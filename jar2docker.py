@@ -6,7 +6,7 @@ import os
 import socketserver
 import re
 import yaml
-
+import base64
 # --- 模拟 Docker 模块 ---
 try:
     import docker
@@ -35,29 +35,44 @@ for d in [UPLOAD_DIR, DOCKER_BUILD_DIR]:
     os.makedirs(d, exist_ok=True)
 
 
+
 def load_config():
+    """加载 config.yml，不存在则返回带默认 docker 配置的空结构"""
     if not os.path.exists(CONFIG_FILE):
-        # 如果没有配置文件，创建一个默认的
         default_config = {
             "docker": {
-                "registry": "localhost:5000",
+                "registry": "docker.io",
+                "registry_prefix": "",
                 "default_push": False,
                 "expose_port": 8080
-            },
-            "server": {
-                "default_image_format": "myapp/{jar_basename}"
             }
         }
+        # 创建默认配置文件（只包含 docker，不影响未来扩展）
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            yaml.dump(default_config, f, allow_unicode=True)
-        print(f"📄 已创建默认配置文件: {CONFIG_FILE}")
-    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+            yaml.dump(default_config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        print(f"🆕 配置文件 {CONFIG_FILE} 不存在，已创建默认配置")
+        return default_config
 
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f) or {}
+
+    # 确保 docker 配置存在
+    if 'docker' not in config:
+        config['docker'] = {
+            "registry": "docker.io",
+            "registry_prefix": "",
+            "default_push": False,
+            "expose_port": 8080
+        }
+        # 保存回去（可选，确保下次不用再补）
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+    return config
 
 CONFIG = load_config()
 
-import base64
+
 
 def require_auth(handler):
     """装饰器：检查 Basic Auth"""
@@ -91,15 +106,97 @@ def auth_required(func):
 
 # --- HTTP 处理器 ---
 class UploadHandler(http.server.BaseHTTPRequestHandler):
+    def handle_save_config(self):
+        """保存全局配置到 config.yml，只更新 docker 部分，保留其他配置"""
+        try:
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length)
+
+            # 解析表单（和上传逻辑一致）
+            boundary = self.headers['Content-Type'].split("boundary=")[1].encode()
+            parts = body.split(b'--' + boundary)
+            form_data = {}
+
+            for part in parts[1:-1]:
+                if b'\r\n\r\n' in part:
+                    header_end = part.find(b'\r\n\r\n')
+                    headers = part[:header_end].decode('utf-8', errors='ignore')
+                    data = part[header_end + 4:].rstrip(b'\r\n')
+
+                    if 'name="' in headers:
+                        try:
+                            field_name = headers.split('name="')[1].split('"')[0]
+                            form_data[field_name] = data.decode('utf-8', errors='ignore')
+                        except:
+                            continue
+
+            # 构造新的 docker 配置
+            new_docker_config = {
+                "registry": form_data.get("registry", "docker.io").strip(),
+                "registry_prefix": form_data.get("registry_prefix", "").strip().rstrip('/'),
+                "default_push": (form_data.get("default_push") == "on"),
+                "expose_port": int(form_data.get("expose_port", "8080")) if form_data.get("expose_port",
+                                                                                          "").isdigit() else 8080
+            }
+
+            # 🆕 读取现有完整配置（如果存在）
+            full_config = {}
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    full_config = yaml.safe_load(f) or {}
+                print(f"📄 读取现有配置: {full_config}")
+
+            # 🆕 只更新 docker 部分，保留其他部分
+            if 'docker' not in full_config:
+                full_config['docker'] = {}
+            full_config['docker'].update(new_docker_config)
+
+            # 🆕 写回完整配置
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                yaml.dump(full_config, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+            print(f"✅ 配置已更新到 {CONFIG_FILE}: {full_config}")
+
+            self._send_json(200, {
+                "message": "Docker 配置保存成功！",
+                "docker_config": full_config.get('docker')
+            })
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            error_msg = str(e)
+            clean_error_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', error_msg).strip()
+            self._send_json(500, {"error": f"保存配置失败: {clean_error_msg}"})
+
+    def handle_get_config(self):
+        """返回当前 config.yml 中的配置"""
+        try:
+            config = load_config()  # 复用你已有的 load_config 方法
+            docker_config = config.get('docker', {})
+
+            self._send_json(200, {
+                "docker": docker_config
+            })
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            error_msg = str(e)
+            clean_error_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', error_msg).strip()
+            self._send_json(500, {"error": f"获取配置失败: {clean_error_msg}"})
 
     @auth_required
     def do_GET(self):
+
         if self.path == '/' or self.path == '/index.html':
             self._serve_file(STATIC_FILE, 'text/html')
         elif self.path == '/list_templates':
             self._list_templates()
         elif self.path.startswith('/get_default_image'):
             self._get_default_image()
+        if self.path == '/get-config':
+            return self.handle_get_config()
         else:
             self.send_error(404)
 
@@ -188,11 +285,7 @@ class UploadHandler(http.server.BaseHTTPRequestHandler):
             print(f"❌ 读取模板失败: {e}")
             self._send_json(500, {"error": f"读取模板目录失败: {str(e)}"})
 
-    def do_POST(self):
-        if self.path != '/upload':
-            self.send_error(404)
-            return  # 👈 必须 return
-
+    def handle_upload(self):
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
 
@@ -379,6 +472,16 @@ class UploadHandler(http.server.BaseHTTPRequestHandler):
             traceback.print_exc()
             self._send_json(500, {"error": f"服务器内部错误: {clean_error_msg}"})
             return  # 👈 必须 return
+
+    def do_POST(self):
+        if self.path == '/upload':
+            return self.handle_upload()
+        elif self.path == '/save-config':
+            return self.handle_save_config()
+        else:
+            self.send_error(404)
+
+
     def _send_json(self, status_code, data):
         self.send_response(status_code)
         self.send_header('Content-type', 'application/json')

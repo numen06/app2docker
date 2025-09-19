@@ -1,25 +1,16 @@
-# config.yml
-
-
 docker:
-  registry: "docker.demo.com"
-  registry_prefix : "docker.demo.com/demo"
+  registry: docker.trt.com
+  registry_prefix: docker.demo.com/demo
   default_push: false
   expose_port: 8080
-
 server:
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 8000
-  username: "admin"
-  password: "admin"
-  default_image_format: "{registry}/{jar_basename}"
-  # 默认使用的模板 ID
-  default_template: "dragonwell8.Dockerfile"
-
-# Dockerfile 模板配置
+  username: admin
+  password: admin
+  default_image_format: '{registry}/{jar_basename}'
+  default_template: dragonwell8.Dockerfile
 templates:
   enabled: true
-  # 模板目录（相对于项目根目录）
-  directory: "dockerfiles"
-  # 默认模板（对应文件名，不含扩展名）
-  default: "simple"
+  directory: dockerfiles
+  default: simple
