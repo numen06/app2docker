@@ -155,9 +155,9 @@ class UploadHandler(http.server.BaseHTTPRequestHandler):
     COPY app.jar app.jar
     CMD ["java", "-jar", "app.jar"]
     """
-            with open(os.path.join(template_dir, "simple.Dockerfile"), "w", encoding="utf-8") as f:
+            with open(os.path.join(template_dir, "dragonwell8.Dockerfile"), "w", encoding="utf-8") as f:
                 f.write(default_template)
-            print(f"✅ 已创建默认模板: {template_dir}/simple.Dockerfile")
+            print(f"✅ 已创建默认模板: {template_dir}/dragonwell8.Dockerfile")
 
         try:
             for filename in os.listdir(template_dir):
