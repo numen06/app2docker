@@ -15,6 +15,7 @@
 - ✅ **零依赖配置**：首次运行自动生成 `config.yml` 和默认模板
 
 ## 📦 项目结构
+```
 jar2docker/
 ├── jar2docker.py            # 主程序（Python HTTP 服务）
 ├── templates/               # Dockerfile 模板目录（自动加载）
@@ -28,6 +29,7 @@ jar2docker/
 ├── requirements.txt         # Python 依赖
 ├── Dockerfile               # 容器化部署文件
 └── README.md                # 本文件
+```
 
 
 ## ⚙️ 快速开始（本地运行）
