@@ -3,8 +3,8 @@ docker:
   registry_prefix: docker.jajachina.com/jaja
   default_push: false
   expose_port: 8080
-  username: admin
-  password: Admin@123
+  username: test
+  password: 123456
 server:
   host: 0.0.0.0
   port: 8000
