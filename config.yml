@@ -1,6 +1,6 @@
 docker:
-  registry: docker.test.com11
-  registry_prefix: docker.demo.com/demo
+  registry: registry.cn-shanghai.aliyuncs.com
+  registry_prefix: registry.cn-shanghai.aliyuncs.com/51jbm
   default_push: false
   expose_port: 8080
 server:

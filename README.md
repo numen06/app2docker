@@ -53,10 +53,13 @@ python jar2docker.py
 ```bash
 docker build -t jar2docker .
 
+```
+
+### 3. 直接使用
+```bash
 docker run -d \
   -p 8000:8000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v ./config.yml:/app/config.yml \
   --name jar2docker \
-  jar2docker
+  registry.cn-shanghai.aliyuncs.com/51jbm/jar2docker
 ```
