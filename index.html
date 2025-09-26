@@ -110,7 +110,7 @@
                         </div>
                         <div class="col-md-3 d-flex align-items-end">
                             <div class="form-check">
-                                <input type="checkbox" name="push_image" class="form-check-input" id="pushImage">
+                                <input type="checkbox" name="push" class="form-check-input" id="pushImage">
                                 <label class="form-check-label" for="pushImage">构建后推送</label>
                             </div>
                         </div>
@@ -251,6 +251,7 @@
                 });
             });
 
+
             // 构建处理
             $form.on('submit', function(e) {
                 e.preventDefault();
@@ -261,32 +262,17 @@
 
                 const formData = new FormData(this);
 
+
                 $.ajax({
                     url: '/upload',
                     type: 'POST',
                     data: formData,
                     processData: false,
                     contentType: false,
-                    xhr: function() {
-                        const xhr = new XMLHttpRequest();
-                        xhr.onreadystatechange = function() {
-                            if (xhr.readyState === 3) {
-                                const lines = xhr.responseText.split('\n');
-                                const newLines = lines.slice(window.lastLogLine || 0);
-                                window.lastLogLine = lines.length;
-                                newLines.forEach(line => {
-                                    if (line.trim()) appendLog(line);
-                                });
-                                $log.scrollTop($log[0].scrollHeight);
-                            }
-                        };
-                        return xhr;
-                    },
-                    success: function(fullText) {
-                        const lines = fullText.split('\n');
-                        lines.forEach(line => {
-                            if (line.trim()) appendLog(line);
-                        });
+                    success: function(res) {
+                        appendLog(res.message);
+                        // 循环调用日志
+                        pollLogs(res.build_id)
                     },
                     complete: function() {
                         $spinner.hide();
@@ -305,6 +291,31 @@
                     }
                 });
             });
+
+            async function pollLogs(buildId) {
+                const logArea = document.getElementById('log');
+                let lastLength = 0;
+
+                while (true) {
+                    try {
+                        const res = await fetch(`/get-logs?build_id=${encodeURIComponent(buildId)}`);
+                        if (!res.ok) break;
+                        const logs = await res.text();
+                        if (logs.length > lastLength) {
+                              appendLog(logs);
+                              lastLength = logs.length;
+                        }
+
+                        // 检查构建是否结束（可选：通过额外接口判断状态）
+                        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms 轮询
+                    } catch (e) {
+                        console.error("日志轮询失败:", e);
+                        break;
+                    }
+                }
+            }
+
+
 
             // 清空日志
             $('#clearLog').on('click', function() {
