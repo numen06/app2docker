@@ -10,9 +10,11 @@
 - ✅ **自动镜像命名**：根据 JAR 文件名智能生成推荐镜像名（如 `myapp/demo-service`）
 - ✅ **刷新按钮**：一键重新生成推荐名称
 - ✅ **模板化构建**：`templates/` 目录下 `.Dockerfile` 文件自动加载为模板
+- ✅ **模板管理**：Web 端可视化增删改查 Dockerfile 模板
 - ✅ **HTTP Basic 认证**：全局保护，防止未授权访问
 - ✅ **容器化部署**：自身可运行在 Docker 容器中，调用宿主机 Docker API
 - ✅ **零依赖配置**：首次运行自动生成 `config.yml` 和默认模板
+- ✅ **镜像导出**：一键拉取最新镜像并导出为 `.tar` 或 `.tar.gz`
 
 ## 📦 项目结构
 ```
@@ -65,3 +67,10 @@ docker run -d \
   registry.cn-shanghai.aliyuncs.com/51jbm/jar2docker
 #默认账号密码:admin/admin
 ```
+
+## 🧩 模板管理
+
+- 在 Web 页面中，`模板管理` 卡片会列出 `templates/` 目录下的所有 `.Dockerfile` 模板，并展示文件名、大小与最近更新时间。
+- 点击 **新增模板** 可通过表单或上传现有 Dockerfile 创建模板，系统会自动保存为 `templates/<名称>.Dockerfile`。
+- 通过 **预览 / 编辑 / 删除** 按钮即可在线维护模板内容，无需每次构建时重新上传。
+- 构建表单中的模板下拉框会同步模板列表，选择后即可直接复用，进一步提升重复构建效率。

@@ -6,15 +6,18 @@ import shutil
 import threading
 import urllib
 import uuid
+import gzip
+from datetime import datetime
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler
 from urllib import parse
 
 from config import load_config, save_config, CONFIG_FILE
-from utils import generate_image_name
+from utils import generate_image_name, get_safe_filename
 
 UPLOAD_DIR = "uploads"
 BUILD_DIR = "docker_build"
+EXPORT_DIR = "exports"
 TEMPLATES_DIR = "templates"
 INDEX_FILE = "index.html"
 
@@ -80,7 +83,7 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ 发送 HTML 响应失败: {e}")
 
-    def _send_file(self, filepath, content_type='application/octet-stream'):
+    def _send_file(self, filepath, content_type='application/octet-stream', download_name=None):
         try:
             if not os.path.exists(filepath):
                 self.send_error(404, "File not found")
@@ -88,6 +91,8 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header('Content-Type', content_type)
+            if download_name:
+                self.send_header('Content-Disposition', f'attachment; filename="{download_name}"')
             self.send_header('Content-Length', str(os.path.getsize(filepath)))
             self.end_headers()
 
@@ -114,6 +119,37 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "缺少 build_id 参数")
         elif path == '/list-templates':
             self.handle_list_templates()
+        elif path == '/templates':
+            parsed_url = parse.urlparse(self.path)
+            query_params = parse.parse_qs(parsed_url.query)
+            template_name = (query_params.get('name', [None])[0] or '').strip()
+            if template_name:
+                self.handle_get_template(template_name)
+            else:
+                self.handle_templates_summary()
+        elif path.startswith('/templates/'):
+            rel_path = path[len('/templates/'):].lstrip('/')
+            if '..' in rel_path or rel_path.startswith('/'):
+                self.send_error(400, "非法模板路径")
+                return
+            filepath = os.path.join(TEMPLATES_DIR, rel_path)
+            abs_templates = os.path.abspath(TEMPLATES_DIR)
+            abs_target = os.path.abspath(filepath)
+            try:
+                if os.path.commonpath([abs_templates, abs_target]) != abs_templates:
+                    self.send_error(400, "非法模板路径")
+                    return
+            except ValueError:
+                self.send_error(400, "非法模板路径")
+                return
+            if os.path.exists(filepath):
+                self._send_file(filepath, 'text/plain; charset=utf-8')
+            else:
+                self.send_error(404, "模板不存在")
+        elif path == '/export-image':
+            parsed_url = parse.urlparse(self.path)
+            query_params = parse.parse_qs(parsed_url.query)
+            self.handle_export_image(query_params)
         elif path == '/' or path == '/index.html':
             self.serve_index()
         elif path.startswith('/static/') or path.endswith(('.png', '.css', '.js')):
@@ -123,6 +159,20 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                 self._send_file(filepath, content_type)
             else:
                 self.send_error(404)
+        else:
+            self.send_error(404)
+
+    def do_PUT(self):
+        path = self.path.split('?')[0]
+        if path == '/templates':
+            self.handle_update_template()
+        else:
+            self.send_error(404)
+
+    def do_DELETE(self):
+        path = self.path.split('?')[0]
+        if path == '/templates':
+            self.handle_delete_template()
         else:
             self.send_error(404)
 
@@ -160,28 +210,122 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
 
     def handle_list_templates(self):
         try:
-            if not os.path.exists(TEMPLATES_DIR):
-                templates = []
-            else:
-                templates = [
-                    f.replace('.Dockerfile', '')
-                    for f in os.listdir(TEMPLATES_DIR)
-                    if f.endswith('.Dockerfile')
-                ]
-                templates = sorted(templates, key=natural_sort_key)
-            self._send_json(200, {"templates": templates})
+            details = self._collect_template_details()
+            templates = [item['name'] for item in details]
+            self._send_json(200, {
+                "templates": templates,
+                "template_details": details
+            })
         except Exception as e:
             import traceback
             traceback.print_exc()
             self._send_json(500, {"error": "获取模板列表失败"})
 
+    def handle_templates_summary(self):
+        try:
+            details = self._collect_template_details()
+            self._send_json(200, {
+                "templates": [item['name'] for item in details],
+                "items": details
+            })
+        except Exception as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip()
+            self._send_json(500, {"error": f"获取模板信息失败: {clean_msg or '未知错误'}"})
+
+    def handle_get_template(self, template_name):
+        try:
+            template_path, clean_name, filename = self._resolve_template_path(template_name)
+            if not os.path.exists(template_path):
+                self._send_json(404, {"error": "模板不存在"})
+                return
+            with open(template_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            self._send_json(200, {
+                "name": clean_name,
+                "filename": filename,
+                "content": content
+            })
+        except ValueError as ve:
+            self._send_json(400, {"error": str(ve)})
+        except Exception as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip()
+            self._send_json(500, {"error": f"获取模板失败: {clean_msg or '未知错误'}"})
+
+    def handle_export_image(self, query_params):
+        if not DOCKER_AVAILABLE:
+            self._send_json(503, {"error": "Docker 服务不可用，无法导出镜像"})
+            return
+
+        image_input = (query_params.get('image', [None])[0] or '').strip()
+        tag_param = (query_params.get('tag', [''])[0] or '').strip()
+        compress_param = (query_params.get('compress', ['none'])[0] or 'none').strip().lower()
+
+        if not image_input:
+            self._send_json(400, {"error": "缺少 image 参数"})
+            return
+
+        image_name = image_input
+        tag = tag_param or 'latest'
+
+        if ':' in image_name and not tag_param:
+            image_name, inferred_tag = image_name.rsplit(':', 1)
+            if inferred_tag:
+                tag = inferred_tag
+
+        full_tag = f"{image_name}:{tag}"
+        compress_enabled = compress_param in ('gzip', 'gz', 'tgz', '1', 'true', 'yes')
+
+        try:
+            pull_stream = client.api.pull(repository=image_name, tag=tag, stream=True, decode=True)
+            for chunk in pull_stream:
+                if 'error' in chunk:
+                    raise RuntimeError(chunk['error'])
+
+            client.images.get(full_tag)  # 确认镜像存在
+
+            os.makedirs(EXPORT_DIR, exist_ok=True)
+            timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+            safe_base = get_safe_filename(image_name.replace('/', '_') or 'image')
+            tar_filename = f"{safe_base}-{tag}-{timestamp}.tar"
+            tar_path = os.path.join(EXPORT_DIR, tar_filename)
+
+            image_stream = client.api.get_image(full_tag)
+            with open(tar_path, 'wb') as f:
+                for chunk in image_stream:
+                    f.write(chunk)
+
+            final_path = tar_path
+            download_name = tar_filename
+            content_type = 'application/x-tar'
+
+            if compress_enabled:
+                final_path = f"{tar_path}.gz"
+                download_name = os.path.basename(final_path)
+                content_type = 'application/gzip'
+                with open(tar_path, 'rb') as src, gzip.open(final_path, 'wb') as dst:
+                    shutil.copyfileobj(src, dst)
+                os.remove(tar_path)
+
+            success = self._send_file(final_path, content_type, download_name=download_name)
+            if success:
+                try:
+                    os.remove(final_path)
+                except OSError:
+                    pass
+        except Exception as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip() or '未知错误'
+            self._send_json(500, {"error": f"导出镜像失败: {clean_msg}"})
+
     def do_POST(self):
-        if self.path == '/upload':
+        path = self.path.split('?')[0]
+        if path == '/upload':
             self.handle_upload()
-        elif self.path == '/save-config':
+        elif path == '/save-config':
             self.handle_save_config()
-        elif self.path == '/suggest-image-name':
+        elif path == '/suggest-image-name':
             self.handle_suggest_image_name()
+        elif path == '/templates':
+            self.handle_create_template()
         else:
             self.send_error(404)
 
@@ -268,6 +412,140 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             error_msg = str(e)
             clean_error_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', error_msg).strip()
             self._send_json(500, {"error": f"保存配置失败: {clean_error_msg}"})
+
+    def _collect_template_details(self):
+        details = []
+        if not os.path.exists(TEMPLATES_DIR):
+            return details
+        for filename in os.listdir(TEMPLATES_DIR):
+            if not filename.endswith('.Dockerfile'):
+                continue
+            filepath = os.path.join(TEMPLATES_DIR, filename)
+            try:
+                stat = os.stat(filepath)
+                name = filename[:-len('.Dockerfile')]
+                details.append({
+                    "name": name,
+                    "filename": filename,
+                    "size": stat.st_size,
+                    "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+            except OSError:
+                continue
+        details.sort(key=lambda item: natural_sort_key(item['name']))
+        return details
+
+    def _resolve_template_path(self, template_name):
+        clean_name = get_safe_filename(template_name).replace('.Dockerfile', '').strip('_-. ')
+        if not clean_name:
+            raise ValueError("模板名称无效")
+        filename = f"{clean_name}.Dockerfile"
+        filepath = os.path.join(TEMPLATES_DIR, filename)
+        return filepath, clean_name, filename
+
+    def _read_json_body(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except (TypeError, ValueError):
+            length = 0
+        raw = self.rfile.read(length) if length else b''
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            raise ValueError(f"请求体不是有效 JSON: {e}")
+
+    def handle_create_template(self):
+        try:
+            data = self._read_json_body()
+            name = (data.get('name') or '').strip()
+            content = data.get('content')
+            if not name:
+                self._send_json(400, {"error": "模板名称不能为空"})
+                return
+            if not content:
+                self._send_json(400, {"error": "模板内容不能为空"})
+                return
+            filepath, clean_name, filename = self._resolve_template_path(name)
+            if os.path.exists(filepath):
+                self._send_json(400, {"error": "同名模板已存在"})
+                return
+            os.makedirs(TEMPLATES_DIR, exist_ok=True)
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+            self._send_json(201, {
+                "message": "模板创建成功",
+                "template": {
+                    "name": clean_name,
+                    "filename": filename
+                }
+            })
+        except ValueError as ve:
+            self._send_json(400, {"error": str(ve)})
+        except Exception as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip()
+            self._send_json(500, {"error": f"创建模板失败: {clean_msg or '未知错误'}"})
+
+    def handle_update_template(self):
+        try:
+            data = self._read_json_body()
+            original_name = (data.get('original_name') or data.get('name') or '').strip()
+            new_name = (data.get('name') or '').strip()
+            content = data.get('content')
+            if not original_name:
+                self._send_json(400, {"error": "缺少原始模板名称"})
+                return
+            if content is None:
+                self._send_json(400, {"error": "模板内容不能为空"})
+                return
+            src_path, src_clean, src_filename = self._resolve_template_path(original_name)
+            if not os.path.exists(src_path):
+                self._send_json(404, {"error": "原模板不存在"})
+                return
+            target_name = new_name or original_name
+            dst_path, dst_clean, dst_filename = self._resolve_template_path(target_name)
+            if dst_path != src_path and os.path.exists(dst_path):
+                self._send_json(400, {"error": "目标模板名称已存在"})
+                return
+            os.makedirs(TEMPLATES_DIR, exist_ok=True)
+            tmp_path = dst_path + ".tmp"
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            os.replace(tmp_path, dst_path)
+            if dst_path != src_path:
+                os.remove(src_path)
+            self._send_json(200, {
+                "message": "模板更新成功",
+                "template": {
+                    "name": dst_clean,
+                    "filename": dst_filename
+                }
+            })
+        except ValueError as ve:
+            self._send_json(400, {"error": str(ve)})
+        except Exception as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip()
+            self._send_json(500, {"error": f"更新模板失败: {clean_msg or '未知错误'}"})
+
+    def handle_delete_template(self):
+        try:
+            data = self._read_json_body()
+            name = (data.get('name') or '').strip()
+            if not name:
+                self._send_json(400, {"error": "模板名称不能为空"})
+                return
+            filepath, clean_name, filename = self._resolve_template_path(name)
+            if not os.path.exists(filepath):
+                self._send_json(404, {"error": "模板不存在"})
+                return
+            os.remove(filepath)
+            self._send_json(200, {"message": "模板已删除"})
+        except ValueError as ve:
+            self._send_json(400, {"error": str(ve)})
+        except Exception as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip()
+            self._send_json(500, {"error": f"删除模板失败: {clean_msg or '未知错误'}"})
 
     def handle_upload(self):
         content_length = int(self.headers['Content-Length'])

@@ -33,54 +33,18 @@
             <p class="lead text-muted">上传 JAR 文件，一键构建并推送 Docker 镜像</p>
         </div>
 
-        <!-- 配置卡片 -->
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5><i class="fas fa-cog"></i> Docker 配置</h5>
-            </div>
-            <div class="card-body">
-                <form id="configForm" accept-charset="UTF-8">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Registry 地址</label>
-                            <input type="text" name="registry" class="form-control" placeholder="docker.io">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">镜像前缀（可选）</label>
-                            <input type="text" name="registry_prefix" class="form-control" placeholder="your-namespace">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">账号</label>
-                            <input type="text" name="username" class="form-control" value="">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">密码</label>
-                            <input type="password" name="password" class="form-control" value="">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">暴露端口</label>
-                            <input type="number" name="expose_port" class="form-control" value="8080">
-                        </div>
-                        <div class="col-md-4 d-flex align-items-end">
-                            <div class="form-check">
-                                <input type="checkbox" name="default_push" class="form-check-input" id="defaultPush">
-                                <label class="form-check-label" for="defaultPush">默认推送镜像</label>
-                            </div>
-                        </div>
-                        <div class="col-md-4 d-flex align-items-end">
-                            <button type="submit" class="btn btn-outline-primary w-100">
-                                <i class="fas fa-save"></i> 保存配置
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-
         <!-- 上传构建卡片 -->
         <div class="card">
-            <div class="card-header bg-success text-white">
-                <h5><i class="fas fa-cloud-upload-alt"></i> 上传 JAR 并构建</h5>
+            <div class="card-header bg-success text-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-cloud-upload-alt"></i> 上传 JAR 并构建</h5>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-light btn-sm" id="openConfigBtn">
+                        <i class="fas fa-cog"></i> Docker 配置
+                    </button>
+                    <button type="button" class="btn btn-outline-light btn-sm" id="manageTemplateBtn">
+                        <i class="fas fa-sliders-h"></i> 管理模板
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <form id="uploadForm" enctype="multipart/form-data" accept-charset="UTF-8">
@@ -89,22 +53,13 @@
                         <input type="file" name="jar_file" class="form-control" accept=".jar" required>
                     </div>
 
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
+                    <div class="row g-3 mb-3 align-items-end">
+                        <div class="col-12">
                             <label class="form-label">使用模板</label>
                             <select name="template" class="form-select">
                             </select>
                             <div class="form-text">选择预设 Dockerfile 模板</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">或上传自定义 Dockerfile</label>
-                            <input type="file" name="custom_dockerfile" class="form-control" accept=".dockerfile,.txt">
-                        </div>
-                    </div>
-
-                    <div class="template-preview mb-3 d-none">
-                        <label class="form-label">模板预览</label>
-                        <div class="template-content"></div>
                     </div>
 
                     <div class="row g-3 mb-3">
@@ -132,6 +87,38 @@
             </div>
         </div>
 
+        <!-- 导出镜像卡片 -->
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5><i class="fas fa-file-export"></i> 导出 Docker 镜像</h5>
+            </div>
+            <div class="card-body">
+                <form id="exportForm" class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">镜像名称</label>
+                        <input type="text" name="export_image" class="form-control" placeholder="myapp/demo" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">标签</label>
+                        <input type="text" name="export_tag" class="form-control" value="latest">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">压缩方式</label>
+                        <select name="export_compress" class="form-select">
+                            <option value="none">不压缩 (.tar)</option>
+                            <option value="gzip">GZIP (.tar.gz)</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="fas fa-download"></i> 导出镜像
+                            <span class="spinner-border spinner-border-sm ms-2 d-none" role="status" id="exportSpinner"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- 构建日志卡片 -->
         <div class="card">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
@@ -144,6 +131,137 @@
         </div>
     </div>
 
+    <!-- Docker 配置 Modal -->
+    <div class="modal fade" id="configModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-cog"></i> Docker 配置</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="configForm" accept-charset="UTF-8">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Registry 地址</label>
+                                <input type="text" name="registry" class="form-control" placeholder="docker.io">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">镜像前缀（可选）</label>
+                                <input type="text" name="registry_prefix" class="form-control" placeholder="your-namespace">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">账号</label>
+                                <input type="text" name="username" class="form-control" value="">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">密码</label>
+                                <input type="password" name="password" class="form-control" value="">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">暴露端口</label>
+                                <input type="number" name="expose_port" class="form-control" value="8080">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input type="checkbox" name="default_push" class="form-check-input" id="defaultPush">
+                                    <label class="form-check-label" for="defaultPush">默认推送镜像</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-save"></i> 保存配置
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板管理 Modal -->
+    <div class="modal fade" id="templateManagementModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-dark">
+                    <h5 class="modal-title"><i class="fas fa-layer-group"></i> 模板管理</h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary btn-sm" id="addTemplateBtn">
+                            <i class="fas fa-plus-circle"></i> 新增模板
+                        </button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>模板名称</th>
+                                    <th>文件名</th>
+                                    <th>大小</th>
+                                    <th>更新时间</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="templateTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3 template-preview d-none" id="templatePreviewPanel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0 text-muted">模板预览：<span id="templatePreviewName"></span></h6>
+                            <button class="btn btn-sm btn-outline-secondary" id="closeTemplatePreview">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <pre class="template-content" id="templatePreviewContent"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模板编辑 Modal -->
+    <div class="modal fade" id="templateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="templateForm">
+                        <div class="mb-3">
+                            <label class="form-label">模板名称</label>
+                            <input type="text" class="form-control" id="templateNameInput" required>
+                            <div class="form-text">仅限字母、数字、下划线和中划线，自动附加 `.Dockerfile` 后缀</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">上传 Dockerfile（可选）</label>
+                            <input type="file" class="form-control" id="templateFileInput" accept=".dockerfile,.txt,.tpl,.template,.Dockerfile">
+                            <div class="form-text">选择文件后将自动读取内容填入下方编辑器</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">模板内容</label>
+                            <textarea class="form-control" id="templateContentInput" rows="12" required spellcheck="false"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveTemplateBtn">
+                        <i class="fas fa-save"></i> 保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer" style="z-index: 2000;"></div>
+
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -152,15 +270,52 @@
             const $form = $('#uploadForm');
             const $configForm = $('#configForm');
             const $templateSelect = $('select[name="template"]');
-            const $templatePreview = $('.template-preview');
-            const $templateContent = $('.template-content');
             const $spinner = $('.spinner');
             const $pushImage = $('#pushImage');
             const $defaultPush = $('#defaultPush');
+            const $exportForm = $('#exportForm');
+            const $exportSpinner = $('#exportSpinner');
+            const $templateTableBody = $('#templateTableBody');
+            const templateModalEl = document.getElementById('templateModal');
+            const templateModal = new bootstrap.Modal(templateModalEl);
+            const templateManagementModalEl = document.getElementById('templateManagementModal');
+            const templateManagementModal = new bootstrap.Modal(templateManagementModalEl);
+            const configModalEl = document.getElementById('configModal');
+            const configModal = new bootstrap.Modal(configModalEl);
+            const $openConfigBtn = $('#openConfigBtn');
+            const toastContainer = document.getElementById('toastContainer');
+            const $templateModalTitle = $('#templateModal .modal-title');
+            function showToast(message, type = 'success') {
+                if (!toastContainer) return;
+                const level = type === 'error' ? 'danger' : type;
+                const toastEl = document.createElement('div');
+                toastEl.className = `toast align-items-center text-bg-${level} border-0 mb-2`;
+                toastEl.setAttribute('role', 'alert');
+                toastEl.setAttribute('aria-live', 'assertive');
+                toastEl.setAttribute('aria-atomic', 'true');
+                toastEl.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">${message}</div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>`;
+                toastContainer.appendChild(toastEl);
+                const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
+                toast.show();
+                toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+            }
+            const $templateForm = $('#templateForm');
+            const $templateNameInput = $('#templateNameInput');
+            const $templateContentInput = $('#templateContentInput');
+            const $templateFileInput = $('#templateFileInput');
+            const $templatePreviewPanel = $('#templatePreviewPanel');
+            const $templatePreviewName = $('#templatePreviewName');
+            const $templatePreviewContent = $('#templatePreviewContent');
+            let editingTemplate = null;
+            let templateItems = [];
 
             // 加载配置
             function loadConfig() {
-                $.getJSON('/get-config')
+                return $.getJSON('/get-config')
                     .done(data => {
                         const docker = data.docker || {};
                         $('input[name="registry"]').val(docker.registry || 'docker.io');
@@ -171,43 +326,258 @@
                         $defaultPush.prop('checked', !!docker.default_push);
                         $pushImage.prop('checked', !!docker.default_push);
                     })
-                    .fail(err => {
+                    .fail(() => {
                         appendLog('❌ 加载配置失败，请检查服务是否正常', 'error');
                     });
             }
 
             // 加载模板列表
             function loadTemplates() {
-                $.getJSON('/list-templates')
-                    .done(data => {
-                        (data.templates || []).forEach(t => {
-                            $templateSelect.append(`<option value="${t}">${t}</option>`);
-                        });
+                return fetch('/templates')
+                    .then(res => {
+                        if (!res.ok) {
+                            throw new Error('加载模板失败');
+                        }
+                        return res.json();
                     })
-                    .fail(() => {
+                    .then(data => {
+                        templateItems = data.items || [];
+                        renderTemplateSelect();
+                        renderTemplateTable();
+                    })
+                    .catch(() => {
                         appendLog('⚠️ 加载模板列表失败', 'error');
                     });
             }
 
-            // 预览模板
-            $templateSelect.on('change', function() {
-                const template = $(this).val();
-                if (!template) {
-                    $templatePreview.addClass('d-none');
+            function renderTemplateSelect() {
+                const previous = $templateSelect.val();
+                $templateSelect.empty();
+                if (!templateItems.length) {
+                    $templateSelect.append('<option value="">暂无模板</option>');
                     return;
                 }
-                $.post('/suggest-image-name', new FormData($form[0]), null, false)
-                    .done(() => {}) // trick: 触发文件上传以获取文件名
-                    .always(() => {
-                        $.get(`/templates/${template}.Dockerfile`)
-                            .done(content => {
-                                $templateContent.text(content);
-                                $templatePreview.removeClass('d-none');
-                            })
-                            .fail(() => {
-                                $templateContent.text('❌ 无法加载模板内容');
-                                $templatePreview.removeClass('d-none');
-                            });
+                templateItems.forEach(item => {
+                    const selected = previous === item.name ? 'selected' : '';
+                    $templateSelect.append(`<option value="${item.name}" ${selected}>${item.name}</option>`);
+                });
+            }
+
+            function renderTemplateTable() {
+                $templateTableBody.empty();
+                if (!templateItems.length) {
+                    $templateTableBody.append('<tr><td colspan="5" class="text-center text-muted">暂无模板，请点击右上角按钮新增</td></tr>');
+                    return;
+                }
+                templateItems.forEach(item => {
+                    const row = `
+                        <tr>
+                            <td>${item.name}</td>
+                            <td>${item.filename}</td>
+                            <td>${formatBytes(item.size)}</td>
+                            <td>${formatTime(item.updated_at)}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary me-2 btn-template-preview" data-name="${item.name}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary me-2 btn-template-edit" data-name="${item.name}">
+                                    <i class="fas fa-pen"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger btn-template-delete" data-name="${item.name}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>`;
+                    $templateTableBody.append(row);
+                });
+            }
+
+            function formatBytes(bytes) {
+                if (bytes === undefined || bytes === null) return '-';
+                if (bytes === 0) return '0 B';
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                let idx = 0;
+                let value = bytes;
+                while (value >= 1024 && idx < units.length - 1) {
+                    value /= 1024;
+                    idx++;
+                }
+                return `${value.toFixed(value < 10 && idx > 0 ? 1 : 0)} ${units[idx]}`;
+            }
+
+            function formatTime(timeStr) {
+                if (!timeStr) return '-';
+                try {
+                    return new Date(timeStr).toLocaleString();
+                } catch {
+                    return timeStr;
+                }
+            }
+
+            function fetchTemplateContent(name) {
+                return fetch(`/templates?name=${encodeURIComponent(name)}`)
+                    .then(res => {
+                        if (!res.ok) {
+                            throw new Error('加载模板失败');
+                        }
+                        return res.json();
+                    });
+            }
+
+            function previewTemplate(name) {
+                if (!name) {
+                    $templatePreviewPanel.addClass('d-none');
+                    return;
+                }
+                fetchTemplateContent(name)
+                    .then(data => {
+                        $templatePreviewName.text(data.name || name);
+                        $templatePreviewContent.text(data.content || '');
+                        $templatePreviewPanel.removeClass('d-none');
+                    })
+                    .catch(() => {
+                        $templatePreviewName.text(name);
+                        $templatePreviewContent.text('❌ 无法加载模板内容');
+                        $templatePreviewPanel.removeClass('d-none');
+                    });
+            }
+
+            function templateRequest(method, payload) {
+                return fetch('/templates', {
+                    method,
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload || {})
+                }).then(async res => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        throw new Error(data.error || '操作失败');
+                    }
+                    return data;
+                });
+            }
+
+            function openTemplateModal(name = null) {
+                if (!name) {
+                    editingTemplate = null;
+                    $templateModalTitle.text('新增模板');
+                    $templateForm[0].reset();
+                    $templateFileInput.val('');
+                    templateModal.show();
+                    return;
+                }
+                fetchTemplateContent(name)
+                    .then(data => {
+                        editingTemplate = data.name;
+                        $templateModalTitle.text('编辑模板');
+                        $templateForm[0].reset();
+                        $templateFileInput.val('');
+                        $templateNameInput.val(data.name);
+                        $templateContentInput.val(data.content || '');
+                        templateModal.show();
+                    })
+                    .catch(() => {
+                        appendLog('❌ 加载模板内容失败', 'error');
+                    });
+            }
+
+            $('#addTemplateBtn').on('click', () => openTemplateModal());
+            $('#manageTemplateBtn').on('click', () => {
+                loadTemplates().finally(() => templateManagementModal.show());
+            });
+            $('#closeTemplatePreview').on('click', () => $templatePreviewPanel.addClass('d-none'));
+            $openConfigBtn.on('click', () => {
+                loadConfig().always(() => configModal.show());
+            });
+
+            $templateFileInput.on('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => {
+                    $templateContentInput.val(ev.target.result || '');
+                    if (!$templateNameInput.val()) {
+                        const base = (file.name || '')
+                            .replace(/\.Dockerfile$/i, '')
+                            .replace(/\.[^/.]+$/, '')
+                            .replace(/[^a-zA-Z0-9_-]/g, '-');
+                        if (base) {
+                            $templateNameInput.val(base);
+                        }
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            $('#saveTemplateBtn').on('click', function() {
+                const name = $templateNameInput.val().trim();
+                const content = $templateContentInput.val();
+                if (!name) {
+                    appendLog('❌ 模板名称不能为空', 'error');
+                    return;
+                }
+                if (!content.trim()) {
+                    appendLog('❌ 模板内容不能为空', 'error');
+                    return;
+                }
+                const payload = {
+                    name,
+                    content
+                };
+                if (editingTemplate) {
+                    payload.original_name = editingTemplate;
+                }
+                const method = editingTemplate ? 'PUT' : 'POST';
+                templateRequest(method, payload)
+                    .then(data => {
+                        const savedName = data.template?.name || name;
+                        const msg = data.message || '模板保存成功';
+                        appendLog(`✅ ${msg}`, 'success');
+                        showToast(msg, 'success');
+                        templateModal.hide();
+                        editingTemplate = null;
+                        loadTemplates().then(() => {
+                            $templateSelect.val(savedName);
+                        });
+                    })
+                    .catch(err => {
+                        appendLog(`❌ ${err.message}`, 'error');
+                        showToast(err.message || '模板保存失败', 'error');
+                    });
+            });
+
+            $templateTableBody.on('click', '.btn-template-preview', function() {
+                const name = $(this).data('name');
+                if (!name) return;
+                previewTemplate(name);
+            });
+
+            $templateTableBody.on('click', '.btn-template-edit', function() {
+                const name = $(this).data('name');
+                if (!name) return;
+                openTemplateModal(name);
+            });
+
+            $templateTableBody.on('click', '.btn-template-delete', function() {
+                const name = $(this).data('name');
+                if (!name) return;
+                if (!window.confirm(`确认删除模板 ${name} 吗？该操作不可恢复。`)) return;
+                templateRequest('DELETE', { name })
+                    .then(data => {
+                        const msg = data.message || '模板已删除';
+                        appendLog(`✅ ${msg}`, 'success');
+                        showToast(msg, 'success');
+                        loadTemplates().then(() => {
+                            const current = $templateSelect.val();
+                            if (current === name && templateItems.length) {
+                                $templateSelect.val(templateItems[0].name);
+                            } else if (!templateItems.length) {
+                                previewTemplate(null);
+                            }
+                        });
+                    })
+                    .catch(err => {
+                        appendLog(`❌ ${err.message}`, 'error');
+                        showToast(err.message || '模板删除失败', 'error');
                     });
             });
 
@@ -248,14 +618,17 @@
                         if (res.message) {
                             appendLog(`✅ ${res.message}`, 'success');
                             $pushImage.prop('checked', res.docker_config?.default_push || false);
+                            showToast(res.message, 'success');
                         }
                     },
                     error: function(xhr) {
                         try {
                             const res = JSON.parse(xhr.responseText);
                             appendLog(`❌ ${res.error}`, 'error');
+                            showToast(res.error || '保存配置失败', 'error');
                         } catch {
                             appendLog('❌ 保存配置失败', 'error');
+                            showToast('保存配置失败', 'error');
                         }
                     }
                 });
@@ -300,6 +673,69 @@
                         }
                     }
                 });
+            });
+
+            // 导出镜像
+            $exportForm.on('submit', function(e) {
+                e.preventDefault();
+                const image = $('input[name="export_image"]').val().trim();
+                const tag = $('input[name="export_tag"]').val().trim() || 'latest';
+                const compress = $('select[name="export_compress"]').val();
+
+                if (!image) {
+                    appendLog('❌ 导出镜像名称不能为空', 'error');
+                    return;
+                }
+
+                const params = new URLSearchParams({
+                    image,
+                    tag,
+                    compress
+                });
+
+                $exportSpinner.removeClass('d-none');
+                $exportForm.find('button[type="submit"]').prop('disabled', true);
+
+                fetch(`/export-image?${params.toString()}`)
+                    .then(async res => {
+                        if (!res.ok) {
+                            let message = '导出失败';
+                            try {
+                                const data = await res.json();
+                                message = data.error || message;
+                            } catch (err) {
+                                // ignore parse errors
+                            }
+                            throw new Error(message);
+                        }
+                        const disposition = res.headers.get('Content-Disposition') || '';
+                        let filename = '';
+                        const match = disposition.match(/filename="?([^";]+)"?/i);
+                        if (match && match[1]) {
+                            filename = match[1];
+                        }
+                        const blob = await res.blob();
+                        return { blob, filename };
+                    })
+                    .then(({ blob, filename }) => {
+                        const url = URL.createObjectURL(blob);
+                        const anchor = document.createElement('a');
+                        anchor.href = url;
+                        const fallbackName = `${image.replace(/\//g, '_')}-${tag}.tar${compress === 'gzip' ? '.gz' : ''}`;
+                        anchor.download = filename || fallbackName;
+                        document.body.appendChild(anchor);
+                        anchor.click();
+                        document.body.removeChild(anchor);
+                        URL.revokeObjectURL(url);
+                        appendLog(`✅ 镜像 ${image}:${tag} 导出成功`, 'success');
+                    })
+                    .catch(err => {
+                        appendLog(`❌ 导出失败: ${err.message}`, 'error');
+                    })
+                    .finally(() => {
+                        $exportSpinner.addClass('d-none');
+                        $exportForm.find('button[type="submit"]').prop('disabled', false);
+                    });
             });
 
             async function pollLogs(buildId) {

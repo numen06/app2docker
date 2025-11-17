@@ -25,3 +25,4 @@ def ensure_dirs():
     os.makedirs("uploads", exist_ok=True)
     os.makedirs("docker_build", exist_ok=True)
     os.makedirs("templates", exist_ok=True)
+    os.makedirs("exports", exist_ok=True)
