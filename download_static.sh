@@ -21,19 +21,28 @@ curl -L -o "$BASE_DIR/js/jquery-3.7.1.min.js" https://code.jquery.com/jquery-3.7
 echo "下载 Font Awesome..."
 curl -L -o "$BASE_DIR/fontawesome/all.min.css" https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css
 echo "下载 Font Awesome 字体文件..."
-curl -L -o "$BASE_DIR/fontawesome/webfonts/fa-solid-900.woff2" https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2
-curl -L -o "$BASE_DIR/fontawesome/webfonts/fa-regular-400.woff2" https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2
-curl -L -o "$BASE_DIR/fontawesome/webfonts/fa-brands-400.woff2" https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2
-curl -L -o "$BASE_DIR/fontawesome/webfonts/fa-v4compatibility.woff2" https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-v4compatibility.woff2
+# 下载所有字体格式以确保兼容性
+FONTS=("fa-solid-900" "fa-regular-400" "fa-brands-400" "fa-v4compatibility")
+FORMATS=("woff2" "woff" "ttf")
+for font in "${FONTS[@]}"; do
+    for format in "${FORMATS[@]}"; do
+        echo "  下载 $font.$format..."
+        curl -L -o "$BASE_DIR/fontawesome/webfonts/$font.$format" "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/$font.$format" 2>/dev/null || echo "    ⚠️  $font.$format 下载失败（可能不存在）"
+    done
+done
 
 # 修改 Font Awesome CSS 中的字体路径
 echo "修改 Font Awesome CSS 字体路径..."
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
-    sed -i '' 's|https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/|../webfonts/|g' "$BASE_DIR/fontawesome/all.min.css"
+    # 先替换 CDN 路径为相对路径
+    sed -i '' 's|https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/|webfonts/|g' "$BASE_DIR/fontawesome/all.min.css"
+    # 如果还有 ../webfonts/ 路径，也替换为 webfonts/
+    sed -i '' 's|url(../webfonts/|url(webfonts/|g' "$BASE_DIR/fontawesome/all.min.css"
 else
     # Linux
-    sed -i 's|https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/|../webfonts/|g' "$BASE_DIR/fontawesome/all.min.css"
+    sed -i 's|https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/|webfonts/|g' "$BASE_DIR/fontawesome/all.min.css"
+    sed -i 's|url(../webfonts/|url(webfonts/|g' "$BASE_DIR/fontawesome/all.min.css"
 fi
 
 # CodeMirror
