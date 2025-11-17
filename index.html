@@ -835,10 +835,19 @@
             });
 
             $composeImagesTableBody.on('click', '.compose-download-btn', function() {
-                const index = Number($(this).data('index'));
+                const $btn = $(this);
+                if ($btn.prop('disabled')) return; // 防止重复点击
+                
+                const index = Number($btn.data('index'));
                 const item = composeImages[index];
                 if (!item) return;
+                
                 const compress = $composeCompress.val();
+                const originalHtml = $btn.html();
+                
+                // 设置 loading 状态
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>下载中...');
+                
                 downloadImage(item.image, item.tag || 'latest', compress)
                     .then(() => {
                         const msg = `镜像 ${item.image}:${item.tag || 'latest'} 导出成功`;
@@ -849,10 +858,17 @@
                         const msg = `导出失败 ${item.image}:${item.tag || 'latest'}: ${err.message}`;
                         appendLog(`❌ ${msg}`, 'error');
                         showToast(msg, 'error');
+                    })
+                    .finally(() => {
+                        // 恢复按钮状态
+                        $btn.prop('disabled', false).html(originalHtml);
                     });
             });
 
             $downloadSelectedBtn.on('click', async function() {
+                const $btn = $(this);
+                if ($btn.prop('disabled')) return; // 防止重复点击
+                
                 const indexes = [];
                 $composeImagesTableBody.find('.compose-image-checkbox:checked').each(function() {
                     indexes.push(Number($(this).data('index')));
@@ -862,26 +878,51 @@
                     return;
                 }
                 const compress = $composeCompress.val();
-                const originalHtml = $(this).html();
-                $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>下载中...');
+                const total = indexes.length;
+                const originalHtml = $btn.html();
+                
+                // 设置批量下载按钮 loading 状态
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>准备下载...');
+                
+                // 禁用所有单个下载按钮和复选框
+                $composeImagesTableBody.find('.compose-download-btn').prop('disabled', true);
+                $composeImagesTableBody.find('.compose-image-checkbox').prop('disabled', true);
+                $selectAllImages.prop('disabled', true);
+                
                 try {
-                    for (const idx of indexes) {
+                    for (let i = 0; i < indexes.length; i++) {
+                        const idx = indexes[i];
                         const item = composeImages[idx];
                         if (!item) continue;
+                        
+                        // 更新进度
+                        $btn.html(`<span class="spinner-border spinner-border-sm me-1"></span>下载中 (${i + 1}/${total})...`);
+                        
                         try {
                             await downloadImage(item.image, item.tag || 'latest', compress);
                             const msg = `镜像 ${item.image}:${item.tag || 'latest'} 导出成功`;
                             appendLog(`✅ ${msg}`, 'success');
-                            showToast(msg, 'success');
+                            if (i === indexes.length - 1) {
+                                // 最后一个下载完成时显示提示
+                                showToast(`批量下载完成：${total} 个镜像`, 'success');
+                            }
                         } catch (err) {
                             const msg = `导出失败 ${item.image}:${item.tag || 'latest'}: ${err.message}`;
                             appendLog(`❌ ${msg}`, 'error');
                             showToast(msg, 'error');
                         }
-                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                        // 下载间隔，避免服务器压力过大
+                        if (i < indexes.length - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                        }
                     }
                 } finally {
-                    $(this).prop('disabled', false).html(originalHtml);
+                    // 恢复所有按钮状态
+                    $btn.prop('disabled', false).html(originalHtml);
+                    $composeImagesTableBody.find('.compose-download-btn').prop('disabled', false);
+                    $composeImagesTableBody.find('.compose-image-checkbox').prop('disabled', false);
+                    $selectAllImages.prop('disabled', false);
                 }
             });
 
