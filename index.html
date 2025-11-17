@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jar2Docker - 一键构建 & 推送 Docker 镜像</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="static/bootstrap/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/fontawesome/all.min.css">
+    <link rel="stylesheet" href="static/codemirror/css/codemirror.min.css">
+    <link rel="stylesheet" href="static/codemirror/css/monokai.min.css">
     <style>
         body { padding-top: 2rem; background: #f8f9fa; }
         .card { box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15); margin-bottom: 2rem; }
@@ -24,6 +26,20 @@
         .btn-build { position: relative; }
         .spinner { display: none; margin-left: 0.5rem; }
         #imagename, #tag { font-family: 'Courier New', monospace; }
+        .CodeMirror {
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            height: 320px;
+            font-size: 14px;
+        }
+        .CodeMirror-scroll {
+            max-height: 320px;
+            overflow-y: auto !important;
+        }
+        .CodeMirror-focused {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
     </style>
 </head>
 <body>
@@ -116,6 +132,80 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Docker Compose 镜像导出 -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-diagram-project"></i> Docker Compose 镜像导出</h5>
+            </div>
+            <div class="card-body">
+                <form id="composeForm">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="compose-file-tab" data-bs-toggle="tab" data-bs-target="#compose-file" type="button" role="tab">
+                                <i class="fas fa-file-upload"></i> 上传文件
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="compose-text-tab" data-bs-toggle="tab" data-bs-target="#compose-text" type="button" role="tab">
+                                <i class="fas fa-edit"></i> 文本输入
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="compose-file" role="tabpanel">
+                            <div class="mb-3">
+                                <label class="form-label">上传 docker-compose.yml</label>
+                                <input type="file" class="form-control" id="composeFileInput" accept=".yml,.yaml,.YML,.YAML,.txt">
+                                <div class="form-text">自动提取 compose 文件内的镜像</div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="compose-text" role="tabpanel">
+                            <div class="mb-3">
+                                <label class="form-label">直接输入 docker-compose.yml 内容</label>
+                                <div id="composeTextEditor"></div>
+                                <div class="form-text">粘贴或输入完整的 docker-compose.yml 内容（支持语法高亮）</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-info" id="parseComposeBtn">
+                            <i class="fas fa-search"></i> 解析镜像
+                        </button>
+                    </div>
+                </form>
+                <div class="table-responsive mt-3 d-none" id="composeResult">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                        <h6 class="mb-0">共找到 <span id="composeImageCount">0</span> 个镜像</h6>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="form-check me-2">
+                                <input type="checkbox" class="form-check-input" id="selectAllImages">
+                                <label class="form-check-label" for="selectAllImages">全选</label>
+                            </div>
+                            <select class="form-select form-select-sm" id="composeCompress" style="width: auto;">
+                                <option value="none">不压缩 (.tar)</option>
+                                <option value="gzip">GZIP (.tar.gz)</option>
+                            </select>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="downloadSelectedBtn">
+                                <i class="fas fa-download"></i> 下载选中
+                            </button>
+                        </div>
+                    </div>
+                    <table class="table table-striped align-middle" id="composeImagesTable">
+                        <thead>
+                            <tr>
+                                <th style="width:40px;"></th>
+                                <th>服务</th>
+                                <th>镜像</th>
+                                <th>标签/摘要</th>
+                                <th class="text-end">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -262,8 +352,10 @@
     <!-- Toast Container -->
     <div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer" style="z-index: 2000;"></div>
 
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="static/js/jquery-3.7.1.min.js"></script>
+    <script src="static/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="static/codemirror/js/codemirror.min.js"></script>
+    <script src="static/codemirror/mode/yaml/yaml.min.js"></script>
     <script>
         $(function() {
             const $log = $('#buildLog');
@@ -284,6 +376,25 @@
             const configModal = new bootstrap.Modal(configModalEl);
             const $openConfigBtn = $('#openConfigBtn');
             const toastContainer = document.getElementById('toastContainer');
+            const $composeForm = $('#composeForm');
+            const $composeFileInput = $('#composeFileInput');
+            const $composeResult = $('#composeResult');
+            // 初始化 CodeMirror 编辑器
+            const composeTextEditor = CodeMirror(document.getElementById('composeTextEditor'), {
+                mode: 'yaml',
+                theme: 'monokai',
+                lineNumbers: true,
+                lineWrapping: true,
+                indentUnit: 2,
+                tabSize: 2,
+                indentWithTabs: false,
+                autoRefresh: true
+            });
+            const $composeImagesTableBody = $('#composeImagesTable tbody');
+            const $composeImageCount = $('#composeImageCount');
+            const $selectAllImages = $('#selectAllImages');
+            const $downloadSelectedBtn = $('#downloadSelectedBtn');
+            const $composeCompress = $('#composeCompress');
             const $templateModalTitle = $('#templateModal .modal-title');
             function showToast(message, type = 'success') {
                 if (!toastContainer) return;
@@ -303,6 +414,41 @@
                 toast.show();
                 toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
             }
+            function downloadImage(image, tag = 'latest', compress = 'none') {
+                const params = new URLSearchParams({ image, tag, compress });
+                return fetch(`/export-image?${params.toString()}`)
+                    .then(async res => {
+                        if (!res.ok) {
+                            let message = '导出失败';
+                            try {
+                                const data = await res.json();
+                                message = data.error || message;
+                            } catch (err) {
+                                // ignore
+                            }
+                            throw new Error(message);
+                        }
+                        const disposition = res.headers.get('Content-Disposition') || '';
+                        let filename = '';
+                        const match = disposition.match(/filename="?([^";]+)"?/i);
+                        if (match && match[1]) {
+                            filename = match[1];
+                        }
+                        const blob = await res.blob();
+                        const fallbackName = `${image.replace(/\//g, '_')}-${tag}.tar${compress === 'gzip' ? '.gz' : ''}`;
+                        triggerDownload(blob, filename || fallbackName);
+                    });
+            }
+            function triggerDownload(blob, filename) {
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = filename;
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+                URL.revokeObjectURL(url);
+            }
             const $templateForm = $('#templateForm');
             const $templateNameInput = $('#templateNameInput');
             const $templateContentInput = $('#templateContentInput');
@@ -312,6 +458,7 @@
             const $templatePreviewContent = $('#templatePreviewContent');
             let editingTemplate = null;
             let templateItems = [];
+            let composeImages = [];
 
             // 加载配置
             function loadConfig() {
@@ -581,6 +728,163 @@
                     });
             });
 
+            // Compose 文件输入切换时，如果已上传文件，自动填充到编辑器
+            $('#compose-text-tab').on('shown.bs.tab', function() {
+                const file = $composeFileInput[0]?.files?.[0];
+                if (file && !composeTextEditor.getValue().trim()) {
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                        composeTextEditor.setValue(ev.target.result);
+                        composeTextEditor.refresh();
+                    };
+                    reader.readAsText(file);
+                }
+                // 刷新编辑器以确保正确显示
+                setTimeout(() => composeTextEditor.refresh(), 100);
+            });
+
+            // Compose 镜像解析
+            $composeForm.on('submit', function(e) {
+                e.preventDefault();
+                const file = $composeFileInput[0]?.files?.[0];
+                const textContent = composeTextEditor.getValue()?.trim();
+                
+                if (file) {
+                    // 优先使用上传的文件
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                        const content = ev.target.result;
+                        parseComposeContent(content);
+                    };
+                    reader.onerror = () => {
+                        showToast('读取 compose 文件失败', 'error');
+                    };
+                    reader.readAsText(file);
+                } else if (textContent) {
+                    // 使用编辑器输入
+                    parseComposeContent(textContent);
+                } else {
+                    showToast('请上传文件或输入 docker-compose.yml 内容', 'error');
+                }
+            });
+
+            function parseComposeContent(content) {
+                fetch('/parse-compose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                })
+                    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+                    .then(({ ok, data }) => {
+                        if (!ok) {
+                            throw new Error(data.error || '解析失败');
+                        }
+                        composeImages = data.images || [];
+                        renderComposeImages();
+                        showToast(`解析成功，共 ${composeImages.length} 个镜像`, 'success');
+                    })
+                    .catch(err => {
+                        composeImages = [];
+                        renderComposeImages();
+                        showToast(err.message || '解析失败', 'error');
+                    });
+            }
+
+            function renderComposeImages() {
+                $composeImagesTableBody.empty();
+                if (!composeImages.length) {
+                    $composeResult.addClass('d-none');
+                    $composeImageCount.text('0');
+                    $selectAllImages.prop('checked', false);
+                    return;
+                }
+                $composeResult.removeClass('d-none');
+                $composeImageCount.text(composeImages.length);
+                composeImages.forEach((item, index) => {
+                    const $row = $('<tr>');
+                    const $checkboxCell = $('<td>');
+                    const $checkbox = $('<input>', {
+                        type: 'checkbox',
+                        class: 'form-check-input compose-image-checkbox',
+                        'data-index': index
+                    });
+                    $checkboxCell.append($checkbox);
+                    $row.append($checkboxCell);
+                    $row.append($('<td>').text(item.service || '-'));
+                    $row.append($('<td>').text(item.image || '-'));
+                    $row.append($('<td>').text(item.tag || 'latest'));
+                    const $actionCell = $('<td class="text-end">');
+                    const $btn = $('<button type="button" class="btn btn-sm btn-outline-primary compose-download-btn">')
+                        .attr('data-index', index)
+                        .append('<i class="fas fa-download"></i> 下载');
+                    $actionCell.append($btn);
+                    $row.append($actionCell);
+                    $composeImagesTableBody.append($row);
+                });
+            }
+
+            $selectAllImages.on('change', function() {
+                const checked = $(this).is(':checked');
+                $composeImagesTableBody.find('.compose-image-checkbox').prop('checked', checked);
+            });
+
+            $composeImagesTableBody.on('change', '.compose-image-checkbox', function() {
+                const total = $composeImagesTableBody.find('.compose-image-checkbox').length;
+                const checked = $composeImagesTableBody.find('.compose-image-checkbox:checked').length;
+                $selectAllImages.prop('checked', total > 0 && total === checked);
+            });
+
+            $composeImagesTableBody.on('click', '.compose-download-btn', function() {
+                const index = Number($(this).data('index'));
+                const item = composeImages[index];
+                if (!item) return;
+                const compress = $composeCompress.val();
+                downloadImage(item.image, item.tag || 'latest', compress)
+                    .then(() => {
+                        const msg = `镜像 ${item.image}:${item.tag || 'latest'} 导出成功`;
+                        appendLog(`✅ ${msg}`, 'success');
+                        showToast(msg, 'success');
+                    })
+                    .catch(err => {
+                        const msg = `导出失败 ${item.image}:${item.tag || 'latest'}: ${err.message}`;
+                        appendLog(`❌ ${msg}`, 'error');
+                        showToast(msg, 'error');
+                    });
+            });
+
+            $downloadSelectedBtn.on('click', async function() {
+                const indexes = [];
+                $composeImagesTableBody.find('.compose-image-checkbox:checked').each(function() {
+                    indexes.push(Number($(this).data('index')));
+                });
+                if (!indexes.length) {
+                    showToast('请先选择要下载的镜像', 'error');
+                    return;
+                }
+                const compress = $composeCompress.val();
+                const originalHtml = $(this).html();
+                $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>下载中...');
+                try {
+                    for (const idx of indexes) {
+                        const item = composeImages[idx];
+                        if (!item) continue;
+                        try {
+                            await downloadImage(item.image, item.tag || 'latest', compress);
+                            const msg = `镜像 ${item.image}:${item.tag || 'latest'} 导出成功`;
+                            appendLog(`✅ ${msg}`, 'success');
+                            showToast(msg, 'success');
+                        } catch (err) {
+                            const msg = `导出失败 ${item.image}:${item.tag || 'latest'}: ${err.message}`;
+                            appendLog(`❌ ${msg}`, 'error');
+                            showToast(msg, 'error');
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    }
+                } finally {
+                    $(this).prop('disabled', false).html(originalHtml);
+                }
+            });
+
             // 文件选择后建议镜像名
             $('input[name="jar_file"]').on('change', function() {
                 if (!this.files.length) return;
@@ -687,50 +991,18 @@
                     return;
                 }
 
-                const params = new URLSearchParams({
-                    image,
-                    tag,
-                    compress
-                });
-
                 $exportSpinner.removeClass('d-none');
                 $exportForm.find('button[type="submit"]').prop('disabled', true);
 
-                fetch(`/export-image?${params.toString()}`)
-                    .then(async res => {
-                        if (!res.ok) {
-                            let message = '导出失败';
-                            try {
-                                const data = await res.json();
-                                message = data.error || message;
-                            } catch (err) {
-                                // ignore parse errors
-                            }
-                            throw new Error(message);
-                        }
-                        const disposition = res.headers.get('Content-Disposition') || '';
-                        let filename = '';
-                        const match = disposition.match(/filename="?([^";]+)"?/i);
-                        if (match && match[1]) {
-                            filename = match[1];
-                        }
-                        const blob = await res.blob();
-                        return { blob, filename };
-                    })
-                    .then(({ blob, filename }) => {
-                        const url = URL.createObjectURL(blob);
-                        const anchor = document.createElement('a');
-                        anchor.href = url;
-                        const fallbackName = `${image.replace(/\//g, '_')}-${tag}.tar${compress === 'gzip' ? '.gz' : ''}`;
-                        anchor.download = filename || fallbackName;
-                        document.body.appendChild(anchor);
-                        anchor.click();
-                        document.body.removeChild(anchor);
-                        URL.revokeObjectURL(url);
-                        appendLog(`✅ 镜像 ${image}:${tag} 导出成功`, 'success');
-                    })
+            downloadImage(image, tag, compress)
+                .then(() => {
+                    const msg = `镜像 ${image}:${tag} 导出成功`;
+                    appendLog(`✅ ${msg}`, 'success');
+                    showToast(msg, 'success');
+                })
                     .catch(err => {
-                        appendLog(`❌ 导出失败: ${err.message}`, 'error');
+                    appendLog(`❌ 导出失败: ${err.message}`, 'error');
+                    showToast(err.message || '导出失败', 'error');
                     })
                     .finally(() => {
                         $exportSpinner.addClass('d-none');

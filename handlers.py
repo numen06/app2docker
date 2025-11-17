@@ -11,6 +11,7 @@ from datetime import datetime
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler
 from urllib import parse
+import yaml
 
 from config import load_config, save_config, CONFIG_FILE
 from utils import generate_image_name, get_safe_filename
@@ -83,6 +84,30 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print(f"❌ 发送 HTML 响应失败: {e}")
 
+    def _get_content_type(self, filepath):
+        """根据文件扩展名返回 MIME 类型"""
+        ext = os.path.splitext(filepath)[1].lower()
+        mime_types = {
+            '.css': 'text/css',
+            '.js': 'application/javascript',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.ico': 'image/x-icon',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf',
+            '.eot': 'application/vnd.ms-fontobject',
+            '.html': 'text/html',
+            '.htm': 'text/html',
+            '.xml': 'text/xml',
+            '.txt': 'text/plain',
+        }
+        return mime_types.get(ext, 'application/octet-stream')
+
     def _send_file(self, filepath, content_type='application/octet-stream', download_name=None):
         try:
             if not os.path.exists(filepath):
@@ -152,10 +177,11 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             self.handle_export_image(query_params)
         elif path == '/' or path == '/index.html':
             self.serve_index()
-        elif path.startswith('/static/') or path.endswith(('.png', '.css', '.js')):
+        elif path.startswith('/static/'):
             filepath = path.lstrip('/')
             if os.path.exists(filepath):
-                content_type = 'image/png' if filepath.endswith('.png') else 'text/css'
+                # 根据文件扩展名确定 MIME 类型
+                content_type = self._get_content_type(filepath)
                 self._send_file(filepath, content_type)
             else:
                 self.send_error(404)
@@ -342,6 +368,8 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             self.handle_save_config()
         elif path == '/suggest-image-name':
             self.handle_suggest_image_name()
+        elif path == '/parse-compose':
+            self.handle_parse_compose()
         elif path == '/templates':
             self.handle_create_template()
         else:
@@ -453,6 +481,41 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
         details.sort(key=lambda item: natural_sort_key(item['name']))
         return details
 
+    def _extract_images_from_compose(self, compose_doc):
+        images = []
+        if not isinstance(compose_doc, dict):
+            return images
+        services = compose_doc.get('services', {})
+        if isinstance(services, dict):
+            for service_name, service_conf in services.items():
+                if not isinstance(service_conf, dict):
+                    continue
+                image_ref = service_conf.get('image')
+                if image_ref:
+                    image_name, tag = self._split_image_reference(str(image_ref).strip())
+                    if image_name:
+                        images.append({
+                            "service": service_name,
+                            "image": image_name,
+                            "tag": tag,
+                            "raw": image_ref
+                        })
+        return images
+
+    def _split_image_reference(self, reference: str):
+        if not reference:
+            return "", "latest"
+        if '@' in reference:
+            name, digest = reference.split('@', 1)
+            return name or "", digest or "latest"
+        slash_index = reference.rfind('/')
+        colon_index = reference.rfind(':')
+        if colon_index > slash_index:
+            name = reference[:colon_index]
+            tag = reference[colon_index + 1:] or 'latest'
+            return name or "", tag
+        return reference, 'latest'
+
     def _resolve_template_path(self, template_name):
         clean_name = get_safe_filename(template_name).replace('.Dockerfile', '').strip('_-. ')
         if not clean_name:
@@ -473,6 +536,37 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             return json.loads(raw.decode('utf-8'))
         except json.JSONDecodeError as e:
             raise ValueError(f"请求体不是有效 JSON: {e}")
+
+    def handle_parse_compose(self):
+        try:
+            data = self._read_json_body()
+        except ValueError as ve:
+            self._send_json(400, {"error": str(ve)})
+            return
+
+        content = (data.get('content') or '').strip()
+        if not content:
+            self._send_json(400, {"error": "compose 内容不能为空"})
+            return
+
+        try:
+            documents = list(yaml.safe_load_all(content))
+        except yaml.YAMLError as e:
+            clean_msg = re.sub(r'[\x00-\x1F\x7F]', ' ', str(e)).strip()
+            self._send_json(400, {"error": f"解析 YAML 失败: {clean_msg or '未知错误'}"})
+            return
+
+        images = []
+        seen = set()
+        for doc in documents:
+            for item in self._extract_images_from_compose(doc):
+                key = f"{item['image']}:{item['tag']}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                images.append(item)
+
+        self._send_json(200, {"images": images})
 
     def handle_create_template(self):
         try:
