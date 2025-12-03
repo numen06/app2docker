@@ -1,9 +1,48 @@
-.idea
-venv/
-.venv/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
 dist/
 build/
-.DS_Store
+.venv/
+venv/
+ENV/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+frontend/dist/
+
+# 数据目录
+data/uploads/*
+!data/uploads/.gitkeep
+data/docker_build/*
+!data/docker_build/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
 *.jar
-docker_build/
-/__pycache__
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+*.bak
+.cache/
+/backend/__pycache__
