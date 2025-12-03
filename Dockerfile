@@ -2,8 +2,7 @@
 
 # ============ 阶段 1: 构建前端 ============
 # 使用阿里云 Node.js 镜像加速下载
-FROM registry.cn-hangzhou.aliyuncs.com/library/node:20-alpine AS frontend-builder
-
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS frontend-builder
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
 RUN apk add --no-cache tzdata && \
@@ -26,7 +25,7 @@ RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
-FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.11.1
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
