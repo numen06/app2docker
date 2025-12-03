@@ -5,9 +5,10 @@
 FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS frontend-builder
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
-RUN apk add --no-cache tzdata && \
+RUN yum install -y tzdata && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone
+    echo $TZ > /etc/timezone && \
+    yum clean all
 
 WORKDIR /frontend
 
@@ -29,12 +30,12 @@ FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN yum install -y \
     tzdata \
     curl \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
-    && rm -rf /var/lib/apt/lists/*
+    && yum clean all
 
 WORKDIR /app
 
