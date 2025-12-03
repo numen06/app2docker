@@ -22,11 +22,34 @@
         </div>
         <div class="col-md-6">
           <label class="form-label">模板</label>
-          <select v-model="form.template" class="form-select">
+          <select v-model="form.template" class="form-select" @change="loadTemplateParams">
             <option v-for="tpl in filteredTemplates" :key="tpl.name" :value="tpl.name">
               {{ tpl.name }}
             </option>
           </select>
+        </div>
+      </div>
+
+      <!-- 模板参数动态输入框 -->
+      <div v-if="templateParams.length > 0" class="mb-3 p-3 bg-light rounded">
+        <h6 class="mb-3">
+          <i class="fas fa-sliders-h"></i> 模板参数
+        </h6>
+        <div class="row g-3">
+          <div v-for="param in templateParams" :key="param.name" class="col-md-6">
+            <label class="form-label">
+              {{ param.description }}
+              <span v-if="param.required" class="text-danger">*</span>
+              <small v-if="param.default" class="text-muted">(默认: {{ param.default }})</small>
+            </label>
+            <input 
+              v-model="form.templateParams[param.name]"
+              type="text" 
+              class="form-control form-control-sm"
+              :placeholder="param.default || param.name"
+              :required="param.required && !param.default"
+            />
+          </div>
         </div>
       </div>
 
@@ -99,11 +122,13 @@ const form = ref({
   file: null,
   imageName: 'myapp/demo',
   tag: 'latest',
-  push: false
+  push: false,
+  templateParams: {}  // 模板参数
 })
 
 const templates = ref([])
 const building = ref(false)
+const templateParams = ref([])  // 当前模板的参数列表
 
 const projectTypes = computed(() => {
   const types = new Set()
@@ -160,6 +185,7 @@ async function loadTemplates() {
     templates.value = res.data.items || []
     if (filteredTemplates.value.length > 0) {
       form.value.template = filteredTemplates.value[0].name
+      await loadTemplateParams()  // 加载初始模板的参数
     }
   } catch (error) {
     console.error('加载模板失败:', error)
@@ -169,6 +195,39 @@ async function loadTemplates() {
 function updateTemplates() {
   if (filteredTemplates.value.length > 0) {
     form.value.template = filteredTemplates.value[0].name
+    loadTemplateParams()  // 加载新模板的参数
+  }
+}
+
+// 加载模板参数
+async function loadTemplateParams() {
+  templateParams.value = []
+  form.value.templateParams = {}
+  
+  if (!form.value.template || !form.value.projectType) {
+    return
+  }
+  
+  try {
+    const res = await axios.get('/api/template-params', {
+      params: {
+        template: form.value.template,
+        project_type: form.value.projectType
+      }
+    })
+    
+    templateParams.value = res.data.params || []
+    
+    // 初始化默认值
+    templateParams.value.forEach(param => {
+      if (param.default) {
+        form.value.templateParams[param.name] = param.default
+      }
+    })
+    
+    console.log('📋 模板参数:', templateParams.value)
+  } catch (error) {
+    console.error('加载模板参数失败:', error)
   }
 }
 
@@ -223,6 +282,11 @@ async function handleBuild() {
   formData.append('tag', form.value.tag)
   if (form.value.push) {
     formData.append('push', 'on')
+  }
+  
+  // 添加模板参数
+  if (Object.keys(form.value.templateParams).length > 0) {
+    formData.append('template_params', JSON.stringify(form.value.templateParams))
   }
   
   try {

@@ -1109,6 +1109,7 @@ class BuildManager:
         selected_template: str,
         original_filename: str,
         project_type: str = "jar",
+        template_params: dict = None,
     ):
         build_id = str(uuid.uuid4())
         thread = threading.Thread(
@@ -1122,6 +1123,7 @@ class BuildManager:
                 selected_template,
                 original_filename,
                 project_type,
+                template_params or {},
             ),
             daemon=True,
         )
@@ -1140,6 +1142,7 @@ class BuildManager:
         selected_template: str,
         original_filename: str,
         project_type: str = "jar",
+        template_params: dict = None,
     ):
         full_tag = f"{image_name}:{tag}"
         build_context = os.path.join(BUILD_DIR, image_name.replace("/", "_"))
@@ -1252,7 +1255,7 @@ class BuildManager:
                         pass
 
             # 获取模板路径（优先用户模板，否则使用内置模板）
-            template_file = get_template_path(selected_template)
+            template_file = get_template_path(selected_template, project_type)
             if not template_file:
                 log(f"❌ 模板不存在: {selected_template}\n")
                 return
@@ -1260,11 +1263,23 @@ class BuildManager:
             with open(template_file, "r", encoding="utf-8") as f:
                 dockerfile_content = f.read()
 
+            # 替换模板变量
             config = load_config()
-            expose_port = config.get("docker", {}).get("expose_port", 8080)
-            dockerfile_content = dockerfile_content.replace(
-                "{{EXPOSE_PORT}}", str(expose_port)
-            )
+            
+            # 准备变量替换字典
+            template_vars = template_params or {}
+            
+            # 如果没有传入 EXPOSE_PORT，使用配置中的默认值
+            if "EXPOSE_PORT" not in template_vars:
+                template_vars["EXPOSE_PORT"] = str(config.get("docker", {}).get("expose_port", 8080))
+            
+            # 替换所有变量
+            from backend.template_parser import replace_template_variables
+            try:
+                dockerfile_content = replace_template_variables(dockerfile_content, template_vars)
+            except ValueError as e:
+                log(f"❌ 模板变量替换失败: {e}\n")
+                return
 
             with open(
                 os.path.join(build_context, "Dockerfile"), "w", encoding="utf-8"

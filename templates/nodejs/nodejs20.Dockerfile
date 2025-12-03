@@ -3,6 +3,12 @@
 # 使用阿里云镜像源加速下载
 FROM registry.cn-hangzhou.aliyuncs.com/library/node:20-alpine as builder
 
+# 设置时区为上海
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
+
 # 设置工作目录
 WORKDIR /app
 
@@ -22,6 +28,12 @@ RUN npm run build
 # 使用阿里云镜像源加速下载
 FROM registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
 
+# 设置时区为上海
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
+
 # 从构建阶段复制构建产物到 Nginx 目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 
@@ -29,7 +41,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # COPY nginx.conf /etc/nginx/nginx.conf
 
 # 暴露端口
-EXPOSE {{EXPOSE_PORT}}
+EXPOSE {{{EXPOSE_PORT:80}}
 
 # 启动 Nginx
 CMD ["nginx", "-g", "daemon off;"]

@@ -16,7 +16,7 @@ from backend.utils import ensure_dirs
 # 创建 FastAPI 应用
 app = FastAPI(
     title="App2Docker API",
-    description="将 JAR 文件和 Node.js 应用打包为 Docker 镜像的 API 服务",
+    description="一键将应用打包成 Docker 镜像的可视化平台 - 支持 Java、Node.js、静态网站等多种应用类型",
     version="2.0.0",
 )
 
@@ -127,11 +127,20 @@ async def shutdown_event():
 # 命令行启动入口
 if __name__ == "__main__":
     import uvicorn
+    from backend.config import load_config
+
+    # 从配置文件或环境变量读取端口
+    config = load_config()
+    server_config = config.get("server", {})
+    host = os.getenv("APP_HOST", server_config.get("host", "0.0.0.0"))
+    port = int(os.getenv("APP_PORT", server_config.get("port", 8000)))
+
+    print(f"🌐 服务监听: {host}:{port}")
 
     uvicorn.run(
         "backend.app:app",
-        host="0.0.0.0",
-        port=8000,
+        host=host,
+        port=port,
         reload=False,
         log_level="info",
     )

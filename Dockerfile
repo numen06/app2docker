@@ -1,7 +1,14 @@
 # 多阶段构建：前端 + 后端
 
 # ============ 阶段 1: 构建前端 ============
-FROM node:20-alpine AS frontend-builder
+# 使用阿里云 Node.js 镜像加速下载
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:20-alpine AS frontend-builder
+
+# 设置时区为上海
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
 
 WORKDIR /frontend
 
@@ -18,14 +25,19 @@ COPY frontend/ ./
 RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
-FROM python:3.11-slim
+# 使用阿里云 Python 镜像加速下载
+FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
+
+# 设置时区为上海
+ENV TZ=Asia/Shanghai
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
+    curl \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
 
 # 复制 Python 依赖文件
 COPY requirements.txt .
@@ -53,9 +65,22 @@ COPY templates/ ./templates/
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -p 8000:8000 \
 #   app2docker
+#
+# 自定义端口：
+# docker run -d \
+#   -e APP_PORT=9000 \
+#   -v $(pwd)/data:/app/data \
+#   -v /var/run/docker.sock:/var/run/docker.sock \
+#   -p 9000:9000 \
+#   app2docker
+
+# 设置默认服务端口（可通过环境变量覆盖）
+ENV APP_PORT=8000
+ENV APP_HOST=0.0.0.0
 
 # 暴露服务端口
-EXPOSE 8000
+EXPOSE ${APP_PORT}
 
 # 启动后端服务（后端会服务前端构建文件）
+# 端口可通过环境变量 APP_PORT 设置
 CMD ["python", "backend/app.py"]

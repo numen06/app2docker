@@ -25,6 +25,7 @@ from backend.handlers import (
     BuildManager,
     generate_image_name,
     get_all_templates,
+    get_template_path,
     BUILTIN_TEMPLATES_DIR,
     USER_TEMPLATES_DIR,
     EXPORT_DIR,
@@ -35,6 +36,7 @@ from backend.handlers import (
 from backend.config import load_config, save_config
 from backend.utils import get_safe_filename
 from backend.auth import authenticate, verify_token
+from backend.template_parser import parse_template_variables
 from datetime import datetime
 import json
 
@@ -157,6 +159,7 @@ async def upload_file(
     template: str = Form(...),
     project_type: str = Form("jar"),
     push: str = Form("off"),
+    template_params: Optional[str] = Form(None),  # JSON 字符串格式的模板参数
 ):
     """上传文件并开始构建"""
     try:
@@ -165,6 +168,14 @@ async def upload_file(
 
         # 读取文件内容
         file_data = await app_file.read()
+        
+        # 解析模板参数
+        params_dict = {}
+        if template_params:
+            try:
+                params_dict = json.loads(template_params)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="模板参数格式错误")
         
         # 调用构建管理器
         manager = BuildManager()
@@ -176,6 +187,7 @@ async def upload_file(
             selected_template=template,
             original_filename=app_file.filename,
             project_type=project_type,
+            template_params=params_dict,  # 传递模板参数
         )
 
         return JSONResponse(
@@ -391,6 +403,36 @@ async def list_templates():
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取模板列表失败: {str(e)}")
+
+
+@router.get("/template-params")
+async def get_template_params(
+    template: str = Query(..., description="模板名称"),
+    project_type: Optional[str] = Query(None, description="项目类型")
+):
+    """获取模板的参数列表"""
+    try:
+        # 获取模板路径
+        template_path = get_template_path(template, project_type)
+        if not template_path or not os.path.exists(template_path):
+            raise HTTPException(status_code=404, detail="模板不存在")
+        
+        # 读取模板内容
+        with open(template_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # 解析参数
+        params = parse_template_variables(content)
+        
+        return JSONResponse({
+            "template": template,
+            "project_type": project_type,
+            "params": params
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"解析模板参数失败: {str(e)}")
 
 
 @router.get("/templates")
