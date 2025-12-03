@@ -56,7 +56,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 
 # 从第一阶段复制构建好的前端文件
-COPY --from=frontend-builder /frontend/dist ./dist
+COPY --from=frontend-builder /dist ./dist
 
 # 复制内置模板
 COPY templates/ ./templates/
