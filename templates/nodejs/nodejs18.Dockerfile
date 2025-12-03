@@ -1,6 +1,7 @@
 # Node.js 18 前端应用 Dockerfile (多阶段构建)
 # 第一阶段：使用 Node.js 18 构建应用
-FROM node:18-alpine as builder
+# 使用阿里云镜像源加速下载
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:18-alpine as builder
 
 # 设置工作目录
 WORKDIR /app
@@ -18,7 +19,8 @@ COPY . .
 RUN npm run build
 
 # 第二阶段：使用 Nginx 部署
-FROM nginx:alpine
+# 使用阿里云镜像源加速下载
+FROM registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
 
 # 从构建阶段复制构建产物到 Nginx 目录
 COPY --from=builder /app/dist /usr/share/nginx/html
