@@ -23,8 +23,6 @@ from pydantic import BaseModel
 
 from backend.handlers import (
     BuildManager,
-    load_config,
-    save_config,
     generate_image_name,
     get_all_templates,
     BUILTIN_TEMPLATES_DIR,
@@ -34,6 +32,7 @@ from backend.handlers import (
     client,
     DOCKER_AVAILABLE,
 )
+from backend.config import load_config, save_config
 from backend.utils import get_safe_filename
 from backend.auth import authenticate, verify_token
 from datetime import datetime
@@ -166,7 +165,7 @@ async def upload_file(
 
         # 读取文件内容
         file_data = await app_file.read()
-
+        
         # 调用构建管理器
         manager = BuildManager()
         build_id = manager.start_build(
@@ -181,8 +180,8 @@ async def upload_file(
 
         return JSONResponse(
             {
-                "build_id": build_id,
-                "message": "构建任务已启动，请通过日志查看进度",
+            "build_id": build_id,
+            "message": "构建任务已启动，请通过日志查看进度",
             }
         )
     except HTTPException:
@@ -239,7 +238,7 @@ async def export_image(
     try:
         import shutil
         import gzip
-
+        
         if not DOCKER_AVAILABLE:
             raise HTTPException(
                 status_code=503, detail="Docker 服务不可用，无法导出镜像"
@@ -279,7 +278,7 @@ async def export_image(
             }
             if auth_config:
                 pull_kwargs["auth_config"] = auth_config
-
+            
             pull_stream = client.api.pull(**pull_kwargs)
             for chunk in pull_stream:
                 if "error" in chunk:
@@ -292,7 +291,7 @@ async def export_image(
 
         # 创建导出目录
         os.makedirs(EXPORT_DIR, exist_ok=True)
-
+        
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         safe_base = get_safe_filename(image_name.replace("/", "_") or "image")
         tar_filename = f"{safe_base}-{tag_name}-{timestamp}.tar"
@@ -341,9 +340,9 @@ async def parse_compose(request: ParseComposeRequest):
     """解析 Docker Compose 文件"""
     try:
         import yaml
-
+        
         compose_doc = yaml.safe_load(request.content)
-
+        
         # 提取镜像列表
         images = []
         if isinstance(compose_doc, dict):
@@ -353,7 +352,7 @@ async def parse_compose(request: ParseComposeRequest):
                     image = service_config.get("image", "")
                     if image:
                         images.append({"service": service_name, "image": image})
-
+        
         return JSONResponse({"images": images})
     except HTTPException:
         raise
@@ -403,20 +402,20 @@ async def get_template(name: Optional[str] = Query(None)):
             templates = get_all_templates()
             if name not in templates:
                 raise HTTPException(status_code=404, detail="模板不存在")
-
+            
             template_path = templates[name]["path"]
             if not os.path.exists(template_path):
                 raise HTTPException(status_code=404, detail="模板文件不存在")
-
+            
             with open(template_path, "r", encoding="utf-8") as f:
                 content = f.read()
-
+            
             return JSONResponse(
                 {
-                    "name": name,
-                    "content": content,
-                    "type": templates[name]["type"],
-                    "project_type": templates[name].get("project_type", "jar"),
+                "name": name,
+                "content": content,
+                "type": templates[name]["type"],
+                "project_type": templates[name].get("project_type", "jar"),
                 }
             )
         else:
@@ -444,14 +443,14 @@ async def get_template(name: Optional[str] = Query(None)):
                     continue
 
             details.sort(key=lambda item: natural_sort_key(item["name"]))
-
+            
             # 返回前端期望的格式
             return JSONResponse(
                 {
-                    "items": details,
-                    "total": len(details),
-                    "builtin": sum(1 for d in details if d["type"] == "builtin"),
-                    "user": sum(1 for d in details if d["type"] == "user"),
+                "items": details,
+                "total": len(details),
+                "builtin": sum(1 for d in details if d["type"] == "builtin"),
+                "user": sum(1 for d in details if d["type"] == "user"),
                 }
             )
     except HTTPException:
@@ -467,24 +466,31 @@ async def create_template(request: TemplateRequest):
         name = request.name
         content = request.content
         project_type = request.project_type
-
+        
+        print(f"📝 创建模板请求: name={name}, project_type={project_type}")
+        
         # 验证模板名称
         if not name or ".." in name or "/" in name:
             raise HTTPException(status_code=400, detail="非法模板名称")
-
+        
         # 确定保存路径
         template_dir = os.path.join(USER_TEMPLATES_DIR, project_type)
+        print(f"📁 模板目录: {template_dir}")
         os.makedirs(template_dir, exist_ok=True)
-
+        
         template_path = os.path.join(template_dir, f"{name}.Dockerfile")
-
+        print(f"💾 保存路径: {template_path}")
+        
         if os.path.exists(template_path):
             raise HTTPException(status_code=400, detail="模板已存在")
-
+        
         # 保存模板
         with open(template_path, "w", encoding="utf-8") as f:
             f.write(content)
-
+        
+        print(f"✅ 模板已保存: {template_path}")
+        print(f"📊 文件大小: {os.path.getsize(template_path)} bytes")
+        
         return JSONResponse({"message": "模板创建成功", "name": name})
     except HTTPException:
         raise
@@ -499,20 +505,20 @@ async def update_template(request: TemplateRequest):
         name = request.name
         content = request.content
         original_name = request.original_name or name  # 支持重命名
-
+        
         templates = get_all_templates()
-
+        
         # 如果是重命名，检查原始模板是否存在
         if original_name not in templates:
             raise HTTPException(status_code=404, detail="模板不存在")
-
+        
         template_info = templates[original_name]
-
+        
         if template_info["type"] == "builtin":
             raise HTTPException(status_code=403, detail="不能修改内置模板")
-
+        
         old_path = template_info["path"]
-
+        
         # 如果项目类型改变或名称改变，需要移动/重命名文件
         if (
             request.old_project_type
@@ -522,11 +528,11 @@ async def update_template(request: TemplateRequest):
             new_dir = os.path.join(USER_TEMPLATES_DIR, request.project_type)
             os.makedirs(new_dir, exist_ok=True)
             new_path = os.path.join(new_dir, f"{name}.Dockerfile")
-
+            
             # 保存到新位置
             with open(new_path, "w", encoding="utf-8") as f:
                 f.write(content)
-
+            
             # 删除旧文件
             if os.path.exists(old_path):
                 os.remove(old_path)
@@ -541,7 +547,7 @@ async def update_template(request: TemplateRequest):
             # 仅更新内容
             with open(old_path, "w", encoding="utf-8") as f:
                 f.write(content)
-
+        
         return JSONResponse({"message": "模板更新成功", "name": name})
     except HTTPException:
         raise
@@ -555,21 +561,21 @@ async def delete_template(request: DeleteTemplateRequest):
     try:
         name = request.name
         templates = get_all_templates()
-
+        
         if name not in templates:
             raise HTTPException(status_code=404, detail="模板不存在")
-
+        
         template_info = templates[name]
-
+        
         if template_info["type"] == "builtin":
             raise HTTPException(status_code=403, detail="不能删除内置模板")
-
+        
         template_path = template_info["path"]
-
+        
         # 删除文件
         if os.path.exists(template_path):
             os.remove(template_path)
-
+        
         return JSONResponse({"message": "模板删除成功", "name": name})
     except HTTPException:
         raise

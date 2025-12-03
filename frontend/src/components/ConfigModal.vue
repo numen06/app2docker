@@ -91,7 +91,7 @@ const config = ref({
   username: '',
   password: '',
   expose_port: 8080,
-  default_push: false
+  default_push: false  // 默认不推送
 })
 
 const saving = ref(false)
@@ -109,7 +109,7 @@ async function loadConfig() {
       username: docker.username || '',
       password: docker.password || '',
       expose_port: docker.expose_port || 8080,
-      default_push: docker.default_push || false
+      default_push: docker.default_push === true  // 布尔值必须严格判断
     }
     console.log('✅ 配置已加载:', config.value)
   } catch (error) {
@@ -160,11 +160,16 @@ function handleEscape(e) {
   }
 }
 
-watch(() => props.modelValue, (val) => {
+watch(
+  () => props.modelValue,
+  (val) => {
   if (val) {
+      console.log('🔔 ConfigModal: 模态框打开，开始加载配置')
     loadConfig()
   }
-})
+  },
+  { immediate: true }  // 立即执行一次，确保首次打开时也会加载
+)
 
 onMounted(() => {
   console.log('📌 ConfigModal: 挂载，添加ESC监听器')

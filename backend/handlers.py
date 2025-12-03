@@ -126,8 +126,8 @@ def get_all_templates():
             if not os.path.isdir(type_dir):
                 continue
 
-            # 只处理有效的项目类型目录
-            if project_type not in ["jar", "nodejs"]:
+            # 跳过隐藏目录和特殊目录
+            if project_type.startswith('.') or project_type.startswith('_'):
                 continue
 
             for f in os.listdir(type_dir):

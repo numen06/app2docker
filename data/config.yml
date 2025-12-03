@@ -1,10 +1,10 @@
 docker:
   registry: docker.io
-  registry_prefix: test
-  default_push: false
-  expose_port: 8080
-  username: ''
-  password: ''
+  registry_prefix: tetwe
+  default_push: true
+  expose_port: 9999
+  username: testuser
+  password: testpass12123
 server:
   host: 0.0.0.0
   port: 8000

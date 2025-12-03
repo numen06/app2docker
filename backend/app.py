@@ -23,7 +23,13 @@ app = FastAPI(
 # CORS 配置（允许前端访问）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Vite 默认端口
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "null",
+    ],  # Vite 默认端口 + file:// 协议
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,6 +91,12 @@ async def health_check_api():
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
+    from backend.config import ensure_config_exists
+
+    # 确保配置文件存在
+    ensure_config_exists()
+
+    # 确保必要的目录存在
     ensure_dirs()
 
     print("\n" + "=" * 60)

@@ -6,21 +6,18 @@
           <label class="form-label">
             项目类型 <span class="text-danger">*</span>
           </label>
-          <input 
+          <select 
             v-model="form.projectType" 
-            list="project-types" 
-            class="form-control" 
-            placeholder="选择或输入项目类型"
+            class="form-select" 
             @change="updateTemplates"
             required
-          />
-          <datalist id="project-types">
+          >
             <option v-for="type in projectTypes" :key="type.value" :value="type.value">
               {{ type.label }}
             </option>
-          </datalist>
+          </select>
           <div class="form-text small">
-            <i class="fas fa-lightbulb"></i> 可选择预设类型或自定义输入
+            <i class="fas fa-info-circle"></i> 选择项目类型（需要先在模板管理中添加对应类型的模板）
           </div>
         </div>
         <div class="col-md-6">
