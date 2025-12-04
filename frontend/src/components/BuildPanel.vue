@@ -397,8 +397,10 @@ async function pollBuildLogs(buildId) {
       
       // 检查是否构建完成
       const lastLine = logLines[logLines.length - 1] || ''
-      const isDone = lastLine.includes('构建完成') || 
+      const isDone = lastLine.includes('所有操作已完成') ||
+                     lastLine.includes('构建完成') || 
                      lastLine.includes('构建失败') || 
+                     lastLine.includes('构建异常') ||
                      lastLine.includes('Successfully tagged') ||
                      lastLine.includes('Error') ||
                      lastLine.includes('推送完成')

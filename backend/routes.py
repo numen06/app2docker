@@ -364,11 +364,34 @@ async def export_image(
         full_tag = f"{image_name}:{tag_name}"
         compress_enabled = compress.lower() in ("gzip", "gz", "tgz", "1", "true", "yes")
 
-        # 获取认证信息
-        config = load_config()
-        docker_cfg = config.get("docker", {})
-        username = docker_cfg.get("username")
-        password = docker_cfg.get("password")
+        # 智能匹配认证信息
+        from backend.config import get_all_registries, get_active_registry
+
+        def find_matching_registry_for_export(image_name):
+            """根据镜像名称查找匹配的仓库配置"""
+            # 提取 registry 地址（镜像名的第一部分，如果包含点）
+            parts = image_name.split("/")
+            if len(parts) >= 2 and "." in parts[0]:
+                image_registry = parts[0]
+                all_registries = get_all_registries()
+                for reg in all_registries:
+                    reg_address = reg.get("registry", "")
+                    if reg_address and (
+                        image_registry == reg_address
+                        or image_registry.startswith(reg_address)
+                        or reg_address.startswith(image_registry)
+                    ):
+                        return reg
+            return None
+
+        # 尝试智能匹配仓库
+        registry_config = find_matching_registry_for_export(image_name)
+        if not registry_config:
+            # 如果没有匹配，使用激活的仓库
+            registry_config = get_active_registry()
+
+        username = registry_config.get("username")
+        password = registry_config.get("password")
         auth_config = None
         if username and password:
             auth_config = {"username": username, "password": password}
