@@ -25,7 +25,12 @@ data/docker_build/*
 !data/docker_build/.gitkeep
 data/exports/*
 !data/exports/.gitkeep
+data/config.yml
+data/templates/
 *.jar
+*.zip
+*.tar
+*.tar.gz
 
 # IDE
 .idea/

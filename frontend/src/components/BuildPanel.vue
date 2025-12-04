@@ -103,6 +103,27 @@
         </div>
       </div>
 
+      <!-- 仓库选择 -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-12">
+          <label class="form-label">
+            <i class="fas fa-server"></i> 构建认证仓库
+            <small class="text-muted">(用于拉取基础镜像)</small>
+          </label>
+          <select v-model="form.buildRegistry" class="form-select">
+            <option value="">使用激活仓库</option>
+            <option v-for="reg in registries" :key="reg.name" :value="reg.name">
+              {{ reg.name }} - {{ reg.registry }}
+              <span v-if="reg.active"> (激活)</span>
+            </option>
+          </select>
+          <div class="form-text small">
+            <i class="fas fa-info-circle"></i> 
+            构建时使用该仓库的认证信息拉取基础镜像。推送始终使用激活的仓库。
+          </div>
+        </div>
+      </div>
+
       <button type="submit" class="btn btn-primary w-100" :disabled="building">
         <i class="fas fa-hammer"></i> 
         {{ building ? '构建中...' : '开始构建' }}
@@ -113,8 +134,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import { computed, onMounted, ref } from 'vue'
 
 const form = ref({
   projectType: 'jar',
@@ -123,12 +144,14 @@ const form = ref({
   imageName: 'myapp/demo',
   tag: 'latest',
   push: false,
-  templateParams: {}  // 模板参数
+  templateParams: {},  // 模板参数
+  buildRegistry: ''  // 构建时使用的仓库（空表示使用激活的仓库）
 })
 
 const templates = ref([])
 const building = ref(false)
 const templateParams = ref([])  // 当前模板的参数列表
+const registries = ref([])  // 仓库列表
 
 const projectTypes = computed(() => {
   const types = new Set()
@@ -189,6 +212,17 @@ async function loadTemplates() {
     }
   } catch (error) {
     console.error('加载模板失败:', error)
+  }
+}
+
+// 加载仓库列表
+async function loadRegistries() {
+  try {
+    const res = await axios.get('/api/registries')
+    registries.value = res.data.registries || []
+    console.log('📦 已加载仓库列表:', registries.value)
+  } catch (error) {
+    console.error('加载仓库列表失败:', error)
   }
 }
 
@@ -289,6 +323,11 @@ async function handleBuild() {
     formData.append('template_params', JSON.stringify(form.value.templateParams))
   }
   
+  // 添加构建仓库
+  if (form.value.buildRegistry) {
+    formData.append('build_registry', form.value.buildRegistry)
+  }
+  
   try {
     const res = await axios.post('/api/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -332,12 +371,18 @@ async function pollBuildLogs(buildId) {
         responseType: 'text' // 确保以文本方式接收
       })
       
-      console.log('📥 收到日志响应:', res.data.substring(0, 100) + '...')
+      console.log('📥 收到日志响应 (前100字符):', res.data.substring(0, 100))
       
+      // 确保日志是字符串
       const logs = typeof res.data === 'string' ? res.data : String(res.data)
-      const logLines = logs.split('\n').filter(line => line.trim())
       
-      console.log(`📊 日志行数: ${logLines.length}, 上次: ${lastLogLength}`)
+      // 分割日志行，过滤空行
+      const logLines = logs
+        .split('\n')
+        .map(line => line.trim())  // 去除两端空格
+        .filter(line => line.length > 0)  // 过滤空行
+      
+      console.log(`📊 日志总行数: ${logLines.length}, 上次处理: ${lastLogLength}`)
       
       // 只添加新的日志行
       if (logLines.length > lastLogLength) {
@@ -384,11 +429,11 @@ async function pollBuildLogs(buildId) {
   // 立即执行一次
   await poll()
   
-  // 每秒轮询一次，最多120秒
+  // 每 500ms 轮询一次（更实时），最多240次（120秒）
   let pollCount = 0
   pollInterval = setInterval(() => {
     pollCount++
-    if (pollCount > 120) {
+    if (pollCount > 240) {  // 240 * 500ms = 120秒
       clearInterval(pollInterval)
       building.value = false
       console.log('⏰ 构建日志轮询超时')
@@ -398,11 +443,12 @@ async function pollBuildLogs(buildId) {
     } else {
       poll()
     }
-  }, 1000)
+  }, 500)  // 500ms 轮询一次，更实时
 }
 
 onMounted(() => {
   loadTemplates()
+  loadRegistries()
 })
 </script>
 

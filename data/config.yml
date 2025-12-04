@@ -1,10 +1,32 @@
 docker:
-  registry: docker.io
-  registry_prefix: tetwe
   default_push: true
   expose_port: 9999
-  username: testuser
-  password: testpass12123
+  use_remote: true
+  remote:
+    host: 10.100.10.95
+    port: 2375
+    use_tls: false
+    cert_path: ''
+    verify_tls: true
+  registries:
+  - name: 默认仓库
+    registry: docker.jajachina.com
+    registry_prefix: docker.jajachina.com/jaja/
+    username: public
+    password: Admin@123
+    active: true
+  - name: 仓库 2
+    registry: registry.cn-shanghai.aliyuncs.com
+    registry_prefix: registry.cn-shanghai.aliyuncs.com/51jbm
+    username: numen06@yahoo.com.cn
+    password: Admin@123
+    active: false
+  - name: 仓库 3
+    registry: registry.cn-hangzhou.aliyuncs.com
+    registry_prefix: ''
+    username: numen06@yahoo.com.cn
+    password: Adnin@123
+    active: false
 server:
   host: 0.0.0.0
   port: 8000

@@ -2,12 +2,11 @@
 # 适用于简单的静态网站部署
 
 # 使用阿里云 Nginx 镜像
-FROM registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
+FROM registry.cn-shanghai.aliyuncs.com/numen/nginx:latest
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
-RUN apk add --no-cache tzdata && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
 
 # 复制静态文件到 nginx 默认目录

@@ -30,65 +30,30 @@ USER_TEMPLATES_DIR = "data/templates"  # 用户自定义模板，通过Docker映
 DIST_DIR = "dist"  # 前端构建产物
 INDEX_FILE = "dist/index.html"  # 前端入口文件
 
+# 导入 Docker 构建器
+from backend.docker_builder import create_docker_builder
+
+# 全局 Docker 构建器（在配置更新时会重新创建）
+docker_builder = None
+DOCKER_AVAILABLE = False
+
+
+def init_docker_builder():
+    """初始化 Docker 构建器"""
+    global docker_builder, DOCKER_AVAILABLE
+    config = load_config()
+    docker_config = config.get("docker", {})
+    docker_builder = create_docker_builder(docker_config)
+    DOCKER_AVAILABLE = docker_builder.is_available()
+    print(f"🐳 Docker 构建器已初始化: {docker_builder.get_connection_info()}")
+    return docker_builder
+
+
+# 在模块加载时初始化
 try:
-    import docker
-
-    try:
-        client = docker.from_env()
-        # 测试连接是否有效
-        client.ping()
-        DOCKER_AVAILABLE = True
-        print("✅ Docker 模块加载成功，已连接到 Docker 服务")
-    except Exception as e:
-        print(f"⚠️ Docker 服务未运行或连接失败: {e}")
-        print("🔧 启用模拟构建模式（仅输出日志，不真实构建）")
-        DOCKER_AVAILABLE = False
-
-        # 创建一个轻量模拟器，仅用于返回构建日志流
-        class MockDockerClient:
-            class MockImages:
-                def build(self, **kwargs):
-                    yield '{"stream":"模拟模式：Docker 服务不可用\\n"}\n'
-                    yield '{"stream":"Step 1/4 : FROM openjdk:17-jre-slim (模拟)\\n"}\n'
-                    yield '{"stream":"Step 2/4 : COPY . . (模拟)\\n"}\n'
-                    yield '{"stream":"Step 3/4 : EXPOSE 8080 (模拟)\\n"}\n'
-                    yield '{"stream":"Step 4/4 : ENTRYPOINT [\\"java\\", \\"-jar\\", \\"app.jar\\"] (模拟)\\n"}\n'
-                    yield '{"stream":"Successfully built模拟镜像ID12345\\n"}\n'
-                    yield '{"stream":"Successfully tagged 模拟镜像:latest\\n"}\n'
-
-                def push(self, repository, tag=None, **kwargs):
-                    yield '{"status":"模拟推送：推送镜像 " + repository + ":" + (tag or "latest") + " (未真实推送)"}\n'
-                    yield '{"status":"模拟推送完成，耗时 0.01 秒"}\n'
-
-            def __init__(self):
-                self.images = self.MockImages()
-
-        client = MockDockerClient()
-except (ImportError, ModuleNotFoundError) as e:
-    print(f"⚠️ 未安装 docker SDK 模块: {e}")
-    print("🔧 启用模拟构建模式（仅输出日志，不真实构建）")
-    DOCKER_AVAILABLE = False
-
-    # 创建一个轻量模拟器，仅用于返回构建日志流
-    class MockDockerClient:
-        class MockImages:
-            def build(self, **kwargs):
-                yield '{"stream":"模拟模式：未安装 docker 模块或 Docker 服务不可用\\n"}\n'
-                yield '{"stream":"Step 1/4 : FROM openjdk:17-jre-slim (模拟)\\n"}\n'
-                yield '{"stream":"Step 2/4 : COPY . . (模拟)\\n"}\n'
-                yield '{"stream":"Step 3/4 : EXPOSE 8080 (模拟)\\n"}\n'
-                yield '{"stream":"Step 4/4 : ENTRYPOINT [\\"java\\", \\"-jar\\", \\"app.jar\\"] (模拟)\\n"}\n'
-                yield '{"stream":"Successfully built模拟镜像ID12345\\n"}\n'
-                yield '{"stream":"Successfully tagged 模拟镜像:latest\\n"}\n'
-
-            def push(self, repository, tag=None, **kwargs):
-                yield '{"status":"模拟推送：推送镜像 " + repository + ":" + (tag or "latest") + " (未真实推送)"}\n'
-                yield '{"status":"模拟推送完成，耗时 0.01 秒"}\n'
-
-        def __init__(self):
-            self.images = self.MockImages()
-
-    client = MockDockerClient()
+    init_docker_builder()
+except Exception as e:
+    print(f"⚠️ 初始化 Docker 构建器失败: {e}")
 
 
 def natural_sort_key(s):
@@ -127,7 +92,7 @@ def get_all_templates():
                 continue
 
             # 跳过隐藏目录和特殊目录
-            if project_type.startswith('.') or project_type.startswith('_'):
+            if project_type.startswith(".") or project_type.startswith("_"):
                 continue
 
             for f in os.listdir(type_dir):
@@ -167,12 +132,12 @@ def get_template_path(template_name, project_type=None):
 
     # 如果没有指定项目类型，遍历所有子目录查找
     if not project_type:
-        for ptype in ['jar', 'nodejs']:
+        for ptype in ["jar", "nodejs"]:
             # 用户模板目录
             user_type_path = os.path.join(USER_TEMPLATES_DIR, ptype, filename)
             if os.path.exists(user_type_path):
                 return user_type_path
-            
+
             # 内置模板目录
             builtin_type_path = os.path.join(BUILTIN_TEMPLATES_DIR, ptype, filename)
             if os.path.exists(builtin_type_path):
@@ -385,32 +350,35 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
         """处理登录请求"""
         try:
             data = self._read_json_body()
-            username = data.get('username', '').strip()
-            password = data.get('password', '').strip()
-            
+            username = data.get("username", "").strip()
+            password = data.get("password", "").strip()
+
             if not username or not password:
                 self._send_json(400, {"error": "用户名和密码不能为空"})
                 return
-            
+
             result = authenticate(username, password)
-            
-            if result['success']:
-                self._send_json(200, {
-                    "success": True,
-                    "token": result['token'],
-                    "username": result['username'],
-                    "expires_in": result['expires_in']
-                })
+
+            if result["success"]:
+                self._send_json(
+                    200,
+                    {
+                        "success": True,
+                        "token": result["token"],
+                        "username": result["username"],
+                        "expires_in": result["expires_in"],
+                    },
+                )
             else:
-                self._send_json(401, {"error": result['error']})
+                self._send_json(401, {"error": result["error"]})
         except Exception as e:
             self._send_json(500, {"error": f"登录失败: {str(e)}"})
-    
+
     def handle_logout(self):
         """处理登出请求"""
         # JWT 是无状态的，登出主要在客户端删除 token
         self._send_json(200, {"success": True, "message": "登出成功"})
-    
+
     def handle_get_config(self):
         try:
             config = load_config()
@@ -498,20 +466,13 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             auth_config = {"username": username, "password": password}
 
         try:
-            pull_kwargs = {
-                "repository": image_name,
-                "tag": tag,
-                "stream": True,
-                "decode": True,
-            }
-            if auth_config:
-                pull_kwargs["auth_config"] = auth_config
-            pull_stream = client.api.pull(**pull_kwargs)
+            # 使用 docker_builder
+            pull_stream = docker_builder.pull_image(image_name, tag, auth_config)
             for chunk in pull_stream:
                 if "error" in chunk:
                     raise RuntimeError(chunk["error"])
 
-            client.images.get(full_tag)  # 确认镜像存在
+            docker_builder.get_image(full_tag)  # 确认镜像存在
 
             os.makedirs(EXPORT_DIR, exist_ok=True)
             timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
@@ -519,7 +480,7 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             tar_filename = f"{safe_base}-{tag}-{timestamp}.tar"
             tar_path = os.path.join(EXPORT_DIR, tar_filename)
 
-            image_stream = client.api.get_image(full_tag)
+            image_stream = docker_builder.export_image(full_tag)
             with open(tar_path, "wb") as f:
                 for chunk in image_stream:
                     f.write(chunk)
@@ -594,10 +555,11 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": "未找到文件"})
                 return
 
-            config = load_config()
-            docker_config = config.get("docker", {})
-            # 获取属性registry_prefix
-            base_name = docker_config.get("registry_prefix", "")
+            # 使用激活仓库的 registry_prefix
+            from backend.config import get_active_registry
+
+            active_registry = get_active_registry()
+            base_name = active_registry.get("registry_prefix", "")
             suggested_name = generate_image_name(base_name, app_filename)
             self._send_json(200, {"suggested_imagename": suggested_name})
 
@@ -645,6 +607,19 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                     if form_data.get("expose_port", "").isdigit()
                     else 8080
                 ),
+                # 远程 Docker 配置
+                "use_remote": (form_data.get("use_remote") == "on"),
+                "remote": {
+                    "host": form_data.get("remote_host", "").strip(),
+                    "port": (
+                        int(form_data.get("remote_port", "2375"))
+                        if form_data.get("remote_port", "").isdigit()
+                        else 2375
+                    ),
+                    "use_tls": (form_data.get("remote_use_tls") == "on"),
+                    "cert_path": form_data.get("remote_cert_path", "").strip(),
+                    "verify_tls": (form_data.get("remote_verify_tls", "on") == "on"),
+                },
             }
 
             if "docker" not in config:
@@ -652,6 +627,11 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             config["docker"].update(new_docker_config)
 
             save_config(config)
+
+            # 重新初始化 Docker 构建器
+            global docker_builder, DOCKER_AVAILABLE
+            docker_builder = init_docker_builder()
+            DOCKER_AVAILABLE = docker_builder.is_available()
 
             print(f"✅ 配置已更新: {config['docker']}")
             self._send_json(
@@ -821,8 +801,10 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                 return
 
             # 验证项目类型格式：只允许小写字母、数字、下划线和连字符
-            if not re.match(r'^[a-z0-9_-]+$', project_type):
-                self._send_json(400, {"error": "项目类型只能包含小写字母、数字、下划线和连字符"})
+            if not re.match(r"^[a-z0-9_-]+$", project_type):
+                self._send_json(
+                    400, {"error": "项目类型只能包含小写字母、数字、下划线和连字符"}
+                )
                 return
 
             # 使用项目类型子目录保存
@@ -883,10 +865,14 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
 
             # 使用提供的项目类型，如果没有则使用原模板的项目类型
             target_project_type = project_type or original_project_type
-            
+
             # 验证项目类型格式
-            if target_project_type and not re.match(r'^[a-z0-9_-]+$', target_project_type):
-                self._send_json(400, {"error": "项目类型只能包含小写字母、数字、下划线和连字符"})
+            if target_project_type and not re.match(
+                r"^[a-z0-9_-]+$", target_project_type
+            ):
+                self._send_json(
+                    400, {"error": "项目类型只能包含小写字母、数字、下划线和连字符"}
+                )
                 return
 
             target_name = new_name or original_name
@@ -905,9 +891,7 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                 if target_project_type != original_project_type:
                     self._send_json(
                         403,
-                        {
-                            "error": "内置模板的项目类型不可修改"
-                        },
+                        {"error": "内置模板的项目类型不可修改"},
                     )
                     return
                 # 在用户目录的对应项目类型子目录中创建
@@ -942,7 +926,7 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                 message = f"模板已更新并移动到 {target_project_type} 目录"
             else:
                 message = "模板更新成功"
-            
+
             self._send_json(
                 200,
                 {
@@ -950,7 +934,7 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
                     "template": {
                         "name": target_name,
                         "project_type": target_project_type,
-                        "filename": os.path.basename(dst_path)
+                        "filename": os.path.basename(dst_path),
                     },
                 },
             )
@@ -1110,6 +1094,7 @@ class BuildManager:
         original_filename: str,
         project_type: str = "jar",
         template_params: dict = None,
+        build_registry: str = None,  # 构建时使用的仓库名称
     ):
         build_id = str(uuid.uuid4())
         thread = threading.Thread(
@@ -1124,6 +1109,7 @@ class BuildManager:
                 original_filename,
                 project_type,
                 template_params or {},
+                build_registry,
             ),
             daemon=True,
         )
@@ -1143,12 +1129,17 @@ class BuildManager:
         original_filename: str,
         project_type: str = "jar",
         template_params: dict = None,
+        build_registry: str = None,  # 构建时使用的仓库名称
     ):
         full_tag = f"{image_name}:{tag}"
         build_context = os.path.join(BUILD_DIR, image_name.replace("/", "_"))
 
         def log(msg: str):
+            """添加日志，自动确保以换行符结尾"""
             with self.lock:
+                # 确保消息以换行符结尾
+                if not msg.endswith("\n"):
+                    msg = msg + "\n"
                 self.logs[build_id].append(msg)
 
         def extract_archive(file_path: str, extract_to: str):
@@ -1175,10 +1166,10 @@ class BuildManager:
                 return False
 
         try:
-            log(f"📦 开始处理上传: {original_filename}")
-            log(f"🏷️ 镜像名: {full_tag}")
-            log(f"🧱 模板: {selected_template}")
-            log(f"📂 项目类型: {project_type}")
+            log(f"📦 开始处理上传: {original_filename}\n")
+            log(f"🏷️ 镜像名: {full_tag}\n")
+            log(f"🧱 模板: {selected_template}\n")
+            log(f"📂 项目类型: {project_type}\n")
 
             # === 模拟模式 ===
             if not DOCKER_AVAILABLE:
@@ -1189,14 +1180,14 @@ class BuildManager:
                 if project_type == "jar" and original_filename.endswith(".jar"):
                     with open(os.path.join(build_context, "app.jar"), "wb") as f:
                         f.write(file_data)
-                    log("🧪 模拟模式：已保存 JAR")
+                    log("🧪 模拟模式：已保存 JAR\n")
                 else:
                     # 保存并解压
                     temp_file = os.path.join(build_context, original_filename)
                     with open(temp_file, "wb") as f:
                         f.write(file_data)
                     if not extract_archive(temp_file, build_context):
-                        log("⚠️ 模拟模式：文件未解压（可能是 JAR 或不支持的格式）")
+                        log("⚠️ 模拟模式：文件未解压（可能是 JAR 或不支持的格式）\n")
                     else:
                         os.remove(temp_file)
 
@@ -1211,12 +1202,20 @@ class BuildManager:
                     log(line)
 
                 if should_push:
+                    # 推送时只使用激活的仓库
+                    from backend.config import get_active_registry
+
+                    active_registry = get_active_registry()
+
                     log("🚀 开始模拟推送...\n")
-                    username = config.get("docker", {}).get("username", None)
+                    log(f"🎯 使用激活仓库: {active_registry.get('name', 'Unknown')}\n")
+                    username = active_registry.get("username", None)
                     log(f"🚀 账号: {username}\n")
                     for i in range(1, 4):
                         log(f"📡 Pushing layer {i}/3...\n")
-                    log("✅ 模拟推送完成\n")
+                    log(
+                        f"✅ 模拟推送完成到 {active_registry.get('registry', 'Unknown')}\n"
+                    )
                 else:
                     log("🚀 模拟推送跳过（未启用推送）\n")
 
@@ -1265,18 +1264,23 @@ class BuildManager:
 
             # 替换模板变量
             config = load_config()
-            
+
             # 准备变量替换字典
             template_vars = template_params or {}
-            
+
             # 如果没有传入 EXPOSE_PORT，使用配置中的默认值
             if "EXPOSE_PORT" not in template_vars:
-                template_vars["EXPOSE_PORT"] = str(config.get("docker", {}).get("expose_port", 8080))
-            
+                template_vars["EXPOSE_PORT"] = str(
+                    config.get("docker", {}).get("expose_port", 8080)
+                )
+
             # 替换所有变量
             from backend.template_parser import replace_template_variables
+
             try:
-                dockerfile_content = replace_template_variables(dockerfile_content, template_vars)
+                dockerfile_content = replace_template_variables(
+                    dockerfile_content, template_vars
+                )
             except ValueError as e:
                 log(f"❌ 模板变量替换失败: {e}\n")
                 return
@@ -1287,9 +1291,89 @@ class BuildManager:
                 f.write(dockerfile_content)
 
             log(f"\n🚀 开始构建镜像: {full_tag}\n")
+            log(f"🐳 使用构建器: {docker_builder.get_connection_info()}\n")
 
-            build_stream = client.api.build(
-                path=build_context, tag=full_tag, rm=True, decode=True
+            # 智能匹配认证配置
+            from backend.config import (
+                get_registry_by_name,
+                get_active_registry,
+                get_all_registries,
+            )
+
+            def extract_registry_from_dockerfile(dockerfile_content):
+                """从 Dockerfile 中提取基础镜像的 registry 地址"""
+                import re
+
+                # 匹配 FROM 行，支持多阶段构建
+                from_pattern = r"^\s*FROM\s+([^\s]+)"
+                for line in dockerfile_content.split("\n"):
+                    match = re.match(from_pattern, line, re.IGNORECASE)
+                    if match:
+                        image_ref = match.group(1).strip()
+                        # 解析 registry 地址
+                        # 格式: [registry/]repository[:tag]
+                        parts = image_ref.split("/")
+                        if len(parts) >= 2 and "." in parts[0]:
+                            # 包含 registry 地址（如 docker.io, registry.cn-shanghai.aliyuncs.com）
+                            return parts[0]
+                        # 如果没有明确的 registry，默认是 docker.io
+                return None
+
+            def find_matching_registry(image_registry):
+                """根据镜像 registry 地址查找匹配的仓库配置"""
+                if not image_registry:
+                    return None
+
+                all_registries = get_all_registries()
+                for reg in all_registries:
+                    reg_address = reg.get("registry", "")
+                    # 匹配 registry 地址（支持部分匹配）
+                    if reg_address and (
+                        image_registry == reg_address
+                        or image_registry.startswith(reg_address)
+                        or reg_address.startswith(image_registry)
+                    ):
+                        return reg
+                return None
+
+            # 选择认证仓库的逻辑
+            registry_config = None
+
+            # 1. 如果用户手动指定了构建仓库，优先使用
+            if build_registry:
+                registry_config = get_registry_by_name(build_registry)
+                if registry_config:
+                    log(f"🔐 使用指定仓库: {build_registry}\n")
+                else:
+                    log(f"⚠️  指定的仓库 '{build_registry}' 不存在\n")
+
+            # 2. 如果没有指定，尝试自动匹配 Dockerfile 中的基础镜像 registry
+            if not registry_config:
+                image_registry = extract_registry_from_dockerfile(dockerfile_content)
+                if image_registry:
+                    matched_registry = find_matching_registry(image_registry)
+                    if matched_registry:
+                        registry_config = matched_registry
+                        log(
+                            f"🔐 自动匹配到仓库: {matched_registry.get('name')} (registry: {image_registry})\n"
+                        )
+                    else:
+                        log(
+                            f"⚠️  未找到匹配的仓库配置 (基础镜像 registry: {image_registry})\n"
+                        )
+
+            # 3. 如果还是没有，使用激活的仓库
+            if not registry_config:
+                registry_config = get_active_registry()
+                log(f"🔐 使用激活仓库: {registry_config.get('name', 'Unknown')}\n")
+
+            username = registry_config.get("username")
+            password = registry_config.get("password")
+            if username and password:
+                log(f"🔐 认证账号: {username}\n")
+
+            build_stream = docker_builder.build_image(
+                path=build_context, tag=full_tag, pull=True  # 自动拉取基础镜像
             )
             build_succeeded = False
             last_error = None
@@ -1314,13 +1398,24 @@ class BuildManager:
             log(f"\n✅ 镜像构建成功: {full_tag}\n")
 
             if should_push:
+                # 推送时只使用激活的仓库
+                from backend.config import get_active_registry
+
+                active_registry = get_active_registry()
+
                 log(f"\n📤 开始推送镜像: {full_tag}\n")
-                username = config.get("docker", {}).get("username", None)
-                password = config.get("docker", {}).get("password", None)
-                auth_config = {"username": username, "password": password}
+                log(f"🎯 使用激活仓库: {active_registry.get('name', 'Unknown')}\n")
+
+                push_username = active_registry.get("username")
+                push_password = active_registry.get("password")
+
+                if not push_username or not push_password:
+                    log(f"⚠️  激活仓库未配置认证信息，推送可能失败\n")
+
+                auth_config = {"username": push_username, "password": push_password}
                 try:
-                    push_stream = client.images.push(
-                        full_tag, auth_config=auth_config, stream=True, decode=True
+                    push_stream = docker_builder.push_image(
+                        image_name, tag, auth_config=auth_config
                     )
                     for chunk in push_stream:
                         status = (
@@ -1333,7 +1428,9 @@ class BuildManager:
                         if "error" in chunk:
                             log(f"\n❌ 推送失败: {chunk['error']}\n")
                             return
-                    log(f"\n✅ 推送完成: {full_tag}\n")
+                    log(
+                        f"\n✅ 推送完成到 {active_registry.get('registry', 'Unknown')}: {full_tag}\n"
+                    )
                 except Exception as e:
                     log(f"\n❌ 推送异常: {e}\n")
 

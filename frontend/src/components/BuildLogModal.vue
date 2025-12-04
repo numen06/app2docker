@@ -167,20 +167,36 @@ function clearLog() {
 }
 
 function copyLog() {
-  const text = logs.value.map(log => log.text).join('\n')
+  // 清理和格式化日志文本
+  const text = logs.value
+    .map(log => {
+      // 移除可能的额外空白和特殊字符
+      let cleanText = log.text.trim()
+      // 确保每行都是独立的
+      return cleanText
+    })
+    .filter(line => line.length > 0)  // 过滤空行
+    .join('\n')  // 用换行符连接
+  
   navigator.clipboard.writeText(text).then(() => {
-    alert('日志已复制到剪贴板')
+    alert(`日志已复制到剪贴板 (${logs.value.length} 行)`)
+  }).catch(err => {
+    console.error('复制失败:', err)
+    alert('复制失败，请手动选择文本复制')
   })
 }
 
 function downloadLog() {
-  const text = logs.value.map(log => {
-    let line = ''
-    if (showLineNumber.value) line += `${log.number} `
-    if (showTimestamp.value) line += `[${log.timestamp}] `
-    line += log.text
-    return line
-  }).join('\n')
+  const text = logs.value
+    .map(log => {
+      let line = ''
+      if (showLineNumber.value) line += `${log.number.toString().padStart(4, ' ')} `
+      if (showTimestamp.value) line += `[${log.timestamp}] `
+      line += log.text.trim()  // 清理文本
+      return line
+    })
+    .filter(line => line.trim().length > 0)  // 过滤空行
+    .join('\n')
   
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)

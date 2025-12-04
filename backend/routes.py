@@ -30,10 +30,16 @@ from backend.handlers import (
     USER_TEMPLATES_DIR,
     EXPORT_DIR,
     natural_sort_key,
-    client,
+    docker_builder,
     DOCKER_AVAILABLE,
 )
-from backend.config import load_config, save_config
+from backend.config import (
+    load_config,
+    save_config,
+    get_active_registry,
+    get_registry_by_name,
+    get_all_registries,
+)
 from backend.utils import get_safe_filename
 from backend.auth import authenticate, verify_token
 from backend.template_parser import parse_template_variables
@@ -66,6 +72,19 @@ class DeleteTemplateRequest(BaseModel):
     project_type: str = "jar"
 
 
+class RegistryModel(BaseModel):
+    name: str
+    registry: str
+    registry_prefix: str = ""
+    username: str = ""
+    password: str = ""
+    active: bool = False
+
+
+class SaveRegistriesRequest(BaseModel):
+    registries: list[RegistryModel]
+
+
 # === 认证相关 ===
 @router.post("/login")
 async def login(request: LoginRequest):
@@ -96,19 +115,80 @@ async def get_config():
         raise HTTPException(status_code=500, detail=f"获取配置失败: {str(e)}")
 
 
+@router.get("/registries")
+async def get_registries():
+    """获取所有仓库配置"""
+    try:
+        registries = get_all_registries()
+        return JSONResponse({"registries": registries})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取仓库列表失败: {str(e)}")
+
+
+@router.post("/registries")
+async def save_registries(request: SaveRegistriesRequest):
+    """保存仓库配置列表"""
+    try:
+        config = load_config()
+
+        # 转换 Pydantic 模型为字典
+        registries_data = [reg.model_dump() for reg in request.registries]
+
+        # 确保至少有一个仓库被激活
+        has_active = any(reg.get("active", False) for reg in registries_data)
+        if not has_active and registries_data:
+            registries_data[0]["active"] = True
+
+        # 更新配置
+        if "docker" not in config:
+            config["docker"] = {}
+        config["docker"]["registries"] = registries_data
+
+        save_config(config)
+
+        # 重新初始化 Docker 构建器
+        from backend.handlers import init_docker_builder
+
+        init_docker_builder()
+
+        return JSONResponse(
+            {"message": "仓库配置保存成功", "registries": registries_data}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"保存仓库配置失败: {str(e)}")
+
+
 @router.post("/save-config")
 async def save_config_route(
-    registry: str = Form("docker.io"),
+    expose_port: str = Form("8080"),
+    default_push: str = Form("false"),
+    # 远程 Docker 配置
+    use_remote: str = Form("false"),
+    remote_host: str = Form(""),
+    remote_port: str = Form("2375"),
+    remote_use_tls: str = Form("false"),
+    remote_cert_path: str = Form(""),
+    remote_verify_tls: str = Form("true"),
+    # 兼容旧格式（可选参数）
+    registry: str = Form(""),
     registry_prefix: str = Form(""),
-    default_push: str = Form("false"),  # 改为 str 类型，前端发送的是字符串
     username: str = Form(""),
     password: str = Form(""),
-    expose_port: str = Form("8080"),  # 改为 str 类型以便更好地处理
 ):
-    """保存 Docker 配置"""
+    """保存 Docker 配置（非仓库配置）"""
     try:
         # 转换布尔值
         default_push_bool = default_push.lower() in ("true", "1", "on", "yes")
+        use_remote_bool = use_remote.lower() in ("true", "1", "on", "yes")
+        remote_use_tls_bool = remote_use_tls.lower() in ("true", "1", "on", "yes")
+        remote_verify_tls_bool = remote_verify_tls.lower() in ("true", "1", "on", "yes")
 
         # 转换端口号
         try:
@@ -116,29 +196,40 @@ async def save_config_route(
         except (ValueError, TypeError):
             expose_port_int = 8080
 
-        config = load_config()
-        new_docker_config = {
-            "registry": registry.strip(),
-            "registry_prefix": registry_prefix.strip().rstrip("/"),
-            "default_push": default_push_bool,
-            "username": username.strip(),
-            "password": password.strip(),
-            "expose_port": expose_port_int,
-        }
+        try:
+            remote_port_int = int(remote_port)
+        except (ValueError, TypeError):
+            remote_port_int = 2375
 
+        config = load_config()
+
+        # 更新非仓库配置
         if "docker" not in config:
             config["docker"] = {}
-        config["docker"].update(new_docker_config)
+
+        config["docker"]["expose_port"] = expose_port_int
+        config["docker"]["default_push"] = default_push_bool
+        config["docker"]["use_remote"] = use_remote_bool
+        config["docker"]["remote"] = {
+            "host": remote_host.strip(),
+            "port": remote_port_int,
+            "use_tls": remote_use_tls_bool,
+            "cert_path": remote_cert_path.strip(),
+            "verify_tls": remote_verify_tls_bool,
+        }
 
         save_config(config)
 
-        print(
-            f"✅ 配置已保存: {json.dumps(config['docker'], ensure_ascii=False, indent=2)}"
-        )
+        # 重新初始化 Docker 构建器
+        from backend.handlers import init_docker_builder
+
+        init_docker_builder()
+
+        print(f"✅ Docker 配置已更新")
         return JSONResponse(
             {
                 "message": "Docker 配置保存成功！",
-                "docker": config["docker"],  # 改为 docker 以与 get-config 保持一致
+                "docker": config["docker"],
             }
         )
     except HTTPException:
@@ -160,6 +251,7 @@ async def upload_file(
     project_type: str = Form("jar"),
     push: str = Form("off"),
     template_params: Optional[str] = Form(None),  # JSON 字符串格式的模板参数
+    build_registry: Optional[str] = Form(None),  # 构建时使用的仓库名称
 ):
     """上传文件并开始构建"""
     try:
@@ -168,7 +260,7 @@ async def upload_file(
 
         # 读取文件内容
         file_data = await app_file.read()
-        
+
         # 解析模板参数
         params_dict = {}
         if template_params:
@@ -176,7 +268,7 @@ async def upload_file(
                 params_dict = json.loads(template_params)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="模板参数格式错误")
-        
+
         # 调用构建管理器
         manager = BuildManager()
         build_id = manager.start_build(
@@ -188,12 +280,13 @@ async def upload_file(
             original_filename=app_file.filename,
             project_type=project_type,
             template_params=params_dict,  # 传递模板参数
+            build_registry=build_registry,  # 传递构建时使用的仓库
         )
 
         return JSONResponse(
             {
-            "build_id": build_id,
-            "message": "构建任务已启动，请通过日志查看进度",
+                "build_id": build_id,
+                "message": "构建任务已启动，请通过日志查看进度",
             }
         )
     except HTTPException:
@@ -228,9 +321,9 @@ async def suggest_image_name(jar_file: UploadFile = File(...)):
         if not app_filename:
             raise HTTPException(status_code=400, detail="未找到文件")
 
-        config = load_config()
-        docker_config = config.get("docker", {})
-        base_name = docker_config.get("registry_prefix", "")
+        # 使用激活仓库的 registry_prefix
+        active_registry = get_active_registry()
+        base_name = active_registry.get("registry_prefix", "")
         suggested_name = generate_image_name(base_name, app_filename)
 
         return JSONResponse({"suggested_imagename": suggested_name})
@@ -250,7 +343,7 @@ async def export_image(
     try:
         import shutil
         import gzip
-        
+
         if not DOCKER_AVAILABLE:
             raise HTTPException(
                 status_code=503, detail="Docker 服务不可用，无法导出镜像"
@@ -282,35 +375,26 @@ async def export_image(
 
         # 尝试拉取镜像
         try:
-            pull_kwargs = {
-                "repository": image_name,
-                "tag": tag_name,
-                "stream": True,
-                "decode": True,
-            }
-            if auth_config:
-                pull_kwargs["auth_config"] = auth_config
-            
-            pull_stream = client.api.pull(**pull_kwargs)
+            pull_stream = docker_builder.pull_image(image_name, tag_name, auth_config)
             for chunk in pull_stream:
                 if "error" in chunk:
                     raise RuntimeError(chunk["error"])
 
             # 确认镜像存在
-            client.images.get(full_tag)
+            docker_builder.get_image(full_tag)
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"无法获取镜像: {str(e)}")
 
         # 创建导出目录
         os.makedirs(EXPORT_DIR, exist_ok=True)
-        
+
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         safe_base = get_safe_filename(image_name.replace("/", "_") or "image")
         tar_filename = f"{safe_base}-{tag_name}-{timestamp}.tar"
         tar_path = os.path.join(EXPORT_DIR, tar_filename)
 
         # 导出镜像
-        image_stream = client.api.get_image(full_tag)
+        image_stream = docker_builder.export_image(full_tag)
         with open(tar_path, "wb") as f:
             for chunk in image_stream:
                 f.write(chunk)
@@ -352,9 +436,9 @@ async def parse_compose(request: ParseComposeRequest):
     """解析 Docker Compose 文件"""
     try:
         import yaml
-        
+
         compose_doc = yaml.safe_load(request.content)
-        
+
         # 提取镜像列表
         images = []
         if isinstance(compose_doc, dict):
@@ -364,7 +448,7 @@ async def parse_compose(request: ParseComposeRequest):
                     image = service_config.get("image", "")
                     if image:
                         images.append({"service": service_name, "image": image})
-        
+
         return JSONResponse({"images": images})
     except HTTPException:
         raise
@@ -408,7 +492,7 @@ async def list_templates():
 @router.get("/template-params")
 async def get_template_params(
     template: str = Query(..., description="模板名称"),
-    project_type: Optional[str] = Query(None, description="项目类型")
+    project_type: Optional[str] = Query(None, description="项目类型"),
 ):
     """获取模板的参数列表"""
     try:
@@ -416,19 +500,17 @@ async def get_template_params(
         template_path = get_template_path(template, project_type)
         if not template_path or not os.path.exists(template_path):
             raise HTTPException(status_code=404, detail="模板不存在")
-        
+
         # 读取模板内容
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
-        
+
         # 解析参数
         params = parse_template_variables(content)
-        
-        return JSONResponse({
-            "template": template,
-            "project_type": project_type,
-            "params": params
-        })
+
+        return JSONResponse(
+            {"template": template, "project_type": project_type, "params": params}
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -444,20 +526,20 @@ async def get_template(name: Optional[str] = Query(None)):
             templates = get_all_templates()
             if name not in templates:
                 raise HTTPException(status_code=404, detail="模板不存在")
-            
+
             template_path = templates[name]["path"]
             if not os.path.exists(template_path):
                 raise HTTPException(status_code=404, detail="模板文件不存在")
-            
+
             with open(template_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            
+
             return JSONResponse(
                 {
-                "name": name,
-                "content": content,
-                "type": templates[name]["type"],
-                "project_type": templates[name].get("project_type", "jar"),
+                    "name": name,
+                    "content": content,
+                    "type": templates[name]["type"],
+                    "project_type": templates[name].get("project_type", "jar"),
                 }
             )
         else:
@@ -485,14 +567,14 @@ async def get_template(name: Optional[str] = Query(None)):
                     continue
 
             details.sort(key=lambda item: natural_sort_key(item["name"]))
-            
+
             # 返回前端期望的格式
             return JSONResponse(
                 {
-                "items": details,
-                "total": len(details),
-                "builtin": sum(1 for d in details if d["type"] == "builtin"),
-                "user": sum(1 for d in details if d["type"] == "user"),
+                    "items": details,
+                    "total": len(details),
+                    "builtin": sum(1 for d in details if d["type"] == "builtin"),
+                    "user": sum(1 for d in details if d["type"] == "user"),
                 }
             )
     except HTTPException:
@@ -508,31 +590,31 @@ async def create_template(request: TemplateRequest):
         name = request.name
         content = request.content
         project_type = request.project_type
-        
+
         print(f"📝 创建模板请求: name={name}, project_type={project_type}")
-        
+
         # 验证模板名称
         if not name or ".." in name or "/" in name:
             raise HTTPException(status_code=400, detail="非法模板名称")
-        
+
         # 确定保存路径
         template_dir = os.path.join(USER_TEMPLATES_DIR, project_type)
         print(f"📁 模板目录: {template_dir}")
         os.makedirs(template_dir, exist_ok=True)
-        
+
         template_path = os.path.join(template_dir, f"{name}.Dockerfile")
         print(f"💾 保存路径: {template_path}")
-        
+
         if os.path.exists(template_path):
             raise HTTPException(status_code=400, detail="模板已存在")
-        
+
         # 保存模板
         with open(template_path, "w", encoding="utf-8") as f:
             f.write(content)
-        
+
         print(f"✅ 模板已保存: {template_path}")
         print(f"📊 文件大小: {os.path.getsize(template_path)} bytes")
-        
+
         return JSONResponse({"message": "模板创建成功", "name": name})
     except HTTPException:
         raise
@@ -547,20 +629,20 @@ async def update_template(request: TemplateRequest):
         name = request.name
         content = request.content
         original_name = request.original_name or name  # 支持重命名
-        
+
         templates = get_all_templates()
-        
+
         # 如果是重命名，检查原始模板是否存在
         if original_name not in templates:
             raise HTTPException(status_code=404, detail="模板不存在")
-        
+
         template_info = templates[original_name]
-        
+
         if template_info["type"] == "builtin":
             raise HTTPException(status_code=403, detail="不能修改内置模板")
-        
+
         old_path = template_info["path"]
-        
+
         # 如果项目类型改变或名称改变，需要移动/重命名文件
         if (
             request.old_project_type
@@ -570,11 +652,11 @@ async def update_template(request: TemplateRequest):
             new_dir = os.path.join(USER_TEMPLATES_DIR, request.project_type)
             os.makedirs(new_dir, exist_ok=True)
             new_path = os.path.join(new_dir, f"{name}.Dockerfile")
-            
+
             # 保存到新位置
             with open(new_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            
+
             # 删除旧文件
             if os.path.exists(old_path):
                 os.remove(old_path)
@@ -589,7 +671,7 @@ async def update_template(request: TemplateRequest):
             # 仅更新内容
             with open(old_path, "w", encoding="utf-8") as f:
                 f.write(content)
-        
+
         return JSONResponse({"message": "模板更新成功", "name": name})
     except HTTPException:
         raise
@@ -603,21 +685,21 @@ async def delete_template(request: DeleteTemplateRequest):
     try:
         name = request.name
         templates = get_all_templates()
-        
+
         if name not in templates:
             raise HTTPException(status_code=404, detail="模板不存在")
-        
+
         template_info = templates[name]
-        
+
         if template_info["type"] == "builtin":
             raise HTTPException(status_code=403, detail="不能删除内置模板")
-        
+
         template_path = template_info["path"]
-        
+
         # 删除文件
         if os.path.exists(template_path):
             os.remove(template_path)
-        
+
         return JSONResponse({"message": "模板删除成功", "name": name})
     except HTTPException:
         raise
