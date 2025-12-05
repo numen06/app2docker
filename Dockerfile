@@ -9,18 +9,24 @@ USER root
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
-RUN yum install -y tzdata && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+RUN yum install -y \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
-    yum clean all
+    yum clean all && \
+    rm -rf /var/cache/yum
+
+# 设置 Node.js 环境变量
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 WORKDIR /frontend
 
 # 复制前端依赖文件
 COPY frontend/package*.json ./
 
-# 安装依赖
-RUN npm ci
+# 安装依赖（使用 npm ci 确保一致性，如果失败则回退到 npm install）
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # 复制前端源代码
 COPY frontend/ ./
