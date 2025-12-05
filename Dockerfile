@@ -4,17 +4,6 @@
 # 使用阿里云 Node.js 镜像加速下载
 FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS frontend-builder
 
-# 切换到 root 安装构建依赖
-USER root
-
-# 安装构建依赖（某些 npm 包需要编译原生模块）
-RUN yum install -y \
-    python3 \
-    make \
-    gcc-c++ \
-    && yum clean all && \
-    rm -rf /var/cache/yum
-
 # 设置工作目录并确保权限
 WORKDIR /app/frontend
 RUN mkdir -p /app/frontend /app/dist && \
@@ -23,14 +12,13 @@ RUN mkdir -p /app/frontend /app/dist && \
 # 切换到 node 用户
 USER node
 
-# 设置 Node.js 环境变量
-ENV NODE_ENV=production
+# 设置 Node.js 环境变量（构建时需要 devDependencies，所以不设置 NODE_ENV=production）
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # 仅复制依赖文件以利用缓存
 COPY --chown=node:node frontend/package*.json ./
 
-# 安装依赖
+# 安装依赖（包括 devDependencies，因为 vite 在 devDependencies 中）
 RUN npm config set registry https://registry.npmmirror.com && \
     npm install --legacy-peer-deps && \
     npm cache clean --force
@@ -39,9 +27,7 @@ RUN npm config set registry https://registry.npmmirror.com && \
 COPY --chown=node:node frontend/ ./
 
 # 构建生产版本（输出到 /app/dist）
-RUN npm run build && \
-    rm -rf node_modules && \
-    rm -rf /tmp/* /home/node/.npm /home/node/.cache
+RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
