@@ -90,7 +90,7 @@
             </ul>
             <div class="mt-2 p-2 bg-light rounded">
               <strong>💡 模板使用提示：</strong><br>
-              在 Dockerfile 模板中可通过 <code>{{ '{{UPLOADED_FILENAME}}' }}</code> 变量获取上传的原始文件名: <code>{{ form.file.name }}</code><br>
+              在 Dockerfile 模板中可通过 <code>&#123;&#123;UPLOADED_FILENAME&#125;&#125;</code> 变量获取上传的原始文件名: <code>{{ form.file.name }}</code><br>
               <small class="text-muted">
                 这样您可以在模板中根据文件名判断文件类型，决定是否需要特殊处理。
               </small>
