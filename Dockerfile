@@ -4,35 +4,22 @@
 # 使用阿里云 Node.js 镜像加速下载
 FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS frontend-builder
 
-# 切换到 root 用户以安装系统包
-USER root
+# 设置工作目录并确保权限
+WORKDIR /app/frontend
+RUN mkdir -p /app/frontend && chown -R node:node /app/frontend
+USER node
 
-# 设置时区为上海
-ENV TZ=Asia/Shanghai
-RUN yum install -y \
-    tzdata \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone && \
-    yum clean all && \
-    rm -rf /var/cache/yum
+# 仅复制依赖文件以利用缓存
+COPY --chown=node:node frontend/package*.json ./
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install && \
+    npm cache clean --force
 
-# 设置 Node.js 环境变量
-ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-
-WORKDIR /frontend
-
-# 复制前端依赖文件
-COPY frontend/package*.json ./
-
-# 安装依赖（使用 npm ci 确保一致性，如果失败则回退到 npm install）
-RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-
-# 复制前端源代码
-COPY frontend/ ./
-
-# 构建生产版本
-RUN npm run build
+# 复制剩余前端代码并构建
+COPY --chown=node:node frontend/ ./
+RUN npm run build && \
+    rm -rf node_modules && \
+    rm -rf /tmp/* /home/node/.npm /home/node/.cache
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
