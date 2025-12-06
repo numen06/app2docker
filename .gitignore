@@ -52,3 +52,4 @@ Thumbs.db
 .cache/
 /backend/__pycache__
 /data/logs
+/data/logs
