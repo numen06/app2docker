@@ -151,15 +151,13 @@
         </div>
       </div>
 
-      <!-- 仓库选择 -->
-      <div class="row g-3 mb-3">
+      <!-- 推送仓库选择（仅在勾选推送时显示） -->
+      <div v-if="form.push" class="row g-3 mb-3">
         <div class="col-md-12">
           <label class="form-label">
-            <i class="fas fa-server"></i> 构建认证仓库
-            <small class="text-muted">(用于拉取基础镜像)</small>
+            <i class="fas fa-server"></i> 推送仓库
           </label>
-          <select v-model="form.buildRegistry" class="form-select">
-            <option value="">使用激活仓库</option>
+          <select v-model="form.pushRegistry" class="form-select">
             <option v-for="reg in registries" :key="reg.name" :value="reg.name">
               {{ reg.name }} - {{ reg.registry }}
               <span v-if="reg.active"> (激活)</span>
@@ -167,7 +165,7 @@
           </select>
           <div class="form-text small">
             <i class="fas fa-info-circle"></i> 
-            构建时使用该仓库的认证信息拉取基础镜像。推送始终使用激活的仓库。
+            选择推送镜像的目标仓库，默认使用激活的仓库
           </div>
         </div>
       </div>
@@ -194,7 +192,7 @@ const form = ref({
   push: false,
   extractArchive: true,  // 是否解压压缩包（默认解压）
   templateParams: {},  // 模板参数
-  buildRegistry: ''  // 构建时使用的仓库（空表示使用激活的仓库）
+  pushRegistry: ''  // 推送仓库（默认使用激活的仓库）
 })
 
 const templates = ref([])
@@ -270,6 +268,14 @@ async function loadRegistries() {
     const res = await axios.get('/api/registries')
     registries.value = res.data.registries || []
     console.log('📦 已加载仓库列表:', registries.value)
+    
+    // 设置默认推送仓库为激活的仓库
+    const activeRegistry = registries.value.find(r => r.active)
+    if (activeRegistry) {
+      form.value.pushRegistry = activeRegistry.name
+    } else if (registries.value.length > 0) {
+      form.value.pushRegistry = registries.value[0].name
+    }
   } catch (error) {
     console.error('加载仓库列表失败:', error)
   }
@@ -383,9 +389,9 @@ async function handleBuild() {
     formData.append('template_params', JSON.stringify(form.value.templateParams))
   }
   
-  // 添加构建仓库
-  if (form.value.buildRegistry) {
-    formData.append('build_registry', form.value.buildRegistry)
+  // 添加推送仓库（仅在勾选推送时）
+  if (form.value.push && form.value.pushRegistry) {
+    formData.append('push_registry', form.value.pushRegistry)
   }
   
   // 添加解压选项（仅压缩包时有效）

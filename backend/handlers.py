@@ -475,7 +475,7 @@ class Jar2DockerHandler(BaseHTTPRequestHandler):
             docker_builder.get_image(full_tag)  # 确认镜像存在
 
             os.makedirs(EXPORT_DIR, exist_ok=True)
-            timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             safe_base = get_safe_filename(image_name.replace("/", "_") or "image")
             tar_filename = f"{safe_base}-{tag}-{timestamp}.tar"
             tar_path = os.path.join(EXPORT_DIR, tar_filename)
@@ -1094,7 +1094,7 @@ class BuildManager:
         original_filename: str,
         project_type: str = "jar",
         template_params: dict = None,
-        build_registry: str = None,  # 构建时使用的仓库名称
+        push_registry: str = None,  # 推送时使用的仓库名称
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
     ):
         build_id = str(uuid.uuid4())
@@ -1110,7 +1110,7 @@ class BuildManager:
                 original_filename,
                 project_type,
                 template_params or {},
-                build_registry,
+                push_registry,
                 extract_archive,
             ),
             daemon=True,
@@ -1131,7 +1131,7 @@ class BuildManager:
         original_filename: str,
         project_type: str = "jar",
         template_params: dict = None,
-        build_registry: str = None,  # 构建时使用的仓库名称
+        push_registry: str = None,  # 推送时使用的仓库名称
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
     ):
         full_tag = f"{image_name}:{tag}"
@@ -1305,19 +1305,28 @@ class BuildManager:
                     log(line)
 
                 if should_push:
-                    # 推送时只使用激活的仓库
-                    from backend.config import get_active_registry
+                    # 推送时使用用户选择的仓库
+                    from backend.config import get_registry_by_name, get_active_registry
 
-                    active_registry = get_active_registry()
+                    # 优先使用用户指定的推送仓库
+                    push_registry_config = None
+                    if push_registry:
+                        push_registry_config = get_registry_by_name(push_registry)
+                        if not push_registry_config:
+                            log(f"⚠️  指定的推送仓库 '{push_registry}' 不存在，使用激活仓库\n")
+                    
+                    # 如果没有指定或指定失败，使用激活的仓库
+                    if not push_registry_config:
+                        push_registry_config = get_active_registry()
 
                     log("🚀 开始模拟推送...\n")
-                    log(f"🎯 使用激活仓库: {active_registry.get('name', 'Unknown')}\n")
-                    username = active_registry.get("username", None)
+                    log(f"🎯 使用推送仓库: {push_registry_config.get('name', 'Unknown')}\n")
+                    username = push_registry_config.get("username", None)
                     log(f"🚀 账号: {username}\n")
                     for i in range(1, 4):
                         log(f"📡 Pushing layer {i}/3...\n")
                     log(
-                        f"✅ 模拟推送完成到 {active_registry.get('registry', 'Unknown')}\n"
+                        f"✅ 模拟推送完成到 {push_registry_config.get('registry', 'Unknown')}\n"
                     )
                 else:
                     log("🚀 模拟推送跳过（未启用推送）\n")
@@ -1417,84 +1426,7 @@ class BuildManager:
             log(f"\n🚀 开始构建镜像: {full_tag}\n")
             log(f"🐳 使用构建器: {docker_builder.get_connection_info()}\n")
 
-            # 智能匹配认证配置
-            from backend.config import (
-                get_registry_by_name,
-                get_active_registry,
-                get_all_registries,
-            )
-
-            def extract_registry_from_dockerfile(dockerfile_content):
-                """从 Dockerfile 中提取基础镜像的 registry 地址"""
-                import re
-
-                # 匹配 FROM 行，支持多阶段构建
-                from_pattern = r"^\s*FROM\s+([^\s]+)"
-                for line in dockerfile_content.split("\n"):
-                    match = re.match(from_pattern, line, re.IGNORECASE)
-                    if match:
-                        image_ref = match.group(1).strip()
-                        # 解析 registry 地址
-                        # 格式: [registry/]repository[:tag]
-                        parts = image_ref.split("/")
-                        if len(parts) >= 2 and "." in parts[0]:
-                            # 包含 registry 地址（如 docker.io, registry.cn-shanghai.aliyuncs.com）
-                            return parts[0]
-                        # 如果没有明确的 registry，默认是 docker.io
-                return None
-
-            def find_matching_registry(image_registry):
-                """根据镜像 registry 地址查找匹配的仓库配置"""
-                if not image_registry:
-                    return None
-
-                all_registries = get_all_registries()
-                for reg in all_registries:
-                    reg_address = reg.get("registry", "")
-                    # 匹配 registry 地址（支持部分匹配）
-                    if reg_address and (
-                        image_registry == reg_address
-                        or image_registry.startswith(reg_address)
-                        or reg_address.startswith(image_registry)
-                    ):
-                        return reg
-                return None
-
-            # 选择认证仓库的逻辑
-            registry_config = None
-
-            # 1. 如果用户手动指定了构建仓库，优先使用
-            if build_registry:
-                registry_config = get_registry_by_name(build_registry)
-                if registry_config:
-                    log(f"🔐 使用指定仓库: {build_registry}\n")
-                else:
-                    log(f"⚠️  指定的仓库 '{build_registry}' 不存在\n")
-
-            # 2. 如果没有指定，尝试自动匹配 Dockerfile 中的基础镜像 registry
-            if not registry_config:
-                image_registry = extract_registry_from_dockerfile(dockerfile_content)
-                if image_registry:
-                    matched_registry = find_matching_registry(image_registry)
-                    if matched_registry:
-                        registry_config = matched_registry
-                        log(
-                            f"🔐 自动匹配到仓库: {matched_registry.get('name')} (registry: {image_registry})\n"
-                        )
-                    else:
-                        log(
-                            f"⚠️  未找到匹配的仓库配置 (基础镜像 registry: {image_registry})\n"
-                        )
-
-            # 3. 如果还是没有，使用激活的仓库
-            if not registry_config:
-                registry_config = get_active_registry()
-                log(f"🔐 使用激活仓库: {registry_config.get('name', 'Unknown')}\n")
-
-            username = registry_config.get("username")
-            password = registry_config.get("password")
-            if username and password:
-                log(f"🔐 认证账号: {username}\n")
+            # 拉取基础镜像时，Docker 会默认到所有仓库中寻找，不需要指定认证仓库
 
             build_stream = docker_builder.build_image(
                 path=build_context, tag=full_tag, pull=True  # 自动拉取基础镜像
@@ -1522,19 +1454,30 @@ class BuildManager:
             log(f"\n✅ 镜像构建成功: {full_tag}\n")
 
             if should_push:
-                # 推送时只使用激活的仓库
-                from backend.config import get_active_registry
+                # 推送时使用用户选择的仓库
+                from backend.config import get_registry_by_name, get_active_registry
 
-                active_registry = get_active_registry()
+                # 优先使用用户指定的推送仓库
+                push_registry_config = None
+                if push_registry:
+                    push_registry_config = get_registry_by_name(push_registry)
+                    if push_registry_config:
+                        log(f"\n📤 开始推送镜像: {full_tag}\n")
+                        log(f"🎯 使用指定推送仓库: {push_registry}\n")
+                    else:
+                        log(f"⚠️  指定的推送仓库 '{push_registry}' 不存在，使用激活仓库\n")
+                
+                # 如果没有指定或指定失败，使用激活的仓库
+                if not push_registry_config:
+                    push_registry_config = get_active_registry()
+                    log(f"\n📤 开始推送镜像: {full_tag}\n")
+                    log(f"🎯 使用激活仓库: {push_registry_config.get('name', 'Unknown')}\n")
 
-                log(f"\n📤 开始推送镜像: {full_tag}\n")
-                log(f"🎯 使用激活仓库: {active_registry.get('name', 'Unknown')}\n")
-
-                push_username = active_registry.get("username")
-                push_password = active_registry.get("password")
+                push_username = push_registry_config.get("username")
+                push_password = push_registry_config.get("password")
 
                 if not push_username or not push_password:
-                    log(f"⚠️  激活仓库未配置认证信息，推送可能失败\n")
+                    log(f"⚠️  推送仓库未配置认证信息，推送可能失败\n")
 
                 auth_config = {"username": push_username, "password": push_password}
                 try:
@@ -1553,7 +1496,7 @@ class BuildManager:
                             log(f"\n❌ 推送失败: {chunk['error']}\n")
                             return
                     log(
-                        f"\n✅ 推送完成到 {active_registry.get('registry', 'Unknown')}: {full_tag}\n"
+                        f"\n✅ 推送完成到 {push_registry_config.get('registry', 'Unknown')}: {full_tag}\n"
                     )
                 except Exception as e:
                     log(f"\n❌ 推送异常: {e}\n")
@@ -1576,3 +1519,345 @@ class BuildManager:
     def get_logs(self, build_id: str):
         with self.lock:
             return list(self.logs[build_id])
+
+
+# ============ 导出任务管理器 ============
+class ExportTaskManager:
+    """导出任务管理器 - 管理镜像导出任务，支持异步导出和文件存储"""
+    _instance_lock = threading.Lock()
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._init()
+        return cls._instance
+
+    def _init(self):
+        self.tasks = {}  # task_id -> task_info
+        self.lock = threading.Lock()
+        self.tasks_dir = os.path.join(EXPORT_DIR, "tasks")
+        os.makedirs(self.tasks_dir, exist_ok=True)
+        self.tasks_file = os.path.join(self.tasks_dir, "tasks.json")
+        
+        # 从文件加载任务
+        self._load_tasks()
+        
+        # 启动自动清理任务
+        self._start_cleanup_task()
+
+    def _load_tasks(self):
+        """从文件加载任务列表"""
+        if not os.path.exists(self.tasks_file):
+            return
+        
+        try:
+            with open(self.tasks_file, 'r', encoding='utf-8') as f:
+                tasks_data = json.load(f)
+            
+            need_save = False
+            with self.lock:
+                self.tasks = {}
+                for task in tasks_data:
+                    task_id = task["task_id"]
+                    # 如果任务状态是 running 或 pending，标记为失败（因为任务线程已丢失）
+                    if task.get("status") in ("running", "pending"):
+                        task["status"] = "failed"
+                        task["error"] = "服务重启，任务中断"
+                        task["completed_at"] = datetime.now().isoformat()
+                        need_save = True
+                    # 如果任务已完成但文件不存在，标记为失败
+                    elif task.get("status") == "completed":
+                        file_path = task.get("file_path")
+                        if file_path and not os.path.exists(file_path):
+                            task["status"] = "failed"
+                            task["error"] = "任务文件已丢失"
+                            task["completed_at"] = datetime.now().isoformat()
+                            need_save = True
+                    self.tasks[task_id] = task
+            
+            # 如果有任务被标记为失败，保存更新（在锁外调用，避免死锁）
+            if need_save:
+                self._save_tasks()
+            
+            print(f"✅ 已加载 {len(self.tasks)} 个导出任务")
+        except Exception as e:
+            print(f"⚠️ 加载任务列表失败: {e}")
+            self.tasks = {}
+
+    def _save_tasks(self):
+        """保存任务列表到文件（不持有锁，避免死锁）"""
+        try:
+            # 先复制数据，避免长时间持有锁
+            with self.lock:
+                tasks_list = [task.copy() for task in self.tasks.values()]
+            
+            # 使用临时文件，然后原子性替换
+            temp_file = f"{self.tasks_file}.tmp"
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(tasks_list, f, ensure_ascii=False, indent=2)
+            
+            # 原子性替换
+            if os.path.exists(self.tasks_file):
+                os.replace(temp_file, self.tasks_file)
+            else:
+                os.rename(temp_file, self.tasks_file)
+        except Exception as e:
+            print(f"⚠️ 保存任务列表失败: {e}")
+            # 清理临时文件
+            temp_file = f"{self.tasks_file}.tmp"
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
+    def _start_cleanup_task(self):
+        """启动自动清理过期任务的后台线程"""
+        def cleanup_loop():
+            import time
+            while True:
+                try:
+                    time.sleep(3600)  # 每小时检查一次
+                    self.cleanup_expired_tasks()
+                except Exception as e:
+                    print(f"⚠️ 清理任务出错: {e}")
+
+        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+        cleanup_thread.start()
+
+    def create_task(
+        self,
+        image: str,
+        tag: str = "latest",
+        compress: str = "none",
+        registry: str = None,
+    ) -> str:
+        """创建导出任务"""
+        task_id = str(uuid.uuid4())
+        created_at = datetime.now()
+        
+        task_info = {
+            "task_id": task_id,
+            "image": image,
+            "tag": tag,
+            "compress": compress,
+            "registry": registry,
+            "status": "pending",  # pending, running, completed, failed
+            "created_at": created_at.isoformat(),
+            "completed_at": None,
+            "file_path": None,
+            "file_size": None,
+            "error": None,
+        }
+        
+        with self.lock:
+            self.tasks[task_id] = task_info
+        
+        # 保存到文件
+        self._save_tasks()
+        
+        # 启动导出任务
+        thread = threading.Thread(
+            target=self._export_task,
+            args=(task_id,),
+            daemon=True,
+        )
+        thread.start()
+        
+        return task_id
+
+    def _export_task(self, task_id: str):
+        """执行导出任务"""
+        with self.lock:
+            if task_id not in self.tasks:
+                return
+            task_info = self.tasks[task_id]
+            task_info["status"] = "running"
+        
+        # 保存状态更新
+        self._save_tasks()
+        
+        try:
+            image = task_info["image"]
+            tag = task_info["tag"]
+            compress = task_info["compress"]
+            registry = task_info["registry"]
+            
+            if not DOCKER_AVAILABLE:
+                raise RuntimeError("Docker 服务不可用，无法导出镜像")
+            
+            # 获取认证信息
+            from backend.config import get_all_registries, get_active_registry, get_registry_by_name
+            
+            registry_config = None
+            if registry:
+                registry_config = get_registry_by_name(registry)
+                if not registry_config:
+                    raise RuntimeError(f"指定的仓库 '{registry}' 不存在")
+            
+            if not registry_config:
+                # 尝试智能匹配仓库
+                def find_matching_registry_for_export(image_name):
+                    parts = image_name.split("/")
+                    if len(parts) >= 2 and "." in parts[0]:
+                        image_registry = parts[0]
+                        all_registries = get_all_registries()
+                        for reg in all_registries:
+                            reg_address = reg.get("registry", "")
+                            if reg_address and (
+                                image_registry == reg_address
+                                or image_registry.startswith(reg_address)
+                                or reg_address.startswith(image_registry)
+                            ):
+                                return reg
+                    return None
+                
+                registry_config = find_matching_registry_for_export(image)
+                if not registry_config:
+                    registry_config = get_active_registry()
+            
+            username = registry_config.get("username")
+            password = registry_config.get("password")
+            auth_config = None
+            if username and password:
+                auth_config = {"username": username, "password": password}
+            
+            # 拉取镜像
+            pull_stream = docker_builder.pull_image(image, tag, auth_config)
+            for chunk in pull_stream:
+                if "error" in chunk:
+                    raise RuntimeError(chunk["error"])
+            
+            full_tag = f"{image}:{tag}"
+            docker_builder.get_image(full_tag)
+            
+            # 创建任务文件目录
+            task_dir = os.path.join(self.tasks_dir, task_id)
+            os.makedirs(task_dir, exist_ok=True)
+            
+            # 生成文件名
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            safe_base = get_safe_filename(image.replace("/", "_") or "image")
+            tar_filename = f"{safe_base}-{tag}-{timestamp}.tar"
+            tar_path = os.path.join(task_dir, tar_filename)
+            
+            # 导出镜像
+            image_stream = docker_builder.export_image(full_tag)
+            with open(tar_path, "wb") as f:
+                for chunk in image_stream:
+                    f.write(chunk)
+            
+            final_path = tar_path
+            file_size = os.path.getsize(tar_path)
+            
+            # 如果需要压缩
+            if compress.lower() in ("gzip", "gz", "tgz", "1", "true", "yes"):
+                final_path = f"{tar_path}.gz"
+                with open(tar_path, "rb") as src, gzip.open(final_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                os.remove(tar_path)
+                file_size = os.path.getsize(final_path)
+            
+            # 更新任务状态
+            with self.lock:
+                if task_id in self.tasks:
+                    self.tasks[task_id]["status"] = "completed"
+                    self.tasks[task_id]["completed_at"] = datetime.now().isoformat()
+                    self.tasks[task_id]["file_path"] = final_path
+                    self.tasks[task_id]["file_size"] = file_size
+            
+            # 保存到文件
+            self._save_tasks()
+                    
+        except Exception as e:
+            import traceback
+            error_msg = str(e)
+            traceback.print_exc()
+            with self.lock:
+                if task_id in self.tasks:
+                    self.tasks[task_id]["status"] = "failed"
+                    self.tasks[task_id]["completed_at"] = datetime.now().isoformat()
+                    self.tasks[task_id]["error"] = error_msg
+            
+            # 保存到文件
+            self._save_tasks()
+
+    def get_task(self, task_id: str) -> dict:
+        """获取任务信息"""
+        with self.lock:
+            return self.tasks.get(task_id, {}).copy()
+
+    def list_tasks(self, status: str = None) -> list:
+        """列出所有任务"""
+        with self.lock:
+            tasks = list(self.tasks.values())
+            if status:
+                tasks = [t for t in tasks if t["status"] == status]
+            # 按创建时间倒序排列
+            tasks.sort(key=lambda x: x["created_at"], reverse=True)
+            return [t.copy() for t in tasks]
+
+    def get_task_file_path(self, task_id: str) -> str:
+        """获取任务文件路径"""
+        with self.lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                raise ValueError(f"任务 {task_id} 不存在")
+            if task["status"] != "completed":
+                raise ValueError(f"任务 {task_id} 尚未完成")
+            file_path = task.get("file_path")
+            if not file_path or not os.path.exists(file_path):
+                raise ValueError(f"任务文件不存在: {file_path}")
+            return file_path
+
+    def delete_task(self, task_id: str) -> bool:
+        """删除任务及其文件"""
+        with self.lock:
+            if task_id not in self.tasks:
+                return False
+            task = self.tasks[task_id]
+            file_path = task.get("file_path")
+            task_dir = os.path.join(self.tasks_dir, task_id)
+            
+            # 删除文件
+            if file_path and os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f"⚠️ 删除文件失败: {e}")
+            
+            # 删除任务目录
+            if os.path.exists(task_dir):
+                try:
+                    shutil.rmtree(task_dir, ignore_errors=True)
+                except Exception as e:
+                    print(f"⚠️ 删除目录失败: {e}")
+            
+            # 删除任务记录
+            del self.tasks[task_id]
+        
+        # 保存到文件
+        self._save_tasks()
+        return True
+
+    def cleanup_expired_tasks(self, days: int = 1):
+        """清理过期任务（默认保留1天）"""
+        from datetime import timedelta
+        cutoff_time = datetime.now() - timedelta(days=days)
+        
+        expired_task_ids = []
+        with self.lock:
+            for task_id, task in self.tasks.items():
+                created_at = datetime.fromisoformat(task["created_at"])
+                if created_at < cutoff_time:
+                    expired_task_ids.append(task_id)
+        
+        for task_id in expired_task_ids:
+            try:
+                self.delete_task(task_id)
+                print(f"🗑️ 已清理过期任务: {task_id}")
+            except Exception as e:
+                print(f"⚠️ 清理任务失败 {task_id}: {e}")

@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from backend.handlers import (
     BuildManager,
+    ExportTaskManager,
     generate_image_name,
     get_all_templates,
     get_template_path,
@@ -251,7 +252,7 @@ async def upload_file(
     project_type: str = Form("jar"),
     push: str = Form("off"),
     template_params: Optional[str] = Form(None),  # JSON 字符串格式的模板参数
-    build_registry: Optional[str] = Form(None),  # 构建时使用的仓库名称
+    push_registry: Optional[str] = Form(None),  # 推送时使用的仓库名称
     extract_archive: str = Form("on"),  # 是否解压压缩包（默认解压）
 ):
     """上传文件并开始构建"""
@@ -281,7 +282,7 @@ async def upload_file(
             original_filename=app_file.filename,
             project_type=project_type,
             template_params=params_dict,  # 传递模板参数
-            build_registry=build_registry,  # 传递构建时使用的仓库
+            push_registry=push_registry,  # 传递推送时使用的仓库
             extract_archive=(extract_archive == "on"),  # 传递解压选项
         )
 
@@ -335,17 +336,15 @@ async def suggest_image_name(jar_file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"生成镜像名失败: {str(e)}")
 
 
-@router.get("/export-image")
-async def export_image(
-    image: str = Query(..., description="镜像名称"),
-    tag: str = Query("latest", description="镜像标签"),
-    compress: str = Query("none", description="压缩格式: none, gzip"),
+@router.post("/export-image")
+async def create_export_task(
+    image: str = Body(..., description="镜像名称"),
+    tag: str = Body("latest", description="镜像标签"),
+    compress: str = Body("none", description="压缩格式: none, gzip"),
+    registry: Optional[str] = Body(None, description="仓库名称（用于获取认证信息）"),
 ):
-    """导出镜像"""
+    """创建导出任务"""
     try:
-        import shutil
-        import gzip
-
         if not DOCKER_AVAILABLE:
             raise HTTPException(
                 status_code=503, detail="Docker 服务不可用，无法导出镜像"
@@ -363,96 +362,107 @@ async def export_image(
             if inferred_tag:
                 tag_name = inferred_tag
 
-        full_tag = f"{image_name}:{tag_name}"
-        compress_enabled = compress.lower() in ("gzip", "gz", "tgz", "1", "true", "yes")
-
-        # 智能匹配认证信息
-        from backend.config import get_all_registries, get_active_registry
-
-        def find_matching_registry_for_export(image_name):
-            """根据镜像名称查找匹配的仓库配置"""
-            # 提取 registry 地址（镜像名的第一部分，如果包含点）
-            parts = image_name.split("/")
-            if len(parts) >= 2 and "." in parts[0]:
-                image_registry = parts[0]
-                all_registries = get_all_registries()
-                for reg in all_registries:
-                    reg_address = reg.get("registry", "")
-                    if reg_address and (
-                        image_registry == reg_address
-                        or image_registry.startswith(reg_address)
-                        or reg_address.startswith(image_registry)
-                    ):
-                        return reg
-            return None
-
-        # 尝试智能匹配仓库
-        registry_config = find_matching_registry_for_export(image_name)
-        if not registry_config:
-            # 如果没有匹配，使用激活的仓库
-            registry_config = get_active_registry()
-
-        username = registry_config.get("username")
-        password = registry_config.get("password")
-        auth_config = None
-        if username and password:
-            auth_config = {"username": username, "password": password}
-
-        # 尝试拉取镜像
-        try:
-            pull_stream = docker_builder.pull_image(image_name, tag_name, auth_config)
-            for chunk in pull_stream:
-                if "error" in chunk:
-                    raise RuntimeError(chunk["error"])
-
-            # 确认镜像存在
-            docker_builder.get_image(full_tag)
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=f"无法获取镜像: {str(e)}")
-
-        # 创建导出目录
-        os.makedirs(EXPORT_DIR, exist_ok=True)
-
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        safe_base = get_safe_filename(image_name.replace("/", "_") or "image")
-        tar_filename = f"{safe_base}-{tag_name}-{timestamp}.tar"
-        tar_path = os.path.join(EXPORT_DIR, tar_filename)
-
-        # 导出镜像
-        image_stream = docker_builder.export_image(full_tag)
-        with open(tar_path, "wb") as f:
-            for chunk in image_stream:
-                f.write(chunk)
-
-        final_path = tar_path
-        download_name = tar_filename
-        content_type = "application/x-tar"
-
-        # 如果需要压缩
-        if compress_enabled:
-            final_path = f"{tar_path}.gz"
-            download_name = os.path.basename(final_path)
-            content_type = "application/gzip"
-            with open(tar_path, "rb") as src, gzip.open(final_path, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-            os.remove(tar_path)
-
-        # 返回文件并在发送后删除
-        return FileResponse(
-            final_path,
-            media_type=content_type,
-            filename=download_name,
-            background=lambda: (
-                os.remove(final_path) if os.path.exists(final_path) else None
-            ),
+        # 创建导出任务
+        task_manager = ExportTaskManager()
+        task_id = task_manager.create_task(
+            image=image_name,
+            tag=tag_name,
+            compress=compress,
+            registry=registry,
         )
+
+        return JSONResponse({
+            "task_id": task_id,
+            "message": "导出任务已创建，请到任务清单查看进度",
+        })
     except HTTPException:
         raise
     except Exception as e:
         import traceback
-
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"导出镜像失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"创建导出任务失败: {str(e)}")
+
+
+@router.get("/export-tasks")
+async def list_export_tasks(
+    status: Optional[str] = Query(None, description="任务状态过滤: pending, running, completed, failed"),
+):
+    """获取导出任务列表"""
+    try:
+        task_manager = ExportTaskManager()
+        tasks = task_manager.list_tasks(status=status)
+        return JSONResponse({"tasks": tasks})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
+
+
+@router.get("/export-tasks/{task_id}")
+async def get_export_task(task_id: str):
+    """获取导出任务详情"""
+    try:
+        task_manager = ExportTaskManager()
+        task = task_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        return JSONResponse({"task": task})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取任务详情失败: {str(e)}")
+
+
+@router.get("/export-tasks/{task_id}/download")
+async def download_export_task(task_id: str):
+    """下载导出任务的文件"""
+    try:
+        task_manager = ExportTaskManager()
+        task = task_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        
+        if task["status"] != "completed":
+            raise HTTPException(status_code=400, detail=f"任务尚未完成，当前状态: {task['status']}")
+        
+        file_path = task_manager.get_task_file_path(task_id)
+        
+        # 确定文件类型
+        if file_path.endswith(".gz"):
+            content_type = "application/gzip"
+        else:
+            content_type = "application/x-tar"
+        
+        # 生成下载文件名
+        image = task["image"]
+        tag = task["tag"]
+        compress = task["compress"]
+        filename = f"{image.replace('/', '_')}-{tag}.tar"
+        if compress.lower() in ("gzip", "gz", "tgz", "1", "true", "yes"):
+            filename += ".gz"
+        
+        return FileResponse(
+            file_path,
+            media_type=content_type,
+            filename=filename,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"下载失败: {str(e)}")
+
+
+@router.delete("/export-tasks/{task_id}")
+async def delete_export_task(task_id: str):
+    """删除导出任务"""
+    try:
+        task_manager = ExportTaskManager()
+        success = task_manager.delete_task(task_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        return JSONResponse({"message": "任务已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除任务失败: {str(e)}")
 
 
 # === Compose 相关 ===
@@ -464,15 +474,68 @@ async def parse_compose(request: ParseComposeRequest):
 
         compose_doc = yaml.safe_load(request.content)
 
+        def split_image_reference(reference: str):
+            """分离镜像名和标签"""
+            if not reference:
+                return "", "latest"
+            reference = reference.strip()
+            
+            # 处理 digest (格式: image@sha256:...)
+            if "@" in reference:
+                name, digest = reference.split("@", 1)
+                return name.strip(), digest.strip()
+            
+            # 处理 tag (格式: image:tag)
+            # 需要找到最后一个冒号，但要排除端口号的情况
+            # 例如: registry.com:5000/image:tag
+            colon_index = reference.rfind(":")
+            if colon_index > 0:
+                # 检查冒号前是否有斜杠（说明是 registry:port 格式）
+                before_colon = reference[:colon_index]
+                if "/" in before_colon:
+                    # 有斜杠，说明是 registry:port/image:tag 格式
+                    # 找到最后一个斜杠后的冒号
+                    last_slash = before_colon.rfind("/")
+                    if last_slash >= 0:
+                        # 斜杠后的部分
+                        after_slash = reference[last_slash + 1:]
+                        if ":" in after_slash:
+                            # 分离镜像名和标签
+                            name = reference[:colon_index]
+                            tag = reference[colon_index + 1:].strip()
+                            # 如果 tag 为空，使用 latest
+                            return name.strip(), tag if tag else "latest"
+                
+                # 没有斜杠或斜杠在冒号前，直接分离
+                name = reference[:colon_index]
+                tag = reference[colon_index + 1:].strip()
+                # 如果 tag 为空，使用 latest
+                return name.strip(), tag if tag else "latest"
+            
+            # 检查是否以冒号结尾（格式: image:）
+            if reference.endswith(":"):
+                # 移除末尾的冒号，tag 使用 latest
+                return reference[:-1].strip(), "latest"
+            
+            # 没有冒号，返回原镜像名和 latest
+            return reference, "latest"
+
         # 提取镜像列表
         images = []
         if isinstance(compose_doc, dict):
             services = compose_doc.get("services", {})
             for service_name, service_config in services.items():
                 if isinstance(service_config, dict):
-                    image = service_config.get("image", "")
-                    if image:
-                        images.append({"service": service_name, "image": image})
+                    image_ref = service_config.get("image", "")
+                    if image_ref:
+                        image_name, tag = split_image_reference(str(image_ref))
+                        if image_name:
+                            images.append({
+                                "service": service_name,
+                                "image": image_name,
+                                "tag": tag,
+                                "raw": image_ref
+                            })
 
         return JSONResponse({"images": images})
     except HTTPException:

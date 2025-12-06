@@ -64,6 +64,16 @@
                 <button 
                   type="button"
                   class="nav-link" 
+                  :class="{ active: activeTab === 'export-tasks' }"
+                  @click="activeTab = 'export-tasks'"
+                >
+                  <i class="fas fa-list-check"></i> 导出任务
+                </button>
+              </li>
+              <li class="nav-item">
+                <button 
+                  type="button"
+                  class="nav-link" 
                   :class="{ active: activeTab === 'compose' }"
                   @click="activeTab = 'compose'"
                 >
@@ -86,6 +96,7 @@
             <div class="tab-content">
               <BuildPanel v-if="activeTab === 'build'" />
               <ExportPanel v-if="activeTab === 'export'" />
+              <ExportTaskList v-if="activeTab === 'export-tasks'" />
               <ComposePanel v-if="activeTab === 'compose'" />
               <TemplatePanel v-if="activeTab === 'template'" />
             </div>
@@ -111,6 +122,7 @@ import axios from 'axios'
 import LoginPage from './components/LoginPage.vue'
 import BuildPanel from './components/BuildPanel.vue'
 import ExportPanel from './components/ExportPanel.vue'
+import ExportTaskList from './components/ExportTaskList.vue'
 import ComposePanel from './components/ComposePanel.vue'
 import TemplatePanel from './components/TemplatePanel.vue'
 import BuildLogModal from './components/BuildLogModal.vue'

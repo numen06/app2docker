@@ -31,8 +31,8 @@ def create_token(username: str) -> str:
     """创建 JWT token"""
     payload = {
         'username': username,
-        'exp': datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS),
-        'iat': datetime.utcnow()
+        'exp': datetime.now() + timedelta(hours=TOKEN_EXPIRE_HOURS),
+        'iat': datetime.now()
     }
     return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
