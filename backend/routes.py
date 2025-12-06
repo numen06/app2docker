@@ -230,6 +230,32 @@ async def get_operation_logs(
         raise HTTPException(status_code=500, detail=f"获取操作日志失败: {str(e)}")
 
 
+@router.delete("/operation-logs")
+async def clear_operation_logs(
+    request: Request,
+    days: Optional[int] = Query(None, description="保留最近 N 天的日志，不传则清空所有"),
+):
+    """清理操作日志"""
+    try:
+        username = get_current_username(request)
+        logger = OperationLogger()
+        removed_count = logger.clear_logs(days=days)
+        
+        # 记录清理操作
+        OperationLogger.log(username, "clear_logs", {
+            "removed_count": removed_count,
+            "days_kept": days
+        })
+        
+        return JSONResponse({
+            "success": True,
+            "removed_count": removed_count,
+            "message": f"已清理 {removed_count} 条日志" if days else "已清空所有日志"
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"清理操作日志失败: {str(e)}")
+
+
 # === 配置相关 ===
 @router.get("/get-config")
 async def get_config():

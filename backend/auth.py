@@ -4,12 +4,46 @@
 import jwt
 import hashlib
 import secrets
+import os
 from datetime import datetime, timedelta
 from functools import wraps
 
 # 配置
-SECRET_KEY = secrets.token_hex(32)  # 生成随机密钥（生产环境应该从配置文件读取）
 TOKEN_EXPIRE_HOURS = 24
+
+# SECRET_KEY 文件路径
+SECRET_KEY_FILE = "data/secret_key.txt"
+
+
+def get_or_create_secret_key() -> str:
+    """获取或创建 SECRET_KEY（持久化到文件，确保重启后密钥一致）"""
+    # 确保目录存在
+    os.makedirs(os.path.dirname(SECRET_KEY_FILE), exist_ok=True)
+    
+    # 如果文件存在，读取密钥
+    if os.path.exists(SECRET_KEY_FILE):
+        try:
+            with open(SECRET_KEY_FILE, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+                if key and len(key) >= 32:  # 确保密钥长度足够
+                    return key
+        except Exception as e:
+            print(f"⚠️ 读取 SECRET_KEY 失败: {e}，将生成新密钥")
+    
+    # 生成新密钥并保存
+    key = secrets.token_hex(32)
+    try:
+        with open(SECRET_KEY_FILE, "w", encoding="utf-8") as f:
+            f.write(key)
+        print(f"✅ 已生成并保存新的 SECRET_KEY")
+    except Exception as e:
+        print(f"⚠️ 保存 SECRET_KEY 失败: {e}，使用临时密钥（重启后会失效）")
+    
+    return key
+
+
+# 初始化 SECRET_KEY（从文件加载或生成）
+SECRET_KEY = get_or_create_secret_key()
 
 # 默认用户（应该从配置文件读取或数据库）
 DEFAULT_USERS = {

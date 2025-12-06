@@ -29,6 +29,39 @@
         <button class="btn btn-sm btn-outline-primary" @click="loadLogs">
           <i class="fas fa-sync-alt"></i> 刷新
         </button>
+        <div class="btn-group">
+          <button 
+            type="button" 
+            class="btn btn-sm btn-outline-danger dropdown-toggle" 
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+          >
+            <i class="fas fa-trash-alt"></i> 清理日志
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="clearLogs(7)">
+                <i class="fas fa-calendar-week"></i> 保留最近 7 天
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="clearLogs(30)">
+                <i class="fas fa-calendar-alt"></i> 保留最近 30 天
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="clearLogs(90)">
+                <i class="fas fa-calendar"></i> 保留最近 90 天
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item text-danger" href="#" @click.prevent="clearLogs(null)">
+                <i class="fas fa-exclamation-triangle"></i> 清空所有日志
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -145,6 +178,31 @@ async function loadLogs() {
     console.error('加载操作日志失败:', err)
   } finally {
     loading.value = false
+  }
+}
+
+async function clearLogs(days) {
+  let confirmMessage = ''
+  if (days === null) {
+    confirmMessage = '确定要清空所有操作日志吗？此操作不可恢复！'
+  } else {
+    confirmMessage = `确定要清理操作日志吗？将保留最近 ${days} 天的日志，其他日志将被删除。`
+  }
+  
+  if (!confirm(confirmMessage)) {
+    return
+  }
+  
+  try {
+    const params = days ? { days } : {}
+    const res = await axios.delete('/api/operation-logs', { params })
+    
+    alert(res.data.message || '清理成功')
+    // 重新加载日志
+    await loadLogs()
+  } catch (err) {
+    alert(err.response?.data?.detail || err.message || '清理失败')
+    console.error('清理操作日志失败:', err)
   }
 }
 
