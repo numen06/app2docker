@@ -1163,6 +1163,71 @@ class BuildManager:
                 else:
                     return False
                 log("✅ 解压完成\n")
+                
+                # 列出解压后的目录概况和文件
+                try:
+                    log("📂 解压后目录概况：\n")
+                    if os.path.exists(extract_to):
+                        # 统计根目录下的直接内容
+                        root_items = os.listdir(extract_to)
+                        dirs = []
+                        files = []
+                        total_size = 0
+                        total_files = 0
+                        
+                        for item in root_items:
+                            item_path = os.path.join(extract_to, item)
+                            if os.path.isdir(item_path):
+                                dirs.append(item)
+                            elif os.path.isfile(item_path):
+                                files.append(item)
+                        
+                        # 递归统计所有文件大小和数量
+                        for root, dirs_list, files_list in os.walk(extract_to):
+                            for f in files_list:
+                                file_path_full = os.path.join(root, f)
+                                if os.path.isfile(file_path_full):
+                                    total_size += os.path.getsize(file_path_full)
+                                    total_files += 1
+                        
+                        # 格式化大小
+                        if total_size < 1024:
+                            size_str = f"{total_size} B"
+                        elif total_size < 1024 * 1024:
+                            size_str = f"{total_size / 1024:.2f} KB"
+                        else:
+                            size_str = f"{total_size / (1024 * 1024):.2f} MB"
+                        
+                        log(f"  📁 根目录下目录数: {len(dirs)}\n")
+                        log(f"  📄 根目录下文件数: {len(files)}\n")
+                        log(f"  📊 总文件数: {total_files}\n")
+                        log(f"  💾 总大小: {size_str}\n")
+                        
+                        if dirs:
+                            log("  📁 根目录列表：\n")
+                            for d in sorted(dirs)[:20]:  # 最多显示20个
+                                log(f"    - {d}/\n")
+                            if len(dirs) > 20:
+                                log(f"    ... 还有 {len(dirs) - 20} 个目录\n")
+                        
+                        if files:
+                            log("  📄 根目录文件列表：\n")
+                            for f in sorted(files)[:30]:  # 最多显示30个
+                                file_path_full = os.path.join(extract_to, f)
+                                if os.path.isfile(file_path_full):
+                                    size = os.path.getsize(file_path_full)
+                                    if size < 1024:
+                                        f_size_str = f"{size} B"
+                                    elif size < 1024 * 1024:
+                                        f_size_str = f"{size / 1024:.2f} KB"
+                                    else:
+                                        f_size_str = f"{size / (1024 * 1024):.2f} MB"
+                                    log(f"    - {f} ({f_size_str})\n")
+                            if len(files) > 30:
+                                log(f"    ... 还有 {len(files) - 30} 个文件\n")
+                except Exception as e:
+                    log(f"⚠️  无法列出目录内容: {str(e)}\n")
+                
                 return True
             except Exception as e:
                 log(f"❌ 解压失败: {str(e)}\n")
