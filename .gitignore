@@ -51,3 +51,4 @@ Thumbs.db
 *.bak
 .cache/
 /backend/__pycache__
+/data/logs
