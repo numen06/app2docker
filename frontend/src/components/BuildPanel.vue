@@ -30,29 +30,6 @@
         </div>
       </div>
 
-      <!-- 模板参数动态输入框 -->
-      <div v-if="templateParams.length > 0" class="mb-3 p-3 bg-light rounded">
-        <h6 class="mb-3">
-          <i class="fas fa-sliders-h"></i> 模板参数
-        </h6>
-        <div class="row g-3">
-          <div v-for="param in templateParams" :key="param.name" class="col-md-6">
-            <label class="form-label">
-              {{ param.description }}
-              <span v-if="param.required" class="text-danger">*</span>
-              <small v-if="param.default" class="text-muted">(默认: {{ param.default }})</small>
-            </label>
-            <input 
-              v-model="form.templateParams[param.name]"
-              type="text" 
-              class="form-control form-control-sm"
-              :placeholder="param.default || param.name"
-              :required="param.required && !param.default"
-            />
-          </div>
-        </div>
-      </div>
-
       <div class="mb-3">
         <label class="form-label">
           选择文件 <span class="text-danger">*</span>
@@ -121,6 +98,53 @@
         </div>
       </div>
 
+      <!-- 推送选项（独立一栏） -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-12">
+          <div class="form-check">
+            <input 
+              v-model="form.push" 
+              type="checkbox" 
+              class="form-check-input" 
+              id="pushImage"
+              @change="handlePushChange"
+            />
+            <label class="form-check-label" for="pushImage">
+              <i class="fas fa-cloud-upload-alt"></i> 构建后推送到仓库
+            </label>
+          </div>
+          <div class="form-text small text-muted">
+            <i class="fas fa-info-circle"></i> 
+            勾选后将构建的镜像推送到指定的仓库
+          </div>
+        </div>
+      </div>
+
+      <!-- 推送仓库选择（仅在勾选推送时显示） -->
+      <div v-if="form.push" class="row g-3 mb-3">
+        <div class="col-md-12">
+          <label class="form-label">
+            <i class="fas fa-server"></i> 推送仓库 <span class="text-danger">*</span>
+          </label>
+          <select 
+            v-model="form.pushRegistry" 
+            class="form-select"
+            @change="updateImageNameFromRegistry"
+            required
+          >
+            <option value="">请选择仓库</option>
+            <option v-for="reg in registries" :key="reg.name" :value="reg.name">
+              {{ reg.name }} - {{ reg.registry }}
+              <span v-if="reg.active"> (激活)</span>
+            </option>
+          </select>
+          <div class="form-text small">
+            <i class="fas fa-info-circle"></i> 
+            选择推送镜像的目标仓库，选择后会自动拼接镜像名称
+          </div>
+        </div>
+      </div>
+
       <div class="row g-3 mb-3">
         <div class="col-md-6">
           <label class="form-label">
@@ -130,42 +154,44 @@
             v-model="form.imageName" 
             type="text" 
             class="form-control" 
-            placeholder="myapp/demo" 
+            :placeholder="imageNamePlaceholder" 
             required
           />
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">标签</label>
-          <input v-model="form.tag" type="text" class="form-control" />
-        </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <div class="form-check">
-            <input 
-              v-model="form.push" 
-              type="checkbox" 
-              class="form-check-input" 
-              id="pushImage"
-            />
-            <label class="form-check-label small" for="pushImage">推送</label>
+          <div class="form-text small">
+            <i class="fas fa-info-circle"></i> 
+            <span v-if="form.push">
+              选择推送仓库后会自动拼接完整镜像名，您也可以手动修改
+            </span>
+            <span v-else>
+              输入镜像名称（不包含仓库前缀）
+            </span>
           </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">标签</label>
+          <input v-model="form.tag" type="text" class="form-control" placeholder="latest" />
         </div>
       </div>
 
-      <!-- 推送仓库选择（仅在勾选推送时显示） -->
-      <div v-if="form.push" class="row g-3 mb-3">
-        <div class="col-md-12">
-          <label class="form-label">
-            <i class="fas fa-server"></i> 推送仓库
-          </label>
-          <select v-model="form.pushRegistry" class="form-select">
-            <option v-for="reg in registries" :key="reg.name" :value="reg.name">
-              {{ reg.name }} - {{ reg.registry }}
-              <span v-if="reg.active"> (激活)</span>
-            </option>
-          </select>
-          <div class="form-text small">
-            <i class="fas fa-info-circle"></i> 
-            选择推送镜像的目标仓库，默认使用激活的仓库
+      <!-- 模板参数动态输入框 -->
+      <div v-if="templateParams.length > 0" class="mb-3 p-3 bg-light rounded">
+        <h6 class="mb-3">
+          <i class="fas fa-sliders-h"></i> 模板参数
+        </h6>
+        <div class="row g-3">
+          <div v-for="param in templateParams" :key="param.name" class="col-md-6">
+            <label class="form-label">
+              {{ param.description }}
+              <span v-if="param.required" class="text-danger">*</span>
+              <small v-if="param.default" class="text-muted">(默认: {{ param.default }})</small>
+            </label>
+            <input 
+              v-model="form.templateParams[param.name]"
+              type="text" 
+              class="form-control form-control-sm"
+              :placeholder="param.default || param.name"
+              :required="param.required && !param.default"
+            />
           </div>
         </div>
       </div>
@@ -249,6 +275,20 @@ const fileHint = computed(() => {
     : '支持 .jar 文件或 .zip、.tar、.tar.gz 压缩包'
 })
 
+// 计算镜像名占位符
+const imageNamePlaceholder = computed(() => {
+  if (form.value.push) {
+    const selectedRegistry = registries.value.find(r => r.name === form.value.pushRegistry)
+    if (selectedRegistry && selectedRegistry.registry_prefix) {
+      const prefix = selectedRegistry.registry_prefix.trim()
+      if (prefix) {
+        return `${prefix}/myapp/demo`
+      }
+    }
+  }
+  return 'myapp/demo'
+})
+
 async function loadTemplates() {
   try {
     const res = await axios.get('/api/templates')
@@ -269,15 +309,82 @@ async function loadRegistries() {
     registries.value = res.data.registries || []
     console.log('📦 已加载仓库列表:', registries.value)
     
-    // 设置默认推送仓库为激活的仓库
+    // 如果已勾选推送，设置默认推送仓库为激活的仓库
+    if (form.value.push) {
+      const activeRegistry = registries.value.find(r => r.active)
+      if (activeRegistry) {
+        form.value.pushRegistry = activeRegistry.name
+        updateImageNameFromRegistry()
+      } else if (registries.value.length > 0) {
+        form.value.pushRegistry = registries.value[0].name
+        updateImageNameFromRegistry()
+      }
+    }
+  } catch (error) {
+    console.error('加载仓库列表失败:', error)
+  }
+}
+
+// 根据仓库更新镜像名称
+function updateImageNameFromRegistry() {
+  if (!form.value.push || !form.value.pushRegistry) {
+    return
+  }
+  
+  const selectedRegistry = registries.value.find(r => r.name === form.value.pushRegistry)
+  if (selectedRegistry && selectedRegistry.registry_prefix) {
+    const prefix = selectedRegistry.registry_prefix.trim()
+    if (prefix) {
+      // 如果当前镜像名为空或没有前缀，自动拼接
+      if (!form.value.imageName || !form.value.imageName.startsWith(prefix)) {
+        // 如果镜像名已经包含其他仓库的前缀，先移除
+        let imageName = form.value.imageName || 'myapp/demo'
+        registries.value.forEach(reg => {
+          const regPrefix = reg.registry_prefix?.trim()
+          if (regPrefix && imageName.startsWith(regPrefix + '/')) {
+            imageName = imageName.substring(regPrefix.length + 1)
+          }
+        })
+        
+        // 拼接新仓库的前缀
+        form.value.imageName = `${prefix}/${imageName}`.replace(/\/+/g, '/')
+      }
+    } else {
+      // 如果仓库没有前缀，移除当前镜像名的前缀
+      if (form.value.imageName) {
+        registries.value.forEach(reg => {
+          const regPrefix = reg.registry_prefix?.trim()
+          if (regPrefix && form.value.imageName.startsWith(regPrefix + '/')) {
+            form.value.imageName = form.value.imageName.substring(regPrefix.length + 1)
+          }
+        })
+      }
+    }
+  }
+}
+
+// 处理推送选项变化
+function handlePushChange() {
+  if (form.value.push) {
+    // 勾选推送时，设置默认仓库并更新镜像名
     const activeRegistry = registries.value.find(r => r.active)
     if (activeRegistry) {
       form.value.pushRegistry = activeRegistry.name
     } else if (registries.value.length > 0) {
       form.value.pushRegistry = registries.value[0].name
     }
-  } catch (error) {
-    console.error('加载仓库列表失败:', error)
+    updateImageNameFromRegistry()
+  } else {
+    // 取消推送时，移除镜像名的仓库前缀
+    if (form.value.imageName) {
+      registries.value.forEach(reg => {
+        const regPrefix = reg.registry_prefix?.trim()
+        if (regPrefix && form.value.imageName.startsWith(regPrefix + '/')) {
+          form.value.imageName = form.value.imageName.substring(regPrefix.length + 1)
+        }
+      })
+    }
+    form.value.pushRegistry = ''
   }
 }
 
@@ -345,7 +452,20 @@ async function suggestImageName(file) {
     formData.append('jar_file', file)
     const res = await axios.post('/api/suggest-image-name', formData)
     if (res.data.suggested_imagename) {
-      form.value.imageName = res.data.suggested_imagename
+      let suggestedName = res.data.suggested_imagename
+      
+      // 如果勾选了推送且有仓库前缀，自动拼接
+      if (form.value.push && form.value.pushRegistry) {
+        const selectedRegistry = registries.value.find(r => r.name === form.value.pushRegistry)
+        if (selectedRegistry && selectedRegistry.registry_prefix) {
+          const prefix = selectedRegistry.registry_prefix.trim()
+          if (prefix && !suggestedName.startsWith(prefix)) {
+            suggestedName = `${prefix}/${suggestedName}`.replace(/\/+/g, '/')
+          }
+        }
+      }
+      
+      form.value.imageName = suggestedName
     }
   } catch (error) {
     // 忽略错误
@@ -370,6 +490,12 @@ function isArchiveFile(filename) {
 async function handleBuild() {
   if (!form.value.file) {
     alert('请选择文件')
+    return
+  }
+  
+  // 如果勾选了推送，必须选择仓库
+  if (form.value.push && !form.value.pushRegistry) {
+    alert('请选择推送仓库')
     return
   }
   
