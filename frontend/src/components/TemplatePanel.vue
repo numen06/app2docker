@@ -87,25 +87,30 @@
       <nav>
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button class="page-link" @click="currentPage = 1" :disabled="currentPage === 1">
+            <button class="page-link" @click="changePage(1)" :disabled="currentPage === 1">
               <i class="fas fa-angle-double-left"></i>
             </button>
           </li>
           <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button class="page-link" @click="currentPage--" :disabled="currentPage === 1">
+            <button class="page-link" @click="changePage(currentPage - 1)" :disabled="currentPage === 1">
               <i class="fas fa-angle-left"></i>
             </button>
           </li>
-          <li class="page-item active">
-            <span class="page-link">{{ currentPage }} / {{ totalPages }}</span>
+          <li 
+            v-for="page in visiblePages" 
+            :key="page" 
+            class="page-item" 
+            :class="{ active: currentPage === page }"
+          >
+            <button class="page-link" @click="changePage(page)">{{ page }}</button>
           </li>
           <li class="page-item" :class="{ disabled: currentPage === totalPages }">
-            <button class="page-link" @click="currentPage++" :disabled="currentPage === totalPages">
+            <button class="page-link" @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages">
               <i class="fas fa-angle-right"></i>
             </button>
           </li>
           <li class="page-item" :class="{ disabled: currentPage === totalPages }">
-            <button class="page-link" @click="currentPage = totalPages" :disabled="currentPage === totalPages">
+            <button class="page-link" @click="changePage(totalPages)" :disabled="currentPage === totalPages">
               <i class="fas fa-angle-double-right"></i>
             </button>
           </li>
@@ -153,6 +158,48 @@ const paginatedTemplates = computed(() => {
   const end = start + pageSize.value
   return templates.value.slice(start, end)
 })
+
+// 可见的页码列表
+const visiblePages = computed(() => {
+  const total = totalPages.value
+  const current = currentPage.value
+  const pages = []
+  
+  if (total <= 7) {
+    // 总页数小于7，显示所有页码
+    for (let i = 1; i <= total; i++) {
+      pages.push(i)
+    }
+  } else {
+    // 总页数大于7，智能显示
+    if (current <= 4) {
+      // 前部：1 2 3 4 5 ... 最后页
+      for (let i = 1; i <= 5; i++) pages.push(i)
+      pages.push('...')
+      pages.push(total)
+    } else if (current >= total - 3) {
+      // 后部：1 ... 倍数第5页 倍数第4页 倍数第3页 倍数第2页 最后页
+      pages.push(1)
+      pages.push('...')
+      for (let i = total - 4; i <= total; i++) pages.push(i)
+    } else {
+      // 中间：1 ... current-1 current current+1 ... 最后页
+      pages.push(1)
+      pages.push('...')
+      for (let i = current - 1; i <= current + 1; i++) pages.push(i)
+      pages.push('...')
+      pages.push(total)
+    }
+  }
+  
+  return pages.filter(p => p !== '...' || pages.indexOf(p) === pages.lastIndexOf(p))
+})
+
+// 切换页码
+function changePage(page) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  currentPage.value = page
+}
 
 async function loadTemplates() {
   loading.value = true
