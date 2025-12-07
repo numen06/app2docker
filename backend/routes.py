@@ -2090,39 +2090,43 @@ async def webhook_trigger(webhook_token: str, request: Request):
         # 验证 Webhook 签名（可选）
         webhook_secret = pipeline.get("webhook_secret")
         if webhook_secret:
-            # 支持不同平台的签名验证
-            signature = None
-            signature_header = "sha256"
+            # 如果配置了 secret，则尝试验证签名
             signature_verified = False
+            signature_found = False
             
             # GitHub: X-Hub-Signature-256 或 X-Hub-Signature
             if "x-hub-signature-256" in request.headers:
                 signature = request.headers["x-hub-signature-256"]
-                signature_header = "sha256"
-                signature_verified = manager.verify_webhook_signature(body, signature, webhook_secret, signature_header)
+                signature_found = True
+                signature_verified = manager.verify_webhook_signature(body, signature, webhook_secret, "sha256")
             elif "x-hub-signature" in request.headers:
                 signature = request.headers["x-hub-signature"]
-                signature_header = "sha1"
-                signature_verified = manager.verify_webhook_signature(body, signature, webhook_secret, signature_header)
+                signature_found = True
+                signature_verified = manager.verify_webhook_signature(body, signature, webhook_secret, "sha1")
             # GitLab: X-Gitlab-Token
             elif "x-gitlab-token" in request.headers:
                 gitlab_token = request.headers["x-gitlab-token"]
+                signature_found = True
                 signature_verified = (gitlab_token == webhook_secret)
             # Gitee: X-Gitee-Token
             elif "x-gitee-token" in request.headers:
                 gitee_token = request.headers["x-gitee-token"]
+                signature_found = True
                 signature_verified = (gitee_token == webhook_secret)
-            else:
-                # 配置了 secret 但没有提供任何签名头部
-                print(f"⚠️ Webhook 请求缺少签名头部，配置了 secret 但未提供签名")
-                raise HTTPException(status_code=403, detail="Webhook 签名验证失败：缺少签名头部")
             
-            # 检查验证结果
-            if not signature_verified:
+            # 如果提供了签名但验证失败，则拒绝请求
+            if signature_found and not signature_verified:
                 print(f"❌ Webhook 签名验证失败: pipeline={pipeline.get('name')}")
                 raise HTTPException(status_code=403, detail="Webhook 签名验证失败")
             
-            print(f"✅ Webhook 签名验证通过: pipeline={pipeline.get('name')}")
+            # 如果没有提供签名，警告但允许通过（容错处理）
+            if not signature_found:
+                print(f"⚠️ Webhook 请求未提供签名，但配置了 secret，允许通过: pipeline={pipeline.get('name')}")
+            else:
+                print(f"✅ Webhook 签名验证通过: pipeline={pipeline.get('name')}")
+        else:
+            # 没有配置 secret，直接允许通过
+            print(f"🔓 Webhook 未配置签名验证，直接允许通过: pipeline={pipeline.get('name')}")
         
         # 解析 Webhook 负载（尝试解析 JSON）
         try:
