@@ -19,6 +19,7 @@
             <th>分支</th>
             <th>镜像</th>
             <th>状态</th>
+            <th>当前任务</th>
             <th>定时</th>
             <th>触发次数</th>
             <th>最后触发</th>
@@ -27,12 +28,12 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="9" class="text-center">
+            <td colspan="10" class="text-center">
               <span class="spinner-border spinner-border-sm"></span> 加载中...
             </td>
           </tr>
           <tr v-else-if="pipelines.length === 0">
-            <td colspan="9" class="text-center text-muted">
+            <td colspan="10" class="text-center text-muted">
               暂无流水线配置
             </td>
           </tr>
@@ -58,6 +59,18 @@
               <span v-else class="badge bg-secondary">
                 <i class="fas fa-times-circle"></i> 已禁用
               </span>
+            </td>
+            <td>
+              <span v-if="pipeline.current_task_info">
+                <span v-if="pipeline.current_task_status === 'running'" class="badge bg-primary">
+                  <span class="spinner-border spinner-border-sm me-1" style="width: 0.65rem; height: 0.65rem;"></span> 运行中
+                </span>
+                <span v-else-if="pipeline.current_task_status === 'pending'" class="badge bg-warning">
+                  <i class="fas fa-clock"></i> 等待中
+                </span>
+                <span v-else class="text-muted small">-</span>
+              </span>
+              <span v-else class="text-muted small">-</span>
             </td>
             <td>
               <span v-if="pipeline.cron_expression" class="badge bg-info" :title="pipeline.cron_expression">

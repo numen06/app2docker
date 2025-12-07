@@ -2340,6 +2340,17 @@ class BuildTaskManager:
                     self.tasks[task_id]["error"] = error
                 if status in ("completed", "failed"):
                     self.tasks[task_id]["completed_at"] = datetime.now().isoformat()
+                    
+                    # 任务完成或失败时，解绑流水线
+                    try:
+                        from backend.pipeline_manager import PipelineManager
+                        pipeline_manager = PipelineManager()
+                        pipeline_id = pipeline_manager.find_pipeline_by_task(task_id)
+                        if pipeline_id:
+                            pipeline_manager.unbind_task(pipeline_id)
+                            print(f"✅ 任务 {task_id[:8]} 已完成，解绑流水线 {pipeline_id[:8]}")
+                    except Exception as e:
+                        print(f"⚠️ 解绑流水线失败: {e}")
         self._save_tasks()
 
     def add_log(self, task_id: str, log_message: str):

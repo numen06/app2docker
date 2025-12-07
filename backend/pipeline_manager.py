@@ -124,6 +124,8 @@ class PipelineManager:
             # 定时触发配置
             "cron_expression": cron_expression,
             "next_run_time": None,  # 下次执行时间
+            # 任务绑定
+            "current_task_id": None,  # 当前正在执行的任务ID
             # 元数据
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
@@ -259,14 +261,58 @@ class PipelineManager:
             self._save_pipelines()
             return True
     
-    def record_trigger(self, pipeline_id: str):
-        """记录流水线触发"""
+    def record_trigger(self, pipeline_id: str, task_id: str = None):
+        """记录流水线触发
+        
+        Args:
+            pipeline_id: 流水线 ID
+            task_id: 任务 ID，如果提供则绑定到流水线
+        """
         with self.lock:
             if pipeline_id in self.pipelines:
                 pipeline = self.pipelines[pipeline_id]
                 pipeline["last_triggered_at"] = datetime.now().isoformat()
                 pipeline["trigger_count"] = pipeline.get("trigger_count", 0) + 1
+                if task_id:
+                    pipeline["current_task_id"] = task_id
                 self._save_pipelines()
+    
+    def get_pipeline_running_task(self, pipeline_id: str) -> Optional[str]:
+        """获取流水线当前正在执行的任务ID
+        
+        Returns:
+            任务ID，如果没有运行中的任务则返回 None
+        """
+        with self.lock:
+            if pipeline_id in self.pipelines:
+                return self.pipelines[pipeline_id].get("current_task_id")
+            return None
+    
+    def unbind_task(self, pipeline_id: str):
+        """解绑流水线的任务绑定
+        
+        Args:
+            pipeline_id: 流水线 ID
+        """
+        with self.lock:
+            if pipeline_id in self.pipelines:
+                self.pipelines[pipeline_id]["current_task_id"] = None
+                self._save_pipelines()
+    
+    def find_pipeline_by_task(self, task_id: str) -> Optional[str]:
+        """根据任务ID查找绑定的流水线ID
+        
+        Args:
+            task_id: 任务 ID
+            
+        Returns:
+            流水线 ID，如果没有绑定则返回 None
+        """
+        with self.lock:
+            for pipeline_id, pipeline in self.pipelines.items():
+                if pipeline.get("current_task_id") == task_id:
+                    return pipeline_id
+            return None
     
     def verify_webhook_signature(
         self,

@@ -1877,6 +1877,27 @@ async def list_pipelines(enabled: Optional[bool] = Query(None, description="过�
     try:
         manager = PipelineManager()
         pipelines = manager.list_pipelines(enabled=enabled)
+        
+        # 为每个流水线添加当前任务状态
+        build_manager = BuildManager()
+        for pipeline in pipelines:
+            task_id = pipeline.get("current_task_id")
+            if task_id:
+                task = build_manager.task_manager.get_task(task_id)
+                if task:
+                    pipeline["current_task_status"] = task.get("status")
+                    pipeline["current_task_info"] = {
+                        "task_id": task_id,
+                        "status": task.get("status"),
+                        "created_at": task.get("created_at"),
+                        "image": task.get("image"),
+                        "tag": task.get("tag"),
+                    }
+                else:
+                    # 任务不存在，清除绑定
+                    manager.unbind_task(pipeline["pipeline_id"])
+                    pipeline["current_task_id"] = None
+        
         return JSONResponse({"pipelines": pipelines, "total": len(pipelines)})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取流水线列表失败: {str(e)}")
@@ -1980,6 +2001,21 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
         if not pipeline:
             raise HTTPException(status_code=404, detail="流水线不存在")
         
+        # 检查是否有正在运行的任务
+        current_task_id = manager.get_pipeline_running_task(pipeline_id)
+        if current_task_id:
+            # 检查任务是否真的在运行
+            build_manager = BuildManager()
+            task = build_manager.task_manager.get_task(current_task_id)
+            if task and task.get("status") in ["pending", "running"]:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"流水线已有正在执行的任务（任务ID: {current_task_id[:8]}）"
+                )
+            else:
+                # 任务已完成或不存在，解绑
+                manager.unbind_task(pipeline_id)
+        
         # 启动构建任务
         build_manager = BuildManager()
         task_id = build_manager.start_build_from_source(
@@ -1996,8 +2032,8 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
         )
         
-        # 记录触发
-        manager.record_trigger(pipeline_id)
+        # 记录触发并绑定任务
+        manager.record_trigger(pipeline_id, task_id)
         
         # 记录操作日志
         OperationLogger.log(username, "pipeline_run", {
@@ -2093,6 +2129,24 @@ async def webhook_trigger(webhook_token: str, request: Request):
         
         print(f"🔔 Webhook 触发: pipeline={pipeline.get('name')}, branch={branch}")
         
+        # 检查是否有正在运行的任务
+        pipeline_id = pipeline["pipeline_id"]
+        current_task_id = manager.get_pipeline_running_task(pipeline_id)
+        if current_task_id:
+            # 检查任务是否真的在运行
+            build_manager = BuildManager()
+            task = build_manager.task_manager.get_task(current_task_id)
+            if task and task.get("status") in ["pending", "running"]:
+                print(f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务 {current_task_id[:8]}，忽略本次触发")
+                return JSONResponse({
+                    "message": "流水线已有正在执行的任务，忽略本次触发",
+                    "current_task_id": current_task_id,
+                    "pipeline": pipeline.get("name"),
+                })
+            else:
+                # 任务已完成或不存在，解绑
+                manager.unbind_task(pipeline_id)
+        
         # 启动构建任务
         build_manager = BuildManager()
         task_id = build_manager.start_build_from_source(
@@ -2109,8 +2163,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
         )
         
-        # 记录触发
-        manager.record_trigger(pipeline["pipeline_id"])
+        # 记录触发并绑定任务
+        manager.record_trigger(pipeline["pipeline_id"], task_id)
         
         # 记录操作日志
         OperationLogger.log("webhook", "pipeline_trigger", {

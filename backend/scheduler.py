@@ -116,6 +116,24 @@ class PipelineScheduler:
     def _trigger_pipeline(self, pipeline: dict):
         """触发流水线构建"""
         try:
+            pipeline_id = pipeline.get("pipeline_id")
+            pipeline_name = pipeline.get("name", "unknown")
+            
+            # 检查是否有正在运行的任务
+            current_task_id = self.pipeline_manager.get_pipeline_running_task(pipeline_id)
+            if current_task_id:
+                # 检查任务是否真的在运行
+                if self.build_manager is None:
+                    self.build_manager = BuildManager()
+                
+                task = self.build_manager.task_manager.get_task(current_task_id)
+                if task and task.get("status") in ["pending", "running"]:
+                    print(f"⚠️ 流水线 {pipeline_name} 已有正在执行的任务 {current_task_id[:8]}，忽略本次定时触发")
+                    return
+                else:
+                    # 任务已完成或不存在，解绑
+                    self.pipeline_manager.unbind_task(pipeline_id)
+            
             # 延迟导入避免循环依赖
             if self.build_manager is None:
                 self.build_manager = BuildManager()
@@ -138,24 +156,24 @@ class PipelineScheduler:
                 git_url=git_url,
                 branch=branch,
                 project_type=project_type,
-                template=template,
+                selected_template=template,
                 image_name=image_name,
                 tag=tag,
-                push=push,
+                should_push=push,
                 push_registry=push_registry,
                 template_params=template_params,
                 sub_path=sub_path,
                 use_project_dockerfile=use_project_dockerfile,
-                username="scheduler"  # 系统用户
             )
             
-            # 记录触发
-            self.pipeline_manager.record_trigger(pipeline.get("pipeline_id"))
+            print(f"✅ 定时触发流水线: {pipeline_name}, 任务ID: {task_id[:8]}")
             
-            print(f"✅ 定时流水线 {pipeline['name']} 已触发，任务ID: {task_id}")
-        
+            # 记录触发并绑定任务
+            self.pipeline_manager.record_trigger(pipeline_id, task_id)
+            
         except Exception as e:
-            print(f"❌ 触发流水线失败: {e}")
+            pipeline_name = pipeline.get("name", "unknown")
+            print(f"❌ 触发流水线 {pipeline_name} 失败: {e}")
             import traceback
             traceback.print_exc()
 
