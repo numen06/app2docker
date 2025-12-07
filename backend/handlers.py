@@ -1522,11 +1522,55 @@ class BuildManager:
 
                 push_username = push_registry_config.get("username")
                 push_password = push_registry_config.get("password")
+                push_registry_host = push_registry_config.get("registry", "")
+
+                log(
+                    f"🔐 Registry配置 - 地址: {push_registry_host}, 用户名: {push_username}, 密码: {'***' if push_password else '(未配置)'}\n"
+                )
 
                 auth_config = None
                 if push_username and push_password:
-                    auth_config = {"username": push_username, "password": push_password}
+                    # 构建auth_config，包含registry信息
+                    auth_config = {
+                        "username": push_username,
+                        "password": push_password,
+                    }
+                    # 如果registry不是docker.io，添加serveraddress
+                    if push_registry_host and push_registry_host != "docker.io":
+                        auth_config["serveraddress"] = push_registry_host
+
                     log(f"✅ 已配置认证信息\n")
+                    log(
+                        f"🔐 Auth配置: username={push_username}, serveraddress={auth_config.get('serveraddress', 'docker.io')}\n"
+                    )
+
+                    # 推送前先登录到registry（重要：确保认证生效）
+                    try:
+                        if hasattr(docker_builder, "client") and docker_builder.client:
+                            # 对于阿里云等registry，需要确保使用正确的registry地址
+                            login_registry = (
+                                push_registry_host
+                                if push_registry_host
+                                and push_registry_host != "docker.io"
+                                else None
+                            )
+                            log(
+                                f"🔑 正在登录到registry: {login_registry or 'docker.io'}\n"
+                            )
+                            log(f"🔑 用户名: {push_username}\n")
+
+                            # 执行登录
+                            login_result = docker_builder.client.login(
+                                username=push_username,
+                                password=push_password,
+                                registry=login_registry,
+                            )
+                            log(f"✅ 登录成功: {login_result}\n")
+                        else:
+                            log(f"⚠️  Docker客户端不可用，跳过登录\n")
+                    except Exception as login_error:
+                        log(f"❌ 登录失败: {str(login_error)}\n")
+                        log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
                 else:
                     log(f"⚠️  registry未配置认证信息，推送可能失败\n")
 
@@ -1975,14 +2019,19 @@ logs/
                     if len(parts) >= 2 and "." in parts[0]:
                         # 镜像名格式: registry.com/namespace/image
                         image_registry = parts[0]
+                        log(f"🔍 从镜像名提取registry: {image_registry}\n")
                         all_registries = get_all_registries()
+                        log(f"🔍 共有 {len(all_registries)} 个registry配置\n")
                         for reg in all_registries:
                             reg_address = reg.get("registry", "")
+                            reg_name = reg.get("name", "Unknown")
+                            log(f"🔍 检查registry: {reg_name}, 地址: {reg_address}\n")
                             if reg_address and (
                                 image_registry == reg_address
                                 or image_registry.startswith(reg_address)
                                 or reg_address.startswith(image_registry)
                             ):
+                                log(f"✅ 找到匹配的registry: {reg_name}\n")
                                 return reg
                     return None
 
@@ -2004,10 +2053,54 @@ logs/
                 # 从registry配置中获取认证信息
                 username = registry_config.get("username")
                 password = registry_config.get("password")
+                registry_host = registry_config.get("registry", "")
+
+                log(
+                    f"🔐 Registry配置 - 地址: {registry_host}, 用户名: {username}, 密码: {'***' if password else '(未配置)'}\n"
+                )
+
                 auth_config = None
                 if username and password:
-                    auth_config = {"username": username, "password": password}
+                    # 构建auth_config，包含registry信息
+                    auth_config = {
+                        "username": username,
+                        "password": password,
+                    }
+                    # 如果registry不是docker.io，添加serveraddress
+                    if registry_host and registry_host != "docker.io":
+                        auth_config["serveraddress"] = registry_host
+
                     log(f"✅ 已配置认证信息\n")
+                    log(
+                        f"🔐 Auth配置: username={username}, serveraddress={auth_config.get('serveraddress', 'docker.io')}\n"
+                    )
+
+                    # 推送前先登录到registry（重要：确保认证生效）
+                    try:
+                        if hasattr(docker_builder, "client") and docker_builder.client:
+                            # 对于阿里云等registry，需要确保使用正确的registry地址
+                            login_registry = (
+                                registry_host
+                                if registry_host and registry_host != "docker.io"
+                                else None
+                            )
+                            log(
+                                f"🔑 正在登录到registry: {login_registry or 'docker.io'}\n"
+                            )
+                            log(f"🔑 用户名: {username}\n")
+
+                            # 执行登录
+                            login_result = docker_builder.client.login(
+                                username=username,
+                                password=password,
+                                registry=login_registry,
+                            )
+                            log(f"✅ 登录成功: {login_result}\n")
+                        else:
+                            log(f"⚠️  Docker客户端不可用，跳过登录\n")
+                    except Exception as login_error:
+                        log(f"❌ 登录失败: {str(login_error)}\n")
+                        log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
                 else:
                     log(f"⚠️  registry未配置认证信息，推送可能失败\n")
 
