@@ -1959,23 +1959,49 @@ logs/
                 else:
                     registry_config = get_active_registry()
 
+                # 构建完整的推送repository路径
+                registry_host = registry_config.get("registry", "docker.io")
+                registry_prefix = registry_config.get("registry_prefix", "").strip()
+
+                # 构建完整的repository路径
+                if registry_prefix:
+                    # 如果有prefix，格式为: registry_host/prefix/image_name
+                    push_repository = f"{registry_host}/{registry_prefix}/{image_name}"
+                else:
+                    # 如果没有prefix，格式为: registry_host/image_name
+                    push_repository = f"{registry_host}/{image_name}"
+
+                # 移除可能的重复斜杠
+                push_repository = push_repository.replace("//", "/")
+
+                log(f"🎯 推送仓库: {registry_config.get('name', 'Unknown')}\n")
+                log(f"📦 推送路径: {push_repository}:{tag}\n")
+
                 username = registry_config.get("username")
                 password = registry_config.get("password")
                 auth_config = None
                 if username and password:
                     auth_config = {"username": username, "password": password}
+                else:
+                    log(f"⚠️  推送仓库未配置认证信息，推送可能失败\n")
 
-                push_stream = docker_builder.push_image(full_tag, auth_config)
-                for chunk in push_stream:
-                    if isinstance(chunk, dict):
-                        if "status" in chunk:
-                            log(chunk["status"] + "\n")
-                        elif "error" in chunk:
-                            raise RuntimeError(chunk["error"])
-                    else:
-                        log(str(chunk))
+                try:
+                    push_stream = docker_builder.push_image(
+                        push_repository, tag, auth_config=auth_config
+                    )
+                    for chunk in push_stream:
+                        if isinstance(chunk, dict):
+                            if "status" in chunk:
+                                log(chunk["status"] + "\n")
+                            elif "error" in chunk:
+                                raise RuntimeError(chunk["error"])
+                        else:
+                            log(str(chunk))
 
-                log(f"✅ 推送完成\n")
+                    log(f"✅ 推送完成到 {registry_host}: {push_repository}:{tag}\n")
+                except Exception as e:
+                    log(f"❌ 推送异常: {str(e)}\n")
+                    raise
 
             log(f"✅ 所有操作已完成\n")
             # 更新任务状态为完成
