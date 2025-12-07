@@ -14,17 +14,17 @@
       <table class="table table-sm table-hover">
         <thead>
           <tr>
-            <th>名称</th>
-            <th>Git 仓库</th>
-            <th>分支</th>
-            <th>镜像</th>
-            <th>状态</th>
-            <th>当前任务</th>
-            <th>最后构建</th>
-            <th>定时</th>
-            <th>触发次数</th>
-            <th>最后触发</th>
-            <th>操作</th>
+            <th style="width: 15%;">名称</th>
+            <th style="width: 18%;">Git 仓库</th>
+            <th style="width: 8%;">分支</th>
+            <th style="width: 12%;">镜像</th>
+            <th style="width: 8%;">状态</th>
+            <th style="width: 8%;">当前任务</th>
+            <th style="width: 12%;">最后构建</th>
+            <th style="width: 6%;">定时</th>
+            <th style="width: 6%;">触发次数</th>
+            <th style="width: 10%;">最后触发</th>
+            <th style="width: 7%;">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -40,18 +40,25 @@
           </tr>
           <tr v-for="pipeline in pipelines" :key="pipeline.pipeline_id">
             <td>
-              <strong>{{ pipeline.name }}</strong>
-              <br>
-              <small class="text-muted">{{ pipeline.description }}</small>
+              <div class="text-truncate" :title="pipeline.name">
+                <strong>{{ pipeline.name }}</strong>
+              </div>
+              <small class="text-muted text-truncate d-block" :title="pipeline.description">
+                {{ pipeline.description || '-' }}
+              </small>
             </td>
             <td>
-              <small class="font-monospace">{{ formatGitUrl(pipeline.git_url) }}</small>
+              <small class="font-monospace text-truncate d-block" :title="pipeline.git_url">
+                {{ formatGitUrl(pipeline.git_url) }}
+              </small>
             </td>
             <td>
               <span class="badge bg-secondary">{{ pipeline.branch || '默认' }}</span>
             </td>
             <td>
-              <small class="font-monospace">{{ pipeline.image_name }}:{{ pipeline.tag }}</small>
+              <small class="font-monospace text-truncate d-block" :title="`${pipeline.image_name}:${pipeline.tag}`">
+                {{ pipeline.image_name }}:{{ pipeline.tag }}
+              </small>
             </td>
             <td>
               <span v-if="pipeline.enabled" class="badge bg-success">
@@ -75,23 +82,32 @@
             </td>
             <td>
               <span v-if="pipeline.last_build">
-                <span 
-                  :class="{
-                    'badge': true,
-                    'bg-success': pipeline.last_build.status === 'completed',
-                    'bg-danger': pipeline.last_build.status === 'failed',
-                  }"
-                >
-                  <i v-if="pipeline.last_build.status === 'completed'" class="fas fa-check-circle"></i>
-                  <i v-else-if="pipeline.last_build.status === 'failed'" class="fas fa-times-circle"></i>
-                  {{ pipeline.last_build.status === 'completed' ? '成功' : '失败' }}
-                </span>
-                <br>
-                <small class="text-muted">
-                  {{ formatTime(pipeline.last_build.completed_at || pipeline.last_build.created_at) }}
+                <div class="d-flex align-items-center gap-1 mb-1">
+                  <span 
+                    :class="{
+                      'badge': true,
+                      'bg-success': pipeline.last_build.status === 'completed',
+                      'bg-danger': pipeline.last_build.status === 'failed',
+                    }"
+                  >
+                    <i v-if="pipeline.last_build.status === 'completed'" class="fas fa-check-circle"></i>
+                    <i v-else-if="pipeline.last_build.status === 'failed'" class="fas fa-times-circle"></i>
+                    {{ pipeline.last_build.status === 'completed' ? '成功' : '失败' }}
+                  </span>
+                  <button 
+                    v-if="pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
+                    class="btn btn-sm btn-outline-info p-0" 
+                    style="width: 20px; height: 20px; line-height: 1;"
+                    @click="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
+                    title="查看日志"
+                  >
+                    <i class="fas fa-terminal" style="font-size: 0.7rem;"></i>
+                  </button>
+                </div>
+                <small class="text-muted d-block" :title="formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at)">
+                  {{ formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at) }}
                 </small>
-                <br>
-                <small class="text-muted">
+                <small class="text-muted d-block">
                   <code>{{ pipeline.last_build.task_id.substring(0, 8) }}</code>
                 </small>
               </span>
@@ -105,10 +121,10 @@
                 -
               </span>
             </td>
-            <td>{{ pipeline.trigger_count || 0 }}</td>
+            <td class="text-center">{{ pipeline.trigger_count || 0 }}</td>
             <td>
-              <small v-if="pipeline.last_triggered_at">
-                {{ formatTime(pipeline.last_triggered_at) }}
+              <small v-if="pipeline.last_triggered_at" :title="formatDateTime(pipeline.last_triggered_at)">
+                {{ formatDateTime(pipeline.last_triggered_at) }}
               </small>
               <small v-else class="text-muted">-</small>
             </td>
@@ -393,6 +409,26 @@
       </div>
     </div>
 
+    <!-- 日志查看模态框 -->
+    <div v-if="showLogModal && selectedTask" class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5)">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-terminal"></i> 任务日志 - {{ selectedTask.image || '未知' }}:{{ selectedTask.tag || 'latest' }}
+            </h5>
+            <button type="button" class="btn-close" @click="closeLogModal"></button>
+          </div>
+          <div class="modal-body">
+            <pre class="bg-dark text-light p-3 rounded" style="max-height: 500px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word;">{{ taskLogs }}</pre>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="closeLogModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 历史构建模态框 -->
     <div v-if="showHistoryModal" class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5)">
       <div class="modal-dialog modal-xl">
@@ -444,13 +480,14 @@
               <table class="table table-sm table-hover">
                 <thead>
                   <tr>
-                    <th>任务ID</th>
-                    <th>触发来源</th>
-                    <th>状态</th>
-                    <th>镜像</th>
-                    <th>触发时间</th>
-                    <th>完成时间</th>
-                    <th>分支/信息</th>
+                    <th style="width: 10%;">任务ID</th>
+                    <th style="width: 10%;">触发来源</th>
+                    <th style="width: 10%;">状态</th>
+                    <th style="width: 15%;">镜像</th>
+                    <th style="width: 12%;">触发时间</th>
+                    <th style="width: 12%;">完成时间</th>
+                    <th style="width: 18%;">分支/信息</th>
+                    <th style="width: 13%;">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -488,30 +525,47 @@
                       </span>
                     </td>
                     <td>
-                      <small class="font-monospace">{{ task.image }}:{{ task.tag }}</small>
+                      <small class="font-monospace text-truncate d-block" :title="`${task.image}:${task.tag}`">
+                        {{ task.image }}:{{ task.tag }}
+                      </small>
                     </td>
                     <td>
-                      <small class="text-muted">{{ formatTime(task.triggered_at) }}</small>
+                      <small class="text-muted" :title="formatDateTime(task.triggered_at)">
+                        {{ formatDateTime(task.triggered_at) }}
+                      </small>
                     </td>
                     <td>
-                      <small v-if="task.completed_at" class="text-muted">{{ formatTime(task.completed_at) }}</small>
-                      <small v-else class="text-muted">-</small>
-                    </td>
-                    <td>
-                      <small v-if="task.trigger_info">
-                        <span v-if="task.trigger_info.branch" class="badge bg-secondary">
-                          {{ task.trigger_info.branch }}
-                        </span>
-                        <br v-if="task.trigger_info.platform">
-                        <span v-if="task.trigger_info.platform" class="text-muted">
-                          {{ task.trigger_info.platform }}
-                        </span>
-                        <br v-if="task.trigger_info.last_commit">
-                        <span v-if="task.trigger_info.last_commit" class="text-muted small" :title="task.trigger_info.last_commit">
-                          {{ task.trigger_info.last_commit.substring(0, 30) }}...
-                        </span>
+                      <small v-if="task.completed_at" class="text-muted" :title="formatDateTime(task.completed_at)">
+                        {{ formatDateTime(task.completed_at) }}
                       </small>
                       <small v-else class="text-muted">-</small>
+                    </td>
+                    <td>
+                      <div v-if="task.trigger_info">
+                        <span v-if="task.trigger_info.branch" class="badge bg-secondary mb-1">
+                          {{ task.trigger_info.branch }}
+                        </span>
+                        <div v-if="task.trigger_info.platform" class="text-muted small">
+                          {{ task.trigger_info.platform }}
+                        </div>
+                        <div v-if="task.trigger_info.last_commit" class="text-muted small text-truncate" :title="task.trigger_info.last_commit">
+                          {{ task.trigger_info.last_commit.substring(0, 40) }}{{ task.trigger_info.last_commit.length > 40 ? '...' : '' }}
+                        </div>
+                      </div>
+                      <small v-else class="text-muted">-</small>
+                    </td>
+                    <td>
+                      <button 
+                        v-if="task.status !== 'deleted' && task.task_id"
+                        class="btn btn-sm btn-outline-info" 
+                        @click="viewTaskLogs(task.task_id, task)"
+                        :disabled="viewingLogs === task.task_id"
+                        title="查看日志"
+                      >
+                        <i class="fas fa-terminal"></i> 日志
+                        <span v-if="viewingLogs === task.task_id" class="spinner-border spinner-border-sm ms-1"></span>
+                      </button>
+                      <span v-else class="text-muted small">-</span>
                     </td>
                   </tr>
                 </tbody>
@@ -552,6 +606,10 @@ const historyFilter = ref({
   trigger_source: '',
   status: ''
 })
+const showLogModal = ref(false)
+const selectedTask = ref(null)
+const taskLogs = ref('')
+const viewingLogs = ref(null)
 
 const formData = ref({
   name: '',
@@ -763,6 +821,21 @@ function formatTime(isoString) {
   return date.toLocaleDateString('zh-CN')
 }
 
+function formatDateTime(isoString) {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  
+  // 格式：YYYY-MM-DD HH:mm:ss
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
 function showHistory(pipeline) {
   currentPipeline.value = pipeline
   historyFilter.value = {
@@ -804,6 +877,39 @@ async function loadHistory() {
     historyLoading.value = false
   }
 }
+
+async function viewTaskLogs(taskId, task) {
+  if (viewingLogs.value) return
+  
+  viewingLogs.value = taskId
+  selectedTask.value = task
+  showLogModal.value = true
+  taskLogs.value = '加载中...'
+  
+  try {
+    const res = await axios.get(`/api/build-tasks/${taskId}/logs`)
+    // 直接使用 res.data,不设置 responseType
+    if (typeof res.data === 'string') {
+      taskLogs.value = res.data || '暂无日志'
+    } else {
+      // 如果返回的不是字符串,尝试转换
+      taskLogs.value = JSON.stringify(res.data, null, 2)
+    }
+  } catch (err) {
+    console.error('获取日志失败:', err)
+    const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '未知错误'
+    taskLogs.value = `加载日志失败: ${errorMsg}`
+  } finally {
+    viewingLogs.value = null
+  }
+}
+
+function closeLogModal() {
+  showLogModal.value = false
+  selectedTask.value = null
+  taskLogs.value = ''
+  viewingLogs.value = null
+}
 </script>
 
 <style scoped>
@@ -813,10 +919,27 @@ async function loadHistory() {
 
 .table {
   font-size: 0.875rem;
+  table-layout: fixed; /* 固定表格布局，使列宽生效 */
+}
+
+.table th {
+  white-space: nowrap; /* 表头不换行 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table td {
+  word-wrap: break-word; /* 允许单元格内容换行 */
+  overflow-wrap: break-word;
 }
 
 .font-monospace {
   font-family: 'Courier New', monospace;
   font-size: 0.85em;
+}
+
+/* 确保操作按钮组不换行 */
+.btn-group {
+  flex-wrap: nowrap;
 }
 </style>
