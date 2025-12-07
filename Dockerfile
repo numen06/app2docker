@@ -38,23 +38,8 @@ RUN npm run build
 # 使用阿里云 Python 镜像加速下载
 FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.11.1
 
-# 切换到 root 用户以安装系统包
-USER root
-
-
-# Step: 替换 base 和 module repo 源为 aliyun
-RUN sed -i 's/mirrors.cloud.aliyuncs.com/mirrors.aliyun.com/g' /etc/yum.repos.d/Alinux.repo && \
-    sed -i 's/mirrors.cloud.aliyuncs.com/mirrors.aliyun.com/g' /etc/yum.repos.d/Alinux-M.repo
-    
-# 设置时区为上海
 ENV TZ=Asia/Shanghai
-RUN yum install -y \
-    tzdata \
-    curl \
-    git \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
-    && echo $TZ > /etc/timezone \
-    && yum clean all
+RUN dnf install -y tzdata curl git && ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone && dnf clean all
 
 WORKDIR /app
 
