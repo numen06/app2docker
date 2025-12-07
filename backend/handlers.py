@@ -1965,6 +1965,11 @@ class BuildManager:
                     )
                     log(f"🔑 使用 SSH key: {ssh_key_path}\n")
 
+            # 如果指定了分支，需要在 URL 之前添加 -b 参数
+            if branch:
+                cmd.extend(["-b", branch])
+                log(f"📌 检出分支: {branch}\n")
+
             # Git clone 会在目标目录下创建仓库目录
             # 确定仓库名称（从 URL 提取）
             repo_name = git_url.rstrip("/").split("/")[-1].replace(".git", "")
@@ -1973,12 +1978,7 @@ class BuildManager:
             cmd.append(git_url)
             cmd.append(target_dir)
 
-            if branch:
-                cmd.extend(["-b", branch])
-                log(f"📌 检出分支: {branch}\n")
-
             # 执行克隆
-            log(f"🔧 执行命令: {' '.join(cmd[:2])} ...\n")
             # 确保父目录存在
             os.makedirs(os.path.dirname(target_dir), exist_ok=True)
             # 使用绝对路径，避免路径问题
@@ -1986,6 +1986,10 @@ class BuildManager:
             abs_clone_dir = os.path.abspath(clone_dir)
             # 更新命令中的目标路径为绝对路径
             cmd[-1] = abs_target_dir
+            
+            # 调试日志：打印完整命令
+            log(f"🔧 完整命令: {' '.join(cmd)}\n")
+            
             result = subprocess.run(
                 cmd,
                 cwd=os.path.dirname(abs_clone_dir),
