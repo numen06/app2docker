@@ -1104,7 +1104,7 @@ class BuildManager:
         original_filename: str,
         project_type: str = "jar",
         template_params: dict = None,
-        push_registry: str = None,  # 推送时使用的仓库名称
+        push_registry: str = None,  # 已废弃，保留以兼容旧代码，实际不再使用
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
     ):
         # 创建任务
@@ -1154,7 +1154,7 @@ class BuildManager:
         original_filename: str,
         project_type: str = "jar",
         template_params: dict = None,
-        push_registry: str = None,  # 推送时使用的仓库名称
+        push_registry: str = None,  # 已废弃，保留以兼容旧代码，实际不再使用
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
     ):
         full_tag = f"{image_name}:{tag}"
@@ -1336,25 +1336,14 @@ class BuildManager:
                     log(line)
 
                 if should_push:
-                    # 推送时使用用户选择的仓库
-                    from backend.config import get_registry_by_name, get_active_registry
+                    # 推送时统一使用激活的registry
+                    from backend.config import get_active_registry
 
-                    # 优先使用用户指定的推送仓库
-                    push_registry_config = None
-                    if push_registry:
-                        push_registry_config = get_registry_by_name(push_registry)
-                        if not push_registry_config:
-                            log(
-                                f"⚠️  指定的推送仓库 '{push_registry}' 不存在，使用激活仓库\n"
-                            )
-
-                    # 如果没有指定或指定失败，使用激活的仓库
-                    if not push_registry_config:
-                        push_registry_config = get_active_registry()
+                    push_registry_config = get_active_registry()
 
                     log("🚀 开始模拟推送...\n")
                     log(
-                        f"🎯 使用推送仓库: {push_registry_config.get('name', 'Unknown')}\n"
+                        f"🎯 使用激活仓库: {push_registry_config.get('name', 'Unknown')}\n"
                     )
                     username = push_registry_config.get("username", None)
                     log(f"🚀 账号: {username}\n")
@@ -1489,28 +1478,29 @@ class BuildManager:
             log(f"\n✅ 镜像构建成功: {full_tag}\n")
 
             if should_push:
-                # 推送时使用用户选择的仓库
-                from backend.config import get_registry_by_name, get_active_registry
+                # 推送时统一使用激活的registry
+                from backend.config import get_active_registry
 
-                # 优先使用用户指定的推送仓库
-                push_registry_config = None
-                if push_registry:
-                    push_registry_config = get_registry_by_name(push_registry)
-                    if push_registry_config:
-                        log(f"\n📤 开始推送镜像: {full_tag}\n")
-                        log(f"🎯 使用指定推送仓库: {push_registry}\n")
-                    else:
-                        log(
-                            f"⚠️  指定的推送仓库 '{push_registry}' 不存在，使用激活仓库\n"
-                        )
+                push_registry_config = get_active_registry()
+                log(f"\n📤 开始推送镜像: {full_tag}\n")
+                log(f"🎯 使用激活仓库: {push_registry_config.get('name', 'Unknown')}\n")
 
-                # 如果没有指定或指定失败，使用激活的仓库
-                if not push_registry_config:
-                    push_registry_config = get_active_registry()
-                    log(f"\n📤 开始推送镜像: {full_tag}\n")
-                    log(
-                        f"🎯 使用激活仓库: {push_registry_config.get('name', 'Unknown')}\n"
-                    )
+                # 构建完整的推送repository路径
+                registry_host = push_registry_config.get("registry", "docker.io")
+                registry_prefix = push_registry_config.get(
+                    "registry_prefix", ""
+                ).strip()
+
+                # 构建完整的repository路径
+                if registry_prefix:
+                    push_repository = f"{registry_host}/{registry_prefix}/{image_name}"
+                else:
+                    push_repository = f"{registry_host}/{image_name}"
+
+                # 移除可能的重复斜杠
+                push_repository = push_repository.replace("//", "/")
+
+                log(f"📦 推送路径: {push_repository}:{tag}\n")
 
                 push_username = push_registry_config.get("username")
                 push_password = push_registry_config.get("password")
@@ -1521,7 +1511,7 @@ class BuildManager:
                 auth_config = {"username": push_username, "password": push_password}
                 try:
                     push_stream = docker_builder.push_image(
-                        image_name, tag, auth_config=auth_config
+                        push_repository, tag, auth_config=auth_config
                     )
                     for chunk in push_stream:
                         status = (
@@ -1534,9 +1524,7 @@ class BuildManager:
                         if "error" in chunk:
                             log(f"\n❌ 推送失败: {chunk['error']}\n")
                             return
-                    log(
-                        f"\n✅ 推送完成到 {push_registry_config.get('registry', 'Unknown')}: {full_tag}\n"
-                    )
+                    log(f"\n✅ 推送完成到 {registry_host}: {push_repository}:{tag}\n")
                 except Exception as e:
                     log(f"\n❌ 推送异常: {e}\n")
 
@@ -1949,15 +1937,11 @@ logs/
 
             log(f"✅ 镜像构建完成: {full_tag}\n")
 
-            # 如果需要推送
+            # 如果需要推送，统一使用激活的registry自动推送
             if should_push:
                 log(f"📡 开始推送镜像...\n")
-                if push_registry:
-                    registry_config = get_registry_by_name(push_registry)
-                    if not registry_config:
-                        raise RuntimeError(f"指定的仓库 '{push_registry}' 不存在")
-                else:
-                    registry_config = get_active_registry()
+                # 统一使用激活的registry
+                registry_config = get_active_registry()
 
                 # 构建完整的推送repository路径
                 registry_host = registry_config.get("registry", "docker.io")
@@ -1974,7 +1958,7 @@ logs/
                 # 移除可能的重复斜杠
                 push_repository = push_repository.replace("//", "/")
 
-                log(f"🎯 推送仓库: {registry_config.get('name', 'Unknown')}\n")
+                log(f"🎯 使用激活仓库: {registry_config.get('name', 'Unknown')}\n")
                 log(f"📦 推送路径: {push_repository}:{tag}\n")
 
                 username = registry_config.get("username")

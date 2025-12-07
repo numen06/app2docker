@@ -470,7 +470,7 @@ async def upload_file(
     project_type: str = Form("jar"),
     push: str = Form("off"),
     template_params: Optional[str] = Form(None),  # JSON 字符串格式的模板参数
-    push_registry: Optional[str] = Form(None),  # 推送时使用的仓库名称
+    push_registry: Optional[str] = Form(None),  # 已废弃，保留以兼容旧代码，实际不再使用
     extract_archive: str = Form("on"),  # 是否解压压缩包（默认解压）
 ):
     """上传文件并开始构建"""
@@ -501,7 +501,7 @@ async def upload_file(
             original_filename=app_file.filename,
             project_type=project_type,
             template_params=params_dict,  # 传递模板参数
-            push_registry=push_registry,  # 传递推送时使用的仓库
+            push_registry=None,  # 已废弃，统一使用激活的registry
             extract_archive=(extract_archive == "on"),  # 传递解压选项
         )
 
@@ -625,7 +625,7 @@ async def build_from_source(
     tag: str = Body("latest"),
     push: str = Body("off"),
     template_params: Optional[str] = Body(None),
-    push_registry: Optional[str] = Body(None),
+    push_registry: Optional[str] = Body(None),  # 已废弃，保留以兼容旧代码，实际不再使用
     branch: Optional[str] = Body(None),
     sub_path: Optional[str] = Body(None),
     use_project_dockerfile: bool = Body(True, description="是否优先使用项目中的 Dockerfile"),
@@ -667,7 +667,7 @@ async def build_from_source(
                     selected_template=template,
                     project_type=project_type,
                     template_params=params_dict,
-                    push_registry=push_registry,
+                    push_registry=None,  # 已废弃，统一使用激活的registry
                     branch=branch,
                     sub_path=sub_path,
                     use_project_dockerfile=use_project_dockerfile,
@@ -2158,7 +2158,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             selected_template=pipeline.get("template", ""),
             project_type=pipeline.get("project_type", "jar"),
             template_params=pipeline.get("template_params", {}),
-            push_registry=pipeline.get("push_registry"),
+            push_registry=None,  # 已废弃，统一使用激活的registry
             branch=pipeline.get("branch"),
             sub_path=pipeline.get("sub_path"),
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
@@ -2339,7 +2339,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
             selected_template=pipeline.get("template", ""),
             project_type=pipeline.get("project_type", "jar"),
             template_params=pipeline.get("template_params", {}),
-            push_registry=pipeline.get("push_registry"),
+            push_registry=None,  # 已废弃，统一使用激活的registry
             branch=branch,
             sub_path=pipeline.get("sub_path"),
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),

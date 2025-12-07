@@ -146,7 +146,8 @@ class PipelineScheduler:
             image_name = pipeline.get("image_name", "my-app")
             tag = pipeline.get("tag", "latest")
             push = pipeline.get("push", False)
-            push_registry = pipeline.get("push_registry")
+            # push_registry 已废弃，统一使用激活的registry
+            push_registry = None
             template_params = pipeline.get("template_params", {})
             sub_path = pipeline.get("sub_path")
             use_project_dockerfile = pipeline.get("use_project_dockerfile", True)

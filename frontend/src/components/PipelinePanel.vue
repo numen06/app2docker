@@ -321,15 +321,6 @@
                 </label>
               </div>
 
-              <div v-if="formData.push" class="mb-3">
-                <label class="form-label">推送仓库</label>
-                <select v-model="formData.push_registry" class="form-select form-select-sm">
-                  <option value="">使用默认仓库</option>
-                  <option v-for="reg in registries" :key="reg.name" :value="reg.name">
-                    {{ reg.name }} ({{ reg.registry }})
-                  </option>
-                </select>
-              </div>
 
               <div class="form-check mb-3">
                 <input 
@@ -643,7 +634,6 @@ const formData = ref({
   image_name: '',
   tag: 'latest',
   push: false,
-  push_registry: '',
   webhook_secret: '',
   enabled: true,
   trigger_schedule: false,  // 是否启用定时触发
@@ -700,7 +690,6 @@ function showCreateModal() {
     image_name: '',
     tag: 'latest',
     push: false,
-    push_registry: '',
     webhook_secret: '',
     enabled: true,
     trigger_schedule: false,
@@ -722,7 +711,6 @@ function editPipeline(pipeline) {
     image_name: pipeline.image_name || '',
     tag: pipeline.tag || 'latest',
     push: pipeline.push || false,
-    push_registry: pipeline.push_registry || '',
     webhook_secret: pipeline.webhook_secret || '',
     enabled: pipeline.enabled !== false,
     trigger_schedule: !!pipeline.cron_expression,  // 如果有cron表达式则启用

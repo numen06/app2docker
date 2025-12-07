@@ -172,7 +172,6 @@
               type="checkbox" 
               class="form-check-input" 
               id="pushImage"
-              @change="handlePushChange"
             />
             <label class="form-check-label" for="pushImage">
               <i class="fas fa-cloud-upload-alt"></i> 构建后推送到仓库
@@ -180,32 +179,7 @@
           </div>
           <div class="form-text small text-muted">
             <i class="fas fa-info-circle"></i> 
-            勾选后将构建的镜像推送到指定的仓库
-          </div>
-        </div>
-      </div>
-
-      <!-- 推送仓库选择（仅在勾选推送时显示） -->
-      <div v-if="form.push" class="row g-3 mb-3">
-        <div class="col-md-12">
-          <label class="form-label">
-            <i class="fas fa-server"></i> 推送仓库 <span class="text-danger">*</span>
-          </label>
-          <select 
-            v-model="form.pushRegistry" 
-            class="form-select"
-            @change="updateImageNameFromRegistry"
-            required
-          >
-            <option value="">请选择仓库</option>
-            <option v-for="reg in registries" :key="reg.name" :value="reg.name">
-              {{ reg.name }} - {{ reg.registry }}
-              <span v-if="reg.active"> (激活)</span>
-            </option>
-          </select>
-          <div class="form-text small">
-            <i class="fas fa-info-circle"></i> 
-            选择推送镜像的目标仓库，选择后会自动拼接镜像名称
+            勾选后将构建的镜像推送到激活的仓库
           </div>
         </div>
       </div>
@@ -224,12 +198,7 @@
           />
           <div class="form-text small">
             <i class="fas fa-info-circle"></i> 
-            <span v-if="form.push">
-              选择推送仓库后会自动拼接完整镜像名，您也可以手动修改
-            </span>
-            <span v-else>
-              输入镜像名称（不包含仓库前缀）
-            </span>
+            输入镜像名称（推送时会自动使用激活的仓库）
           </div>
         </div>
         <div class="col-md-6">
@@ -284,7 +253,6 @@ const form = ref({
   tag: 'latest',
   push: false,
   templateParams: {},
-  pushRegistry: '',
   useProjectDockerfile: true  // 默认优先使用项目中的 Dockerfile
 })
 
@@ -358,15 +326,6 @@ const filteredTemplates = computed(() => {
 })
 
 const imageNamePlaceholder = computed(() => {
-  if (form.value.push) {
-    const selectedRegistry = registries.value.find(r => r.name === form.value.pushRegistry)
-    if (selectedRegistry && selectedRegistry.registry_prefix) {
-      const prefix = selectedRegistry.registry_prefix.trim()
-      if (prefix) {
-        return `${prefix}/myapp/demo`
-      }
-    }
-  }
   return 'myapp/demo'
 })
 
@@ -388,16 +347,6 @@ async function loadRegistries() {
     const res = await axios.get('/api/registries')
     registries.value = res.data.registries || []
     
-    if (form.value.push) {
-      const activeRegistry = registries.value.find(r => r.active)
-      if (activeRegistry) {
-        form.value.pushRegistry = activeRegistry.name
-        updateImageNameFromRegistry()
-      } else if (registries.value.length > 0) {
-        form.value.pushRegistry = registries.value[0].name
-        updateImageNameFromRegistry()
-      }
-    }
   } catch (error) {
     console.error('加载仓库列表失败:', error)
   }
@@ -474,50 +423,6 @@ async function loadTemplateParams() {
   }
 }
 
-function updateImageNameFromRegistry() {
-  if (!form.value.push || !form.value.pushRegistry) {
-    return
-  }
-  
-  const selectedRegistry = registries.value.find(r => r.name === form.value.pushRegistry)
-  if (selectedRegistry && selectedRegistry.registry_prefix) {
-    const prefix = selectedRegistry.registry_prefix.trim()
-    if (prefix) {
-      if (!form.value.imageName || !form.value.imageName.startsWith(prefix)) {
-        let imageName = form.value.imageName || 'myapp/demo'
-        registries.value.forEach(reg => {
-          const regPrefix = reg.registry_prefix?.trim()
-          if (regPrefix && imageName.startsWith(regPrefix + '/')) {
-            imageName = imageName.substring(regPrefix.length + 1)
-          }
-        })
-        form.value.imageName = `${prefix}/${imageName}`.replace(/\/+/g, '/')
-      }
-    }
-  }
-}
-
-function handlePushChange() {
-  if (form.value.push) {
-    const activeRegistry = registries.value.find(r => r.active)
-    if (activeRegistry) {
-      form.value.pushRegistry = activeRegistry.name
-    } else if (registries.value.length > 0) {
-      form.value.pushRegistry = registries.value[0].name
-    }
-    updateImageNameFromRegistry()
-  } else {
-    if (form.value.imageName) {
-      registries.value.forEach(reg => {
-        const regPrefix = reg.registry_prefix?.trim()
-        if (regPrefix && form.value.imageName.startsWith(regPrefix + '/')) {
-          form.value.imageName = form.value.imageName.substring(regPrefix.length + 1)
-        }
-      })
-    }
-    form.value.pushRegistry = ''
-  }
-}
 
 // 验证 Git 仓库
 async function verifyGitRepo() {
@@ -579,10 +484,6 @@ async function handleBuild() {
     return
   }
   
-  if (form.value.push && !form.value.pushRegistry) {
-    alert('请选择推送仓库')
-    return
-  }
   
   building.value = true
   
@@ -595,7 +496,6 @@ async function handleBuild() {
       imagename: form.value.imageName.trim(),
       tag: form.value.tag.trim() || 'latest',
       push: form.value.push ? 'on' : 'off',
-      push_registry: form.value.push ? form.value.pushRegistry : undefined,
       template_params: Object.keys(form.value.templateParams).length > 0 
         ? JSON.stringify(form.value.templateParams) 
         : undefined,

@@ -487,7 +487,6 @@ const pipelineForm = ref({
   sub_path: '',
   use_project_dockerfile: true,
   push: false,
-  push_registry: '',
   trigger_webhook: true,
   trigger_schedule: false,
   cron_expression: '',
@@ -832,7 +831,6 @@ function addToPipeline(task) {
     sub_path: config.sub_path || '',
     use_project_dockerfile: config.use_project_dockerfile !== false,
     push: config.push || false,
-    push_registry: config.push_registry || '',
     trigger_webhook: true,
     trigger_schedule: false,
     cron_expression: '',
@@ -881,7 +879,6 @@ async function savePipeline() {
       image_name: pipelineForm.value.image_name,
       tag: pipelineForm.value.tag,
       push: pipelineForm.value.push,
-      push_registry: pipelineForm.value.push_registry,
       template_params: pipelineForm.value.template_params,
       sub_path: pipelineForm.value.sub_path,
       use_project_dockerfile: pipelineForm.value.use_project_dockerfile,
@@ -935,7 +932,6 @@ async function rebuildTask(task) {
       sub_path: task.sub_path || '',
       use_project_dockerfile: task.use_project_dockerfile !== false,
       push: task.should_push || false,
-      push_registry: task.push_registry || ''
     }
     
     // 验证必要参数
