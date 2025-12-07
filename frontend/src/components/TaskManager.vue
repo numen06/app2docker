@@ -108,7 +108,7 @@
                   <i class="fas fa-plus-circle"></i> 流水线
                 </button>
                 <button 
-                  v-if="task.task_category === 'build' && (task.status === 'completed' || task.status === 'failed') && task.task_type === 'build_from_source'"
+                  v-if="task.task_category === 'build' && task.status === 'failed' && task.task_type === 'build_from_source'"
                   class="btn btn-sm btn-outline-primary"
                   @click="rebuildTask(task)"
                   :disabled="rebuilding === task.task_id"
