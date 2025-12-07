@@ -314,6 +314,21 @@
 
               <div class="form-check mb-3">
                 <input 
+                  v-model="formData.webhook_branch_filter" 
+                  class="form-check-input" 
+                  type="checkbox" 
+                  id="webhookBranchFilterCheck"
+                >
+                <label class="form-check-label" for="webhookBranchFilterCheck">
+                  <strong>Webhook 分支过滤</strong>
+                </label>
+                <small class="text-muted d-block ms-4 mt-1">
+                  启用后，只有推送的分支与上方配置的分支一致时才会触发构建
+                </small>
+              </div>
+
+              <div class="form-check mb-3">
+                <input 
                   v-model="formData.push" 
                   class="form-check-input" 
                   type="checkbox" 
