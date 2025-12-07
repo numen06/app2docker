@@ -2485,27 +2485,30 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 # 任务已完成或不存在，解绑
                 manager.unbind_task(pipeline_id)
         
-        # 根据分支查找对应的标签
+        # 根据推送的分支查找对应的标签（分支标签映射应该基于推送的分支，而不是用于构建的分支）
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         tag = pipeline.get("tag", "latest")  # 默认标签
         
-        if branch and branch_tag_mapping:
+        # 使用webhook推送的分支来查找标签映射（如果有的话）
+        branch_for_tag_mapping = webhook_branch if webhook_branch else branch
+        
+        if branch_for_tag_mapping and branch_tag_mapping:
             # 优先精确匹配
-            if branch in branch_tag_mapping:
-                tag = branch_tag_mapping[branch]
-                print(f"✅ 找到分支标签映射: {branch} -> {tag}")
+            if branch_for_tag_mapping in branch_tag_mapping:
+                tag = branch_tag_mapping[branch_for_tag_mapping]
+                print(f"✅ 找到分支标签映射: {branch_for_tag_mapping} -> {tag} (推送分支: {webhook_branch}, 构建分支: {branch})")
             else:
                 # 尝试通配符匹配（如 feature/* -> feature）
                 import fnmatch
                 for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(branch, pattern):
+                    if fnmatch.fnmatch(branch_for_tag_mapping, pattern):
                         tag = mapped_tag
-                        print(f"✅ 通配符匹配分支标签: {branch} (pattern: {pattern}) -> {tag}")
+                        print(f"✅ 通配符匹配分支标签: {branch_for_tag_mapping} (pattern: {pattern}) -> {tag} (推送分支: {webhook_branch}, 构建分支: {branch})")
                         break
                 else:
-                    print(f"ℹ️  未找到分支 {branch} 的标签映射，使用默认标签: {tag}")
+                    print(f"ℹ️  未找到分支 {branch_for_tag_mapping} 的标签映射，使用默认标签: {tag} (推送分支: {webhook_branch}, 构建分支: {branch})")
         else:
-            print(f"ℹ️  使用默认标签: {tag}")
+            print(f"ℹ️  使用默认标签: {tag} (推送分支: {webhook_branch}, 构建分支: {branch})")
         
         # 启动构建任务
         build_manager = BuildManager()
