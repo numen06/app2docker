@@ -39,11 +39,13 @@ RUN npm run build
 FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.11.1
 
 ENV TZ=Asia/Shanghai
-RUN dnf install -y --disablerepo=alinux3-module tzdata curl git \
-    && ln -sf /usr/share/zoneinfo=$TZ /etc/localtime \
-    && echo "$TZ" > /etc/timezone \
-    && dnf clean all
-    
+RUN echo '[alinux3]\nname=Alibaba Cloud Linux 3\nbaseurl=https://mirrors.aliyun.com/alinux/3/baseos/\$basearch/\nenabled=1\ngpgcheck=1\ngpgkey=https://mirrors.aliyun.com/alinux/RPM-GPG-KEY-Alibaba-Cloud-3' > /etc/yum.repos.d/alinux3.repo && \
+    dnf makecache && \
+    dnf install -y tzdata curl git && \
+    ln -sf /usr/share/zoneinfo=$TZ /etc/localtime && \
+    echo "$TZ" > /etc/timezone && \
+    dnf clean all
+
 WORKDIR /app
 
 # 复制 Python 依赖文件
