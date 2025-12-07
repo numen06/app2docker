@@ -106,6 +106,16 @@
                   <i class="fas fa-history"></i> 操作日志
                 </button>
               </li>
+              <li class="nav-item">
+                <button 
+                  type="button"
+                  class="nav-link" 
+                  :class="{ active: activeTab === 'docker' }"
+                  @click="activeTab = 'docker'"
+                >
+                  <i class="fas fa-server"></i> Docker 管理
+                </button>
+              </li>
             </ul>
 
             <!-- 标签页内容 -->
@@ -117,6 +127,7 @@
               <ComposePanel v-if="activeTab === 'compose'" />
               <TemplatePanel v-if="activeTab === 'template'" />
               <OperationLogs v-if="activeTab === 'logs'" />
+              <DockerManager v-if="activeTab === 'docker'" />
             </div>
           </div>
         </div>
@@ -140,6 +151,7 @@ import { getToken, getUsername, isAuthenticated, logout } from './utils/auth'
 import BuildPanel from './components/BuildPanel.vue'
 import ComposePanel from './components/ComposePanel.vue'
 import ConfigModal from './components/ConfigModal.vue'
+import DockerManager from './components/DockerManager.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import LoginPage from './components/LoginPage.vue'
 import OperationLogs from './components/OperationLogs.vue'

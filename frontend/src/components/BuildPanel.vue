@@ -530,10 +530,10 @@ async function handleBuild() {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     
-    // 获取 build_id
-    const buildId = res.data.build_id
+    // 获取 build_id 或 task_id（兼容新旧版本）
+    const buildId = res.data.build_id || res.data.task_id
     if (buildId) {
-      console.log('✅ 构建任务已启动, build_id:', buildId)
+      console.log('✅ 构建任务已启动, task_id:', buildId)
       
       // 先打开日志窗口
       window.dispatchEvent(new CustomEvent('show-build-log'))
@@ -557,21 +557,32 @@ async function handleBuild() {
 // 轮询构建日志
 let pollInterval = null
 async function pollBuildLogs(buildId) {
-  console.log('🔄 开始轮询构建日志, build_id:', buildId)
+  console.log('🔄 开始轮询构建日志, task_id:', buildId)
   
   let lastLogLength = 0
+  let taskCompleted = false
   
   const poll = async () => {
     try {
-      const res = await axios.get('/api/get-logs', {
-        params: { build_id: buildId },
-        responseType: 'text' // 确保以文本方式接收
-      })
+      // 先检查任务状态
+      const taskRes = await axios.get(`/api/build-tasks/${buildId}`)
+      const taskStatus = taskRes.data.status
       
-      console.log('📥 收到日志响应 (前100字符):', res.data.substring(0, 100))
+      // 获取日志（兼容新旧API）
+      let logs = ''
+      try {
+        // 优先尝试新API
+        const res = await axios.get(`/api/build-tasks/${buildId}/logs`)
+        logs = typeof res.data === 'string' ? res.data : String(res.data)
+      } catch (e) {
+        // 回退到旧API
+        const res = await axios.get('/api/get-logs', {
+          params: { build_id: buildId }
+        })
+        logs = typeof res.data === 'string' ? res.data : String(res.data)
+      }
       
-      // 确保日志是字符串
-      const logs = typeof res.data === 'string' ? res.data : String(res.data)
+      console.log('📥 收到日志响应 (前100字符):', logs.substring(0, 100))
       
       // 分割日志行，过滤空行
       const logLines = logs
@@ -592,29 +603,24 @@ async function pollBuildLogs(buildId) {
         lastLogLength = logLines.length
       }
       
-      // 检查是否构建完成
-      const lastLine = logLines[logLines.length - 1] || ''
-      const isDone = lastLine.includes('所有操作已完成') ||
-                     lastLine.includes('构建完成') || 
-                     lastLine.includes('构建失败') || 
-                     lastLine.includes('构建异常') ||
-                     lastLine.includes('Successfully tagged') ||
-                     lastLine.includes('Error') ||
-                     lastLine.includes('推送完成')
-      
-      if (isDone) {
+      // 检查任务是否完成（优先检查任务状态）
+      if (taskStatus === 'completed' || taskStatus === 'failed') {
+        taskCompleted = true
         clearInterval(pollInterval)
         building.value = false
-        console.log('✅ 构建任务结束')
+        console.log(`✅ 构建任务结束: ${taskStatus}`)
+        window.dispatchEvent(new CustomEvent('add-log', {
+          detail: { text: taskStatus === 'completed' ? '✅ 构建已完成' : '❌ 构建已失败' }
+        }))
       }
     } catch (error) {
       console.error('❌ 获取日志失败:', error)
       // 不要因为单次失败就停止轮询
-      if (error.response?.status === 404 || error.response?.status === 500) {
+      if (error.response?.status === 404) {
         clearInterval(pollInterval)
         building.value = false
         window.dispatchEvent(new CustomEvent('add-log', {
-          detail: { text: '❌ 日志获取失败: ' + (error.response?.statusText || error.message) }
+          detail: { text: '❌ 任务不存在' }
         }))
       }
     }
@@ -622,27 +628,32 @@ async function pollBuildLogs(buildId) {
   
   // 先发送一条初始日志
   window.dispatchEvent(new CustomEvent('add-log', {
-    detail: { text: `🚀 开始构建，Build ID: ${buildId}` }
+    detail: { text: `🚀 开始构建，Task ID: ${buildId}` }
   }))
   
   // 立即执行一次
   await poll()
   
-  // 每 500ms 轮询一次（更实时），最多240次（120秒）
+  // 每 1秒 轮询一次，最多300次（5分钟）
   let pollCount = 0
   pollInterval = setInterval(() => {
+    if (taskCompleted) {
+      clearInterval(pollInterval)
+      return
+    }
+    
     pollCount++
-    if (pollCount > 240) {  // 240 * 500ms = 120秒
+    if (pollCount > 300) {  // 300 * 1000ms = 5分钟
       clearInterval(pollInterval)
       building.value = false
       console.log('⏰ 构建日志轮询超时')
       window.dispatchEvent(new CustomEvent('add-log', {
-        detail: { text: '⏰ 构建日志轮询超时（120秒）' }
+        detail: { text: '⏰ 构建日志轮询超时（5分钟）' }
       }))
     } else {
       poll()
     }
-  }, 500)  // 500ms 轮询一次，更实时
+  }, 1000)  // 1秒 轮询一次
 }
 
 onMounted(() => {

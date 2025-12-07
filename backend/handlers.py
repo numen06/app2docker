@@ -1578,43 +1578,70 @@ class BuildManager:
         use_project_dockerfile: bool = True,  # 是否优先使用项目中的 Dockerfile
     ):
         """从 Git 源码开始构建"""
-        # 创建任务
-        task_id = self.task_manager.create_task(
-            task_type="build_from_source",
-            image_name=image_name,
-            tag=tag,
-            git_url=git_url,
-            should_push=should_push,
-            selected_template=selected_template,
-            project_type=project_type,
-            template_params=template_params or {},
-            push_registry=push_registry,
-            branch=branch,
-            sub_path=sub_path,
-            use_project_dockerfile=use_project_dockerfile,
-        )
+        try:
+            # 创建任务
+            print(f"📝 正在创建构建任务: image={image_name}:{tag}, git_url={git_url}")
+            task_id = self.task_manager.create_task(
+                task_type="build_from_source",
+                image_name=image_name,
+                tag=tag,
+                git_url=git_url,
+                should_push=should_push,
+                selected_template=selected_template,
+                project_type=project_type,
+                template_params=template_params or {},
+                push_registry=push_registry,
+                branch=branch,
+                sub_path=sub_path,
+                use_project_dockerfile=use_project_dockerfile,
+            )
+            print(f"✅ 任务创建成功: task_id={task_id}")
+        except Exception as e:
+            import traceback
 
-        thread = threading.Thread(
-            target=self._build_from_source_task,
-            args=(
-                task_id,
-                git_url,
-                image_name,
-                tag,
-                should_push,
-                selected_template,
-                project_type,
-                template_params or {},
-                push_registry,
-                branch,
-                sub_path,
-                use_project_dockerfile,
-            ),
-            daemon=True,
-        )
-        thread.start()
-        with self.lock:
-            self.tasks[task_id] = thread
+            error_trace = traceback.format_exc()
+            print(f"❌ 创建任务失败: {e}")
+            print(f"错误堆栈:\n{error_trace}")
+            raise RuntimeError(f"创建构建任务失败: {str(e)}")
+
+        try:
+            thread = threading.Thread(
+                target=self._build_from_source_task,
+                args=(
+                    task_id,
+                    git_url,
+                    image_name,
+                    tag,
+                    should_push,
+                    selected_template,
+                    project_type,
+                    template_params or {},
+                    push_registry,
+                    branch,
+                    sub_path,
+                    use_project_dockerfile,
+                ),
+                daemon=True,
+            )
+            thread.start()
+            print(f"✅ 构建线程已启动: task_id={task_id}")
+            with self.lock:
+                self.tasks[task_id] = thread
+        except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
+            print(f"❌ 启动构建线程失败: {e}")
+            print(f"错误堆栈:\n{error_trace}")
+            # 尝试更新任务状态为失败
+            try:
+                self.task_manager.update_task_status(
+                    task_id, "failed", error=f"启动构建线程失败: {str(e)}"
+                )
+            except:
+                pass
+            raise RuntimeError(f"启动构建线程失败: {str(e)}")
+
         return task_id
 
     def _build_from_source_task(
@@ -2059,8 +2086,47 @@ class BuildTaskManager:
     def _save_tasks(self):
         """保存任务列表到文件"""
         try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(self.tasks_file), exist_ok=True)
+
             with self.lock:
-                tasks_list = [task.copy() for task in self.tasks.values()]
+                # 创建可序列化的任务列表
+                tasks_list = []
+                for task in self.tasks.values():
+                    try:
+                        # 尝试创建任务副本并验证可序列化
+                        task_copy = task.copy()
+                        # 确保 logs 是列表
+                        if "logs" not in task_copy:
+                            task_copy["logs"] = []
+                        # 限制 logs 长度以避免序列化问题
+                        if (
+                            isinstance(task_copy.get("logs"), list)
+                            and len(task_copy["logs"]) > 20000
+                        ):
+                            task_copy["logs"] = task_copy["logs"][-10000:]
+                        tasks_list.append(task_copy)
+                    except Exception as task_error:
+                        print(
+                            f"⚠️ 处理任务时出错 (task_id={task.get('task_id', 'unknown')}): {task_error}"
+                        )
+                        # 跳过有问题的任务，继续处理其他任务
+                        continue
+
+            # 尝试序列化以验证
+            try:
+                json.dumps(tasks_list)
+            except (TypeError, ValueError) as json_error:
+                print(f"⚠️ 任务列表无法序列化: {json_error}")
+                # 尝试清理无法序列化的数据
+                for task in tasks_list:
+                    # 移除可能无法序列化的字段
+                    if "logs" in task and isinstance(task["logs"], list):
+                        # 确保所有日志项都是字符串
+                        task["logs"] = [
+                            str(log) if not isinstance(log, str) else log
+                            for log in task["logs"]
+                        ]
 
             temp_file = f"{self.tasks_file}.tmp"
             with open(temp_file, "w", encoding="utf-8") as f:
@@ -2071,13 +2137,18 @@ class BuildTaskManager:
             else:
                 os.rename(temp_file, self.tasks_file)
         except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
             print(f"⚠️ 保存构建任务列表失败: {e}")
+            print(f"错误堆栈:\n{error_trace}")
             temp_file = f"{self.tasks_file}.tmp"
             if os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
                 except:
                     pass
+            # 不抛出异常，允许任务创建继续
 
     def _start_cleanup_task(self):
         """启动自动清理过期任务的后台线程"""
@@ -2103,27 +2174,54 @@ class BuildTaskManager:
         **kwargs,  # 其他任务参数
     ) -> str:
         """创建构建任务"""
-        task_id = str(uuid.uuid4())
-        created_at = datetime.now()
+        try:
+            task_id = str(uuid.uuid4())
+            created_at = datetime.now()
 
-        task_info = {
-            "task_id": task_id,
-            "task_type": task_type,  # "build" 或 "build_from_source"
-            "image": image_name,
-            "tag": tag,
-            "status": "pending",  # pending, running, completed, failed
-            "created_at": created_at.isoformat(),
-            "completed_at": None,
-            "error": None,
-            "logs": [],  # 任务日志
-            **kwargs,  # 其他任务参数
-        }
+            # 确保 kwargs 中的值可以序列化
+            serializable_kwargs = {}
+            for key, value in kwargs.items():
+                try:
+                    # 尝试序列化以检查是否可序列化
+                    json.dumps(value)
+                    serializable_kwargs[key] = value
+                except (TypeError, ValueError) as e:
+                    # 如果无法序列化，转换为字符串
+                    print(f"⚠️ 参数 {key} 无法序列化，转换为字符串: {e}")
+                    serializable_kwargs[key] = str(value)
 
-        with self.lock:
-            self.tasks[task_id] = task_info
+            task_info = {
+                "task_id": task_id,
+                "task_type": task_type,  # "build" 或 "build_from_source"
+                "image": image_name,
+                "tag": tag,
+                "status": "pending",  # pending, running, completed, failed
+                "created_at": created_at.isoformat(),
+                "completed_at": None,
+                "error": None,
+                "logs": [],  # 任务日志
+                **serializable_kwargs,  # 其他任务参数
+            }
 
-        self._save_tasks()
-        return task_id
+            with self.lock:
+                self.tasks[task_id] = task_info
+
+            # 保存任务，即使失败也不影响返回 task_id
+            try:
+                self._save_tasks()
+            except Exception as save_error:
+                print(f"⚠️ 保存任务失败，但任务已创建 (task_id={task_id}): {save_error}")
+                # 即使保存失败，也继续返回 task_id
+
+            print(f"✅ 任务创建成功: task_id={task_id}, type={task_type}")
+            return task_id
+        except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
+            print(f"❌ 创建任务异常: {e}")
+            print(f"错误堆栈:\n{error_trace}")
+            raise
 
     def get_task(self, task_id: str) -> dict:
         """获取任务信息"""

@@ -558,31 +558,72 @@ async def build_from_source(
                 raise HTTPException(status_code=400, detail="模板参数格式错误")
 
         # 调用构建管理器
-        manager = BuildManager()
-        task_id = manager.start_build_from_source(
-            git_url=git_url,
-            image_name=imagename,
-            tag=tag,
-            should_push=(push == "on"),
-            selected_template=template,
-            project_type=project_type,
-            template_params=params_dict,
-            push_registry=push_registry,
-            branch=branch,
-            sub_path=sub_path,
-            use_project_dockerfile=use_project_dockerfile,
-        )
+        try:
+            print(f"📝 开始创建构建任务: git_url={git_url}, image={imagename}:{tag}")
+            try:
+                manager = BuildManager()
+                print(f"✅ BuildManager 初始化成功")
+            except Exception as init_error:
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f"❌ BuildManager 初始化失败: {init_error}")
+                print(f"错误堆栈:\n{error_trace}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"构建管理器初始化失败: {str(init_error)}"
+                )
+            
+            try:
+                task_id = manager.start_build_from_source(
+                    git_url=git_url,
+                    image_name=imagename,
+                    tag=tag,
+                    should_push=(push == "on"),
+                    selected_template=template,
+                    project_type=project_type,
+                    template_params=params_dict,
+                    push_registry=push_registry,
+                    branch=branch,
+                    sub_path=sub_path,
+                    use_project_dockerfile=use_project_dockerfile,
+                )
+                if not task_id:
+                    raise RuntimeError("任务创建失败：未返回 task_id")
+                print(f"✅ 任务创建成功: task_id={task_id}")
+            except Exception as create_error:
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f"❌ 创建构建任务失败: {create_error}")
+                print(f"错误堆栈:\n{error_trace}")
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"创建构建任务失败: {str(create_error)}"
+                )
+        except HTTPException:
+            raise
+        except Exception as create_error:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"❌ 创建构建任务异常: {create_error}")
+            print(f"错误堆栈:\n{error_trace}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"创建构建任务失败: {str(create_error)}"
+            )
 
         # 记录操作日志
-        OperationLogger.log(username, "build_from_source", {
-            "task_id": task_id,
-            "image": f"{imagename}:{tag}",
-            "template": template,
-            "project_type": project_type,
-            "git_url": git_url,
-            "branch": branch,
-            "push": push == "on",
-        })
+        try:
+            OperationLogger.log(username, "build_from_source", {
+                "task_id": task_id,
+                "image": f"{imagename}:{tag}",
+                "template": template,
+                "project_type": project_type,
+                "git_url": git_url,
+                "branch": branch,
+                "push": push == "on",
+            })
+        except Exception as log_error:
+            print(f"⚠️ 记录操作日志失败: {log_error}")
 
         return JSONResponse({
             "task_id": task_id,
@@ -592,6 +633,9 @@ async def build_from_source(
         raise
     except Exception as e:
         import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ 构建请求处理失败: {e}")
+        print(f"错误堆栈:\n{error_trace}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"构建失败: {str(e)}")
 
@@ -1226,3 +1270,345 @@ async def delete_template(request: DeleteTemplateRequest, http_request: Request)
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除模板失败: {str(e)}")
+
+
+# === Docker 管理相关 ===
+@router.get("/docker/info")
+async def get_docker_info():
+    """获取 Docker 服务信息"""
+    try:
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        info = {
+            "connected": DOCKER_AVAILABLE,
+            "builder_type": "unknown",
+            "version": None,
+            "api_version": None,
+            "remote_host": None,
+            "images_count": 0,
+            "images_size": 0,
+            "containers_total": 0,
+            "containers_running": 0,
+            "containers_size": 0,
+            "storage_driver": None,
+            "os_type": None,
+            "arch": None,
+            "kernel_version": None,
+            "docker_root": None,
+            "ncpu": None,
+            "mem_total": None,
+            "runtime": None,
+            "volumes_count": 0,
+            "networks_count": 0
+        }
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            return JSONResponse(info)
+        
+        # 获取构建器类型
+        connection_info = docker_builder.get_connection_info()
+        if "本地" in connection_info:
+            info["builder_type"] = "local"
+        elif "远程" in connection_info:
+            info["builder_type"] = "remote"
+            import re
+            match = re.search(r'\((.+?)\)', connection_info)
+            if match:
+                info["remote_host"] = match.group(1)
+        elif "模拟" in connection_info:
+            info["builder_type"] = "mock"
+        
+        # 获取 Docker 详细信息
+        try:
+            if hasattr(docker_builder, 'client') and docker_builder.client:
+                # 获取版本信息
+                version_info = docker_builder.client.version()
+                info["version"] = version_info.get('Version', 'Unknown')
+                info["api_version"] = version_info.get('ApiVersion', 'Unknown')
+                info["os_type"] = version_info.get('Os', 'Unknown')
+                info["arch"] = version_info.get('Arch', 'Unknown')
+                info["kernel_version"] = version_info.get('KernelVersion', '')
+                
+                # 获取系统信息
+                system_info = docker_builder.client.info()
+                info["images_count"] = system_info.get('Images', 0)
+                info["containers_total"] = system_info.get('Containers', 0)
+                info["containers_running"] = system_info.get('ContainersRunning', 0)
+                info["storage_driver"] = system_info.get('Driver', 'Unknown')
+                info["docker_root"] = system_info.get('DockerRootDir', '')
+                info["ncpu"] = system_info.get('NCPU', 0)
+                info["mem_total"] = system_info.get('MemTotal', 0)
+                info["runtime"] = system_info.get('DefaultRuntime', 'runc')
+                
+                # 获取卷和网络数量
+                try:
+                    info["volumes_count"] = len(docker_builder.client.volumes.list())
+                    info["networks_count"] = len(docker_builder.client.networks.list())
+                except:
+                    pass
+                
+                # 获取磁盘使用信息
+                try:
+                    df_info = docker_builder.client.df()
+                    if 'Images' in df_info:
+                        info["images_size"] = sum(img.get('Size', 0) for img in df_info['Images'])
+                    if 'Containers' in df_info:
+                        info["containers_size"] = sum(c.get('SizeRw', 0) or 0 for c in df_info['Containers'])
+                except:
+                    pass
+        except Exception as e:
+            print(f"⚠️ 获取 Docker 详细信息失败: {e}")
+        
+        return JSONResponse(info)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取 Docker 信息失败: {str(e)}")
+
+
+@router.get("/docker/images")
+async def get_docker_images(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100)):
+    """获取 Docker 镜像列表（支持分页）"""
+    try:
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            return JSONResponse({"images": [], "total": 0})
+        
+        if not hasattr(docker_builder, 'client') or not docker_builder.client:
+            return JSONResponse({"images": [], "total": 0})
+        
+        # 获取镜像列表
+        images_data = []
+        try:
+            images = docker_builder.client.images.list()
+            for img in images:
+                tags = img.tags
+                if not tags:
+                    images_data.append({
+                        "id": img.id,
+                        "repository": "<none>",
+                        "tag": "<none>",
+                        "size": img.attrs.get('Size', 0),
+                        "created": img.attrs.get('Created', '')
+                    })
+                else:
+                    for tag in tags:
+                        if ':' in tag:
+                            repo, tag_name = tag.rsplit(':', 1)
+                        else:
+                            repo, tag_name = tag, 'latest'
+                        images_data.append({
+                            "id": img.id,
+                            "repository": repo,
+                            "tag": tag_name,
+                            "size": img.attrs.get('Size', 0),
+                            "created": img.attrs.get('Created', '')
+                        })
+        except Exception as e:
+            print(f"⚠️ 获取镜像列表失败: {e}")
+        
+        total = len(images_data)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return JSONResponse({"images": images_data[start:end], "total": total})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取镜像列表失败: {str(e)}")
+
+
+class DeleteImageRequest(BaseModel):
+    image_id: str
+
+
+@router.delete("/docker/images")
+async def delete_docker_image(request: DeleteImageRequest, http_request: Request):
+    """删除 Docker 镜像"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        if not hasattr(docker_builder, 'client') or not docker_builder.client:
+            raise HTTPException(status_code=503, detail="Docker 客户端不可用")
+        
+        try:
+            docker_builder.client.images.remove(request.image_id, force=True)
+            OperationLogger.log(username, "docker_image_delete", {"image_id": request.image_id})
+            return JSONResponse({"message": "镜像已删除"})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"删除镜像失败: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除镜像失败: {str(e)}")
+
+
+@router.post("/docker/images/prune")
+async def prune_docker_images(http_request: Request):
+    """清理未使用的镜像"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        result = docker_builder.client.images.prune()
+        space_reclaimed = result.get('SpaceReclaimed', 0)
+        OperationLogger.log(username, "docker_images_prune", {"space_reclaimed": space_reclaimed})
+        return JSONResponse({"space_reclaimed": space_reclaimed})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"清理镜像失败: {str(e)}")
+
+
+# === 容器管理 ===
+@router.get("/docker/containers")
+async def get_docker_containers(page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=1000)):
+    """获取容器列表（支持分页）"""
+    try:
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            return JSONResponse({"containers": [], "total": 0})
+        
+        if not hasattr(docker_builder, 'client') or not docker_builder.client:
+            return JSONResponse({"containers": [], "total": 0})
+        
+        containers_data = []
+        try:
+            containers = docker_builder.client.containers.list(all=True)
+            for c in containers:
+                # 解析端口映射
+                ports_str = ''
+                try:
+                    ports = c.attrs.get('NetworkSettings', {}).get('Ports', {}) or {}
+                    port_list = []
+                    for container_port, host_bindings in ports.items():
+                        if host_bindings:
+                            for binding in host_bindings:
+                                host_port = binding.get('HostPort', '')
+                                if host_port:
+                                    port_list.append(f"{host_port}->{container_port}")
+                        else:
+                            port_list.append(container_port)
+                    ports_str = ', '.join(port_list[:3])  # 最多显示3个
+                    if len(port_list) > 3:
+                        ports_str += f" (+{len(port_list)-3})"
+                except:
+                    pass
+                
+                containers_data.append({
+                    "id": c.id,
+                    "name": c.name,
+                    "image": c.image.tags[0] if c.image.tags else c.image.id[:12],
+                    "status": c.status,
+                    "state": c.attrs.get('State', {}).get('Status', 'unknown'),
+                    "created": c.attrs.get('Created', ''),
+                    "ports": ports_str
+                })
+        except Exception as e:
+            print(f"⚠️ 获取容器列表失败: {e}")
+        
+        total = len(containers_data)
+        start = (page - 1) * page_size
+        end = start + page_size
+        return JSONResponse({"containers": containers_data[start:end], "total": total})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取容器列表失败: {str(e)}")
+
+
+@router.post("/docker/containers/{container_id}/start")
+async def start_container(container_id: str, http_request: Request):
+    """启动容器"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        container = docker_builder.client.containers.get(container_id)
+        container.start()
+        OperationLogger.log(username, "docker_container_start", {"container_id": container_id})
+        return JSONResponse({"message": "容器已启动"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动容器失败: {str(e)}")
+
+
+@router.post("/docker/containers/{container_id}/stop")
+async def stop_container(container_id: str, http_request: Request, force: bool = Query(False)):
+    """停止容器，支持强制停止"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        container = docker_builder.client.containers.get(container_id)
+        if force:
+            container.kill()  # 强制停止
+        else:
+            container.stop()  # 正常停止
+        OperationLogger.log(username, "docker_container_stop", {"container_id": container_id, "force": force})
+        return JSONResponse({"message": "容器已停止" if not force else "容器已强制停止"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"停止容器失败: {str(e)}")
+
+
+@router.post("/docker/containers/{container_id}/restart")
+async def restart_container(container_id: str, http_request: Request):
+    """重启容器"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        container = docker_builder.client.containers.get(container_id)
+        container.restart()
+        OperationLogger.log(username, "docker_container_restart", {"container_id": container_id})
+        return JSONResponse({"message": "容器已重启"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重启容器失败: {str(e)}")
+
+
+@router.delete("/docker/containers/{container_id}")
+async def remove_container(container_id: str, http_request: Request):
+    """删除容器"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        container = docker_builder.client.containers.get(container_id)
+        container.remove(force=True)
+        OperationLogger.log(username, "docker_container_remove", {"container_id": container_id})
+        return JSONResponse({"message": "容器已删除"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除容器失败: {str(e)}")
+
+
+@router.post("/docker/containers/prune")
+async def prune_containers(http_request: Request):
+    """清理已停止的容器"""
+    try:
+        username = get_current_username(http_request)
+        from backend.handlers import docker_builder, DOCKER_AVAILABLE
+        
+        if not DOCKER_AVAILABLE or not docker_builder:
+            raise HTTPException(status_code=503, detail="Docker 服务不可用")
+        
+        result = docker_builder.client.containers.prune()
+        deleted = len(result.get('ContainersDeleted', []) or [])
+        OperationLogger.log(username, "docker_containers_prune", {"deleted": deleted})
+        return JSONResponse({"deleted": deleted})  
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"清理容器失败: {str(e)}")
