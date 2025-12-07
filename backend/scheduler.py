@@ -169,8 +169,16 @@ class PipelineScheduler:
             
             print(f"✅ 定时触发流水线: {pipeline_name}, 任务ID: {task_id[:8]}")
             
-            # 记录触发并绑定任务
-            self.pipeline_manager.record_trigger(pipeline_id, task_id)
+            # 记录触发并绑定任务（定时触发）
+            self.pipeline_manager.record_trigger(
+                pipeline_id, 
+                task_id,
+                trigger_source="cron",
+                trigger_info={
+                    "cron_expression": pipeline.get("cron_expression"),
+                    "branch": branch,
+                }
+            )
             
         except Exception as e:
             pipeline_name = pipeline.get("name", "unknown")

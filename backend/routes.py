@@ -1964,6 +1964,92 @@ async def get_pipeline(pipeline_id: str):
         raise HTTPException(status_code=500, detail=f"获取流水线详情失败: {str(e)}")
 
 
+@router.get("/pipelines/{pipeline_id}/tasks")
+async def get_pipeline_tasks(
+    pipeline_id: str,
+    status: Optional[str] = Query(None, description="过滤任务状态"),
+    limit: Optional[int] = Query(50, description="返回任务数量限制", ge=1, le=200),
+    trigger_source: Optional[str] = Query(None, description="过滤触发来源: webhook, manual, cron"),
+):
+    """获取流水线关联的所有任务历史记录"""
+    try:
+        # 获取流水线配置
+        manager = PipelineManager()
+        pipeline = manager.get_pipeline(pipeline_id)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="流水线不存在")
+        
+        # 获取任务历史
+        task_history = pipeline.get("task_history", [])
+        
+        # 获取所有任务并补充详细信息
+        build_manager = BuildManager()
+        tasks_with_details = []
+        
+        for history_entry in task_history:
+            task_id = history_entry.get("task_id")
+            if not task_id:
+                continue
+            
+            # 应用过滤
+            if trigger_source and history_entry.get("trigger_source") != trigger_source:
+                continue
+            
+            # 获取任务详情
+            task = build_manager.task_manager.get_task(task_id)
+            if not task:
+                # 任务不存在，但保留历史记录
+                task_info = {
+                    "task_id": task_id,
+                    "status": "deleted",
+                    "created_at": history_entry.get("triggered_at"),
+                    "image": "未知",
+                    "tag": "未知",
+                }
+            else:
+                # 应用状态过滤
+                if status and task.get("status") != status:
+                    continue
+                
+                task_info = {
+                    "task_id": task_id,
+                    "status": task.get("status"),
+                    "created_at": task.get("created_at"),
+                    "completed_at": task.get("completed_at"),
+                    "image": task.get("image"),
+                    "tag": task.get("tag"),
+                    "error": task.get("error"),
+                }
+            
+            # 合并历史记录信息
+            task_info.update({
+                "trigger_source": history_entry.get("trigger_source"),
+                "triggered_at": history_entry.get("triggered_at"),
+                "trigger_info": history_entry.get("trigger_info", {}),
+            })
+            
+            tasks_with_details.append(task_info)
+        
+        # 按触发时间倒序排列
+        tasks_with_details.sort(key=lambda x: x.get("triggered_at", ""), reverse=True)
+        
+        # 限制返回数量
+        tasks_with_details = tasks_with_details[:limit]
+        
+        return JSONResponse({
+            "tasks": tasks_with_details,
+            "total": len(tasks_with_details),
+            "pipeline_id": pipeline_id,
+            "pipeline_name": pipeline.get("name"),
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取流水线任务失败: {str(e)}")
+
+
 @router.put("/pipelines/{pipeline_id}")
 async def update_pipeline(
     pipeline_id: str,
@@ -2079,8 +2165,16 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             pipeline_id=pipeline_id,  # 传递流水线ID
         )
         
-        # 记录触发并绑定任务
-        manager.record_trigger(pipeline_id, task_id)
+        # 记录触发并绑定任务（手动触发）
+        manager.record_trigger(
+            pipeline_id, 
+            task_id,
+            trigger_source="manual",
+            trigger_info={
+                "username": username,
+                "branch": pipeline.get("branch"),
+            }
+        )
         
         # 记录操作日志
         OperationLogger.log(username, "pipeline_run", {
@@ -2088,6 +2182,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             "pipeline_name": pipeline.get("name"),
             "task_id": task_id,
             "branch": pipeline.get("branch"),
+            "trigger_source": "manual",
         })
         
         return JSONResponse({
@@ -2251,8 +2346,28 @@ async def webhook_trigger(webhook_token: str, request: Request):
             pipeline_id=pipeline["pipeline_id"],  # 传递流水线ID
         )
         
-        # 记录触发并绑定任务
-        manager.record_trigger(pipeline["pipeline_id"], task_id)
+        # 提取 webhook 相关信息
+        webhook_info = {
+            "branch": branch,
+            "event": request.headers.get("x-gitee-event") or request.headers.get("x-gitlab-event") or request.headers.get("x-github-event", "unknown"),
+            "platform": "gitee" if "x-gitee-event" in request.headers else ("gitlab" if "x-gitlab-event" in request.headers else "github"),
+        }
+        
+        # 尝试从 payload 中提取更多信息
+        if payload:
+            if "commits" in payload and payload["commits"]:
+                webhook_info["commit_count"] = len(payload["commits"])
+                webhook_info["last_commit"] = payload["commits"][0].get("message", "")[:100] if payload["commits"] else ""
+            if "repository" in payload:
+                webhook_info["repository"] = payload["repository"].get("name", "")
+        
+        # 记录触发并绑定任务（webhook 触发）
+        manager.record_trigger(
+            pipeline["pipeline_id"], 
+            task_id,
+            trigger_source="webhook",
+            trigger_info=webhook_info
+        )
         
         # 记录操作日志
         OperationLogger.log("webhook", "pipeline_trigger", {
@@ -2260,6 +2375,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
             "pipeline_name": pipeline.get("name"),
             "task_id": task_id,
             "branch": branch,
+            "trigger_source": "webhook",
+            "webhook_info": webhook_info,
         })
         
         return JSONResponse({

@@ -126,6 +126,7 @@ class PipelineManager:
             "next_run_time": None,  # 下次执行时间
             # 任务绑定
             "current_task_id": None,  # 当前正在执行的任务ID
+            "task_history": [],  # 任务历史记录列表
             # 元数据
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
@@ -261,20 +262,46 @@ class PipelineManager:
             self._save_pipelines()
             return True
     
-    def record_trigger(self, pipeline_id: str, task_id: str = None):
+    def record_trigger(
+        self, 
+        pipeline_id: str, 
+        task_id: str = None,
+        trigger_source: str = "unknown",
+        trigger_info: dict = None
+    ):
         """记录流水线触发
         
         Args:
             pipeline_id: 流水线 ID
             task_id: 任务 ID，如果提供则绑定到流水线
+            trigger_source: 触发来源 ("webhook", "manual", "cron")
+            trigger_info: 触发信息（如 webhook 的分支、提交信息等）
         """
         with self.lock:
             if pipeline_id in self.pipelines:
                 pipeline = self.pipelines[pipeline_id]
                 pipeline["last_triggered_at"] = datetime.now().isoformat()
                 pipeline["trigger_count"] = pipeline.get("trigger_count", 0) + 1
+                
                 if task_id:
                     pipeline["current_task_id"] = task_id
+                    
+                    # 记录到任务历史
+                    if "task_history" not in pipeline:
+                        pipeline["task_history"] = []
+                    
+                    history_entry = {
+                        "task_id": task_id,
+                        "trigger_source": trigger_source,
+                        "triggered_at": datetime.now().isoformat(),
+                        "trigger_info": trigger_info or {},
+                    }
+                    pipeline["task_history"].append(history_entry)
+                    
+                    # 限制历史记录数量（保留最近100条）
+                    if len(pipeline["task_history"]) > 100:
+                        pipeline["task_history"] = pipeline["task_history"][-100:]
+                
                 self._save_pipelines()
     
     def get_pipeline_running_task(self, pipeline_id: str) -> Optional[str]:
