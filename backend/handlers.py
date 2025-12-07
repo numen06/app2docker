@@ -1745,15 +1745,53 @@ class BuildManager:
                     raise RuntimeError(f"指定的子目录不存在: {sub_path}")
                 log(f"📂 使用子目录作为构建上下文: {sub_path}\n")
 
-            # 将源码复制到构建上下文根目录
+            # 将源码复制到构建上下文根目录（排除不必要的文件）
             log(f"📋 准备构建上下文...\n")
+            
+            # 定义需要排除的文件和目录（类似 .dockerignore）
+            exclude_patterns = {
+                '.git', '.gitignore', '.dockerignore',
+                '__pycache__', '*.pyc', '.pytest_cache',
+                'node_modules', '.venv', 'venv',
+                '.idea', '.vscode', '.cursor',
+                '*.md', '*.log', '.DS_Store',
+                'test_*.py', '*_test.py'
+            }
+            
+            def should_exclude(item_name):
+                """判断文件/目录是否应该被排除"""
+                # 直接匹配
+                if item_name in exclude_patterns:
+                    return True
+                # 通配符匹配
+                import fnmatch
+                for pattern in exclude_patterns:
+                    if fnmatch.fnmatch(item_name, pattern):
+                        return True
+                return False
+            
+            copied_count = 0
+            excluded_count = 0
+            
             for item in os.listdir(source_dir):
+                if should_exclude(item):
+                    excluded_count += 1
+                    log(f"⏭️  跳过: {item}\n")
+                    continue
+                    
                 src = os.path.join(source_dir, item)
                 dst = os.path.join(build_context, item)
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(src, dst)
+                
+                try:
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(src, dst)
+                    copied_count += 1
+                except Exception as e:
+                    log(f"⚠️  复制失败 {item}: {e}\n")
+            
+            log(f"✅ 已复制 {copied_count} 个文件/目录，跳过 {excluded_count} 个\n")
 
             # 检查项目中是否存在 Dockerfile
             project_dockerfile_path = os.path.join(source_dir, "Dockerfile")
@@ -1798,6 +1836,53 @@ class BuildManager:
             # Docker API 需要相对于构建上下文的 Dockerfile 路径
             dockerfile_relative = os.path.relpath(dockerfile_path, build_context)
             log(f"📄 Dockerfile 相对路径: {dockerfile_relative}\n")
+            # 创建 .dockerignore 文件以进一步优化构建上下文
+            dockerignore_path = os.path.join(build_context, '.dockerignore')
+            if not os.path.exists(dockerignore_path):
+                log(f"📝 创建 .dockerignore 文件...\n")
+                with open(dockerignore_path, 'w') as f:
+                    f.write("""# Git 相关
+.git
+.gitignore
+.gitattributes
+
+# Python 缓存
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+.venv
+venv/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+.DS_Store
+
+# 测试和文档
+test_*.py
+*_test.py
+*.md
+README*
+LICENSE
+
+# 日志
+*.log
+logs/
+""")
+                log(f"✅ .dockerignore 已创建\n")
+            
             log(f"🐳 准备调用 Docker 构建器...\n")
             try:
                 build_stream = docker_builder.build_image(
@@ -1806,6 +1891,8 @@ class BuildManager:
                 log(f"✅ Docker 构建流已启动\n")
             except Exception as e:
                 log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
+                import traceback
+                log(f"详细错误:\n{traceback.format_exc()}\n")
                 raise
 
             log(f"🔍 开始处理 Docker 构建流输出...\n")
