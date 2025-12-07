@@ -19,6 +19,7 @@
             <th>分支</th>
             <th>镜像</th>
             <th>状态</th>
+            <th>定时</th>
             <th>触发次数</th>
             <th>最后触发</th>
             <th>操作</th>
@@ -26,12 +27,12 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="8" class="text-center">
+            <td colspan="9" class="text-center">
               <span class="spinner-border spinner-border-sm"></span> 加载中...
             </td>
           </tr>
           <tr v-else-if="pipelines.length === 0">
-            <td colspan="8" class="text-center text-muted">
+            <td colspan="9" class="text-center text-muted">
               暂无流水线配置
             </td>
           </tr>
@@ -58,6 +59,14 @@
                 <i class="fas fa-times-circle"></i> 已禁用
               </span>
             </td>
+            <td>
+              <span v-if="pipeline.cron_expression" class="badge bg-info" :title="pipeline.cron_expression">
+                <i class="fas fa-clock"></i> 已启用
+              </span>
+              <span v-else class="text-muted">
+                -
+              </span>
+            </td>
             <td>{{ pipeline.trigger_count || 0 }}</td>
             <td>
               <small v-if="pipeline.last_triggered_at">
@@ -67,6 +76,15 @@
             </td>
             <td>
               <div class="btn-group btn-group-sm">
+                <button 
+                  class="btn btn-outline-success" 
+                  @click="runPipeline(pipeline)"
+                  :disabled="running === pipeline.pipeline_id"
+                  title="手动运行"
+                >
+                  <i class="fas fa-play"></i>
+                  <span v-if="running === pipeline.pipeline_id" class="spinner-border spinner-border-sm ms-1"></span>
+                </button>
                 <button 
                   class="btn btn-outline-info" 
                   @click="showWebhookUrl(pipeline)"
@@ -246,6 +264,39 @@
                   启用流水线
                 </label>
               </div>
+
+              <!-- 定时触发配置 -->
+              <div class="mb-3">
+                <div class="form-check mb-2">
+                  <input 
+                    v-model="formData.trigger_schedule" 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="triggerScheduleCheck"
+                  >
+                  <label class="form-check-label" for="triggerScheduleCheck">
+                    启用定时触发
+                  </label>
+                </div>
+                
+                <div v-if="formData.trigger_schedule" class="ms-3">
+                  <label class="form-label">Cron 表达式 <span class="text-danger">*</span></label>
+                  <input 
+                    v-model="formData.cron_expression" 
+                    type="text" 
+                    class="form-control form-control-sm font-monospace"
+                    placeholder="0 0 * * * (每天零点)"
+                    :required="formData.trigger_schedule"
+                  >
+                  <small class="text-muted">
+                    示例：<br>
+                    <code>0 0 * * *</code> - 每天零点<br>
+                    <code>0 */2 * * *</code> - 每2小时<br>
+                    <code>0 0 * * 1</code> - 每周一零点<br>
+                    <code>*/30 * * * *</code> - 每30分钟
+                  </small>
+                </div>
+              </div>
             </form>
           </div>
           <div class="modal-footer">
@@ -307,6 +358,7 @@ const pipelines = ref([])
 const templates = ref([])
 const registries = ref([])
 const loading = ref(false)
+const running = ref(null)  // 正在运行的流水线ID
 const showModal = ref(false)
 const showWebhookModal = ref(false)
 const webhookUrl = ref('')
@@ -327,6 +379,8 @@ const formData = ref({
   push_registry: '',
   webhook_secret: '',
   enabled: true,
+  trigger_schedule: false,  // 是否启用定时触发
+  cron_expression: '',  // Cron 表达式
 })
 
 onMounted(() => {
@@ -382,6 +436,8 @@ function showCreateModal() {
     push_registry: '',
     webhook_secret: '',
     enabled: true,
+    trigger_schedule: false,
+    cron_expression: '',
   }
   showModal.value = true
 }
@@ -402,19 +458,34 @@ function editPipeline(pipeline) {
     push_registry: pipeline.push_registry || '',
     webhook_secret: pipeline.webhook_secret || '',
     enabled: pipeline.enabled !== false,
+    trigger_schedule: !!pipeline.cron_expression,  // 如果有cron表达式则启用
+    cron_expression: pipeline.cron_expression || '',
   }
   showModal.value = true
 }
 
 async function savePipeline() {
   try {
+    // 准备提交数据
+    const payload = {
+      ...formData.value,
+      // 如果未启用定时触发，则cron_expression为null
+      cron_expression: formData.value.trigger_schedule ? formData.value.cron_expression : null
+    }
+    
+    // 验证：如果启用定时触发，必须填写cron表达式
+    if (payload.trigger_schedule && !payload.cron_expression) {
+      alert('请填写 Cron 表达式')
+      return
+    }
+    
     if (editingPipeline.value) {
       // 更新
-      await axios.put(`/api/pipelines/${editingPipeline.value.pipeline_id}`, formData.value)
+      await axios.put(`/api/pipelines/${editingPipeline.value.pipeline_id}`, payload)
       alert('流水线更新成功')
     } else {
       // 创建
-      await axios.post('/api/pipelines', formData.value)
+      await axios.post('/api/pipelines', payload)
       alert('流水线创建成功')
     }
     closeModal()
@@ -442,6 +513,31 @@ async function deletePipeline(pipeline) {
   } catch (error) {
     console.error('删除流水线失败:', error)
     alert(error.response?.data?.detail || '删除流水线失败')
+  }
+}
+
+// 手动运行流水线
+async function runPipeline(pipeline) {
+  if (running.value) return
+  
+  if (!confirm(`确定要运行流水线 "${pipeline.name}" 吗？`)) {
+    return
+  }
+  
+  running.value = pipeline.pipeline_id
+  try {
+    const res = await axios.post(`/api/pipelines/${pipeline.pipeline_id}/run`)
+    
+    if (res.data.task_id) {
+      alert(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${res.data.branch || '默认'}`)
+      // 刷新流水线列表（更新触发次数和时间）
+      loadPipelines()
+    }
+  } catch (error) {
+    console.error('运行流水线失败:', error)
+    alert(error.response?.data?.detail || '运行流水线失败')
+  } finally {
+    running.value = null
   }
 }
 

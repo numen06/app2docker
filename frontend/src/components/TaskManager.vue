@@ -108,6 +108,16 @@
                   <i class="fas fa-plus-circle"></i> 流水线
                 </button>
                 <button 
+                  v-if="task.task_category === 'build' && (task.status === 'completed' || task.status === 'failed') && task.task_type === 'build_from_source'"
+                  class="btn btn-sm btn-outline-primary"
+                  @click="rebuildTask(task)"
+                  :disabled="rebuilding === task.task_id"
+                  :title="'重新构建'"
+                >
+                  <i class="fas fa-redo"></i> 重建
+                  <span v-if="rebuilding === task.task_id" class="spinner-border spinner-border-sm ms-1"></span>
+                </button>
+                <button 
                   v-if="task.task_category === 'build'"
                   class="btn btn-sm btn-outline-info"
                   @click="viewLogs(task)"
@@ -506,6 +516,7 @@ const statusFilter = ref('')
 const categoryFilter = ref('')
 const downloading = ref(null)
 const deleting = ref(null)
+const rebuilding = ref(null)  // 重建中的任务ID
 const viewingLogs = ref(null)
 const showLogModal = ref(false)
 const selectedTask = ref(null)
@@ -962,6 +973,72 @@ async function savePipeline() {
     }, 5000)
   } finally {
     saving.value = false
+  }
+}
+
+// 重新构建任务
+async function rebuildTask(task) {
+  if (rebuilding.value) return
+  
+  // 确认对话框
+  const taskName = task.image || task.task_type || '未知任务'
+  const taskTag = task.tag || 'latest'
+  if (!confirm(`确定要重新构建任务 "${taskName}:${taskTag}" 吗？`)) {
+    return
+  }
+  
+  rebuilding.value = task.task_id
+  error.value = null
+  
+  try {
+    // 从任务信息中提取构建参数
+    const config = {
+      git_url: task.git_url,
+      branch: task.branch || 'main',
+      image_name: task.image,
+      tag: task.tag || 'latest',
+      project_type: task.project_type || 'jar',
+      template: task.selected_template || '',
+      template_params: task.template_params || {},
+      sub_path: task.sub_path || '',
+      use_project_dockerfile: task.use_project_dockerfile !== false,
+      push: task.should_push || false,
+      push_registry: task.push_registry || ''
+    }
+    
+    // 验证必要参数
+    if (!config.git_url) {
+      throw new Error('任务缺少 Git 仓库地址，无法重新构建')
+    }
+    
+    if (!config.image_name) {
+      throw new Error('任务缺少镜像名称，无法重新构建')
+    }
+    
+    console.log('🔄 重新构建任务:', config)
+    
+    // 调用构建 API
+    const res = await axios.post('/api/build-from-source', config)
+    
+    if (res.data.task_id) {
+      alert(`重新构建任务已创建！\n任务 ID: ${res.data.task_id}`)
+      // 刷新任务列表
+      await loadTasks()
+    } else {
+      throw new Error('创建任务失败，未返回任务 ID')
+    }
+  } catch (err) {
+    console.error('重新构建失败:', err)
+    const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '重新构建失败'
+    error.value = `重新构建失败: ${errorMsg}`
+    // 5秒后自动清除错误提示
+    setTimeout(() => {
+      if (error.value && error.value.includes('重新构建失败')) {
+        error.value = null
+      }
+    }, 5000)
+  } finally {
+    rebuilding.value = null
   }
 }
 

@@ -858,7 +858,19 @@ async def cleanup_tasks(
         if not task_type or task_type == "export":
             export_manager = ExportTaskManager()
             if days:
-                export_manager.cleanup_expired_tasks(days=days)
+                # 清理指定天数前的任务
+                from datetime import timedelta
+                cutoff_time = datetime.now() - timedelta(days=days)
+                
+                with export_manager.lock:
+                    tasks_to_remove = [
+                        task_id for task_id, task in export_manager.tasks.items()
+                        if datetime.fromisoformat(task.get("created_at", "")) < cutoff_time
+                        and (not status or task.get("status") == status)
+                    ]
+                    for task_id in tasks_to_remove:
+                        export_manager.delete_task(task_id)
+                        removed_count += 1
             elif status:
                 with export_manager.lock:
                     tasks_to_remove = [
@@ -1954,6 +1966,59 @@ async def delete_pipeline(pipeline_id: str, http_request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除流水线失败: {str(e)}")
+
+
+@router.post("/pipelines/{pipeline_id}/run")
+async def run_pipeline(pipeline_id: str, http_request: Request):
+    """手动触发流水线执行"""
+    try:
+        username = get_current_username(http_request)
+        manager = PipelineManager()
+        
+        # 获取流水线配置
+        pipeline = manager.get_pipeline(pipeline_id)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="流水线不存在")
+        
+        # 启动构建任务
+        build_manager = BuildManager()
+        task_id = build_manager.start_build_from_source(
+            git_url=pipeline["git_url"],
+            image_name=pipeline.get("image_name") or "manual-build",
+            tag=pipeline.get("tag", "latest"),
+            should_push=pipeline.get("push", False),
+            selected_template=pipeline.get("template", ""),
+            project_type=pipeline.get("project_type", "jar"),
+            template_params=pipeline.get("template_params", {}),
+            push_registry=pipeline.get("push_registry"),
+            branch=pipeline.get("branch"),
+            sub_path=pipeline.get("sub_path"),
+            use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
+        )
+        
+        # 记录触发
+        manager.record_trigger(pipeline_id)
+        
+        # 记录操作日志
+        OperationLogger.log(username, "pipeline_run", {
+            "pipeline_id": pipeline_id,
+            "pipeline_name": pipeline.get("name"),
+            "task_id": task_id,
+            "branch": pipeline.get("branch"),
+        })
+        
+        return JSONResponse({
+            "message": "构建任务已启动",
+            "task_id": task_id,
+            "pipeline": pipeline.get("name"),
+            "branch": pipeline.get("branch"),
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"执行流水线失败: {str(e)}")
 
 
 # === Webhook 触发 ===
