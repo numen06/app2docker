@@ -1,97 +1,271 @@
 <template>
   <div class="export-panel">
-    <form @submit.prevent="handleExport">
-      <!-- 仓库选择 -->
-      <div class="row g-3 mb-3">
-        <div class="col-md-12">
-          <label class="form-label">
-            <i class="fas fa-server"></i> 镜像仓库
-          </label>
-          <select v-model="form.registry" class="form-select" @change="updateImageName">
-            <option v-for="reg in registries" :key="reg.name" :value="reg.name">
-              {{ reg.name }} - {{ reg.registry }}
-              <span v-if="reg.active"> (激活)</span>
-            </option>
-          </select>
-          <div class="form-text small">
-            <i class="fas fa-info-circle"></i> 
-            选择仓库后会自动拼接镜像名，默认使用激活的仓库
-          </div>
-        </div>
-      </div>
+    <!-- 子标签页 -->
+    <ul class="nav nav-pills mb-3">
+      <li class="nav-item">
+        <button 
+          class="nav-link" 
+          :class="{ active: exportMode === 'single' }"
+          @click="exportMode = 'single'"
+          type="button"
+        >
+          <i class="fas fa-cube"></i> 单个镜像
+        </button>
+      </li>
+      <li class="nav-item">
+        <button 
+          class="nav-link" 
+          :class="{ active: exportMode === 'compose' }"
+          @click="exportMode = 'compose'"
+          type="button"
+        >
+          <i class="fas fa-diagram-project"></i> Compose 批量导出
+        </button>
+      </li>
+    </ul>
 
-      <div class="row g-3 mb-3">
-        <div class="col-md-6">
-          <label class="form-label">
-            镜像名称 <span class="text-danger">*</span>
-          </label>
-          <input 
-            v-model="form.image" 
-            type="text" 
-            class="form-control" 
-            :placeholder="imagePlaceholder" 
-            required
-          />
-          <div class="form-text small">
-            <i class="fas fa-info-circle"></i> 
-            选择仓库后会自动拼接完整镜像名，您也可以手动修改
-          </div>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">标签</label>
-          <input v-model="form.tag" type="text" class="form-control" />
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">压缩</label>
-          <select v-model="form.compress" class="form-select">
-            <option value="none">不压缩</option>
-            <option value="gzip">GZIP</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- 本地仓库选项 -->
-      <div class="row g-3 mb-3">
-        <div class="col-md-12">
-          <div class="form-check">
-            <input 
-              v-model="form.useLocal" 
-              class="form-check-input" 
-              type="checkbox" 
-              id="useLocal"
-            />
-            <label class="form-check-label" for="useLocal">
-              <i class="fas fa-server"></i> 使用本地仓库（不执行 pull 操作）
+    <!-- 单个镜像导出 -->
+    <div v-if="exportMode === 'single'">
+      <form @submit.prevent="handleExport">
+        <!-- 仓库选择 -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-12">
+            <label class="form-label">
+              <i class="fas fa-server"></i> 镜像仓库
             </label>
+            <select v-model="form.registry" class="form-select" @change="updateImageName">
+              <option v-for="reg in registries" :key="reg.name" :value="reg.name">
+                {{ reg.name }} - {{ reg.registry }}
+                <span v-if="reg.active"> (激活)</span>
+              </option>
+            </select>
             <div class="form-text small">
               <i class="fas fa-info-circle"></i> 
-              勾选后，将直接从本地 Docker 导出镜像，不会从远程仓库拉取
+              选择仓库后会自动拼接镜像名，默认使用激活的仓库
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">
+              镜像名称 <span class="text-danger">*</span>
+            </label>
+            <input 
+              v-model="form.image" 
+              type="text" 
+              class="form-control" 
+              :placeholder="imagePlaceholder" 
+              required
+            />
+            <div class="form-text small">
+              <i class="fas fa-info-circle"></i> 
+              选择仓库后会自动拼接完整镜像名，您也可以手动修改
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">标签</label>
+            <input v-model="form.tag" type="text" class="form-control" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">压缩</label>
+            <select v-model="form.compress" class="form-select">
+              <option value="none">不压缩</option>
+              <option value="gzip">GZIP</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 本地仓库选项 -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-12">
+            <div class="form-check">
+              <input 
+                v-model="form.useLocal" 
+                class="form-check-input" 
+                type="checkbox" 
+                id="useLocal"
+              />
+              <label class="form-check-label" for="useLocal">
+                <i class="fas fa-server"></i> 使用本地仓库（不执行 pull 操作）
+              </label>
+              <div class="form-text small">
+                <i class="fas fa-info-circle"></i> 
+                勾选后，将直接从本地 Docker 导出镜像，不会从远程仓库拉取
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-warning w-100" :disabled="exporting">
+          <i class="fas fa-download"></i> 
+          {{ exporting ? '导出中...' : '导出镜像' }}
+          <span v-if="exporting" class="spinner-border spinner-border-sm ms-2"></span>
+        </button>
+      </form>
+
+      <!-- 导出状态提示 -->
+      <div v-if="exporting && exportMode === 'single'" class="alert alert-info mt-3 mb-0">
+        <div class="d-flex align-items-center">
+          <div class="spinner-border spinner-border-sm me-2" role="status">
+            <span class="visually-hidden">加载中...</span>
+          </div>
+          <div class="flex-grow-1">
+            <strong>正在创建导出任务...</strong>
+            <div class="small mt-1">
+              镜像: <code>{{ form.image }}:{{ form.tag }}</code>
+            </div>
+            <div class="small text-muted mt-1">
+              <i class="fas fa-info-circle"></i> 
+              任务创建后，请到“任务管理”标签页查看进度和下载文件
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <button type="submit" class="btn btn-warning w-100" :disabled="exporting">
-        <i class="fas fa-download"></i> 
-        {{ exporting ? '导出中...' : '导出镜像' }}
-        <span v-if="exporting" class="spinner-border spinner-border-sm ms-2"></span>
+    <!-- Compose 批量导出 -->
+    <div v-if="exportMode === 'compose'">
+      <ul class="nav nav-pills nav-fill mb-3">
+        <li class="nav-item">
+          <button 
+            class="nav-link" 
+            :class="{ active: inputMode === 'file' }"
+            @click="inputMode = 'file'"
+            type="button"
+          >
+            <i class="fas fa-file-upload"></i> 上传文件
+          </button>
+        </li>
+        <li class="nav-item">
+          <button 
+            class="nav-link" 
+            :class="{ active: inputMode === 'text' }"
+            @click="inputMode = 'text'"
+            type="button"
+          >
+            <i class="fas fa-edit"></i> 文本输入
+          </button>
+        </li>
+      </ul>
+
+      <div class="mb-3">
+        <input 
+          v-if="inputMode === 'file'"
+          type="file" 
+          class="form-control" 
+          accept=".yml,.yaml,.YML,.YAML,.txt"
+          @change="handleFileChange"
+        />
+        <codemirror
+          v-else
+          v-model="composeText" 
+          :style="{ height: '400px', fontSize: '13px' }"
+          :autofocus="true"
+          :indent-with-tab="true"
+          :tab-size="2"
+          :extensions="extensions"
+          placeholder="粘贴 docker-compose.yml 内容..."
+        />
+        <div class="form-text small">自动提取镜像列表</div>
+      </div>
+
+      <button 
+        type="button" 
+        class="btn btn-info w-100 mb-3" 
+        @click="parseCompose"
+        :disabled="parsing"
+      >
+        <i class="fas fa-search"></i> 
+        {{ parsing ? '解析中...' : '解析镜像' }}
       </button>
-    </form>
 
-    <!-- 导出状态提示 -->
-    <div v-if="exporting" class="alert alert-info mt-3 mb-0">
-      <div class="d-flex align-items-center">
-        <div class="spinner-border spinner-border-sm me-2" role="status">
-          <span class="visually-hidden">加载中...</span>
-        </div>
-        <div class="flex-grow-1">
-          <strong>正在创建导出任务...</strong>
-          <div class="small mt-1">
-            镜像: <code>{{ form.image }}:{{ form.tag }}</code>
+      <!-- 镜像列表 -->
+      <div v-if="images.length > 0" class="mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <small class="text-muted">共 {{ images.length }} 个镜像</small>
+          <div class="d-flex gap-2 align-items-center">
+            <div class="form-check form-check-inline mb-0">
+              <input 
+                v-model="selectAll" 
+                type="checkbox" 
+                class="form-check-input" 
+                id="selectAllImages"
+                @change="toggleSelectAll"
+              />
+              <label class="form-check-label small" for="selectAllImages">全选</label>
+            </div>
+            <select v-model="composeCompress" class="form-select form-select-sm" style="width: auto;">
+              <option value="none">tar</option>
+              <option value="gzip">tar.gz</option>
+            </select>
+            <button 
+              class="btn btn-sm btn-outline-secondary" 
+              @click="downloadSelected"
+              :disabled="selectedImages.length === 0 || exporting"
+            >
+              <i class="fas fa-download"></i> 
+              {{ exporting ? '导出中...' : '下载' }}
+              <span v-if="exporting" class="spinner-border spinner-border-sm ms-1"></span>
+            </button>
           </div>
-          <div class="small text-muted mt-1">
-            <i class="fas fa-info-circle"></i> 
-            任务创建后，请到"导出任务"标签页查看进度和下载文件
+        </div>
+
+        <div style="max-height: 300px; overflow-y: auto;">
+          <table class="table table-sm table-striped align-middle mb-0">
+            <thead class="table-light" style="position: sticky; top: 0;">
+              <tr>
+                <th style="width: 30px;"></th>
+                <th>服务</th>
+                <th>镜像:标签</th>
+                <th class="text-end" style="width: 80px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(img, index) in images" :key="index">
+                <td>
+                  <input 
+                    v-model="img.selected" 
+                    type="checkbox" 
+                    class="form-check-input"
+                  />
+                </td>
+                <td>{{ img.service }}</td>
+                <td>{{ img.image }}{{ img.tag && img.tag !== 'latest' ? ':' + img.tag : '' }}</td>
+                <td class="text-end">
+                  <button 
+                    class="btn btn-sm btn-outline-primary py-0" 
+                    style="font-size: 0.8rem;"
+                    @click="downloadImage(img)"
+                    :disabled="exporting"
+                  >
+                    <i class="fas fa-download"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 导出状态提示 -->
+      <div v-if="exporting && exportMode === 'compose'" class="alert alert-info mt-3 mb-0">
+        <div class="d-flex align-items-center">
+          <div class="spinner-border spinner-border-sm me-2" role="status">
+            <span class="visually-hidden">加载中...</span>
+          </div>
+          <div class="flex-grow-1">
+            <strong>正在创建导出任务...</strong>
+            <div v-if="currentExporting" class="small mt-1">
+              当前: <code>{{ currentExporting.image }}{{ currentExporting.tag && currentExporting.tag !== 'latest' ? ':' + currentExporting.tag : '' }}</code>
+              <span v-if="exportProgress.total > 1">
+                ({{ exportProgress.current }}/{{ exportProgress.total }})
+              </span>
+            </div>
+            <div class="small text-muted mt-1">
+              <i class="fas fa-info-circle"></i> 
+              任务创建后，请到“任务管理”标签页查看进度和下载文件
+            </div>
           </div>
         </div>
       </div>
@@ -100,9 +274,16 @@
 </template>
 
 <script setup>
+import { yaml as yamlLang } from '@codemirror/lang-yaml'
+import { oneDark } from '@codemirror/theme-one-dark'
 import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
+import { Codemirror } from 'vue-codemirror'
 
+// 导出模式：single=单个镜像, compose=Compose批量导出
+const exportMode = ref('single')
+
+// 单个镜像导出
 const form = ref({
   registry: '',  // 仓库名称
   image: '',  // 镜像名称（完整镜像名）
@@ -113,6 +294,26 @@ const form = ref({
 
 const registries = ref([])
 const exporting = ref(false)
+
+// Compose 批量导出
+const inputMode = ref('file')
+const composeText = ref('')
+const images = ref([])
+const composeCompress = ref('none')
+const selectAll = ref(false)
+const parsing = ref(false)
+const currentExporting = ref(null)  // 当前正在导出的镜像
+const exportProgress = ref({ current: 0, total: 0 })  // 导出进度
+
+// CodeMirror 扩展配置（YAML 模式）
+const extensions = [
+  oneDark,
+  yamlLang()
+]
+
+const selectedImages = computed(() => {
+  return images.value.filter(img => img.selected)
+})
 
 // 计算镜像名占位符
 const imagePlaceholder = computed(() => {
@@ -184,6 +385,138 @@ function updateImageName() {
   }
 }
 
+// Compose 功能
+function handleFileChange(e) {
+  const file = e.target.files[0]
+  if (file) {
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      composeText.value = ev.target.result
+    }
+    reader.readAsText(file)
+  }
+}
+
+function toggleSelectAll() {
+  images.value.forEach(img => {
+    img.selected = selectAll.value
+  })
+}
+
+async function parseCompose() {
+  if (!composeText.value.trim()) {
+    alert('请上传文件或输入 docker-compose.yml 内容')
+    return
+  }
+  
+  parsing.value = true
+  try {
+    const res = await axios.post('/api/parse-compose', {
+      content: composeText.value
+    })
+    
+    images.value = (res.data.images || []).map(img => ({
+      ...img,
+      selected: false
+    }))
+    
+    alert(`解析成功，共 ${images.value.length} 个镜像`)
+  } catch (error) {
+    alert(error.response?.data?.error || '解析失败')
+  } finally {
+    parsing.value = false
+  }
+}
+
+async function downloadImage(img) {
+  if (exporting.value) {
+    alert('正在提交任务，请稍候...')
+    return
+  }
+  
+  exporting.value = true
+  currentExporting.value = img
+  
+  try {
+    const payload = {
+      image: img.image,
+      tag: img.tag || 'latest',
+      compress: composeCompress.value
+    }
+    
+    const res = await axios.post('/api/export-image', payload)
+    
+    alert(`导出任务已创建！
+镜像: ${img.image}${img.tag && img.tag !== 'latest' ? ':' + img.tag : ''}
+任务ID: ${res.data.task_id}
+
+请到“任务管理”标签页查看进度和下载文件。`)
+  } catch (error) {
+    alert(error.response?.data?.error || error.message || '创建导出任务失败')
+  } finally {
+    exporting.value = false
+    currentExporting.value = null
+  }
+}
+
+async function downloadSelected() {
+  if (exporting.value) {
+    alert('正在提交任务，请稍候...')
+    return
+  }
+  
+  const selected = selectedImages.value
+  if (selected.length === 0) {
+    alert('请至少选择一个镜像')
+    return
+  }
+  
+  exporting.value = true
+  exportProgress.value = { current: 0, total: selected.length }
+  
+  // 滚动到状态提示区域
+  setTimeout(() => {
+    const alertElement = document.querySelector('.export-panel .alert-info')
+    if (alertElement) {
+      alertElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, 100)
+  
+  try {
+    const taskIds = []
+    for (let i = 0; i < selected.length; i++) {
+      const img = selected[i]
+      currentExporting.value = img
+      exportProgress.value.current = i + 1
+      
+      try {
+        const payload = {
+          image: img.image,
+          tag: img.tag || 'latest',
+          compress: composeCompress.value
+        }
+        
+        const res = await axios.post('/api/export-image', payload)
+        taskIds.push(res.data.task_id)
+      } catch (error) {
+        const errorMsg = error.response?.data?.error || error.message || '创建任务失败'
+        console.error(`镜像 ${img.image} 创建任务失败:`, errorMsg)
+        // 继续创建下一个任务
+      }
+    }
+    
+    if (taskIds.length > 0) {
+      alert(`已创建 ${taskIds.length} 个导出任务！\n\n请到“任务管理”标签页查看进度和下载文件。`)
+    } else {
+      alert('所有任务创建失败，请检查网络连接')
+    }
+  } finally {
+    exporting.value = false
+    currentExporting.value = null
+    exportProgress.value = { current: 0, total: 0 }
+  }
+}
+
 onMounted(() => {
   loadRegistries()
 })
@@ -224,7 +557,7 @@ async function handleExport() {
     
     const res = await axios.post('/api/export-image', payload)
     
-    alert(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到"导出任务"标签页查看进度和下载文件。`)
+    alert(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到“任务管理”标签页查看进度和下载文件。`)
     
     // 清空表单（可选）
     // form.value.image = ''

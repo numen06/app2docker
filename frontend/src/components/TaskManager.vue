@@ -100,6 +100,14 @@
             <td class="text-end">
               <div class="btn-group btn-group-sm">
                 <button 
+                  v-if="task.task_category === 'build' && task.status === 'completed' && task.task_type === 'build_from_source'"
+                  class="btn btn-sm btn-outline-success"
+                  @click="addToPipeline(task)"
+                  :title="'加入流水线'"
+                >
+                  <i class="fas fa-plus-circle"></i> 流水线
+                </button>
+                <button 
                   v-if="task.task_category === 'build'"
                   class="btn btn-sm btn-outline-info"
                   @click="viewLogs(task)"
@@ -338,6 +346,152 @@
       </div>
     </div>
     <div v-if="showCleanupModal" class="modal-backdrop fade show" @click="closeCleanupModal"></div>
+
+    <!-- 加入流水线模态框 -->
+    <div v-if="showPipelineModal && selectedPipelineTask" class="modal fade show" style="display: block;" tabindex="-1" @click.self="closePipelineModal">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-success text-white">
+            <h5 class="modal-title">
+              <i class="fas fa-plus-circle"></i> 加入流水线
+            </h5>
+            <button type="button" class="btn-close btn-close-white" @click="closePipelineModal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="alert alert-info mb-3">
+              <i class="fas fa-info-circle"></i>
+              将此成功的构建任务配置保存为流水线，可通过 Webhook 或定时任务自动触发构建。
+            </div>
+
+            <form @submit.prevent="savePipeline">
+              <div class="mb-3">
+                <label class="form-label">流水线名称 <span class="text-danger">*</span></label>
+                <input 
+                  v-model="pipelineForm.name" 
+                  type="text" 
+                  class="form-control" 
+                  required
+                  placeholder="例如：主分支自动构建"
+                />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">描述</label>
+                <input 
+                  v-model="pipelineForm.description" 
+                  type="text" 
+                  class="form-control"
+                  placeholder="流水线描述（可选）"
+                />
+              </div>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Git 仓库</label>
+                  <input 
+                    v-model="pipelineForm.git_url" 
+                    type="text" 
+                    class="form-control" 
+                    readonly
+                  />
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">分支</label>
+                  <input 
+                    v-model="pipelineForm.branch" 
+                    type="text" 
+                    class="form-control"
+                  />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">镜像名称</label>
+                  <input 
+                    v-model="pipelineForm.image_name" 
+                    type="text" 
+                    class="form-control"
+                  />
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">镜像标签</label>
+                  <input 
+                    v-model="pipelineForm.tag" 
+                    type="text" 
+                    class="form-control"
+                  />
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">触发方式</label>
+                <div class="form-check">
+                  <input 
+                    v-model="pipelineForm.trigger_webhook" 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="triggerWebhook"
+                  />
+                  <label class="form-check-label" for="triggerWebhook">
+                    <i class="fas fa-link"></i> Webhook 触发
+                  </label>
+                </div>
+                <div class="form-check mt-2">
+                  <input 
+                    v-model="pipelineForm.trigger_schedule" 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="triggerSchedule"
+                  />
+                  <label class="form-check-label" for="triggerSchedule">
+                    <i class="fas fa-clock"></i> 定时触发
+                  </label>
+                </div>
+              </div>
+
+              <div v-if="pipelineForm.trigger_schedule" class="mb-3">
+                <label class="form-label">Cron 表达式</label>
+                <input 
+                  v-model="pipelineForm.cron_expression" 
+                  type="text" 
+                  class="form-control"
+                  placeholder="0 0 * * * (每天零点)"
+                />
+                <div class="form-text small">
+                  示例：<code>0 0 * * *</code> 每天零点，<code>0 */6 * * *</code> 每6小时
+                </div>
+              </div>
+
+              <div class="form-check mb-3">
+                <input 
+                  v-model="pipelineForm.enabled" 
+                  class="form-check-input" 
+                  type="checkbox" 
+                  id="pipelineEnabled"
+                />
+                <label class="form-check-label" for="pipelineEnabled">
+                  启用流水线
+                </label>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closePipelineModal">取消</button>
+            <button 
+              type="button" 
+              class="btn btn-success" 
+              @click="savePipeline"
+              :disabled="saving"
+            >
+              <i class="fas fa-save"></i> 保存
+              <span v-if="saving" class="spinner-border spinner-border-sm ms-1"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showPipelineModal" class="modal-backdrop fade show" @click="closePipelineModal"></div>
   </div>
 </template>
 
@@ -367,6 +521,28 @@ const cleanupOptions = ref({
   status: 'completed',  // completed, failed, 或 ''
   days: 7,  // 清理N天前的任务
   taskType: ''  // build, export, 或 ''
+})
+const showPipelineModal = ref(false)  // 流水线模态框
+const selectedPipelineTask = ref(null)  // 选中的任务
+const saving = ref(false)  // 保存中状态
+const pipelineForm = ref({
+  name: '',
+  description: '',
+  git_url: '',
+  branch: '',
+  image_name: '',
+  tag: '',
+  project_type: '',
+  template: '',
+  template_params: {},
+  sub_path: '',
+  use_project_dockerfile: true,
+  push: false,
+  push_registry: '',
+  trigger_webhook: true,
+  trigger_schedule: false,
+  cron_expression: '',
+  enabled: true
 })
 let refreshInterval = null
 
@@ -690,6 +866,102 @@ async function executeCleanup() {
     }, 5000)
   } finally {
     cleaning.value = false
+  }
+}
+
+// 打开流水线模态框
+function addToPipeline(task) {
+  selectedPipelineTask.value = task
+  
+  // 从任务中提取配置信息
+  const config = task.config || {}
+  
+  pipelineForm.value = {
+    name: `${task.image || 'unnamed'}-pipeline`,
+    description: `基于任务 ${task.task_id.substring(0, 8)} 创建`,
+    git_url: config.git_url || '',
+    branch: config.branch || 'main',
+    image_name: task.image || '',
+    tag: task.tag || 'latest',
+    project_type: config.project_type || 'jar',
+    template: config.template || '',
+    template_params: config.template_params || {},
+    sub_path: config.sub_path || '',
+    use_project_dockerfile: config.use_project_dockerfile !== false,
+    push: config.push || false,
+    push_registry: config.push_registry || '',
+    trigger_webhook: true,
+    trigger_schedule: false,
+    cron_expression: '',
+    enabled: true
+  }
+  
+  showPipelineModal.value = true
+}
+
+// 关闭流水线模态框
+function closePipelineModal() {
+  showPipelineModal.value = false
+  selectedPipelineTask.value = null
+}
+
+// 保存流水线
+async function savePipeline() {
+  if (saving.value) return
+  
+  if (!pipelineForm.value.name) {
+    alert('请输入流水线名称')
+    return
+  }
+  
+  if (!pipelineForm.value.git_url) {
+    alert('Git 仓库地址不能为空')
+    return
+  }
+  
+  if (pipelineForm.value.trigger_schedule && !pipelineForm.value.cron_expression) {
+    alert('启用定时触发时，必须填写 Cron 表达式')
+    return
+  }
+  
+  saving.value = true
+  error.value = null
+  
+  try {
+    const payload = {
+      name: pipelineForm.value.name,
+      description: pipelineForm.value.description,
+      git_url: pipelineForm.value.git_url,
+      branch: pipelineForm.value.branch,
+      project_type: pipelineForm.value.project_type,
+      template: pipelineForm.value.template,
+      image_name: pipelineForm.value.image_name,
+      tag: pipelineForm.value.tag,
+      push: pipelineForm.value.push,
+      push_registry: pipelineForm.value.push_registry,
+      template_params: pipelineForm.value.template_params,
+      sub_path: pipelineForm.value.sub_path,
+      use_project_dockerfile: pipelineForm.value.use_project_dockerfile,
+      enabled: pipelineForm.value.enabled,
+      cron_expression: pipelineForm.value.trigger_schedule ? pipelineForm.value.cron_expression : null
+    }
+    
+    await axios.post('/api/pipelines', payload)
+    
+    alert('流水线创建成功！')
+    closePipelineModal()
+  } catch (err) {
+    console.error('创建流水线失败:', err)
+    const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '创建失败'
+    error.value = `创建流水线失败: ${errorMsg}`
+    // 5秒后自动清除错误提示
+    setTimeout(() => {
+      if (error.value && error.value.includes('创建流水线失败')) {
+        error.value = null
+      }
+    }, 5000)
+  } finally {
+    saving.value = false
   }
 }
 

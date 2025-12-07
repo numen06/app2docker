@@ -58,8 +58,8 @@
                 </button>
               </li>
               <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeTab === 'compose' }" @click="activeTab = 'compose'">
-                  <i class="fas fa-diagram-project"></i> Compose
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'pipeline' }" @click="activeTab = 'pipeline'">
+                  <i class="fas fa-project-diagram"></i> 流水线
                 </button>
               </li>
               <li class="nav-item">
@@ -86,10 +86,10 @@
             <SourceBuildPanel v-if="activeTab === 'source-build'" />
             <ExportPanel v-if="activeTab === 'export'" />
             <TaskManager v-if="activeTab === 'tasks'" />
-            <ComposePanel v-if="activeTab === 'compose'" />
             <TemplatePanel v-if="activeTab === 'template'" />
             <OperationLogs v-if="activeTab === 'logs'" />
             <DockerManager v-if="activeTab === 'docker'" />
+            <PipelinePanel v-if="activeTab === 'pipeline'" />
           </div>
         </div>
       </div>
@@ -110,12 +110,12 @@ import { getToken, getUsername, isAuthenticated, logout } from './utils/auth'
 
 // 懒加载组件
 import BuildPanel from './components/BuildPanel.vue'
-import ComposePanel from './components/ComposePanel.vue'
 import ConfigModal from './components/ConfigModal.vue'
 import DockerManager from './components/DockerManager.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import LoginPage from './components/LoginPage.vue'
 import OperationLogs from './components/OperationLogs.vue'
+import PipelinePanel from './components/PipelinePanel.vue'
 import SourceBuildPanel from './components/SourceBuildPanel.vue'
 import TaskManager from './components/TaskManager.vue'
 import TemplatePanel from './components/TemplatePanel.vue'

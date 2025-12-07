@@ -1772,3 +1772,298 @@ async def prune_containers(http_request: Request):
         return JSONResponse({"deleted": deleted})  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"清理容器失败: {str(e)}")
+
+
+# === 流水线管理 ===
+from backend.pipeline_manager import PipelineManager
+
+
+class CreatePipelineRequest(BaseModel):
+    name: str
+    git_url: str
+    branch: Optional[str] = None
+    project_type: str = "jar"
+    template: Optional[str] = None
+    image_name: Optional[str] = None
+    tag: str = "latest"
+    push: bool = False
+    push_registry: Optional[str] = None
+    template_params: Optional[dict] = None
+    sub_path: Optional[str] = None
+    use_project_dockerfile: bool = True
+    webhook_secret: Optional[str] = None
+    enabled: bool = True
+    description: str = ""
+    cron_expression: Optional[str] = None
+
+
+class UpdatePipelineRequest(BaseModel):
+    name: Optional[str] = None
+    git_url: Optional[str] = None
+    branch: Optional[str] = None
+    project_type: Optional[str] = None
+    template: Optional[str] = None
+    image_name: Optional[str] = None
+    tag: Optional[str] = None
+    push: Optional[bool] = None
+    push_registry: Optional[str] = None
+    template_params: Optional[dict] = None
+    sub_path: Optional[str] = None
+    use_project_dockerfile: Optional[bool] = None
+    webhook_secret: Optional[str] = None
+    enabled: Optional[bool] = None
+    description: Optional[str] = None
+    cron_expression: Optional[str] = None
+
+
+@router.post("/pipelines")
+async def create_pipeline(request: CreatePipelineRequest, http_request: Request):
+    """创建流水线配置"""
+    try:
+        username = get_current_username(http_request)
+        manager = PipelineManager()
+        
+        pipeline_id = manager.create_pipeline(
+            name=request.name,
+            git_url=request.git_url,
+            branch=request.branch,
+            project_type=request.project_type,
+            template=request.template,
+            image_name=request.image_name,
+            tag=request.tag,
+            push=request.push,
+            push_registry=request.push_registry,
+            template_params=request.template_params,
+            sub_path=request.sub_path,
+            use_project_dockerfile=request.use_project_dockerfile,
+            webhook_secret=request.webhook_secret,
+            enabled=request.enabled,
+            description=request.description,
+            cron_expression=request.cron_expression,
+        )
+        
+        # 记录操作日志
+        OperationLogger.log(username, "pipeline_create", {
+            "pipeline_id": pipeline_id,
+            "name": request.name,
+            "git_url": request.git_url
+        })
+        
+        return JSONResponse({
+            "pipeline_id": pipeline_id,
+            "message": "流水线创建成功"
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建流水线失败: {str(e)}")
+
+
+@router.get("/pipelines")
+async def list_pipelines(enabled: Optional[bool] = Query(None, description="过滤启用状态")):
+    """获取流水线列表"""
+    try:
+        manager = PipelineManager()
+        pipelines = manager.list_pipelines(enabled=enabled)
+        return JSONResponse({"pipelines": pipelines, "total": len(pipelines)})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取流水线列表失败: {str(e)}")
+
+
+@router.get("/pipelines/{pipeline_id}")
+async def get_pipeline(pipeline_id: str):
+    """获取流水线详情"""
+    try:
+        manager = PipelineManager()
+        pipeline = manager.get_pipeline(pipeline_id)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="流水线不存在")
+        return JSONResponse(pipeline)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取流水线详情失败: {str(e)}")
+
+
+@router.put("/pipelines/{pipeline_id}")
+async def update_pipeline(
+    pipeline_id: str,
+    request: UpdatePipelineRequest,
+    http_request: Request
+):
+    """更新流水线配置"""
+    try:
+        username = get_current_username(http_request)
+        manager = PipelineManager()
+        
+        success = manager.update_pipeline(
+            pipeline_id=pipeline_id,
+            name=request.name,
+            git_url=request.git_url,
+            branch=request.branch,
+            project_type=request.project_type,
+            template=request.template,
+            image_name=request.image_name,
+            tag=request.tag,
+            push=request.push,
+            push_registry=request.push_registry,
+            template_params=request.template_params,
+            sub_path=request.sub_path,
+            use_project_dockerfile=request.use_project_dockerfile,
+            webhook_secret=request.webhook_secret,
+            enabled=request.enabled,
+            description=request.description,
+            cron_expression=request.cron_expression,
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="流水线不存在")
+        
+        # 记录操作日志
+        OperationLogger.log(username, "pipeline_update", {
+            "pipeline_id": pipeline_id
+        })
+        
+        return JSONResponse({"message": "流水线更新成功"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新流水线失败: {str(e)}")
+
+
+@router.delete("/pipelines/{pipeline_id}")
+async def delete_pipeline(pipeline_id: str, http_request: Request):
+    """删除流水线配置"""
+    try:
+        username = get_current_username(http_request)
+        manager = PipelineManager()
+        
+        success = manager.delete_pipeline(pipeline_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="流水线不存在")
+        
+        # 记录操作日志
+        OperationLogger.log(username, "pipeline_delete", {
+            "pipeline_id": pipeline_id
+        })
+        
+        return JSONResponse({"message": "流水线已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除流水线失败: {str(e)}")
+
+
+# === Webhook 触发 ===
+@router.post("/webhook/{webhook_token}")
+async def webhook_trigger(webhook_token: str, request: Request):
+    """Webhook 触发端点（支持 GitHub/GitLab/Gitee）"""
+    try:
+        # 获取请求体（原始字节）
+        body = await request.body()
+        
+        # 获取流水线配置
+        manager = PipelineManager()
+        pipeline = manager.get_pipeline_by_token(webhook_token)
+        
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="流水线不存在")
+        
+        if not pipeline.get("enabled", False):
+            raise HTTPException(status_code=403, detail="流水线已禁用")
+        
+        # 验证 Webhook 签名（可选）
+        webhook_secret = pipeline.get("webhook_secret")
+        if webhook_secret:
+            # 支持不同平台的签名验证
+            signature = None
+            signature_header = "sha256"
+            
+            # GitHub: X-Hub-Signature-256 或 X-Hub-Signature
+            if "x-hub-signature-256" in request.headers:
+                signature = request.headers["x-hub-signature-256"]
+                signature_header = "sha256"
+            elif "x-hub-signature" in request.headers:
+                signature = request.headers["x-hub-signature"]
+                signature_header = "sha1"
+            # GitLab: X-Gitlab-Token
+            elif "x-gitlab-token" in request.headers:
+                gitlab_token = request.headers["x-gitlab-token"]
+                if gitlab_token != webhook_secret:
+                    raise HTTPException(status_code=403, detail="Webhook 签名验证失败")
+            # Gitee: X-Gitee-Token
+            elif "x-gitee-token" in request.headers:
+                gitee_token = request.headers["x-gitee-token"]
+                if gitee_token != webhook_secret:
+                    raise HTTPException(status_code=403, detail="Webhook 签名验证失败")
+            
+            # 验证签名（GitHub）
+            if signature:
+                if not manager.verify_webhook_signature(body, signature, webhook_secret, signature_header):
+                    raise HTTPException(status_code=403, detail="Webhook 签名验证失败")
+        
+        # 解析 Webhook 负载（尝试解析 JSON）
+        try:
+            payload = json.loads(body.decode('utf-8'))
+        except:
+            payload = {}
+        
+        # 提取分支信息（不同平台格式不同）
+        branch = None
+        # GitHub: ref = refs/heads/main
+        if "ref" in payload:
+            ref = payload["ref"]
+            if ref.startswith("refs/heads/"):
+                branch = ref.replace("refs/heads/", "")
+        # GitLab: ref = main
+        elif "ref" in payload:
+            branch = payload["ref"]
+        # Gitee: ref = refs/heads/main
+        
+        # 如果没有提取到分支，使用流水线配置的分支
+        if not branch:
+            branch = pipeline.get("branch")
+        
+        print(f"🔔 Webhook 触发: pipeline={pipeline.get('name')}, branch={branch}")
+        
+        # 启动构建任务
+        build_manager = BuildManager()
+        task_id = build_manager.start_build_from_source(
+            git_url=pipeline["git_url"],
+            image_name=pipeline.get("image_name") or "webhook-build",
+            tag=pipeline.get("tag", "latest"),
+            should_push=pipeline.get("push", False),
+            selected_template=pipeline.get("template", ""),
+            project_type=pipeline.get("project_type", "jar"),
+            template_params=pipeline.get("template_params", {}),
+            push_registry=pipeline.get("push_registry"),
+            branch=branch,
+            sub_path=pipeline.get("sub_path"),
+            use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
+        )
+        
+        # 记录触发
+        manager.record_trigger(pipeline["pipeline_id"])
+        
+        # 记录操作日志
+        OperationLogger.log("webhook", "pipeline_trigger", {
+            "pipeline_id": pipeline["pipeline_id"],
+            "pipeline_name": pipeline.get("name"),
+            "task_id": task_id,
+            "branch": branch,
+        })
+        
+        return JSONResponse({
+            "message": "构建任务已启动",
+            "task_id": task_id,
+            "pipeline": pipeline.get("name"),
+            "branch": branch,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Webhook 处理失败: {str(e)}")

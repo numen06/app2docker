@@ -97,12 +97,16 @@ async def health_check_api():
 async def startup_event():
     """应用启动时执行"""
     from backend.config import ensure_config_exists
+    from backend.scheduler import start_scheduler
 
     # 确保配置文件存在
     ensure_config_exists()
 
     # 确保必要的目录存在
     ensure_dirs()
+    
+    # 启动流水线调度器
+    start_scheduler()
 
     print("\n" + "=" * 60)
     print("🚀 App2Docker 服务已启动")
@@ -119,6 +123,7 @@ async def startup_event():
     print("  └── 用户模板: data/templates/jar, data/templates/nodejs (可读写)")
     print("")
     print("⚙️  配置文件: data/config.yml")
+    print("⏰ 流水线调度器: 已启动")
     print("=" * 60)
 
 
@@ -126,6 +131,11 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
+    from backend.scheduler import stop_scheduler
+    
+    # 停止流水线调度器
+    stop_scheduler()
+    
     print("\n👋 服务已停止")
 
 
