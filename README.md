@@ -18,7 +18,7 @@ docker run -d \
   -p 8000:8000 \
   -v $(pwd)/data:/app/data \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  registry.cn-shanghai.aliyuncs.com/51jbm/jar2docker:latest
+  registry.cn-shanghai.aliyuncs.com/51jbm/app2docker:latest
 ```
 
 访问：**http://localhost:8000**  
@@ -31,12 +31,14 @@ docker run -d \
 ### 1. 构建镜像
 
 **从文件构建**：
+
 - 支持 Java（.jar）、Node.js、Python、Go、静态网站
 - 选择项目类型和模板
 - 上传应用文件，填写镜像名称和标签
 - 实时查看构建日志
 
 **从 Git 源构建**：
+
 - 配置 Git 仓库地址和分支
 - 支持自动构建和推送镜像
 
@@ -141,6 +143,7 @@ docker run -d \
 ```
 
 **目录内容**：
+
 - `config.yml` - 配置文件
 - `templates/` - 用户自定义模板
 - `uploads/` - 上传的文件（临时）
@@ -153,6 +156,7 @@ docker run -d \
 ### Q: 构建失败怎么办？
 
 查看构建日志，常见原因：
+
 - Docker 服务未运行
 - 文件格式不正确
 - 模板配置有误
