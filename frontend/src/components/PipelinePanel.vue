@@ -204,51 +204,102 @@
             </h5>
             <button type="button" class="btn-close" @click="closeModal"></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <form @submit.prevent="savePipeline">
-              <div class="mb-3">
-                <label class="form-label">流水线名称 <span class="text-danger">*</span></label>
-                <input 
-                  v-model="formData.name" 
-                  type="text" 
-                  class="form-control form-control-sm" 
-                  required
-                  placeholder="例如：主分支自动构建"
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">描述</label>
-                <input 
-                  v-model="formData.description" 
-                  type="text" 
-                  class="form-control form-control-sm"
-                  placeholder="流水线描述（可选）"
-                >
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Git 仓库地址 <span class="text-danger">*</span></label>
-                <input 
-                  v-model="formData.git_url" 
-                  type="text" 
-                  class="form-control form-control-sm" 
-                  required
-                  placeholder="https://github.com/user/repo.git"
-                >
-              </div>
-
-              <div class="row">
-                <div class="col-md-4 mb-3">
-                  <label class="form-label">分支名称</label>
+              <!-- 基本信息 -->
+              <div class="mb-4">
+                <h6 class="text-primary mb-3">
+                  <i class="fas fa-info-circle"></i> 基本信息
+                </h6>
+                <div class="mb-3">
+                  <label class="form-label">流水线名称 <span class="text-danger">*</span></label>
                   <input 
-                    v-model="formData.branch" 
+                    v-model="formData.name" 
                     type="text" 
-                    class="form-control form-control-sm"
-                    placeholder="main"
+                    class="form-control form-control-sm" 
+                    required
+                    placeholder="例如：主分支自动构建"
                   >
                 </div>
-                <div class="col-md-4 mb-3">
+                <div class="mb-3">
+                  <label class="form-label">描述</label>
+                  <input 
+                    v-model="formData.description" 
+                    type="text" 
+                    class="form-control form-control-sm"
+                    placeholder="流水线描述（可选）"
+                  >
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Git 仓库地址 <span class="text-danger">*</span></label>
+                  <input 
+                    v-model="formData.git_url" 
+                    type="text" 
+                    class="form-control form-control-sm" 
+                    required
+                    placeholder="https://github.com/user/repo.git"
+                  >
+                </div>
+              </div>
+
+              <!-- 构建配置 -->
+              <div class="mb-4">
+                <h6 class="text-primary mb-3">
+                  <i class="fas fa-cogs"></i> 构建配置
+                </h6>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">分支名称</label>
+                    <input 
+                      v-model="formData.branch" 
+                      type="text" 
+                      class="form-control form-control-sm"
+                      placeholder="main（Webhook触发时使用推送的分支）"
+                    >
+                    <small class="text-muted">留空则使用推送的分支</small>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">项目类型</label>
+                    <select v-model="formData.project_type" class="form-select form-select-sm">
+                      <option value="jar">Java (JAR)</option>
+                      <option value="nodejs">Node.js</option>
+                      <option value="python">Python</option>
+                      <option value="go">Go</option>
+                      <option value="web">静态网站</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+                    <input 
+                      v-model="formData.image_name" 
+                      type="text" 
+                      class="form-control form-control-sm" 
+                      required
+                      placeholder="myapp/demo"
+                    >
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">镜像标签</label>
+                    <input 
+                      v-model="formData.tag" 
+                      type="text" 
+                      class="form-control form-control-sm"
+                      placeholder="latest"
+                    >
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Dockerfile 模板</label>
+                  <select v-model="formData.template" class="form-select form-select-sm">
+                    <option value="">使用项目中的 Dockerfile</option>
+                    <option v-for="tpl in templates" :key="tpl.name" :value="tpl.name">
+                      {{ tpl.name }} ({{ tpl.project_type }})
+                    </option>
+                  </select>
+                </div>
+                <div class="mb-3">
                   <label class="form-label">子路径</label>
                   <input 
                     v-model="formData.sub_path" 
@@ -257,131 +308,94 @@
                     placeholder="留空表示根目录"
                   >
                 </div>
-                <div class="col-md-4 mb-3">
-                  <label class="form-label">项目类型</label>
-                  <select v-model="formData.project_type" class="form-select form-select-sm">
-                    <option value="jar">Java (JAR)</option>
-                    <option value="nodejs">Node.js</option>
-                    <option value="python">Python</option>
-                    <option value="go">Go</option>
-                    <option value="web">静态网站</option>
-                  </select>
-                </div>
               </div>
 
-              <div class="row">
-                <div class="col-md-6 mb-3">
-                  <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+              <!-- Webhook 设置 -->
+              <div class="mb-4">
+                <h6 class="text-primary mb-3">
+                  <i class="fas fa-link"></i> Webhook 设置
+                </h6>
+                <div class="mb-3">
+                  <label class="form-label">Webhook 密钥</label>
                   <input 
-                    v-model="formData.image_name" 
-                    type="text" 
-                    class="form-control form-control-sm" 
-                    required
-                    placeholder="myapp/demo"
-                  >
-                </div>
-                <div class="col-md-6 mb-3">
-                  <label class="form-label">镜像标签</label>
-                  <input 
-                    v-model="formData.tag" 
+                    v-model="formData.webhook_secret" 
                     type="text" 
                     class="form-control form-control-sm"
-                    placeholder="latest"
+                    placeholder="留空自动生成"
                   >
+                  <small class="text-muted">用于验证 Webhook 签名（可选）</small>
                 </div>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Dockerfile 模板</label>
-                <select v-model="formData.template" class="form-select form-select-sm">
-                  <option value="">使用项目中的 Dockerfile</option>
-                  <option v-for="tpl in templates" :key="tpl.name" :value="tpl.name">
-                    {{ tpl.name }} ({{ tpl.project_type }})
-                  </option>
-                </select>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Webhook 密钥</label>
-                <input 
-                  v-model="formData.webhook_secret" 
-                  type="text" 
-                  class="form-control form-control-sm"
-                  placeholder="留空自动生成"
-                >
-                <small class="text-muted">用于验证 Webhook 签名（可选）</small>
-              </div>
-
-              <div class="form-check mb-3">
-                <input 
-                  v-model="formData.webhook_branch_filter" 
-                  class="form-check-input" 
-                  type="checkbox" 
-                  id="webhookBranchFilterCheck"
-                >
-                <label class="form-check-label" for="webhookBranchFilterCheck">
-                  <strong>Webhook 分支过滤</strong>
-                </label>
-                <small class="text-muted d-block ms-4 mt-1">
-                  启用后，只有推送的分支与上方配置的分支一致时才会触发构建
-                </small>
-              </div>
-
-              <div class="form-check mb-3">
-                <input 
-                  v-model="formData.push" 
-                  class="form-check-input" 
-                  type="checkbox" 
-                  id="pushCheck"
-                >
-                <label class="form-check-label" for="pushCheck">
-                  构建完成后推送镜像
-                </label>
-              </div>
-
-
-              <div class="form-check mb-3">
-                <input 
-                  v-model="formData.enabled" 
-                  class="form-check-input" 
-                  type="checkbox" 
-                  id="enabledCheck"
-                >
-                <label class="form-check-label" for="enabledCheck">
-                  启用流水线
-                </label>
-              </div>
-
-              <!-- 定时触发配置 -->
-              <div class="mb-3">
-                <div class="form-check mb-2">
+                <div class="form-check mb-3">
                   <input 
-                    v-model="formData.trigger_schedule" 
+                    v-model="formData.webhook_branch_filter" 
                     class="form-check-input" 
                     type="checkbox" 
-                    id="triggerScheduleCheck"
+                    id="webhookBranchFilterCheck"
                   >
-                  <label class="form-check-label" for="triggerScheduleCheck">
-                    启用定时触发
+                  <label class="form-check-label" for="webhookBranchFilterCheck">
+                    分支过滤：只允许匹配的分支触发构建
+                  </label>
+                  <small class="text-muted d-block ms-4 mt-1">
+                    启用后，只有推送的分支与上方配置的分支一致时才会触发
+                  </small>
+                </div>
+              </div>
+
+              <!-- 其他选项 -->
+              <div class="mb-4">
+                <h6 class="text-primary mb-3">
+                  <i class="fas fa-sliders-h"></i> 其他选项
+                </h6>
+                <div class="form-check mb-3">
+                  <input 
+                    v-model="formData.push" 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="pushCheck"
+                  >
+                  <label class="form-check-label" for="pushCheck">
+                    构建完成后推送镜像
                   </label>
                 </div>
-                
-                <div v-if="formData.trigger_schedule" class="ms-3">
-                  <label class="form-label">Cron 表达式 <span class="text-danger">*</span></label>
+                <div class="form-check mb-3">
                   <input 
-                    v-model="formData.cron_expression" 
-                    type="text" 
-                    class="form-control form-control-sm font-monospace"
-                    placeholder="0 0 * * * (每天零点)"
-                    :required="formData.trigger_schedule"
+                    v-model="formData.enabled" 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="enabledCheck"
+                    checked
                   >
-                  <small class="text-muted">
-                    示例：<br>
-                    <code>0 0 * * *</code> - 每天零点<br>
-                    <code>0 */2 * * *</code> - 每2小时<br>
-                    <code>0 0 * * 1</code> - 每周一零点<br>
-                    <code>*/30 * * * *</code> - 每30分钟
-                  </small>
+                  <label class="form-check-label" for="enabledCheck">
+                    启用流水线
+                  </label>
+                </div>
+                <div class="mb-3">
+                  <div class="form-check mb-2">
+                    <input 
+                      v-model="formData.trigger_schedule" 
+                      class="form-check-input" 
+                      type="checkbox" 
+                      id="triggerScheduleCheck"
+                    >
+                    <label class="form-check-label" for="triggerScheduleCheck">
+                      启用定时触发
+                    </label>
+                  </div>
+                  <div v-if="formData.trigger_schedule" class="ms-4">
+                    <label class="form-label small">Cron 表达式 <span class="text-danger">*</span></label>
+                    <input 
+                      v-model="formData.cron_expression" 
+                      type="text" 
+                      class="form-control form-control-sm font-monospace"
+                      placeholder="0 0 * * *"
+                      :required="formData.trigger_schedule"
+                    >
+                    <small class="text-muted">
+                      <code>0 0 * * *</code> 每天零点 | 
+                      <code>0 */2 * * *</code> 每2小时 | 
+                      <code>*/30 * * * *</code> 每30分钟
+                    </small>
+                  </div>
                 </div>
               </div>
             </form>
