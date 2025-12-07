@@ -124,6 +124,13 @@
                   <span v-if="running === pipeline.pipeline_id" class="spinner-border spinner-border-sm ms-1"></span>
                 </button>
                 <button 
+                  class="btn btn-outline-secondary" 
+                  @click="showHistory(pipeline)"
+                  title="查看历史构建"
+                >
+                  <i class="fas fa-history"></i>
+                </button>
+                <button 
                   class="btn btn-outline-info" 
                   @click="showWebhookUrl(pipeline)"
                   title="查看 Webhook URL"
@@ -385,6 +392,152 @@
         </div>
       </div>
     </div>
+
+    <!-- 历史构建模态框 -->
+    <div v-if="showHistoryModal" class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5)">
+      <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-history"></i> 历史构建 - {{ currentPipeline?.name }}
+            </h5>
+            <button type="button" class="btn-close" @click="closeHistoryModal"></button>
+          </div>
+          <div class="modal-body">
+            <!-- 过滤选项 -->
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label class="form-label small">触发来源</label>
+                <select v-model="historyFilter.trigger_source" class="form-select form-select-sm" @change="loadHistory">
+                  <option value="">全部</option>
+                  <option value="webhook">Webhook</option>
+                  <option value="manual">手动</option>
+                  <option value="cron">定时</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small">任务状态</label>
+                <select v-model="historyFilter.status" class="form-select form-select-sm" @change="loadHistory">
+                  <option value="">全部</option>
+                  <option value="pending">等待中</option>
+                  <option value="running">进行中</option>
+                  <option value="completed">已完成</option>
+                  <option value="failed">失败</option>
+                </select>
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <button class="btn btn-sm btn-outline-primary" @click="loadHistory">
+                  <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+              </div>
+            </div>
+
+            <!-- 历史列表 -->
+            <div v-if="historyLoading" class="text-center py-4">
+              <span class="spinner-border spinner-border-sm"></span> 加载中...
+            </div>
+            <div v-else-if="historyTasks.length === 0" class="text-center py-4 text-muted">
+              <i class="fas fa-inbox fa-2x mb-2"></i>
+              <p class="mb-0">暂无历史构建记录</p>
+            </div>
+            <div v-else class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead>
+                  <tr>
+                    <th>任务ID</th>
+                    <th>触发来源</th>
+                    <th>状态</th>
+                    <th>镜像</th>
+                    <th>触发时间</th>
+                    <th>完成时间</th>
+                    <th>分支/信息</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="task in historyTasks" :key="task.task_id">
+                    <td>
+                      <code class="small">{{ task.task_id.substring(0, 8) }}</code>
+                    </td>
+                    <td>
+                      <span v-if="task.trigger_source === 'webhook'" class="badge bg-info">
+                        <i class="fas fa-link"></i> Webhook
+                      </span>
+                      <span v-else-if="task.trigger_source === 'manual'" class="badge bg-success">
+                        <i class="fas fa-hand-pointer"></i> 手动
+                      </span>
+                      <span v-else-if="task.trigger_source === 'cron'" class="badge bg-warning">
+                        <i class="fas fa-clock"></i> 定时
+                      </span>
+                      <span v-else class="badge bg-secondary">未知</span>
+                    </td>
+                    <td>
+                      <span v-if="task.status === 'pending'" class="badge bg-secondary">
+                        <i class="fas fa-clock"></i> 等待中
+                      </span>
+                      <span v-else-if="task.status === 'running'" class="badge bg-primary">
+                        <span class="spinner-border spinner-border-sm me-1" style="width: 0.65rem; height: 0.65rem;"></span> 进行中
+                      </span>
+                      <span v-else-if="task.status === 'completed'" class="badge bg-success">
+                        <i class="fas fa-check-circle"></i> 已完成
+                      </span>
+                      <span v-else-if="task.status === 'failed'" class="badge bg-danger">
+                        <i class="fas fa-times-circle"></i> 失败
+                      </span>
+                      <span v-else-if="task.status === 'deleted'" class="badge bg-secondary">
+                        <i class="fas fa-trash"></i> 已删除
+                      </span>
+                    </td>
+                    <td>
+                      <small class="font-monospace">{{ task.image }}:{{ task.tag }}</small>
+                    </td>
+                    <td>
+                      <small class="text-muted">{{ formatTime(task.triggered_at) }}</small>
+                    </td>
+                    <td>
+                      <small v-if="task.completed_at" class="text-muted">{{ formatTime(task.completed_at) }}</small>
+                      <small v-else class="text-muted">-</small>
+                    </td>
+                    <td>
+                      <small v-if="task.trigger_info">
+                        <span v-if="task.trigger_info.branch" class="badge bg-secondary">
+                          {{ task.trigger_info.branch }}
+                        </span>
+                        <br v-if="task.trigger_info.platform">
+                        <span v-if="task.trigger_info.platform" class="text-muted">
+                          {{ task.trigger_info.platform }}
+                        </span>
+                        <br v-if="task.trigger_info.last_commit">
+                        <span v-if="task.trigger_info.last_commit" class="text-muted small" :title="task.trigger_info.last_commit">
+                          {{ task.trigger_info.last_commit.substring(0, 30) }}...
+                        </span>
+                      </small>
+                      <small v-else class="text-muted">-</small>
+                    </td>
+                    <td>
+                      <button 
+                        v-if="task.status !== 'deleted'"
+                        class="btn btn-sm btn-outline-info" 
+                        @click="viewTask(task.task_id)"
+                        title="查看任务详情"
+                      >
+                        <i class="fas fa-eye"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <div class="text-muted small">
+              共 {{ historyTasks.length }} 条记录
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" @click="closeHistoryModal">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -399,9 +552,17 @@ const loading = ref(false)
 const running = ref(null)  // 正在运行的流水线ID
 const showModal = ref(false)
 const showWebhookModal = ref(false)
+const showHistoryModal = ref(false)
 const webhookUrl = ref('')
 const webhookUrlInput = ref(null)
 const editingPipeline = ref(null)
+const currentPipeline = ref(null)
+const historyTasks = ref([])
+const historyLoading = ref(false)
+const historyFilter = ref({
+  trigger_source: '',
+  status: ''
+})
 
 const formData = ref({
   name: '',
@@ -623,6 +784,48 @@ function viewTask(taskId) {
   // 如果父组件没有处理，则尝试通过 URL hash 传递
   // 这需要任务管理组件支持从 hash 中读取 task_id
   window.location.hash = `task_id=${taskId}`
+}
+
+function showHistory(pipeline) {
+  currentPipeline.value = pipeline
+  historyFilter.value = {
+    trigger_source: '',
+    status: ''
+  }
+  showHistoryModal.value = true
+  loadHistory()
+}
+
+function closeHistoryModal() {
+  showHistoryModal.value = false
+  currentPipeline.value = null
+  historyTasks.value = []
+}
+
+async function loadHistory() {
+  if (!currentPipeline.value) return
+  
+  historyLoading.value = true
+  try {
+    const params = new URLSearchParams()
+    if (historyFilter.value.trigger_source) {
+      params.append('trigger_source', historyFilter.value.trigger_source)
+    }
+    if (historyFilter.value.status) {
+      params.append('status', historyFilter.value.status)
+    }
+    params.append('limit', '100')
+    
+    const url = `/api/pipelines/${currentPipeline.value.pipeline_id}/tasks?${params.toString()}`
+    const res = await axios.get(url)
+    historyTasks.value = res.data.tasks || []
+  } catch (error) {
+    console.error('加载历史构建失败:', error)
+    alert('加载历史构建失败')
+    historyTasks.value = []
+  } finally {
+    historyLoading.value = false
+  }
 }
 </script>
 
