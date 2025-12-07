@@ -20,9 +20,35 @@
         <button class="btn btn-sm btn-outline-primary" @click="loadTasks">
           <i class="fas fa-sync-alt"></i> 刷新
         </button>
-        <button class="btn btn-sm btn-outline-danger" @click="showCleanupModal = true">
-          <i class="fas fa-broom"></i> 清理
-        </button>
+        <div class="btn-group">
+          <button 
+            class="btn btn-sm btn-outline-danger dropdown-toggle" 
+            type="button" 
+            data-bs-toggle="dropdown"
+            :disabled="cleaning"
+          >
+            <i class="fas fa-broom"></i> 清理
+            <span v-if="cleaning" class="spinner-border spinner-border-sm ms-1"></span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="cleanupByStatus('completed')">
+                <i class="fas fa-check-circle"></i> 清理已完成的任务
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="cleanupByStatus('failed')">
+                <i class="fas fa-times-circle"></i> 清理失败的任务
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="cleanupByDaysPrompt">
+                <i class="fas fa-calendar-alt"></i> 清理N天前的任务
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -275,69 +301,6 @@
     </div>
     <div v-if="showLogModal" class="modal-backdrop fade show" @click="closeLogModal"></div>
 
-    <!-- 清理任务模态框 -->
-    <div v-if="showCleanupModal" class="modal fade show" style="display: block;" tabindex="-1" @click.self="closeCleanupModal">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header bg-warning text-dark">
-            <h5 class="modal-title">
-              <i class="fas fa-broom"></i> 清理任务
-            </h5>
-            <button type="button" class="btn-close" @click="closeCleanupModal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="alert alert-warning mb-3">
-              <i class="fas fa-exclamation-triangle"></i>
-              清理后的任务无法恢复，请谨慎操作！
-            </div>
-
-            <div class="d-grid gap-2">
-              <button 
-                class="btn btn-outline-danger" 
-                @click="cleanupByStatus('completed')"
-                :disabled="cleaning"
-              >
-                <i class="fas fa-check-circle"></i> 清理已完成的任务
-              </button>
-              
-              <button 
-                class="btn btn-outline-danger" 
-                @click="cleanupByStatus('failed')"
-                :disabled="cleaning"
-              >
-                <i class="fas fa-times-circle"></i> 清理失败的任务
-              </button>
-              
-              <div class="input-group mt-2">
-                <input 
-                  v-model.number="cleanupDays" 
-                  type="number" 
-                  class="form-control" 
-                  min="1"
-                  placeholder="输入天数"
-                />
-                <button 
-                  class="btn btn-outline-danger" 
-                  @click="cleanupByDays"
-                  :disabled="cleaning || !cleanupDays || cleanupDays < 1"
-                >
-                  清理 {{ cleanupDays || 'N' }} 天前的任务
-                </button>
-              </div>
-            </div>
-            
-            <div v-if="cleaning" class="text-center mt-3">
-              <span class="spinner-border spinner-border-sm me-2"></span>
-              <span class="text-muted">清理中...</span>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeCleanupModal" :disabled="cleaning">关闭</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div v-if="showCleanupModal" class="modal-backdrop fade show" @click="closeCleanupModal"></div>
 
     <!-- 加入流水线模态框 -->
     <div v-if="showPipelineModal && selectedPipelineTask" class="modal fade show" style="display: block;" tabindex="-1" @click.self="closePipelineModal">
@@ -507,9 +470,7 @@ const showErrorModal = ref(false)
 const selectedErrorTask = ref(null)
 const currentPage = ref(1)  // 当前页码
 const pageSize = ref(10)    // 每页显示数量
-const showCleanupModal = ref(false)  // 清理模态框
 const cleaning = ref(false)  // 清理中状态
-const cleanupDays = ref(7)  // 清理N天前的任务
 const showPipelineModal = ref(false)  // 流水线模态框
 const selectedPipelineTask = ref(null)  // 选中的任务
 const saving = ref(false)  // 保存中状态
@@ -789,17 +750,11 @@ async function deleteTask(task) {
   }
 }
 
-function closeCleanupModal() {
-  if (cleaning.value) return
-  showCleanupModal.value = false
-  cleanupDays.value = 7
-}
-
 async function cleanupByStatus(status) {
   if (cleaning.value) return
   
   const statusText = status === 'completed' ? '已完成' : '失败'
-  if (!confirm(`确定要清理所有${statusText}的任务吗？`)) {
+  if (!confirm(`确定要清理所有${statusText}的任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`)) {
     return
   }
   
@@ -812,7 +767,6 @@ async function cleanupByStatus(status) {
     })
     
     alert(`成功清理 ${res.data.removed_count} 个任务`)
-    closeCleanupModal()
     await loadTasks()
   } catch (err) {
     console.error('清理任务失败:', err)
@@ -822,10 +776,21 @@ async function cleanupByStatus(status) {
   }
 }
 
-async function cleanupByDays() {
-  if (cleaning.value || !cleanupDays.value || cleanupDays.value < 1) return
+async function cleanupByDaysPrompt() {
+  if (cleaning.value) return
   
-  if (!confirm(`确定要清理 ${cleanupDays.value} 天前的所有任务吗？`)) {
+  const daysInput = prompt('请输入要清理的天数（例如：7 表示清理7天前的任务）：', '7')
+  if (!daysInput) {
+    return
+  }
+  
+  const days = parseInt(daysInput)
+  if (isNaN(days) || days < 1) {
+    alert('请输入有效的天数（必须大于0）')
+    return
+  }
+  
+  if (!confirm(`确定要清理 ${days} 天前的所有任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`)) {
     return
   }
   
@@ -834,11 +799,10 @@ async function cleanupByDays() {
   
   try {
     const res = await axios.post('/api/tasks/cleanup', {
-      days: cleanupDays.value
+      days: days
     })
     
     alert(`成功清理 ${res.data.removed_count} 个任务`)
-    closeCleanupModal()
     await loadTasks()
   } catch (err) {
     console.error('清理任务失败:', err)
