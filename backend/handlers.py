@@ -1569,8 +1569,29 @@ class BuildManager:
                         else:
                             log(f"⚠️  Docker客户端不可用，跳过登录\n")
                     except Exception as login_error:
-                        log(f"❌ 登录失败: {str(login_error)}\n")
-                        log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
+                        error_msg = str(login_error)
+                        log(f"❌ 登录失败: {error_msg}\n")
+
+                        # 检查是否是认证错误
+                        if (
+                            "401" in error_msg
+                            or "Unauthorized" in error_msg
+                            or "unauthorized" in error_msg
+                        ):
+                            log(f"⚠️  认证失败，可能的原因：\n")
+                            log(f"   1. 用户名或密码不正确\n")
+                            log(f"   2. 对于阿里云registry，请确认：\n")
+                            log(
+                                f"      - 用户名：使用阿里云账号或独立的镜像仓库用户名\n"
+                            )
+                            log(f"      - 密码：使用阿里云账号密码或镜像仓库独立密码\n")
+                            log(f"      - 如果使用访问令牌，请确认令牌未过期\n")
+                            log(f"   3. 请检查registry配置中的认证信息是否正确\n")
+                            log(
+                                f"⚠️  继续尝试推送（推送时会使用auth_config，但可能仍然失败）\n"
+                            )
+                        else:
+                            log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
                 else:
                     log(f"⚠️  registry未配置认证信息，推送可能失败\n")
 
@@ -2099,8 +2120,29 @@ logs/
                         else:
                             log(f"⚠️  Docker客户端不可用，跳过登录\n")
                     except Exception as login_error:
-                        log(f"❌ 登录失败: {str(login_error)}\n")
-                        log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
+                        error_msg = str(login_error)
+                        log(f"❌ 登录失败: {error_msg}\n")
+
+                        # 检查是否是认证错误
+                        if (
+                            "401" in error_msg
+                            or "Unauthorized" in error_msg
+                            or "unauthorized" in error_msg
+                        ):
+                            log(f"⚠️  认证失败，可能的原因：\n")
+                            log(f"   1. 用户名或密码不正确\n")
+                            log(f"   2. 对于阿里云registry，请确认：\n")
+                            log(
+                                f"      - 用户名：使用阿里云账号或独立的镜像仓库用户名\n"
+                            )
+                            log(f"      - 密码：使用阿里云账号密码或镜像仓库独立密码\n")
+                            log(f"      - 如果使用访问令牌，请确认令牌未过期\n")
+                            log(f"   3. 请检查registry配置中的认证信息是否正确\n")
+                            log(
+                                f"⚠️  继续尝试推送（推送时会使用auth_config，但可能仍然失败）\n"
+                            )
+                        else:
+                            log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
                 else:
                     log(f"⚠️  registry未配置认证信息，推送可能失败\n")
 
