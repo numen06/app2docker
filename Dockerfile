@@ -4,7 +4,10 @@
 # 使用阿里云 Node.js 镜像加速下载
 FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS frontend-builder
 
-# 在设置 WORKDIR 之前，先以 root 用户创建目录并设置权限
+# 切换到 root 用户以创建目录
+USER root
+
+# 创建所需目录并设置权限
 RUN mkdir -p /app/frontend /app/dist && \
     chown -R node:node /app/frontend /app/dist
 
