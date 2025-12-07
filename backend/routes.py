@@ -373,6 +373,97 @@ async def save_registries(request: SaveRegistriesRequest, http_request: Request)
         raise HTTPException(status_code=500, detail=f"保存仓库配置失败: {str(e)}")
 
 
+class TestRegistryRequest(BaseModel):
+    """测试Registry登录请求"""
+    name: str
+    registry: str
+    username: str
+    password: str
+
+
+@router.post("/registries/test")
+async def test_registry_login(request: TestRegistryRequest):
+    """测试Registry登录"""
+    try:
+        from backend.handlers import docker_builder
+        
+        if not docker_builder or not docker_builder.is_available():
+            return JSONResponse(
+                {"success": False, "message": "Docker 不可用，请检查 Docker 连接"},
+                status_code=400
+            )
+        
+        registry_host = request.registry
+        username = request.username
+        password = request.password
+        
+        if not username or not password:
+            return JSONResponse(
+                {"success": False, "message": "用户名和密码不能为空"},
+                status_code=400
+            )
+        
+        # 构建auth_config
+        auth_config = {
+            "username": username,
+            "password": password,
+        }
+        
+        # 设置serveraddress
+        if registry_host and registry_host != "docker.io":
+            auth_config["serveraddress"] = registry_host
+        else:
+            auth_config["serveraddress"] = "https://index.docker.io/v1/"
+        
+        try:
+            # 尝试登录
+            if hasattr(docker_builder, "client") and docker_builder.client:
+                login_registry = registry_host if registry_host and registry_host != "docker.io" else None
+                login_result = docker_builder.client.login(
+                    username=username,
+                    password=password,
+                    registry=login_registry,
+                )
+                
+                # 登录成功
+                return JSONResponse({
+                    "success": True,
+                    "message": f"登录成功！Registry: {registry_host or 'docker.io'}",
+                    "details": str(login_result) if login_result else "认证通过"
+                })
+            else:
+                return JSONResponse(
+                    {"success": False, "message": "Docker 客户端不可用"},
+                    status_code=400
+                )
+        except Exception as login_error:
+            error_msg = str(login_error)
+            
+            # 检查是否是认证错误
+            if "401" in error_msg or "Unauthorized" in error_msg or "unauthorized" in error_msg:
+                return JSONResponse({
+                    "success": False,
+                    "message": "认证失败：用户名或密码不正确",
+                    "details": error_msg,
+                    "suggestions": [
+                        "请检查用户名和密码是否正确",
+                        "对于阿里云registry，请使用独立的Registry登录密码（不是阿里云账号密码）",
+                        "如果使用访问令牌，请确认令牌未过期"
+                    ]
+                }, status_code=401)
+            else:
+                return JSONResponse({
+                    "success": False,
+                    "message": f"登录失败: {error_msg}",
+                    "details": error_msg
+                }, status_code=400)
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试Registry登录失败: {str(e)}")
+
+
 @router.post("/save-config")
 async def save_config_route(
     request: Request,
