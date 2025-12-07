@@ -1531,13 +1531,21 @@ class BuildManager:
                 auth_config = None
                 if push_username and push_password:
                     # 构建auth_config，包含registry信息
+                    # docker-py的push API需要serveraddress字段来指定registry
                     auth_config = {
                         "username": push_username,
                         "password": push_password,
                     }
-                    # 如果registry不是docker.io，添加serveraddress
-                    if push_registry_host and push_registry_host != "docker.io":
-                        auth_config["serveraddress"] = push_registry_host
+                    # 对于非docker.io的registry，必须设置serveraddress
+                    if push_registry_host:
+                        if push_registry_host != "docker.io":
+                            auth_config["serveraddress"] = push_registry_host
+                        else:
+                            # docker.io也可以显式设置
+                            auth_config["serveraddress"] = "https://index.docker.io/v1/"
+                    else:
+                        # 如果没有registry_host，默认使用docker.io
+                        auth_config["serveraddress"] = "https://index.docker.io/v1/"
 
                     log(f"✅ 已配置认证信息\n")
                     log(
@@ -1596,6 +1604,14 @@ class BuildManager:
                     log(f"⚠️  registry未配置认证信息，推送可能失败\n")
 
                 try:
+                    log(f"🚀 开始推送，repository: {push_repository}, tag: {tag}\n")
+                    if auth_config:
+                        log(
+                            f"🔐 使用认证信息: username={auth_config.get('username')}, serveraddress={auth_config.get('serveraddress', 'docker.io')}\n"
+                        )
+                    else:
+                        log(f"⚠️  未使用认证信息\n")
+
                     push_stream = docker_builder.push_image(
                         push_repository, tag, auth_config=auth_config
                     )
@@ -1608,11 +1624,34 @@ class BuildManager:
                         if status:
                             log(f"📡 {status}\n")
                         if "error" in chunk:
-                            log(f"\n❌ 推送失败: {chunk['error']}\n")
+                            error_detail = chunk.get("errorDetail", {})
+                            error_msg = chunk["error"]
+                            log(f"\n❌ 推送失败: {error_msg}\n")
+                            if error_detail:
+                                log(f"❌ 错误详情: {error_detail}\n")
                             return
                     log(f"\n✅ 推送完成: {full_tag}\n")
                 except Exception as e:
-                    log(f"\n❌ 推送异常: {e}\n")
+                    error_str = str(e)
+                    log(f"\n❌ 推送异常: {error_str}\n")
+
+                    # 如果是认证错误，提供更详细的提示
+                    if (
+                        "denied" in error_str.lower()
+                        or "unauthorized" in error_str.lower()
+                        or "401" in error_str
+                    ):
+                        log(f"💡 推送认证失败，建议：\n")
+                        log(f"   1. 确认registry配置中的用户名和密码正确\n")
+                        log(f"   2. 对于阿里云registry，请使用独立的Registry登录密码\n")
+                        log(f"   3. 可以尝试手动执行以下命令测试：\n")
+                        log(
+                            f"      docker login --username={push_username} {push_registry_host}\n"
+                        )
+                        log(f"      docker push {full_tag}\n")
+                        log(
+                            f"   4. 如果手动命令成功，说明配置有问题；如果也失败，说明认证信息不正确\n"
+                        )
 
             log("\n🎉🎉🎉 所有操作已完成！🎉🎉🎉\n")
             # 更新任务状态为完成
@@ -2083,18 +2122,34 @@ logs/
                 auth_config = None
                 if username and password:
                     # 构建auth_config，包含registry信息
+                    # docker-py的push API需要serveraddress字段来指定registry
                     auth_config = {
                         "username": username,
                         "password": password,
                     }
-                    # 如果registry不是docker.io，添加serveraddress
-                    if registry_host and registry_host != "docker.io":
-                        auth_config["serveraddress"] = registry_host
+                    # 对于非docker.io的registry，必须设置serveraddress
+                    # 注意：对于阿里云等registry，直接使用registry地址，不需要加协议
+                    if registry_host:
+                        if registry_host != "docker.io":
+                            # 对于阿里云等registry，直接使用registry地址
+                            auth_config["serveraddress"] = registry_host
+                        else:
+                            # docker.io使用标准地址
+                            auth_config["serveraddress"] = "https://index.docker.io/v1/"
+                    else:
+                        # 如果没有registry_host，默认使用docker.io
+                        auth_config["serveraddress"] = "https://index.docker.io/v1/"
 
                     log(f"✅ 已配置认证信息\n")
                     log(
                         f"🔐 Auth配置: username={username}, serveraddress={auth_config.get('serveraddress', 'docker.io')}\n"
                     )
+
+                    # 对于阿里云registry，添加特殊提示
+                    if registry_host and "aliyuncs.com" in registry_host:
+                        log(
+                            f"ℹ️  检测到阿里云registry，请确保使用独立的Registry登录密码\n"
+                        )
 
                     # 推送前先登录到registry（重要：确保认证生效）
                     try:
@@ -2148,6 +2203,14 @@ logs/
 
                 try:
                     # 直接推送构建好的镜像
+                    log(f"🚀 开始推送，repository: {push_repository}, tag: {tag}\n")
+                    if auth_config:
+                        log(
+                            f"🔐 使用认证信息: username={auth_config.get('username')}, serveraddress={auth_config.get('serveraddress', 'docker.io')}\n"
+                        )
+                    else:
+                        log(f"⚠️  未使用认证信息\n")
+
                     push_stream = docker_builder.push_image(
                         push_repository, tag, auth_config=auth_config
                     )
@@ -2156,13 +2219,38 @@ logs/
                             if "status" in chunk:
                                 log(chunk["status"] + "\n")
                             elif "error" in chunk:
+                                error_detail = chunk.get("errorDetail", {})
+                                error_msg = chunk["error"]
+                                log(f"❌ 推送错误: {error_msg}\n")
+                                if error_detail:
+                                    log(f"❌ 错误详情: {error_detail}\n")
                                 raise RuntimeError(chunk["error"])
                         else:
                             log(str(chunk))
 
                     log(f"✅ 推送完成: {full_tag}\n")
                 except Exception as e:
-                    log(f"❌ 推送异常: {str(e)}\n")
+                    error_str = str(e)
+                    log(f"❌ 推送异常: {error_str}\n")
+
+                    # 如果是认证错误，提供更详细的提示
+                    if (
+                        "denied" in error_str.lower()
+                        or "unauthorized" in error_str.lower()
+                        or "401" in error_str
+                    ):
+                        log(f"💡 推送认证失败，建议：\n")
+                        log(f"   1. 确认registry配置中的用户名和密码正确\n")
+                        log(f"   2. 对于阿里云registry，请使用独立的Registry登录密码\n")
+                        log(f"   3. 可以尝试手动执行以下命令测试：\n")
+                        log(
+                            f"      docker login --username={username} {registry_host}\n"
+                        )
+                        log(f"      docker push {full_tag}\n")
+                        log(
+                            f"   4. 如果手动命令成功，说明配置有问题；如果也失败，说明认证信息不正确\n"
+                        )
+
                     raise
 
             log(f"✅ 所有操作已完成\n")
