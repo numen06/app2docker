@@ -89,26 +89,18 @@
           
           <!-- 卡片内容 -->
           <div class="card-body">
-            <!-- 项目类型和镜像信息 -->
-            <div class="mb-3 pb-2 border-bottom">
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <span class="badge" :class="getProjectTypeBadgeClass(pipeline.project_type)" style="font-size: 0.85rem; padding: 0.35rem 0.65rem;">
-                  <i :class="getProjectTypeIcon(pipeline.project_type)"></i>
-                  {{ getProjectTypeLabel(pipeline.project_type) }}
-                </span>
-                <div class="d-flex align-items-center">
-                  <i class="fas fa-docker text-muted me-2" style="width: 18px;"></i>
-                  <small class="font-monospace text-truncate" :title="`${pipeline.image_name}:${pipeline.tag}`" style="font-size: 0.85rem;">
-                    {{ pipeline.image_name }}:{{ pipeline.tag }}
-                  </small>
-                </div>
-              </div>
+            <!-- 项目类型 -->
+            <div class="mb-3">
+              <span class="badge" :class="getProjectTypeBadgeClass(pipeline.project_type)" style="font-size: 0.85rem; padding: 0.35rem 0.65rem;">
+                <i :class="getProjectTypeIcon(pipeline.project_type)"></i>
+                {{ getProjectTypeLabel(pipeline.project_type) }}
+              </span>
             </div>
 
             <!-- Git 信息 -->
             <div class="mb-3">
               <div class="d-flex align-items-center mb-2">
-                <i class="fas fa-code-branch text-muted me-2" style="width: 18px;"></i>
+                <i class="fas fa-code-branch text-muted me-2" style="width: 18px; flex-shrink: 0;"></i>
                 <small class="font-monospace text-truncate" :title="pipeline.git_url" style="font-size: 0.9rem;">
                   {{ formatGitUrl(pipeline.git_url) }}
                 </small>
@@ -126,6 +118,16 @@
                 <span v-if="pipeline.cron_expression" class="badge bg-info" :title="pipeline.cron_expression" style="font-size: 0.75rem;">
                   <i class="fas fa-clock"></i> 定时
                 </span>
+              </div>
+            </div>
+            
+            <!-- 镜像信息 -->
+            <div class="mb-3">
+              <div class="d-flex align-items-center">
+                <i class="fab fa-docker text-muted me-2" style="width: 18px; flex-shrink: 0;"></i>
+                <small class="font-monospace text-truncate" :title="`${pipeline.image_name}:${pipeline.tag}`" style="font-size: 0.9rem; min-width: 0;">
+                  {{ pipeline.image_name }}:{{ pipeline.tag }}
+                </small>
               </div>
             </div>
             
