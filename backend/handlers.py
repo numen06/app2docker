@@ -1644,10 +1644,40 @@ class BuildManager:
                 elif "error" in chunk:
                     last_error = chunk["error"]
                     log(f"\n🔥 [DOCKER ERROR]: {last_error}\n")
+                    
+                    # 检测是否是镜像拉取失败的错误
+                    if "manifest" in last_error.lower() and ("not found" in last_error.lower() or "unknown" in last_error.lower()):
+                        import re
+                        image_match = re.search(r'manifest for ([^\s]+) not found', last_error)
+                        if image_match:
+                            image_name = image_match.group(1)
+                            log(f"\n💡 镜像拉取失败分析:\n")
+                            log(f"   无法拉取基础镜像: {image_name}\n")
+                            log(f"   可能的原因:\n")
+                            log(f"   1. 镜像不存在或已被删除\n")
+                            log(f"   2. 镜像标签不正确\n")
+                            log(f"   3. 网络连接问题或仓库访问受限\n")
+                            log(f"   4. 需要认证但未配置认证信息\n")
+                            log(f"   建议: 检查 Dockerfile 中的 FROM 指令，确认镜像名称和标签是否正确\n")
                 elif "errorDetail" in chunk:
                     err_msg = chunk["errorDetail"].get("message", "Unknown")
                     last_error = err_msg
                     log(f"\n💥 [ERROR DETAIL]: {err_msg}\n")
+                    
+                    # 检测是否是镜像拉取失败的错误
+                    if "manifest" in err_msg.lower() and ("not found" in err_msg.lower() or "unknown" in err_msg.lower()):
+                        import re
+                        image_match = re.search(r'manifest for ([^\s]+) not found', err_msg)
+                        if image_match:
+                            image_name = image_match.group(1)
+                            log(f"\n💡 镜像拉取失败分析:\n")
+                            log(f"   无法拉取基础镜像: {image_name}\n")
+                            log(f"   可能的原因:\n")
+                            log(f"   1. 镜像不存在或已被删除\n")
+                            log(f"   2. 镜像标签不正确\n")
+                            log(f"   3. 网络连接问题或仓库访问受限\n")
+                            log(f"   4. 需要认证但未配置认证信息\n")
+                            log(f"   建议: 检查 Dockerfile 中的 FROM 指令，确认镜像名称和标签是否正确\n")
                 elif "aux" in chunk and "ID" in chunk["aux"]:
                     build_succeeded = True
 
@@ -2350,6 +2380,26 @@ logs/
                                 if "error" in chunk:
                                     error_msg = chunk["error"]
                                     log(f"[{service_name}] ❌ 构建错误: {error_msg}\n")
+                                    
+                                    # 检测是否是镜像拉取失败的错误
+                                    if "manifest" in error_msg.lower() and ("not found" in error_msg.lower() or "unknown" in error_msg.lower()):
+                                        # 提取镜像名称
+                                        import re
+                                        image_match = re.search(r'manifest for ([^\s]+) not found', error_msg)
+                                        if image_match:
+                                            image_name = image_match.group(1)
+                                            enhanced_error = (
+                                                f"服务 {service_name} 构建失败: 无法拉取基础镜像 {image_name}\n"
+                                                f"可能的原因：\n"
+                                                f"1. 镜像不存在或已被删除\n"
+                                                f"2. 镜像标签不正确\n"
+                                                f"3. 网络连接问题或仓库访问受限\n"
+                                                f"4. 需要认证但未配置认证信息\n"
+                                                f"建议：检查 Dockerfile 中的 FROM 指令，确认镜像名称和标签是否正确"
+                                            )
+                                            log(f"[{service_name}] 💡 {enhanced_error}\n")
+                                            raise RuntimeError(enhanced_error)
+                                    
                                     raise RuntimeError(
                                         f"服务 {service_name} 构建失败: {error_msg}"
                                     )
