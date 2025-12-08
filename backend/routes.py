@@ -720,6 +720,7 @@ async def build_from_source(
     branch: Optional[str] = Body(None),
     sub_path: Optional[str] = Body(None),
     use_project_dockerfile: bool = Body(True, description="是否优先使用项目中的 Dockerfile"),
+    dockerfile_name: str = Body("Dockerfile", description="Dockerfile文件名，默认Dockerfile"),
 ):
     """从 Git 源码构建镜像"""
     try:
@@ -762,6 +763,7 @@ async def build_from_source(
                     branch=branch,
                     sub_path=sub_path,
                     use_project_dockerfile=use_project_dockerfile,
+                    dockerfile_name=dockerfile_name,
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")

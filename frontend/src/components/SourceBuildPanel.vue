@@ -75,6 +75,19 @@
             勾选后，如果项目中存在 Dockerfile，将优先使用项目中的 Dockerfile；否则使用选择的模板
           </div>
         </div>
+        <div class="col-md-12" v-if="form.useProjectDockerfile">
+          <label class="form-label">Dockerfile 文件名</label>
+          <input 
+            v-model="form.dockerfileName" 
+            type="text" 
+            class="form-control form-control-sm"
+            placeholder="Dockerfile"
+          />
+          <div class="form-text small text-muted">
+            <i class="fas fa-info-circle"></i> 
+            默认为 Dockerfile，可自定义文件名（当使用项目中的 Dockerfile 时）
+          </div>
+        </div>
       </div>
 
       <div class="mb-3">
@@ -253,7 +266,8 @@ const form = ref({
   tag: 'latest',
   push: false,
   templateParams: {},
-  useProjectDockerfile: true  // 默认优先使用项目中的 Dockerfile
+  useProjectDockerfile: true,  // 默认优先使用项目中的 Dockerfile
+  dockerfileName: 'Dockerfile'  // Dockerfile文件名，默认Dockerfile
 })
 
 const templates = ref([])
@@ -499,7 +513,8 @@ async function handleBuild() {
       template_params: Object.keys(form.value.templateParams).length > 0 
         ? JSON.stringify(form.value.templateParams) 
         : undefined,
-      use_project_dockerfile: form.value.useProjectDockerfile
+      use_project_dockerfile: form.value.useProjectDockerfile,
+      dockerfile_name: form.value.dockerfileName || 'Dockerfile'
     }
   
   try {

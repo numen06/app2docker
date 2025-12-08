@@ -924,14 +924,15 @@ async function rebuildTask(task) {
     const config = {
       git_url: task.git_url,
       branch: task.branch || 'main',
-      image_name: task.image,
+      imagename: task.image,  // API 使用 imagename 而不是 image_name
       tag: task.tag || 'latest',
       project_type: task.project_type || 'jar',
       template: task.selected_template || '',
-      template_params: task.template_params || {},
+      template_params: task.template_params ? JSON.stringify(task.template_params) : undefined,
       sub_path: task.sub_path || '',
       use_project_dockerfile: task.use_project_dockerfile !== false,
-      push: task.should_push || false,
+      dockerfile_name: task.dockerfile_name || 'Dockerfile',
+      push: task.should_push ? 'on' : 'off',  // API 使用 'on'/'off' 字符串
     }
     
     // 验证必要参数
