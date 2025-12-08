@@ -34,15 +34,21 @@
           <div class="card-header bg-white">
             <!-- 标题行 -->
             <div class="mb-2">
-              <h5 class="card-title mb-0">
-                <strong>{{ pipeline.name }}</strong>
-                <span v-if="pipeline.enabled" class="badge bg-success ms-2">
-                  <i class="fas fa-check-circle"></i> 已启用
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <h5 class="card-title mb-0">
+                  <strong>{{ pipeline.name }}</strong>
+                  <span v-if="pipeline.enabled" class="badge bg-success ms-2">
+                    <i class="fas fa-check-circle"></i> 已启用
+                  </span>
+                  <span v-else class="badge bg-secondary ms-2">
+                    <i class="fas fa-times-circle"></i> 已禁用
+                  </span>
+                </h5>
+                <span class="badge" :class="getProjectTypeBadgeClass(pipeline.project_type)" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">
+                  <i :class="getProjectTypeIcon(pipeline.project_type)"></i>
+                  {{ getProjectTypeLabel(pipeline.project_type) }}
                 </span>
-                <span v-else class="badge bg-secondary ms-2">
-                  <i class="fas fa-times-circle"></i> 已禁用
-                </span>
-              </h5>
+              </div>
               <p class="text-muted mb-0 mt-1" v-if="pipeline.description" style="font-size: 0.9rem;">{{ pipeline.description }}</p>
             </div>
             <!-- 操作按钮行 -->
@@ -89,21 +95,21 @@
           
           <!-- 卡片内容 -->
           <div class="card-body">
-            <!-- 项目类型 -->
-            <div class="mb-3">
-              <span class="badge" :class="getProjectTypeBadgeClass(pipeline.project_type)" style="font-size: 0.85rem; padding: 0.35rem 0.65rem;">
-                <i :class="getProjectTypeIcon(pipeline.project_type)"></i>
-                {{ getProjectTypeLabel(pipeline.project_type) }}
-              </span>
-            </div>
-
             <!-- Git 信息 -->
             <div class="mb-3">
               <div class="d-flex align-items-center mb-2">
                 <i class="fas fa-code-branch text-muted me-2" style="width: 18px; flex-shrink: 0;"></i>
-                <small class="font-monospace text-truncate" :title="pipeline.git_url" style="font-size: 0.9rem;">
+                <small class="font-monospace text-truncate flex-grow-1" :title="pipeline.git_url" style="font-size: 0.9rem; min-width: 0;">
                   {{ formatGitUrl(pipeline.git_url) }}
                 </small>
+                <button 
+                  class="btn btn-sm btn-outline-secondary p-1 ms-2" 
+                  style="width: 24px; height: 24px; line-height: 1; flex-shrink: 0;"
+                  @click="copyToClipboard(pipeline.git_url, 'Git 地址')"
+                  title="复制 Git 地址"
+                >
+                  <i class="fas fa-copy" style="font-size: 0.7rem;"></i>
+                </button>
               </div>
               <div class="d-flex align-items-center flex-wrap gap-2 ms-4">
                 <span class="badge bg-secondary" style="font-size: 0.75rem;">
@@ -125,9 +131,17 @@
             <div class="mb-3">
               <div class="d-flex align-items-center">
                 <i class="fab fa-docker text-muted me-2" style="width: 18px; flex-shrink: 0;"></i>
-                <small class="font-monospace text-truncate" :title="`${pipeline.image_name}:${pipeline.tag}`" style="font-size: 0.9rem; min-width: 0;">
+                <small class="font-monospace text-truncate flex-grow-1" :title="`${pipeline.image_name}:${pipeline.tag}`" style="font-size: 0.9rem; min-width: 0;">
                   {{ pipeline.image_name }}:{{ pipeline.tag }}
                 </small>
+                <button 
+                  class="btn btn-sm btn-outline-secondary p-1 ms-2" 
+                  style="width: 24px; height: 24px; line-height: 1; flex-shrink: 0;"
+                  @click="copyToClipboard(`${pipeline.image_name}:${pipeline.tag}`, '镜像名称')"
+                  title="复制镜像名称"
+                >
+                  <i class="fas fa-copy" style="font-size: 0.7rem;"></i>
+                </button>
               </div>
             </div>
             
@@ -1155,6 +1169,51 @@ function copyWebhookUrl() {
     webhookUrlInput.value.select()
     document.execCommand('copy')
     alert('Webhook URL 已复制到剪贴板')
+  }
+}
+
+function copyToClipboard(text, label) {
+  if (!text) return
+  
+  // 使用现代 Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      // 显示成功提示
+      const btn = event.target.closest('button')
+      if (btn) {
+        const originalHTML = btn.innerHTML
+        btn.innerHTML = '<i class="fas fa-check" style="font-size: 0.7rem; color: green;"></i>'
+        setTimeout(() => {
+          btn.innerHTML = originalHTML
+        }, 1000)
+      }
+    }).catch(err => {
+      console.error('复制失败:', err)
+      alert(`复制${label}失败`)
+    })
+  } else {
+    // 降级方案：使用传统方法
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      document.execCommand('copy')
+      const btn = event.target.closest('button')
+      if (btn) {
+        const originalHTML = btn.innerHTML
+        btn.innerHTML = '<i class="fas fa-check" style="font-size: 0.7rem; color: green;"></i>'
+        setTimeout(() => {
+          btn.innerHTML = originalHTML
+        }, 1000)
+      }
+    } catch (err) {
+      console.error('复制失败:', err)
+      alert(`复制${label}失败`)
+    }
+    document.body.removeChild(textarea)
   }
 }
 
