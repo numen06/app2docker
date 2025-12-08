@@ -172,19 +172,21 @@ def get_user_template_path(template_name, project_type="jar"):
     return os.path.join(type_dir, f"{template_name}.Dockerfile")
 
 
-def parse_dockerfile_services(dockerfile_content: str) -> list:
+def parse_dockerfile_services(dockerfile_content: str) -> tuple:
     """
     解析 Dockerfile，识别所有服务阶段（FROM ... AS <stage_name>）
-    返回服务列表，包含服务名称、端口、用户等信息
+    返回服务列表，包含服务名称和所有动态参数
 
     Args:
         dockerfile_content: Dockerfile 内容字符串
 
     Returns:
-        服务列表，每个服务包含：
-        - name: 服务名称（阶段名）
-        - port: 端口号（如果有）
-        - user: 用户ID或用户名（如果有）
+        (services, global_param_names): 元组
+        - services: 服务列表，每个服务包含：
+          - name: 服务名称（阶段名）
+          - template_params: 该服务的模板参数列表（如果有）
+          - 其他动态参数（port, user, workdir, env, cmd, entrypoint 等）
+        - global_param_names: 全局模板参数名称集合（在第一个 FROM 之前）
     """
     services = []
 
@@ -193,15 +195,23 @@ def parse_dockerfile_services(dockerfile_content: str) -> list:
 
     lines = dockerfile_content.split("\n")
     current_stage = None
-    current_port = None
-    current_user = None
+    current_params = {}  # 存储当前阶段的所有参数
+    global_params = set()  # 存储全局模板参数（在第一个 FROM 之前）
+    first_from_found = False
 
     # 正则表达式
-    # 匹配 FROM ... AS <stage_name>，stage_name 可以包含字母、数字、下划线和连字符
     from_as_pattern = re.compile(r"FROM\s+.*?\s+AS\s+([a-zA-Z0-9_-]+)", re.IGNORECASE)
     from_pattern = re.compile(r"FROM\s+.*?(?:\s+AS\s+([a-zA-Z0-9_-]+))?", re.IGNORECASE)
     expose_pattern = re.compile(r"EXPOSE\s+(\d+)", re.IGNORECASE)
     user_pattern = re.compile(r"USER\s+([a-zA-Z0-9_-]+|\d+)", re.IGNORECASE)
+    workdir_pattern = re.compile(r"WORKDIR\s+(.+)", re.IGNORECASE)
+    # ENV 支持两种格式：ENV KEY=value 或 ENV KEY value
+    env_pattern = re.compile(r"ENV\s+(.+)", re.IGNORECASE)
+    cmd_pattern = re.compile(r"CMD\s+(.+)", re.IGNORECASE)
+    entrypoint_pattern = re.compile(r"ENTRYPOINT\s+(.+)", re.IGNORECASE)
+    arg_pattern = re.compile(r"ARG\s+([A-Z_][A-Z0-9_]*)(?:=(.+))?", re.IGNORECASE)
+    # 模板变量模式：{{VAR_NAME}} 或 {{VAR_NAME:default}}
+    template_var_pattern = re.compile(r'\{\{([A-Z_][A-Z0-9_]*?)(?::([^}]+))?\}\}')
 
     for line in lines:
         # 移除注释和前后空白
@@ -212,31 +222,38 @@ def parse_dockerfile_services(dockerfile_content: str) -> list:
         # 匹配 FROM ... AS <stage_name>
         from_as_match = from_as_pattern.search(line)
         if from_as_match:
+            if not first_from_found:
+                first_from_found = True
             # 如果之前有阶段，先保存
             if current_stage and current_stage.lower() not in excluded_stages:
-                services.append(
-                    {"name": current_stage, "port": current_port, "user": current_user}
-                )
+                service_data = {"name": current_stage, **current_params}
+                services.append(service_data)
 
             # 开始新阶段
             current_stage = from_as_match.group(1)
-            current_port = None
-            current_user = None
+            current_params = {}
             continue
 
         # 匹配 FROM（可能没有 AS）
         from_match = from_pattern.search(line)
         if from_match and from_match.group(1):
+            if not first_from_found:
+                first_from_found = True
             # 如果之前有阶段，先保存
             if current_stage and current_stage.lower() not in excluded_stages:
-                services.append(
-                    {"name": current_stage, "port": current_port, "user": current_user}
-                )
+                service_data = {"name": current_stage, **current_params}
+                services.append(service_data)
 
             # 开始新阶段
             current_stage = from_match.group(1)
-            current_port = None
-            current_user = None
+            current_params = {}
+            continue
+        
+        # 在第一个 FROM 之前，收集全局模板参数
+        if not first_from_found:
+            for match in template_var_pattern.finditer(line):
+                var_name = match.group(1)
+                global_params.add(var_name)
             continue
 
         # 如果当前有阶段，收集信息
@@ -244,20 +261,85 @@ def parse_dockerfile_services(dockerfile_content: str) -> list:
             # 匹配 EXPOSE
             expose_match = expose_pattern.search(line)
             if expose_match:
-                current_port = int(expose_match.group(1))
+                current_params["port"] = int(expose_match.group(1))
 
             # 匹配 USER
             user_match = user_pattern.search(line)
             if user_match:
-                current_user = user_match.group(1)
+                current_params["user"] = user_match.group(1)
+
+            # 匹配 WORKDIR
+            workdir_match = workdir_pattern.search(line)
+            if workdir_match:
+                current_params["workdir"] = workdir_match.group(1).strip().strip('"\'')
+            
+            # 匹配 ENV（支持 ENV KEY=value 和 ENV KEY value 两种格式）
+            env_match = env_pattern.search(line)
+            if env_match:
+                if "env" not in current_params:
+                    current_params["env"] = {}
+                env_line = env_match.group(1).strip()
+                # ENV 可能有两种格式：
+                # 1. ENV KEY=value
+                # 2. ENV KEY value
+                if '=' in env_line:
+                    # 格式1: KEY=value（可能多个，用空格分隔）
+                    parts = env_line.split()
+                    for part in parts:
+                        if '=' in part:
+                            key, value = part.split('=', 1)
+                            current_params["env"][key.strip()] = value.strip().strip('"\'')
+                else:
+                    # 格式2: KEY value（单个环境变量）
+                    parts = env_line.split(None, 1)
+                    if len(parts) >= 2:
+                        key = parts[0].strip()
+                        value = parts[1].strip().strip('"\'')
+                        current_params["env"][key] = value
+            
+            # 匹配 CMD
+            cmd_match = cmd_pattern.search(line)
+            if cmd_match:
+                current_params["cmd"] = cmd_match.group(1).strip().strip('[]"\'')
+            
+            # 匹配 ENTRYPOINT
+            entrypoint_match = entrypoint_pattern.search(line)
+            if entrypoint_match:
+                current_params["entrypoint"] = entrypoint_match.group(1).strip().strip('[]"\'')
+            
+            # 匹配 ARG（构建参数）
+            arg_match = arg_pattern.search(line)
+            if arg_match:
+                if "args" not in current_params:
+                    current_params["args"] = {}
+                key = arg_match.group(1).strip()
+                value = arg_match.group(2).strip().strip('"\'') if arg_match.group(2) else ""
+                current_params["args"][key] = value
+            
+            # 匹配模板变量（{{VAR_NAME}} 或 {{VAR_NAME:default}}）
+            for match in template_var_pattern.finditer(line):
+                var_name = match.group(1)
+                default_value = match.group(2) or ""
+                if "template_params" not in current_params:
+                    current_params["template_params"] = []
+                # 检查是否已存在
+                existing = next((p for p in current_params["template_params"] if p["name"] == var_name), None)
+                if not existing:
+                    from backend.template_parser import _get_var_description
+                    current_params["template_params"].append({
+                        "name": var_name,
+                        "default": default_value.strip(),
+                        "required": not bool(default_value),
+                        "description": _get_var_description(var_name),
+                        "type": "template"
+                    })
 
     # 保存最后一个阶段
     if current_stage and current_stage.lower() not in excluded_stages:
-        services.append(
-            {"name": current_stage, "port": current_port, "user": current_user}
-        )
+        service_data = {"name": current_stage, **current_params}
+        services.append(service_data)
 
-    return services
+    return services, global_params
 
 
 class Jar2DockerHandler(BaseHTTPRequestHandler):
@@ -1539,7 +1621,14 @@ class BuildManager:
                 f.write(dockerfile_content)
 
             log(f"\n🚀 开始构建镜像: {full_tag}\n")
-            log(f"🐳 使用构建器: {docker_builder.get_connection_info()}\n")
+            connection_info = docker_builder.get_connection_info()
+            log(f"🐳 使用构建器: {connection_info}\n")
+            
+            # 检查连接错误
+            if hasattr(docker_builder, 'get_connection_error'):
+                connection_error = docker_builder.get_connection_error()
+                if connection_error and connection_error != "未知错误":
+                    log(f"⚠️ 连接警告: {connection_error}\n")
 
             # 拉取基础镜像时，Docker 会默认到所有仓库中寻找，不需要指定认证仓库
 
@@ -1958,12 +2047,15 @@ class BuildManager:
                 log(f"🔐 使用全局 Git 配置的认证信息\n")
 
             # Git clone 会在目标目录下创建仓库目录，所以目标目录应该是父目录
-            clone_success = self._clone_git_repo(
+            clone_success, clone_error = self._clone_git_repo(
                 git_url, temp_clone_dir, branch, git_config, log
             )
 
             if not clone_success:
-                raise RuntimeError("Git 克隆失败")
+                error_msg = f"Git 克隆失败"
+                if clone_error:
+                    error_msg += f": {clone_error}"
+                raise RuntimeError(error_msg)
 
             # Git clone 会在目标目录下创建仓库目录，找到实际的仓库目录
             # 通常仓库目录名是 URL 的最后一部分（去掉 .git）
@@ -2772,11 +2864,12 @@ logs/
             )
 
             if result.returncode != 0:
-                log(f"❌ Git 克隆失败: {result.stderr}\n")
+                error_msg = result.stderr.strip() or result.stdout.strip() or "未知错误"
+                log(f"❌ Git 克隆失败: {error_msg}\n")
                 # 清理环境变量
                 if "GIT_SSH_COMMAND" in os.environ:
                     del os.environ["GIT_SSH_COMMAND"]
-                return False
+                return (False, error_msg)
 
             log(f"✅ Git 仓库克隆成功\n")
             log(f"📂 仓库已克隆到: {abs_target_dir}\n")
@@ -2785,20 +2878,22 @@ logs/
             if "GIT_SSH_COMMAND" in os.environ:
                 del os.environ["GIT_SSH_COMMAND"]
 
-            return True
+            return (True, None)
 
         except subprocess.TimeoutExpired:
-            log("❌ Git 克隆超时（超过5分钟）\n")
+            error_msg = "Git 克隆超时（超过5分钟）"
+            log(f"❌ {error_msg}\n")
             # 清理环境变量
             if "GIT_SSH_COMMAND" in os.environ:
                 del os.environ["GIT_SSH_COMMAND"]
-            return False
+            return (False, error_msg)
         except Exception as e:
-            log(f"❌ Git 克隆异常: {str(e)}\n")
+            error_msg = f"Git 克隆异常: {str(e)}"
+            log(f"❌ {error_msg}\n")
             # 清理环境变量
             if "GIT_SSH_COMMAND" in os.environ:
                 del os.environ["GIT_SSH_COMMAND"]
-            return False
+            return (False, error_msg)
 
 
 # ============ 构建任务管理器 ============

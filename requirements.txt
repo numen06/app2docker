@@ -8,6 +8,7 @@ PyJWT==2.10.1
 python-multipart==0.0.20
 PyYAML==6.0.3
 requests==2.32.5
+setuptools>=65.0.0  # 提供 distutils 兼容层（Python 3.12+ 需要）
 urllib3==2.5.0
 uvicorn[standard]==0.34.0
 watchdog==5.0.3

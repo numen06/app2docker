@@ -115,7 +115,17 @@ class LocalDockerBuilder(DockerBuilder):
     def _initialize(self):
         """初始化本地 Docker 客户端"""
         try:
-            import docker
+            try:
+                import docker
+            except ImportError as e:
+                if 'distutils' in str(e).lower():
+                    print("⚠️ Docker 库导入失败: distutils 模块不可用（Python 3.12+ 已移除 distutils）")
+                    print("   请安装 setuptools: pip install setuptools")
+                else:
+                    print(f"⚠️ Docker 库导入失败: {e}")
+                self.available = False
+                self.client = None
+                return
             
             # 尝试连接本地 Docker
             self.client = docker.from_env()
@@ -235,9 +245,32 @@ class RemoteDockerBuilder(DockerBuilder):
     def _initialize(self):
         """初始化远程 Docker 客户端"""
         try:
-            import docker
-            import warnings
+            try:
+                import docker
+            except ImportError as e:
+                if 'distutils' in str(e).lower():
+                    error_msg = "Docker 库导入失败: distutils 模块不可用（Python 3.12+ 已移除 distutils）。请安装 setuptools: pip install setuptools"
+                    print(f"⚠️ {error_msg}")
+                else:
+                    error_msg = f"Docker 库导入失败: {e}"
+                    print(f"⚠️ {error_msg}")
+                self.available = False
+                self.client = None
+                self._connection_info = "远程 Docker (导入失败)"
+                self._connection_error = error_msg
+                return
             
+            import warnings
+        except Exception as e:
+            error_msg = f"初始化失败: {str(e)}"
+            print(f"⚠️ {error_msg}")
+            self.available = False
+            self.client = None
+            self._connection_info = "远程 Docker (初始化失败)"
+            self._connection_error = error_msg
+            return
+        
+        try:
             # 忽略凭证助手警告
             warnings.filterwarnings('ignore', message='.*docker-credential.*')
             
@@ -288,26 +321,48 @@ class RemoteDockerBuilder(DockerBuilder):
             self._connection_info = f"远程 Docker ({host}:{port})"
             print(f"✅ 远程 Docker 连接成功: {host}:{port}")
             
-        except Exception as e:
-            print(f"⚠️ 远程 Docker 连接失败: {e}")
+        except docker.errors.DockerException as e:
+            error_msg = f"远程 Docker 连接失败: {str(e)}"
+            print(f"⚠️ {error_msg}")
             self.available = False
             self.client = None
-            self._connection_info = "远程 Docker (未连接)"
+            self._connection_info = f"远程 Docker (连接失败: {str(e)})"
+            self._connection_error = error_msg
+        except Exception as e:
+            error_msg = f"远程 Docker 连接异常: {str(e)}"
+            print(f"⚠️ {error_msg}")
+            import traceback
+            traceback.print_exc()
+            self.available = False
+            self.client = None
+            self._connection_info = f"远程 Docker (连接异常: {str(e)})"
+            self._connection_error = error_msg
     
     def ping(self) -> bool:
         """测试 Docker 连接"""
         if not self.client:
+            self._connection_error = "Docker 客户端未初始化"
             return False
         try:
             self.client.ping()
+            self._connection_error = None  # 清除之前的错误
             return True
-        except Exception:
+        except Exception as e:
+            # 保存连接错误信息
+            self._connection_error = f"Docker ping 失败: {str(e)}"
             return False
+    
+    def get_connection_error(self) -> str:
+        """获取连接错误信息"""
+        return getattr(self, '_connection_error', None) or "未知错误"
     
     def build_image(self, path: str, tag: str, **kwargs) -> Iterator[Dict]:
         """构建 Docker 镜像"""
         if not self.available:
-            raise RuntimeError("远程 Docker 不可用")
+            error_msg = "远程 Docker 不可用"
+            if hasattr(self, '_connection_error') and self._connection_error:
+                error_msg += f": {self._connection_error}"
+            raise RuntimeError(error_msg)
         
         # 准备构建参数，包含认证信息
         build_kwargs = {
@@ -374,7 +429,10 @@ class RemoteDockerBuilder(DockerBuilder):
     def export_image(self, name: str) -> Iterator[bytes]:
         """导出镜像为 tar 文件"""
         if not self.available:
-            raise RuntimeError("远程 Docker 不可用")
+            error_msg = "远程 Docker 不可用"
+            if hasattr(self, '_connection_error') and self._connection_error:
+                error_msg += f": {self._connection_error}"
+            raise RuntimeError(error_msg)
         
         return self.client.api.get_image(name)
     

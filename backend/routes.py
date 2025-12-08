@@ -906,7 +906,7 @@ async def parse_dockerfile_services_api(request: Request, body: ParseDockerfileR
                 clone_dir = os.path.join(temp_dir, "repo")
                 os.makedirs(clone_dir, exist_ok=True)
                 
-                clone_success = manager._clone_git_repo(
+                clone_success, clone_error = manager._clone_git_repo(
                     body.git_url,
                     clone_dir,
                     body.branch,
@@ -915,9 +915,12 @@ async def parse_dockerfile_services_api(request: Request, body: ParseDockerfileR
                 )
                 
                 if not clone_success:
+                    error_detail = "无法克隆 Git 仓库，请检查仓库地址和认证信息"
+                    if clone_error:
+                        error_detail += f": {clone_error}"
                     raise HTTPException(
                         status_code=400,
-                        detail="无法克隆 Git 仓库，请检查仓库地址和认证信息"
+                        detail=error_detail
                     )
                 
                 # 找到仓库目录
@@ -960,7 +963,7 @@ async def parse_dockerfile_services_api(request: Request, body: ParseDockerfileR
         
         # 解析服务列表
         try:
-            services = parse_dockerfile_services(dockerfile_content)
+            services, _ = parse_dockerfile_services(dockerfile_content)
             return JSONResponse({
                 "services": services,
                 "count": len(services)
@@ -1613,18 +1616,22 @@ async def get_template_params(
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # 解析参数
-        params = parse_template_variables(content)
+        # 解析参数（全局参数）
+        all_params = parse_template_variables(content)
         
         # 解析服务阶段（多阶段构建）
-        services = parse_dockerfile_services(content)
+        services, global_param_names = parse_dockerfile_services(content)
+        
+        # 区分全局参数和服务参数
+        global_params = [p for p in all_params if p["name"] in global_param_names]
+        # 服务参数已经在 services 中的 template_params 字段中
 
         return JSONResponse(
             {
                 "template": template,
                 "project_type": project_type,
-                "params": params,
-                "services": services  # 添加服务阶段列表
+                "params": global_params,  # 全局模板参数
+                "services": services  # 服务列表，每个服务可能包含 template_params
             }
         )
     except HTTPException:
@@ -1880,6 +1887,11 @@ async def get_docker_info():
         
         # 获取构建器类型
         connection_info = docker_builder.get_connection_info()
+        connection_error = None
+        if hasattr(docker_builder, 'get_connection_error'):
+            connection_error = docker_builder.get_connection_error()
+            if connection_error and connection_error != "未知错误":
+                info["connection_error"] = connection_error
         if "本地" in connection_info:
             info["builder_type"] = "local"
         elif "远程" in connection_info:
