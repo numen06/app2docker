@@ -1691,6 +1691,7 @@ class BuildManager:
         use_project_dockerfile: bool = True,  # 是否优先使用项目中的 Dockerfile
         dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
         pipeline_id: str = None,  # 流水线ID（可选）
+        source_id: str = None,  # 数据源ID（可选，如果提供将使用数据源的认证信息）
     ):
         """从 Git 源码开始构建"""
         try:
@@ -1711,6 +1712,7 @@ class BuildManager:
                 use_project_dockerfile=use_project_dockerfile,
                 dockerfile_name=dockerfile_name,
                 pipeline_id=pipeline_id,  # 传递流水线ID
+                source_id=source_id,  # 传递数据源ID
             )
             print(f"✅ 任务创建成功: task_id={task_id}")
         except Exception as e:
@@ -1738,6 +1740,7 @@ class BuildManager:
                     sub_path,
                     use_project_dockerfile,
                     dockerfile_name,
+                    source_id,
                 ),
                 daemon=True,
             )
@@ -1777,6 +1780,7 @@ class BuildManager:
         sub_path: str = None,
         use_project_dockerfile: bool = True,  # 是否优先使用项目中的 Dockerfile
         dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
+        source_id: str = None,  # 数据源ID（可选）
     ):
         """从 Git 源码构建任务"""
         full_tag = f"{image_name}:{tag}"
@@ -1833,7 +1837,22 @@ class BuildManager:
             temp_clone_dir = os.path.join(build_context, "source_temp")
             os.makedirs(temp_clone_dir, exist_ok=True)
 
+            # 获取 Git 配置，优先使用数据源的认证信息
             git_config = get_git_config()
+            if source_id:
+                from backend.git_source_manager import GitSourceManager
+
+                source_manager = GitSourceManager()
+                source_auth = source_manager.get_auth_config(source_id)
+                # 如果数据源有认证信息，优先使用数据源的
+                if source_auth.get("username"):
+                    git_config["username"] = source_auth["username"]
+                if source_auth.get("password"):
+                    git_config["password"] = source_auth["password"]
+                log(f"🔐 使用数据源的认证信息\n")
+            elif git_config.get("username") or git_config.get("password"):
+                log(f"🔐 使用全局 Git 配置的认证信息\n")
+
             # Git clone 会在目标目录下创建仓库目录，所以目标目录应该是父目录
             clone_success = self._clone_git_repo(
                 git_url, temp_clone_dir, branch, git_config, log

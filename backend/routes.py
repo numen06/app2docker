@@ -623,17 +623,50 @@ async def upload_file(
 
 @router.post("/verify-git-repo")
 async def verify_git_repo(
-    git_url: str = Body(..., embed=True, description="Git 仓库地址")
+    git_url: str = Body(..., embed=True, description="Git 仓库地址"),
+    save_as_source: bool = Body(False, embed=True, description="是否保存为数据源"),
+    source_name: Optional[str] = Body(None, embed=True, description="数据源名称（保存时必填）"),
+    source_description: Optional[str] = Body("", embed=True, description="数据源描述"),
+    username: Optional[str] = Body(None, embed=True, description="Git 用户名（可选）"),
+    password: Optional[str] = Body(None, embed=True, description="Git 密码或 token（可选）"),
+    source_id: Optional[str] = Body(None, embed=True, description="数据源 ID（如果提供，将使用数据源的认证信息）"),
 ):
     """验证 Git 仓库并获取分支和标签列表"""
     import subprocess
     import tempfile
     import shutil
+    from urllib.parse import urlparse, urlunparse
     
     try:
+        # 如果提供了 source_id，从数据源获取认证信息
+        if source_id:
+            source_manager = GitSourceManager()
+            source = source_manager.get_source(source_id, include_password=False)
+            if source:
+                auth_config = source_manager.get_auth_config(source_id)
+                if auth_config.get("username"):
+                    username = username or auth_config.get("username")
+                if auth_config.get("password"):
+                    password = password or auth_config.get("password")
+        
+        # 如果提供了用户名和密码，嵌入到 URL 中
+        verify_url = git_url
+        if username and password and git_url.startswith("https://"):
+            parsed = urlparse(git_url)
+            verify_url = urlunparse(
+                (
+                    parsed.scheme,
+                    f"{username}:{password}@{parsed.netloc}",
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
+        
         # 使用 git ls-remote 命令获取远程仓库的分支和标签
         # 这个命令不需要克隆整个仓库，只获取引用信息
-        cmd = ["git", "ls-remote", "--heads", "--tags", git_url]
+        cmd = ["git", "ls-remote", "--heads", "--tags", verify_url]
         
         result = subprocess.run(
             cmd,
@@ -644,10 +677,10 @@ async def verify_git_repo(
         
         if result.returncode != 0:
             error_msg = result.stderr.strip()
-            if "Authentication failed" in error_msg or "Permission denied" in error_msg:
+            if "Authentication failed" in error_msg or "Permission denied" in error_msg or "fatal: could not read Username" in error_msg:
                 raise HTTPException(
-                    status_code=401,
-                    detail="仓库访问被拒绝，请检查 URL 是否正确或配置 SSH 密钥"
+                    status_code=403,  # 使用 403 而不是 401，避免被前端拦截器误判为登录失效
+                    detail="仓库访问被拒绝，请检查认证信息是否正确或配置 SSH 密钥"
                 )
             elif "not found" in error_msg.lower():
                 raise HTTPException(
@@ -683,12 +716,59 @@ async def verify_git_repo(
                 if not tag_name.endswith('^{}'):
                     tags.append(tag_name)
         
-        return JSONResponse({
+        result = {
             "success": True,
             "branches": sorted(branches, key=lambda x: (x != 'main', x != 'master', x)),
             "tags": sorted(tags, reverse=True),  # 标签按降序排列，最新的在前
             "default_branch": next((b for b in branches if b in ['main', 'master']), branches[0] if branches else None)
-        })
+        }
+        
+        # 如果需要保存为数据源
+        if save_as_source:
+            if not source_name:
+                raise HTTPException(status_code=400, detail="保存为数据源时必须提供数据源名称")
+            
+            try:
+                source_manager = GitSourceManager()
+                # 检查是否已存在相同 URL 的数据源
+                existing_source = source_manager.get_source_by_url(git_url)
+                if existing_source:
+                    # 更新现有数据源（如果提供了认证信息，也更新）
+                    source_manager.update_source(
+                        source_id=existing_source["source_id"],
+                        name=source_name,
+                        description=source_description or "",
+                        branches=result["branches"],
+                        tags=result["tags"],
+                        default_branch=result["default_branch"],
+                        username=username if username is not None else None,
+                        password=password if password is not None else None
+                    )
+                    result["source_id"] = existing_source["source_id"]
+                    result["source_saved"] = True
+                    result["source_updated"] = True
+                else:
+                    # 创建新数据源
+                    source_id = source_manager.create_source(
+                        name=source_name,
+                        git_url=git_url,
+                        description=source_description or "",
+                        branches=result["branches"],
+                        tags=result["tags"],
+                        default_branch=result["default_branch"],
+                        username=username,
+                        password=password
+                    )
+                    result["source_id"] = source_id
+                    result["source_saved"] = True
+                    result["source_updated"] = False
+            except Exception as e:
+                print(f"⚠️ 保存数据源失败: {e}")
+                # 即使保存失败，也返回验证结果
+                result["source_saved"] = False
+                result["source_error"] = str(e)
+        
+        return JSONResponse(result)
         
     except subprocess.TimeoutExpired:
         raise HTTPException(
@@ -721,6 +801,7 @@ async def build_from_source(
     sub_path: Optional[str] = Body(None),
     use_project_dockerfile: bool = Body(True, description="是否优先使用项目中的 Dockerfile"),
     dockerfile_name: str = Body("Dockerfile", description="Dockerfile文件名，默认Dockerfile"),
+    source_id: Optional[str] = Body(None, description="Git 数据源 ID（可选，如果提供将使用数据源的认证信息）"),
 ):
     """从 Git 源码构建镜像"""
     try:
@@ -764,6 +845,7 @@ async def build_from_source(
                     sub_path=sub_path,
                     use_project_dockerfile=use_project_dockerfile,
                     dockerfile_name=dockerfile_name,
+                    source_id=source_id,
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")
@@ -1894,6 +1976,9 @@ async def prune_containers(http_request: Request):
 # === 流水线管理 ===
 from backend.pipeline_manager import PipelineManager
 
+# === Git 数据源管理 ===
+from backend.git_source_manager import GitSourceManager
+
 
 class CreatePipelineRequest(BaseModel):
     name: str
@@ -1939,6 +2024,7 @@ class UpdatePipelineRequest(BaseModel):
     webhook_branch_filter: Optional[bool] = None
     webhook_use_push_branch: Optional[bool] = None
     branch_tag_mapping: Optional[dict] = None
+    source_id: Optional[str] = None
 
 
 @router.post("/pipelines")
@@ -1969,6 +2055,7 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
             webhook_branch_filter=request.webhook_branch_filter,
             webhook_use_push_branch=request.webhook_use_push_branch,
             branch_tag_mapping=request.branch_tag_mapping,
+            source_id=request.source_id,
         )
         
         # 记录操作日志
@@ -2188,6 +2275,7 @@ async def update_pipeline(
             webhook_branch_filter=request.webhook_branch_filter,
             webhook_use_push_branch=request.webhook_use_push_branch,
             branch_tag_mapping=request.branch_tag_mapping,
+            source_id=request.source_id,
         )
         
         if not success:
@@ -2272,6 +2360,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             sub_path=pipeline.get("sub_path"),
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
             dockerfile_name=pipeline.get("dockerfile_name", "Dockerfile"),
+            source_id=pipeline.get("source_id"),  # 传递数据源ID
             pipeline_id=pipeline_id,  # 传递流水线ID
         )
         
@@ -2580,3 +2669,155 @@ async def webhook_trigger(webhook_token: str, request: Request):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Webhook 处理失败: {str(e)}")
+
+
+# === Git 数据源管理 ===
+
+class CreateGitSourceRequest(BaseModel):
+    name: str
+    git_url: str
+    description: str = ""
+    branches: list = []
+    tags: list = []
+    default_branch: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+
+class UpdateGitSourceRequest(BaseModel):
+    name: Optional[str] = None
+    git_url: Optional[str] = None
+    description: Optional[str] = None
+    branches: Optional[list] = None
+    tags: Optional[list] = None
+    default_branch: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+
+@router.get("/git-sources")
+async def list_git_sources(http_request: Request):
+    """获取所有 Git 数据源"""
+    try:
+        get_current_username(http_request)  # 验证登录
+        manager = GitSourceManager()
+        sources = manager.list_sources()
+        return JSONResponse({"sources": sources, "total": len(sources)})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取数据源列表失败: {str(e)}")
+
+
+@router.get("/git-sources/{source_id}")
+async def get_git_source(source_id: str, http_request: Request):
+    """获取 Git 数据源详情"""
+    try:
+        get_current_username(http_request)  # 验证登录
+        manager = GitSourceManager()
+        source = manager.get_source(source_id)
+        if not source:
+            raise HTTPException(status_code=404, detail="数据源不存在")
+        return JSONResponse(source)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取数据源失败: {str(e)}")
+
+
+@router.post("/git-sources")
+async def create_git_source(request: CreateGitSourceRequest, http_request: Request):
+    """创建 Git 数据源"""
+    try:
+        username = get_current_username(http_request)
+        manager = GitSourceManager()
+        
+        source_id = manager.create_source(
+            name=request.name,
+            git_url=request.git_url,
+            description=request.description,
+            branches=request.branches,
+            tags=request.tags,
+            default_branch=request.default_branch,
+            username=request.username,
+            password=request.password,
+        )
+        
+        # 记录操作日志
+        OperationLogger.log(username, "git_source_create", {
+            "source_id": source_id,
+            "name": request.name,
+            "git_url": request.git_url,
+        })
+        
+        return JSONResponse({
+            "source_id": source_id,
+            "message": "数据源创建成功"
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建数据源失败: {str(e)}")
+
+
+@router.put("/git-sources/{source_id}")
+async def update_git_source(
+    source_id: str,
+    request: UpdateGitSourceRequest,
+    http_request: Request
+):
+    """更新 Git 数据源"""
+    try:
+        username = get_current_username(http_request)
+        manager = GitSourceManager()
+        
+        success = manager.update_source(
+            source_id=source_id,
+            name=request.name,
+            git_url=request.git_url,
+            description=request.description,
+            branches=request.branches,
+            tags=request.tags,
+            default_branch=request.default_branch,
+            username=request.username,
+            password=request.password,
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="数据源不存在")
+        
+        # 记录操作日志
+        OperationLogger.log(username, "git_source_update", {
+            "source_id": source_id
+        })
+        
+        return JSONResponse({"message": "数据源更新成功"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新数据源失败: {str(e)}")
+
+
+@router.delete("/git-sources/{source_id}")
+async def delete_git_source(source_id: str, http_request: Request):
+    """删除 Git 数据源"""
+    try:
+        username = get_current_username(http_request)
+        manager = GitSourceManager()
+        
+        success = manager.delete_source(source_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="数据源不存在")
+        
+        # 记录操作日志
+        OperationLogger.log(username, "git_source_delete", {
+            "source_id": source_id
+        })
+        
+        return JSONResponse({"message": "数据源已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除数据源失败: {str(e)}")

@@ -70,6 +70,7 @@ class PipelineManager:
         webhook_branch_filter: bool = False,
         webhook_use_push_branch: bool = True,
         branch_tag_mapping: dict = None,  # 分支到标签的映射，如 {"main": "latest", "dev": "dev"}
+        source_id: str = None,  # Git 数据源 ID（可选）
     ) -> str:
         """
         创建流水线配置
@@ -130,6 +131,7 @@ class PipelineManager:
             "webhook_branch_filter": webhook_branch_filter,  # 是否启用分支过滤
             "webhook_use_push_branch": webhook_use_push_branch,  # 是否使用推送的分支构建
             "branch_tag_mapping": branch_tag_mapping or {},  # 分支到标签的映射
+            "source_id": source_id,  # Git 数据源 ID
             # 定时触发配置
             "cron_expression": cron_expression,
             "next_run_time": None,  # 下次执行时间
@@ -207,6 +209,7 @@ class PipelineManager:
         webhook_branch_filter: bool = None,
         webhook_use_push_branch: bool = None,
         branch_tag_mapping: dict = None,
+        source_id: str = None,
     ) -> bool:
         """
         更新流水线配置
@@ -261,6 +264,8 @@ class PipelineManager:
                 pipeline["webhook_use_push_branch"] = webhook_use_push_branch
             if branch_tag_mapping is not None:
                 pipeline["branch_tag_mapping"] = branch_tag_mapping
+            if source_id is not None:
+                pipeline["source_id"] = source_id
             
             # 更新时间
             pipeline["updated_at"] = datetime.now().isoformat()

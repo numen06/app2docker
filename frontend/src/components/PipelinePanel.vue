@@ -283,6 +283,23 @@
                     >
                   </div>
                   <div class="mb-3">
+                    <label class="form-label">Git 数据源</label>
+                    <select 
+                      v-model="selectedSourceId" 
+                      class="form-select form-select-sm mb-2"
+                      @change="onSourceSelected"
+                    >
+                      <option value="">-- 选择数据源或手动输入 --</option>
+                      <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
+                        {{ source.name }} ({{ formatGitUrl(source.git_url) }})
+                      </option>
+                    </select>
+                    <div class="form-text small text-muted mb-2">
+                      <i class="fas fa-info-circle"></i> 
+                      可以从已保存的数据源中选择，或手动输入 Git 仓库地址
+                    </div>
+                  </div>
+                  <div class="mb-3">
                     <label class="form-label">Git 仓库地址 <span class="text-danger">*</span></label>
                     <input 
                       v-model="formData.git_url" 
@@ -797,11 +814,13 @@
 
 <script setup>
 import axios from 'axios'
-import { onMounted, ref, inject } from 'vue'
+import { onMounted, ref, inject, watch } from 'vue'
 
 const pipelines = ref([])
 const templates = ref([])
 const registries = ref([])
+const gitSources = ref([])
+const selectedSourceId = ref('')
 const loading = ref(false)
 const running = ref(null)  // 正在运行的流水线ID
 const showModal = ref(false)
@@ -848,6 +867,46 @@ onMounted(() => {
   loadPipelines()
   loadTemplates()
   loadRegistries()
+  loadGitSources()
+})
+
+async function loadGitSources() {
+  try {
+    const res = await axios.get('/api/git-sources')
+    gitSources.value = res.data.sources || []
+  } catch (error) {
+    console.error('加载数据源列表失败:', error)
+  }
+}
+
+function onSourceSelected() {
+  if (!selectedSourceId.value) {
+    return
+  }
+  
+  const source = gitSources.value.find(s => s.source_id === selectedSourceId.value)
+  if (source) {
+    formData.value.git_url = source.git_url
+    if (source.default_branch && !formData.value.branch) {
+      formData.value.branch = source.default_branch
+    }
+  }
+}
+
+// 监听 Git URL 变化，自动匹配数据源
+watch(() => formData.value.git_url, () => {
+  if (!formData.value.git_url || selectedSourceId.value) {
+    return
+  }
+  
+  // 查找匹配的数据源
+  const source = gitSources.value.find(s => s.git_url === formData.value.git_url)
+  if (source) {
+    selectedSourceId.value = source.source_id
+    if (source.default_branch && !formData.value.branch) {
+      formData.value.branch = source.default_branch
+    }
+  }
 })
 
 async function loadPipelines() {
@@ -883,6 +942,7 @@ async function loadRegistries() {
 
 function showCreateModal() {
   editingPipeline.value = null
+  selectedSourceId.value = ''
   formData.value = {
     name: '',
     description: '',
@@ -901,6 +961,7 @@ function showCreateModal() {
     trigger_schedule: false,
     cron_expression: '',
     dockerfile_name: 'Dockerfile',
+    source_id: ''
   }
   showModal.value = true
 }
@@ -908,6 +969,10 @@ function showCreateModal() {
 function editPipeline(pipeline) {
   editingPipeline.value = pipeline
   activeTab.value = 'basic'  // 重置到第一个Tab
+  // 查找对应的数据源
+  const source = gitSources.value.find(s => s.git_url === pipeline.git_url)
+  selectedSourceId.value = source ? source.source_id : ''
+  
   formData.value = {
     name: pipeline.name,
     description: pipeline.description || '',
@@ -993,7 +1058,9 @@ async function savePipeline() {
       // 将分支标签映射转换为对象格式
       branch_tag_mapping: Object.keys(branch_tag_mapping).length > 0 ? branch_tag_mapping : null,
       // 如果未启用定时触发，则cron_expression为null
-      cron_expression: formData.value.trigger_schedule ? formData.value.cron_expression : null
+      cron_expression: formData.value.trigger_schedule ? formData.value.cron_expression : null,
+      // 传递数据源ID
+      source_id: selectedSourceId.value || null
     }
     // 移除webhook_branch_strategy，因为后端不需要这个字段
     delete payload.webhook_branch_strategy

@@ -3,6 +3,82 @@
     <form @submit.prevent="handleBuild">
       <div class="mb-3">
         <label class="form-label">
+          Git 数据源
+        </label>
+        <select 
+          v-model="selectedSourceId" 
+          class="form-select mb-2"
+          @change="onSourceSelected"
+        >
+          <option value="">-- 选择数据源或手动输入 --</option>
+          <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
+            {{ source.name }} ({{ formatGitUrl(source.git_url) }})
+          </option>
+        </select>
+        <div class="form-text small text-muted mb-2">
+          <i class="fas fa-info-circle"></i> 
+          可以从已保存的数据源中选择，或手动输入 Git 仓库地址
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          Git 仓库地址 <span class="text-danger">*</span>
+        </label>
+        <div class="input-group">
+          <input 
+            v-model="form.gitUrl" 
+            type="text" 
+            class="form-control" 
+            placeholder="https://github.com/user/repo.git 或 git@github.com:user/repo.git"
+            :disabled="verifying"
+            required
+          />
+          <button 
+            type="button" 
+            class="btn btn-outline-primary" 
+            @click="verifyGitRepo"
+            :disabled="!form.gitUrl || verifying || repoVerified"
+          >
+            <span v-if="verifying" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else-if="repoVerified" class="fas fa-check-circle me-1"></i>
+            <i v-else class="fas fa-search me-1"></i>
+            {{ verifying ? '验证中...' : (repoVerified ? '已验证' : '验证仓库') }}
+          </button>
+        </div>
+        <div class="form-text small">
+          <i class="fas fa-info-circle"></i> 
+          支持 HTTPS 和 SSH 协议的 Git 仓库地址，请先验证仓库再选择分支
+        </div>
+        <div v-if="repoVerified && !selectedSourceId" class="form-check mt-2">
+          <input 
+            v-model="saveAsSource" 
+            class="form-check-input" 
+            type="checkbox" 
+            id="saveAsSource"
+          >
+          <label class="form-check-label" for="saveAsSource">
+            <i class="fas fa-save"></i> 保存为数据源
+          </label>
+        </div>
+        <div v-if="saveAsSource" class="ms-4 mt-2">
+          <input 
+            v-model="sourceName" 
+            type="text" 
+            class="form-control form-control-sm" 
+            placeholder="数据源名称（可选）"
+          >
+        </div>
+        <div v-if="repoError" class="alert alert-danger alert-sm mt-2 mb-0">
+          <i class="fas fa-exclamation-triangle"></i> {{ repoError }}
+        </div>
+        <div v-if="repoVerified" class="alert alert-success alert-sm mt-2 mb-0">
+          <i class="fas fa-check-circle"></i> 仓库验证成功！找到 {{ branchesAndTags.branches.length }} 个分支、{{ branchesAndTags.tags.length }} 个标签
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
           项目类型 <span class="text-danger">*</span>
         </label>
         <div class="btn-group w-100" role="group">
@@ -87,43 +163,6 @@
             <i class="fas fa-info-circle"></i> 
             默认为 Dockerfile，可自定义文件名（当使用项目中的 Dockerfile 时）
           </div>
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">
-          Git 仓库地址 <span class="text-danger">*</span>
-        </label>
-        <div class="input-group">
-          <input 
-            v-model="form.gitUrl" 
-            type="text" 
-            class="form-control" 
-            placeholder="https://github.com/user/repo.git 或 git@github.com:user/repo.git"
-            :disabled="verifying"
-            required
-          />
-          <button 
-            type="button" 
-            class="btn btn-outline-primary" 
-            @click="verifyGitRepo"
-            :disabled="!form.gitUrl || verifying || repoVerified"
-          >
-            <span v-if="verifying" class="spinner-border spinner-border-sm me-1"></span>
-            <i v-else-if="repoVerified" class="fas fa-check-circle me-1"></i>
-            <i v-else class="fas fa-search me-1"></i>
-            {{ verifying ? '验证中...' : (repoVerified ? '已验证' : '验证仓库') }}
-          </button>
-        </div>
-        <div class="form-text small">
-          <i class="fas fa-info-circle"></i> 
-          支持 HTTPS 和 SSH 协议的 Git 仓库地址，请先验证仓库再选择分支
-        </div>
-        <div v-if="repoError" class="alert alert-danger alert-sm mt-2 mb-0">
-          <i class="fas fa-exclamation-triangle"></i> {{ repoError }}
-        </div>
-        <div v-if="repoVerified" class="alert alert-success alert-sm mt-2 mb-0">
-          <i class="fas fa-check-circle"></i> 仓库验证成功！找到 {{ branchesAndTags.branches.length }} 个分支、{{ branchesAndTags.tags.length }} 个标签
         </div>
       </div>
 
@@ -275,6 +314,12 @@ const building = ref(false)
 const templateParams = ref([])
 const registries = ref([])
 const templateSearch = ref('')  // 模板搜索关键字
+
+// Git 数据源相关状态
+const gitSources = ref([])
+const selectedSourceId = ref('')
+const saveAsSource = ref(false)
+const sourceName = ref('')
 
 // Git 仓库验证相关状态
 const verifying = ref(false)
@@ -454,8 +499,18 @@ async function verifyGitRepo() {
   }
   
   try {
+    // 如果勾选了保存为数据源，生成默认名称
+    let saveName = saveAsSource.value ? (sourceName.value || '') : undefined
+    if (!saveName && saveAsSource.value) {
+      const urlParts = form.value.gitUrl.trim().replace('.git', '').split('/')
+      saveName = urlParts[urlParts.length - 1] || '未命名数据源'
+    }
+    
     const res = await axios.post('/api/verify-git-repo', {
-      git_url: form.value.gitUrl.trim()
+      git_url: form.value.gitUrl.trim(),
+      save_as_source: saveAsSource.value,
+      source_name: saveName,
+      source_description: ''
     })
     
     if (res.data.success) {
@@ -467,6 +522,18 @@ async function verifyGitRepo() {
       repoVerified.value = true
       // 清空之前选择的分支
       form.value.branch = ''
+      
+      // 如果保存成功，刷新数据源列表
+      if (saveAsSource.value && res.data.source_saved) {
+        await loadGitSources()
+        // 自动选择刚保存的数据源
+        if (res.data.source_id) {
+          selectedSourceId.value = res.data.source_id
+        }
+        saveAsSource.value = false
+        sourceName.value = ''
+        alert('数据源保存成功！')
+      }
     } else {
       repoError.value = '仓库验证失败'
     }
@@ -478,16 +545,41 @@ async function verifyGitRepo() {
   }
 }
 
-// 监听 Git URL 变化，重置验证状态
+// 监听 Git URL 变化，自动匹配数据源
 watch(() => form.value.gitUrl, () => {
-  if (repoVerified.value) {
-    repoVerified.value = false
-    repoError.value = ''
-    form.value.branch = ''
-    branchesAndTags.value = {
-      branches: [],
-      tags: [],
-      default_branch: null
+  if (!form.value.gitUrl) {
+    selectedSourceId.value = ''
+    return
+  }
+  
+  // 查找匹配的数据源
+  const source = gitSources.value.find(s => s.git_url === form.value.gitUrl)
+  if (source) {
+    // 如果找到匹配的数据源，自动选择
+    if (selectedSourceId.value !== source.source_id) {
+      selectedSourceId.value = source.source_id
+      branchesAndTags.value = {
+        branches: source.branches || [],
+        tags: source.tags || [],
+        default_branch: source.default_branch || null
+      }
+      repoVerified.value = true
+      if (source.default_branch && !form.value.branch) {
+        form.value.branch = source.default_branch
+      }
+    }
+  } else {
+    // 如果没有匹配的数据源，且之前已验证，重置状态
+    if (repoVerified.value && selectedSourceId.value) {
+      repoVerified.value = false
+      repoError.value = ''
+      form.value.branch = ''
+      selectedSourceId.value = ''
+      branchesAndTags.value = {
+        branches: [],
+        tags: [],
+        default_branch: null
+      }
     }
   }
 })
@@ -514,7 +606,8 @@ async function handleBuild() {
         ? JSON.stringify(form.value.templateParams) 
         : undefined,
       use_project_dockerfile: form.value.useProjectDockerfile,
-      dockerfile_name: form.value.dockerfileName || 'Dockerfile'
+      dockerfile_name: form.value.dockerfileName || 'Dockerfile',
+      source_id: selectedSourceId.value || undefined
     }
   
   try {
@@ -635,7 +728,41 @@ async function pollBuildLogs(buildId) {
 onMounted(() => {
   loadTemplates()
   loadRegistries()
+  loadGitSources()
 })
+
+async function loadGitSources() {
+  try {
+    const res = await axios.get('/api/git-sources')
+    gitSources.value = res.data.sources || []
+  } catch (error) {
+    console.error('加载数据源列表失败:', error)
+  }
+}
+
+function onSourceSelected() {
+  if (!selectedSourceId.value) {
+    return
+  }
+  
+  const source = gitSources.value.find(s => s.source_id === selectedSourceId.value)
+  if (source) {
+    form.value.gitUrl = source.git_url
+    branchesAndTags.value = {
+      branches: source.branches || [],
+      tags: source.tags || [],
+      default_branch: source.default_branch || null
+    }
+    repoVerified.value = true
+    form.value.branch = source.default_branch || ''
+    saveAsSource.value = false  // 已选择数据源，不需要再保存
+  }
+}
+
+function formatGitUrl(url) {
+  if (!url) return ''
+  return url.replace('https://', '').replace('http://', '').replace('.git', '')
+}
 </script>
 
 <style scoped>

@@ -63,6 +63,11 @@
                 </button>
               </li>
               <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'datasource' }" @click="activeTab = 'datasource'">
+                  <i class="fas fa-database"></i> 数据源
+                </button>
+              </li>
+              <li class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'template' }" @click="activeTab = 'template'">
                   <i class="fas fa-layer-group"></i> 模板管理
                 </button>
@@ -89,6 +94,7 @@
             <OperationLogs v-if="activeTab === 'logs'" />
             <DockerManager v-if="activeTab === 'docker'" />
             <PipelinePanel v-if="activeTab === 'pipeline'" />
+            <DataSourcePanel v-if="activeTab === 'datasource'" />
             <TaskManager v-if="activeTab === 'tasks'" />
           </div>
         </div>
@@ -112,6 +118,7 @@ import { useModalEscape } from './composables/useModalEscape'
 // 懒加载组件
 import BuildPanel from './components/BuildPanel.vue'
 import ConfigModal from './components/ConfigModal.vue'
+import DataSourcePanel from './components/DataSourcePanel.vue'
 import DockerManager from './components/DockerManager.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import LoginPage from './components/LoginPage.vue'

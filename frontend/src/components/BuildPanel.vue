@@ -3,49 +3,6 @@
     <form @submit.prevent="handleBuild">
       <div class="mb-3">
         <label class="form-label">
-          项目类型 <span class="text-danger">*</span>
-        </label>
-        <div class="btn-group w-100" role="group">
-          <button
-            v-for="type in projectTypes"
-            :key="type.value"
-            type="button"
-            class="btn"
-            :class="form.projectType === type.value ? 'btn-primary' : 'btn-outline-primary'"
-            @click="changeProjectType(type.value)"
-          >
-            <i :class="getProjectTypeIcon(type.value)"></i>
-            {{ type.label }}
-          </button>
-        </div>
-        <div class="form-text small text-muted">
-          <i class="fas fa-info-circle"></i> 选择后自动过滤对应类型的模板
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">模板</label>
-        <div class="input-group input-group-sm mb-1">
-          <span class="input-group-text"><i class="fas fa-search"></i></span>
-          <input
-            v-model="templateSearch"
-            type="text"
-            class="form-control"
-            placeholder="搜索模板..."
-          />
-        </div>
-        <select v-model="form.template" class="form-select" @change="loadTemplateParams">
-          <option v-for="tpl in filteredTemplates" :key="tpl.name" :value="tpl.name">
-            {{ tpl.name }} ({{ getProjectTypeLabel(tpl.project_type) }}{{ tpl.type === 'builtin' ? ' · 内置' : '' }})
-          </option>
-        </select>
-        <div class="form-text small text-muted">
-          <i class="fas fa-info-circle"></i> 已按项目类型过滤，可在模板管理中维护
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">
           选择文件 <span class="text-danger">*</span>
         </label>
         <input 
@@ -109,6 +66,49 @@
             <i class="fas fa-info-circle"></i> 
             勾选后将自动解压压缩包到构建上下文根目录；不勾选则保持压缩包原样，可在模板中手动处理
           </div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">
+          项目类型 <span class="text-danger">*</span>
+        </label>
+        <div class="btn-group w-100" role="group">
+          <button
+            v-for="type in projectTypes"
+            :key="type.value"
+            type="button"
+            class="btn"
+            :class="form.projectType === type.value ? 'btn-primary' : 'btn-outline-primary'"
+            @click="changeProjectType(type.value)"
+          >
+            <i :class="getProjectTypeIcon(type.value)"></i>
+            {{ type.label }}
+          </button>
+        </div>
+        <div class="form-text small text-muted">
+          <i class="fas fa-info-circle"></i> 选择后自动过滤对应类型的模板
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">模板</label>
+        <div class="input-group input-group-sm mb-1">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            v-model="templateSearch"
+            type="text"
+            class="form-control"
+            placeholder="搜索模板..."
+          />
+        </div>
+        <select v-model="form.template" class="form-select" @change="loadTemplateParams">
+          <option v-for="tpl in filteredTemplates" :key="tpl.name" :value="tpl.name">
+            {{ tpl.name }} ({{ getProjectTypeLabel(tpl.project_type) }}{{ tpl.type === 'builtin' ? ' · 内置' : '' }})
+          </option>
+        </select>
+        <div class="form-text small text-muted">
+          <i class="fas fa-info-circle"></i> 已按项目类型过滤，可在模板管理中维护
         </div>
       </div>
 
