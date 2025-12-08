@@ -1689,6 +1689,7 @@ class BuildManager:
         branch: str = None,
         sub_path: str = None,
         use_project_dockerfile: bool = True,  # 是否优先使用项目中的 Dockerfile
+        dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
         pipeline_id: str = None,  # 流水线ID（可选）
     ):
         """从 Git 源码开始构建"""
@@ -1708,6 +1709,7 @@ class BuildManager:
                 branch=branch,
                 sub_path=sub_path,
                 use_project_dockerfile=use_project_dockerfile,
+                dockerfile_name=dockerfile_name,
                 pipeline_id=pipeline_id,  # 传递流水线ID
             )
             print(f"✅ 任务创建成功: task_id={task_id}")
@@ -1735,6 +1737,7 @@ class BuildManager:
                     branch,
                     sub_path,
                     use_project_dockerfile,
+                    dockerfile_name,
                 ),
                 daemon=True,
             )
@@ -1773,6 +1776,7 @@ class BuildManager:
         branch: str = None,
         sub_path: str = None,
         use_project_dockerfile: bool = True,  # 是否优先使用项目中的 Dockerfile
+        dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
     ):
         """从 Git 源码构建任务"""
         full_tag = f"{image_name}:{tag}"
@@ -1920,17 +1924,19 @@ class BuildManager:
 
             log(f"✅ 已复制 {copied_count} 个文件/目录，跳过 {excluded_count} 个\n")
 
-            # 检查项目中是否存在 Dockerfile
-            project_dockerfile_path = os.path.join(source_dir, "Dockerfile")
+            # 检查项目中是否存在 Dockerfile（使用自定义文件名）
+            project_dockerfile_path = os.path.join(source_dir, dockerfile_name)
             has_project_dockerfile = os.path.exists(project_dockerfile_path)
 
             # 决定使用项目中的 Dockerfile 还是模板
             if has_project_dockerfile and use_project_dockerfile:
-                log(f"📄 检测到项目中的 Dockerfile，使用项目中的 Dockerfile\n")
-                # 复制项目中的 Dockerfile 到构建上下文
+                log(
+                    f"📄 检测到项目中的 Dockerfile ({dockerfile_name})，使用项目中的 Dockerfile\n"
+                )
+                # 复制项目中的 Dockerfile 到构建上下文（始终命名为Dockerfile，因为Docker构建时需要）
                 dockerfile_path = os.path.join(build_context, "Dockerfile")
                 shutil.copy2(project_dockerfile_path, dockerfile_path)
-                log(f"✅ 已使用项目中的 Dockerfile\n")
+                log(f"✅ 已使用项目中的 Dockerfile ({dockerfile_name})\n")
             else:
                 if has_project_dockerfile and not use_project_dockerfile:
                     log(f"📋 项目中有 Dockerfile，但用户选择使用模板\n")

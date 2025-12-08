@@ -354,6 +354,16 @@
                   </select>
                 </div>
                 <div class="mb-3">
+                  <label class="form-label">Dockerfile 文件名</label>
+                  <input 
+                    v-model="formData.dockerfile_name" 
+                    type="text" 
+                    class="form-control form-control-sm"
+                    placeholder="Dockerfile"
+                  >
+                  <small class="text-muted">默认为 Dockerfile，可自定义文件名（当使用项目中的 Dockerfile 时）</small>
+                </div>
+                <div class="mb-3">
                   <label class="form-label">子路径</label>
                   <input 
                     v-model="formData.sub_path" 
@@ -831,6 +841,7 @@ const formData = ref({
   enabled: true,
   trigger_schedule: false,  // 是否启用定时触发
   cron_expression: '',  // Cron 表达式
+  dockerfile_name: 'Dockerfile',  // Dockerfile文件名，默认Dockerfile
 })
 
 onMounted(() => {
@@ -889,6 +900,7 @@ function showCreateModal() {
     enabled: true,
     trigger_schedule: false,
     cron_expression: '',
+    dockerfile_name: 'Dockerfile',
   }
   showModal.value = true
 }
@@ -913,6 +925,7 @@ function editPipeline(pipeline) {
     enabled: pipeline.enabled !== false,
     trigger_schedule: !!pipeline.cron_expression,  // 如果有cron表达式则启用
     cron_expression: pipeline.cron_expression || '',
+    dockerfile_name: pipeline.dockerfile_name || 'Dockerfile',
   }
   showModal.value = true
 }

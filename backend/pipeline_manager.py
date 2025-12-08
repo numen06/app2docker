@@ -62,6 +62,7 @@ class PipelineManager:
         template_params: dict = None,
         sub_path: str = None,
         use_project_dockerfile: bool = True,
+        dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
         webhook_secret: str = None,
         enabled: bool = True,
         description: str = "",
@@ -86,6 +87,7 @@ class PipelineManager:
             template_params: 模板参数
             sub_path: 子路径
             use_project_dockerfile: 是否使用项目中的 Dockerfile
+            dockerfile_name: Dockerfile文件名，默认Dockerfile
             webhook_secret: Webhook 密钥
             enabled: 是否启用
             description: 描述
@@ -121,6 +123,7 @@ class PipelineManager:
             "push_registry": push_registry,
             "template_params": template_params or {},
             "use_project_dockerfile": use_project_dockerfile,
+            "dockerfile_name": dockerfile_name,  # Dockerfile文件名
             # Webhook 配置
             "webhook_token": webhook_token,
             "webhook_secret": webhook_secret,
@@ -196,6 +199,7 @@ class PipelineManager:
         template_params: dict = None,
         sub_path: str = None,
         use_project_dockerfile: bool = None,
+        dockerfile_name: str = None,
         webhook_secret: str = None,
         enabled: bool = None,
         description: str = None,
@@ -241,6 +245,8 @@ class PipelineManager:
                 pipeline["sub_path"] = sub_path
             if use_project_dockerfile is not None:
                 pipeline["use_project_dockerfile"] = use_project_dockerfile
+            if dockerfile_name is not None:
+                pipeline["dockerfile_name"] = dockerfile_name
             if webhook_secret is not None:
                 pipeline["webhook_secret"] = webhook_secret
             if enabled is not None:

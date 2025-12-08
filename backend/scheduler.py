@@ -151,6 +151,7 @@ class PipelineScheduler:
             template_params = pipeline.get("template_params", {})
             sub_path = pipeline.get("sub_path")
             use_project_dockerfile = pipeline.get("use_project_dockerfile", True)
+            dockerfile_name = pipeline.get("dockerfile_name", "Dockerfile")
             
             # 启动构建任务
             task_id = self.build_manager.start_build_from_source(
@@ -165,6 +166,7 @@ class PipelineScheduler:
                 template_params=template_params,
                 sub_path=sub_path,
                 use_project_dockerfile=use_project_dockerfile,
+                dockerfile_name=dockerfile_name,
                 pipeline_id=pipeline_id,  # 传递流水线ID
             )
             

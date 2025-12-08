@@ -1906,6 +1906,7 @@ class CreatePipelineRequest(BaseModel):
     template_params: Optional[dict] = None
     sub_path: Optional[str] = None
     use_project_dockerfile: bool = True
+    dockerfile_name: str = "Dockerfile"  # Dockerfile文件名，默认Dockerfile
     webhook_secret: Optional[str] = None
     enabled: bool = True
     description: str = ""
@@ -1928,6 +1929,7 @@ class UpdatePipelineRequest(BaseModel):
     template_params: Optional[dict] = None
     sub_path: Optional[str] = None
     use_project_dockerfile: Optional[bool] = None
+    dockerfile_name: Optional[str] = None
     webhook_secret: Optional[str] = None
     enabled: Optional[bool] = None
     description: Optional[str] = None
@@ -1957,6 +1959,7 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
             template_params=request.template_params,
             sub_path=request.sub_path,
             use_project_dockerfile=request.use_project_dockerfile,
+            dockerfile_name=request.dockerfile_name,
             webhook_secret=request.webhook_secret,
             enabled=request.enabled,
             description=request.description,
@@ -2175,6 +2178,7 @@ async def update_pipeline(
             template_params=request.template_params,
             sub_path=request.sub_path,
             use_project_dockerfile=request.use_project_dockerfile,
+            dockerfile_name=request.dockerfile_name,
             webhook_secret=request.webhook_secret,
             enabled=request.enabled,
             description=request.description,
@@ -2265,6 +2269,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             branch=pipeline.get("branch"),
             sub_path=pipeline.get("sub_path"),
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
+            dockerfile_name=pipeline.get("dockerfile_name", "Dockerfile"),
             pipeline_id=pipeline_id,  # 传递流水线ID
         )
         
@@ -2524,6 +2529,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
             branch=branch,
             sub_path=pipeline.get("sub_path"),
             use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
+            dockerfile_name=pipeline.get("dockerfile_name", "Dockerfile"),
             pipeline_id=pipeline["pipeline_id"],  # 传递流水线ID
         )
         
