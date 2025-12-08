@@ -1,6 +1,8 @@
 # backend/routes.py
 """FastAPI 路由定义"""
 import os
+import shutil
+import tempfile
 from typing import Optional
 from fastapi import (
     APIRouter,
@@ -35,6 +37,7 @@ from backend.handlers import (
     natural_sort_key,
     docker_builder,
     DOCKER_AVAILABLE,
+    parse_dockerfile_services,
 )
 from backend.config import (
     load_config,
@@ -111,6 +114,7 @@ def get_current_username(request: Request) -> str:
     
     return 'unknown'
 from backend.template_parser import parse_template_variables
+from backend.handlers import parse_dockerfile_services
 from datetime import datetime
 import json
 
@@ -850,6 +854,126 @@ async def verify_git_repo(
         )
 
 
+class ParseDockerfileRequest(BaseModel):
+    """解析 Dockerfile 请求模型"""
+    dockerfile_content: Optional[str] = None  # 直接提供 Dockerfile 内容
+    git_url: Optional[str] = None  # 从 Git 仓库获取
+    branch: Optional[str] = None  # Git 分支
+    dockerfile_name: str = "Dockerfile"  # Dockerfile 文件名
+    source_id: Optional[str] = None  # Git 数据源 ID（可选）
+
+
+@router.post("/parse-dockerfile-services")
+async def parse_dockerfile_services_api(request: Request, body: ParseDockerfileRequest = Body(...)):
+    """解析 Dockerfile 并返回服务列表"""
+    try:
+        dockerfile_content = None
+        
+        # 方式1: 直接提供 Dockerfile 内容
+        if body.dockerfile_content:
+            dockerfile_content = body.dockerfile_content
+        
+        # 方式2: 从 Git 仓库获取
+        elif body.git_url:
+            from backend.git_source_manager import GitSourceManager
+            
+            # 创建临时目录
+            temp_dir = tempfile.mkdtemp(prefix="dockerfile_parse_")
+            
+            try:
+                # 获取 Git 配置
+                git_config = get_git_config()
+                if body.source_id:
+                    source_manager = GitSourceManager()
+                    source_auth = source_manager.get_auth_config(body.source_id)
+                    if source_auth.get("username"):
+                        git_config["username"] = source_auth["username"]
+                    if source_auth.get("password"):
+                        git_config["password"] = source_auth["password"]
+                
+                # 克隆仓库
+                manager = BuildManager()
+                clone_dir = os.path.join(temp_dir, "repo")
+                os.makedirs(clone_dir, exist_ok=True)
+                
+                clone_success = manager._clone_git_repo(
+                    body.git_url,
+                    clone_dir,
+                    body.branch,
+                    git_config,
+                    lambda x: None  # 不需要日志
+                )
+                
+                if not clone_success:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="无法克隆 Git 仓库，请检查仓库地址和认证信息"
+                    )
+                
+                # 找到仓库目录
+                repo_name = body.git_url.rstrip("/").split("/")[-1].replace(".git", "")
+                repo_path = os.path.join(clone_dir, repo_name)
+                if not os.path.exists(repo_path):
+                    items = os.listdir(clone_dir)
+                    if items:
+                        repo_path = os.path.join(clone_dir, items[0])
+                
+                # 读取 Dockerfile
+                dockerfile_path = os.path.join(repo_path, body.dockerfile_name)
+                if not os.path.exists(dockerfile_path):
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"在仓库中未找到 Dockerfile: {body.dockerfile_name}"
+                    )
+                
+                with open(dockerfile_path, 'r', encoding='utf-8') as f:
+                    dockerfile_content = f.read()
+            
+            finally:
+                # 清理临时目录
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="必须提供 dockerfile_content 或 git_url"
+            )
+        
+        if not dockerfile_content:
+            raise HTTPException(
+                status_code=400,
+                detail="无法获取 Dockerfile 内容"
+            )
+        
+        # 解析服务列表
+        try:
+            services = parse_dockerfile_services(dockerfile_content)
+            return JSONResponse({
+                "services": services,
+                "count": len(services)
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"解析 Dockerfile 失败: {str(e)}"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"处理请求失败: {str(e)}"
+        )
+
+
 @router.post("/build-from-source")
 async def build_from_source(
     request: Request,
@@ -866,6 +990,9 @@ async def build_from_source(
     use_project_dockerfile: bool = Body(True, description="是否优先使用项目中的 Dockerfile"),
     dockerfile_name: str = Body("Dockerfile", description="Dockerfile文件名，默认Dockerfile"),
     source_id: Optional[str] = Body(None, description="Git 数据源 ID（可选，如果提供将使用数据源的认证信息）"),
+    selected_services: Optional[list] = Body(None, description="选中的服务列表（多服务构建时使用）"),
+    service_push_config: Optional[dict] = Body(None, description="每个服务的推送配置（key为服务名，value为是否推送）"),
+    push_mode: Optional[str] = Body("multi", description="推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）"),
 ):
     """从 Git 源码构建镜像"""
     try:
@@ -910,6 +1037,9 @@ async def build_from_source(
                     use_project_dockerfile=use_project_dockerfile,
                     dockerfile_name=dockerfile_name,
                     source_id=source_id,
+                    selected_services=selected_services,
+                    service_push_config=service_push_config,
+                    push_mode=push_mode or "multi",
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")
@@ -1473,9 +1603,17 @@ async def get_template_params(
 
         # 解析参数
         params = parse_template_variables(content)
+        
+        # 解析服务阶段（多阶段构建）
+        services = parse_dockerfile_services(content)
 
         return JSONResponse(
-            {"template": template, "project_type": project_type, "params": params}
+            {
+                "template": template,
+                "project_type": project_type,
+                "params": params,
+                "services": services  # 添加服务阶段列表
+            }
         )
     except HTTPException:
         raise

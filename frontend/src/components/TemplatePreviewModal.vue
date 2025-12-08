@@ -52,6 +52,63 @@
               </div>
             </div>
 
+            <!-- 模板信息：参数和服务阶段 -->
+            <div class="row mb-3" v-if="templateInfo">
+              <div class="col-md-6" v-if="templateInfo.params && templateInfo.params.length > 0">
+                <div class="card border-primary">
+                  <div class="card-header bg-primary bg-opacity-10 py-2">
+                    <small class="fw-bold">
+                      <i class="fas fa-sliders-h"></i> 模板参数 ({{ templateInfo.params.length }})
+                    </small>
+                  </div>
+                  <div class="card-body p-2">
+                    <div class="small">
+                      <div v-for="param in templateInfo.params" :key="param.name" class="mb-1">
+                        <code>{{ param.name }}</code>
+                        <span v-if="param.default" class="text-muted"> (默认: {{ param.default }})</span>
+                        <span v-if="param.required" class="badge bg-danger badge-sm ms-1">必填</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6" v-if="templateInfo.services && templateInfo.services.length > 0">
+                <div class="card border-info">
+                  <div class="card-header bg-info bg-opacity-10 py-2">
+                    <small class="fw-bold">
+                      <i class="fas fa-server"></i> 服务阶段 ({{ templateInfo.services.length }})
+                    </small>
+                  </div>
+                  <div class="card-body p-2">
+                    <div class="table-responsive">
+                      <table class="table table-sm table-bordered mb-0">
+                        <thead>
+                          <tr>
+                            <th>服务名称</th>
+                            <th>端口</th>
+                            <th>用户</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="service in templateInfo.services" :key="service.name">
+                            <td><code>{{ service.name }}</code></td>
+                            <td>
+                              <span v-if="service.port" class="badge bg-secondary">{{ service.port }}</span>
+                              <span v-else class="text-muted">-</span>
+                            </td>
+                            <td>
+                              <span v-if="service.user" class="badge bg-secondary">{{ service.user }}</span>
+                              <span v-else class="text-muted">-</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- CodeMirror 只读预览 -->
             <div class="mb-2">
               <label class="form-label fw-bold">
@@ -97,6 +154,7 @@ const emit = defineEmits(['update:modelValue'])
 const loading = ref(false)
 const content = ref('')
 const templateData = ref(null)
+const templateInfo = ref(null)  // 模板信息（参数和服务阶段）
 
 // CodeMirror 扩展配置（只读模式）
 const extensions = [
@@ -107,11 +165,34 @@ const extensions = [
 watch(() => props.modelValue, async (show) => {
   if (show && props.template) {
     loading.value = true
+    templateInfo.value = null
     
     try {
+      // 加载模板内容
       const res = await axios.get(`/api/templates?name=${encodeURIComponent(props.template.name)}`)
       templateData.value = res.data
       content.value = res.data.content || ''
+      
+      // 加载模板参数和服务阶段信息
+      try {
+        const infoRes = await axios.get('/api/template-params', {
+          params: {
+            template: props.template.name,
+            project_type: props.template.project_type
+          }
+        })
+        templateInfo.value = {
+          params: infoRes.data.params || [],
+          services: infoRes.data.services || []
+        }
+      } catch (infoError) {
+        console.error('加载模板信息失败:', infoError)
+        // 不影响主流程，只记录错误
+        templateInfo.value = {
+          params: [],
+          services: []
+        }
+      }
     } catch (error) {
       console.error('加载模板内容失败:', error)
       alert('加载模板内容失败')

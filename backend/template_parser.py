@@ -109,6 +109,33 @@ def replace_template_variables(content: str, variables: Dict[str, str]) -> str:
     return result
 
 
+def parse_template(template_path: str, output_path: str, variables: Dict[str, str]) -> None:
+    """
+    从模板文件生成 Dockerfile
+    
+    Args:
+        template_path: 模板文件路径
+        output_path: 输出 Dockerfile 路径
+        variables: 变量值字典 {"VAR_NAME": "value", ...}
+    """
+    import os
+    
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"模板文件不存在: {template_path}")
+    
+    # 读取模板内容
+    with open(template_path, 'r', encoding='utf-8') as f:
+        template_content = f.read()
+    
+    # 替换变量
+    dockerfile_content = replace_template_variables(template_content, variables)
+    
+    # 写入输出文件
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(dockerfile_content)
+
+
 # 示例用法
 if __name__ == "__main__":
     # 测试模板

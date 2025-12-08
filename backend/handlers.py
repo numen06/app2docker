@@ -172,6 +172,94 @@ def get_user_template_path(template_name, project_type="jar"):
     return os.path.join(type_dir, f"{template_name}.Dockerfile")
 
 
+def parse_dockerfile_services(dockerfile_content: str) -> list:
+    """
+    解析 Dockerfile，识别所有服务阶段（FROM ... AS <stage_name>）
+    返回服务列表，包含服务名称、端口、用户等信息
+
+    Args:
+        dockerfile_content: Dockerfile 内容字符串
+
+    Returns:
+        服务列表，每个服务包含：
+        - name: 服务名称（阶段名）
+        - port: 端口号（如果有）
+        - user: 用户ID或用户名（如果有）
+    """
+    services = []
+
+    # 需要排除的非服务阶段名称（常见的构建阶段）
+    excluded_stages = {"builder", "build", "base", "runtime", "deps", "dependencies"}
+
+    lines = dockerfile_content.split("\n")
+    current_stage = None
+    current_port = None
+    current_user = None
+
+    # 正则表达式
+    # 匹配 FROM ... AS <stage_name>，stage_name 可以包含字母、数字、下划线和连字符
+    from_as_pattern = re.compile(r"FROM\s+.*?\s+AS\s+([a-zA-Z0-9_-]+)", re.IGNORECASE)
+    from_pattern = re.compile(r"FROM\s+.*?(?:\s+AS\s+([a-zA-Z0-9_-]+))?", re.IGNORECASE)
+    expose_pattern = re.compile(r"EXPOSE\s+(\d+)", re.IGNORECASE)
+    user_pattern = re.compile(r"USER\s+([a-zA-Z0-9_-]+|\d+)", re.IGNORECASE)
+
+    for line in lines:
+        # 移除注释和前后空白
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        # 匹配 FROM ... AS <stage_name>
+        from_as_match = from_as_pattern.search(line)
+        if from_as_match:
+            # 如果之前有阶段，先保存
+            if current_stage and current_stage.lower() not in excluded_stages:
+                services.append(
+                    {"name": current_stage, "port": current_port, "user": current_user}
+                )
+
+            # 开始新阶段
+            current_stage = from_as_match.group(1)
+            current_port = None
+            current_user = None
+            continue
+
+        # 匹配 FROM（可能没有 AS）
+        from_match = from_pattern.search(line)
+        if from_match and from_match.group(1):
+            # 如果之前有阶段，先保存
+            if current_stage and current_stage.lower() not in excluded_stages:
+                services.append(
+                    {"name": current_stage, "port": current_port, "user": current_user}
+                )
+
+            # 开始新阶段
+            current_stage = from_match.group(1)
+            current_port = None
+            current_user = None
+            continue
+
+        # 如果当前有阶段，收集信息
+        if current_stage:
+            # 匹配 EXPOSE
+            expose_match = expose_pattern.search(line)
+            if expose_match:
+                current_port = int(expose_match.group(1))
+
+            # 匹配 USER
+            user_match = user_pattern.search(line)
+            if user_match:
+                current_user = user_match.group(1)
+
+    # 保存最后一个阶段
+    if current_stage and current_stage.lower() not in excluded_stages:
+        services.append(
+            {"name": current_stage, "port": current_port, "user": current_user}
+        )
+
+    return services
+
+
 class Jar2DockerHandler(BaseHTTPRequestHandler):
     server_version = "Jar2Docker/1.0"
 
@@ -1692,6 +1780,9 @@ class BuildManager:
         dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
         pipeline_id: str = None,  # 流水线ID（可选）
         source_id: str = None,  # 数据源ID（可选，如果提供将使用数据源的认证信息）
+        selected_services: list = None,  # 选中的服务列表（多服务构建时使用）
+        service_push_config: dict = None,  # 每个服务的推送配置（key为服务名，value为是否推送）
+        push_mode: str = "multi",  # 推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）
     ):
         """从 Git 源码开始构建"""
         try:
@@ -1741,6 +1832,9 @@ class BuildManager:
                     use_project_dockerfile,
                     dockerfile_name,
                     source_id,
+                    selected_services,
+                    service_push_config,
+                    push_mode,
                 ),
                 daemon=True,
             )
@@ -1781,6 +1875,9 @@ class BuildManager:
         use_project_dockerfile: bool = True,  # 是否优先使用项目中的 Dockerfile
         dockerfile_name: str = "Dockerfile",  # Dockerfile文件名，默认Dockerfile
         source_id: str = None,  # 数据源ID（可选）
+        selected_services: list = None,  # 选中的服务列表（多服务构建时使用）
+        service_push_config: dict = None,  # 每个服务的推送配置（key为服务名，value为是否推送）
+        push_mode: str = "multi",  # 推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）
     ):
         """从 Git 源码构建任务"""
         full_tag = f"{image_name}:{tag}"
@@ -1981,10 +2078,6 @@ class BuildManager:
                 )
                 log(f"✅ 已生成 Dockerfile\n")
 
-            # 构建镜像
-            log(f"🔨 开始构建镜像: {full_tag}\n")
-            log(f"📂 构建上下文: {build_context}\n")
-            log(f"📄 Dockerfile 绝对路径: {dockerfile_path}\n")
             # Docker API 需要相对于构建上下文的 Dockerfile 路径
             dockerfile_relative = os.path.relpath(dockerfile_path, build_context)
             log(f"📄 Dockerfile 相对路径: {dockerfile_relative}\n")
@@ -2037,55 +2130,324 @@ logs/
                     )
                 log(f"✅ .dockerignore 已创建\n")
 
-            log(f"🐳 准备调用 Docker 构建器...\n")
-            try:
-                build_stream = docker_builder.build_image(
-                    path=build_context, tag=full_tag, dockerfile=dockerfile_relative
-                )
-                log(f"✅ Docker 构建流已启动\n")
-            except Exception as e:
-                log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
-                import traceback
+            # 多服务构建逻辑
+            if selected_services and len(selected_services) > 0:
+                log(f"🔨 开始多服务构建，共 {len(selected_services)} 个服务\n")
+                log(f"📋 选中的服务: {', '.join(selected_services)}\n")
+                log(f"📦 推送模式: {push_mode}\n")
 
-                log(f"详细错误:\n{traceback.format_exc()}\n")
-                raise
+                service_push_config = service_push_config or {}
+                built_services = []
 
-            log(f"🔍 开始处理 Docker 构建流输出...\n")
-            chunk_count = 0
-            for chunk in build_stream:
-                chunk_count += 1
-                if isinstance(chunk, dict):
-                    # 记录所有字段，确保不遗漏任何信息
-                    if "stream" in chunk:
-                        log(chunk["stream"])  # 编译日志在这里
-                    if "status" in chunk:
-                        log(f"📊 {chunk['status']}\n")
-                    if "progress" in chunk:
-                        log(f"⏳ {chunk['progress']}\n")
-                    if "error" in chunk:
-                        error_msg = chunk["error"]
-                        log(f"❌ 构建错误: {error_msg}\n")
-                        raise RuntimeError(error_msg)
-                    if "errorDetail" in chunk:
-                        error_detail = chunk["errorDetail"]
-                        log(f"💥 错误详情: {error_detail}\n")
-                    # 记录其他未知字段
-                    unknown_keys = set(chunk.keys()) - {
-                        "stream",
-                        "status",
-                        "progress",
-                        "error",
-                        "errorDetail",
-                        "aux",
-                        "id",
-                    }
-                    if unknown_keys:
-                        log(f"🔧 其他信息: {chunk}\n")
+                # 单一推送模式：构建所有服务到一个镜像
+                if push_mode == "single":
+                    log(f"🔨 单一推送模式：所有服务将构建到一个镜像中\n")
+                    log(f"📦 镜像标签: {full_tag}\n")
+                    log(f"📂 构建上下文: {build_context}\n")
+
+                    # 构建最后一个服务阶段（包含所有之前的阶段）
+                    last_service = selected_services[-1]
+                    log(f"🚀 构建最终服务阶段: {last_service}\n")
+
+                    try:
+                        build_stream = docker_builder.build_image(
+                            path=build_context,
+                            tag=full_tag,
+                            dockerfile=dockerfile_relative,
+                            target=last_service,  # 构建最后一个阶段，包含所有依赖
+                        )
+                        log(f"✅ Docker 构建流已启动\n")
+                    except Exception as e:
+                        log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
+                        import traceback
+
+                        log(f"详细错误:\n{traceback.format_exc()}\n")
+                        raise
+
+                    log(f"🔍 开始处理 Docker 构建流输出...\n")
+                    chunk_count = 0
+                    for chunk in build_stream:
+                        chunk_count += 1
+                        if isinstance(chunk, dict):
+                            if "stream" in chunk:
+                                log(chunk["stream"])
+                            if "status" in chunk:
+                                log(f"📊 {chunk['status']}\n")
+                            if "progress" in chunk:
+                                log(f"⏳ {chunk['progress']}\n")
+                            if "error" in chunk:
+                                error_msg = chunk["error"]
+                                log(f"❌ 构建错误: {error_msg}\n")
+                                raise RuntimeError(f"构建失败: {error_msg}")
+                            if "errorDetail" in chunk:
+                                error_detail = chunk["errorDetail"]
+                                log(f"💥 错误详情: {error_detail}\n")
+                        else:
+                            log(f"📦 原始输出: {str(chunk)}\n")
+
+                    log(f"✅ 镜像构建完成: {full_tag}\n")
+                    built_services = selected_services
+
+                    # 单一推送模式的推送逻辑（使用全局推送配置）
+                    if should_push:
+                        log(f"📡 开始推送镜像: {full_tag}\n")
+                        # 使用单服务构建的推送逻辑
+                        # ... (推送逻辑将在后面添加)
+                    else:
+                        log(f"⏭️  跳过推送\n")
+
+                # 多阶段推送模式：每个服务独立构建和推送
                 else:
-                    log(f"📦 原始输出: {str(chunk)}\n")
-            log(f"✅ Docker 构建流处理完成，共 {chunk_count} 个数据块\n")
+                    for service_name in selected_services:
+                        log(f"\n{'='*60}\n")
+                        log(f"🚀 开始构建服务: {service_name}\n")
 
-            log(f"✅ 镜像构建完成: {full_tag}\n")
+                        # 获取服务的配置（支持每个服务独立的镜像名、tag 和 registry）
+                        service_config = service_push_config.get(service_name, {})
+                        if isinstance(service_config, dict):
+                            # 新格式：包含 push, imageName, tag, registry
+                            service_image_name = service_config.get(
+                                "imageName", f"{image_name}-{service_name}"
+                            )
+                            service_tag_value = service_config.get("tag", tag)
+                            service_registry = service_config.get("registry", "")
+                        else:
+                            # 兼容旧格式：只有 push 布尔值
+                            service_image_name = f"{image_name}-{service_name}"
+                            service_tag_value = tag
+                            service_registry = ""
+
+                        service_tag = f"{service_image_name}:{service_tag_value}"
+                        log(f"📦 镜像标签: {service_tag}\n")
+                        log(f"📂 构建上下文: {build_context}\n")
+
+                        try:
+                            # 使用 target 参数构建特定阶段
+                            build_stream = docker_builder.build_image(
+                                path=build_context,
+                                tag=service_tag,
+                                dockerfile=dockerfile_relative,
+                                target=service_name,  # 关键：指定构建阶段
+                            )
+                            log(f"✅ Docker 构建流已启动\n")
+                        except Exception as e:
+                            log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
+                            import traceback
+
+                            log(f"详细错误:\n{traceback.format_exc()}\n")
+                            raise
+
+                        log(f"🔍 开始处理 Docker 构建流输出...\n")
+                        chunk_count = 0
+                        for chunk in build_stream:
+                            chunk_count += 1
+                            if isinstance(chunk, dict):
+                                if "stream" in chunk:
+                                    log(f"[{service_name}] {chunk['stream']}")
+                                if "status" in chunk:
+                                    log(f"[{service_name}] 📊 {chunk['status']}\n")
+                                if "progress" in chunk:
+                                    log(f"[{service_name}] ⏳ {chunk['progress']}\n")
+                                if "error" in chunk:
+                                    error_msg = chunk["error"]
+                                    log(f"[{service_name}] ❌ 构建错误: {error_msg}\n")
+                                    raise RuntimeError(
+                                        f"服务 {service_name} 构建失败: {error_msg}"
+                                    )
+                                if "errorDetail" in chunk:
+                                    error_detail = chunk["errorDetail"]
+                                    log(
+                                        f"[{service_name}] 💥 错误详情: {error_detail}\n"
+                                    )
+                            else:
+                                log(f"[{service_name}] 📦 原始输出: {str(chunk)}\n")
+
+                        log(f"✅ 服务 {service_name} 构建完成\n")
+                        built_services.append(service_name)
+
+                        # 根据推送配置决定是否推送
+                        should_push_service = False
+                        if isinstance(service_config, dict):
+                            should_push_service = service_config.get("push", False)
+                        else:
+                            # 兼容旧格式
+                            should_push_service = bool(service_config)
+
+                        if should_push_service:
+                            log(f"📡 开始推送服务镜像: {service_tag}\n")
+                            try:
+                                # 根据镜像名找到对应的registry配置（与单服务构建逻辑一致）
+                                def find_matching_registry_for_push(img_name):
+                                    """根据镜像名找到匹配的registry配置"""
+                                    # 如果镜像名包含斜杠，提取registry部分
+                                    parts = img_name.split("/")
+                                    if len(parts) >= 2 and "." in parts[0]:
+                                        # 镜像名格式: registry.com/namespace/image
+                                        img_registry = parts[0]
+                                        log(
+                                            f"🔍 从镜像名提取registry: {img_registry}\n"
+                                        )
+                                        all_registries = get_all_registries()
+                                        log(
+                                            f"🔍 共有 {len(all_registries)} 个registry配置\n"
+                                        )
+                                        for reg in all_registries:
+                                            reg_address = reg.get("registry", "")
+                                            reg_name = reg.get("name", "Unknown")
+                                            log(
+                                                f"🔍 检查registry: {reg_name}, 地址: {reg_address}\n"
+                                            )
+                                            if reg_address and (
+                                                img_registry == reg_address
+                                                or img_registry.startswith(reg_address)
+                                                or reg_address.startswith(img_registry)
+                                            ):
+                                                log(
+                                                    f"✅ 找到匹配的registry: {reg_name}\n"
+                                                )
+                                                return reg
+                                    return None
+
+                                # 如果服务配置中指定了 registry，优先使用指定的 registry
+                                if service_registry:
+                                    log(
+                                        f"🔍 使用服务指定的 registry: {service_registry}\n"
+                                    )
+                                    all_registries = get_all_registries()
+                                    registry_config = None
+                                    for reg in all_registries:
+                                        if reg.get("name") == service_registry:
+                                            registry_config = reg
+                                            log(
+                                                f"✅ 找到指定的 registry 配置: {service_registry}\n"
+                                            )
+                                            break
+                                    if not registry_config:
+                                        log(
+                                            f"⚠️  未找到指定的 registry: {service_registry}，将尝试从镜像名匹配\n"
+                                        )
+                                        registry_config = None
+
+                                # 如果未指定 registry 或找不到指定的 registry，尝试根据镜像名找到匹配的registry
+                                if not registry_config:
+                                    registry_config = find_matching_registry_for_push(
+                                        service_image_name
+                                    )
+
+                                if not registry_config:
+                                    # 如果找不到匹配的，使用激活的registry
+                                    registry_config = get_active_registry()
+                                    log(
+                                        f"⚠️  未找到匹配的registry配置，使用激活仓库: {registry_config.get('name', 'Unknown')}\n"
+                                    )
+                                else:
+                                    log(
+                                        f"🎯 找到匹配的registry配置: {registry_config.get('name', 'Unknown')}\n"
+                                    )
+
+                                username = registry_config.get("username")
+                                password = registry_config.get("password")
+                                registry_host = registry_config.get("registry", "")
+
+                                auth_config = None
+                                if username and password:
+                                    auth_config = {
+                                        "username": username,
+                                        "password": password,
+                                    }
+                                    if registry_host and registry_host != "docker.io":
+                                        auth_config["serveraddress"] = registry_host
+                                    else:
+                                        auth_config["serveraddress"] = (
+                                            "https://index.docker.io/v1/"
+                                        )
+
+                                # 使用完整的镜像名和 tag 进行推送
+                                # service_image_name 格式: image_name-service_name (可能包含 registry 前缀)
+                                push_repository = service_image_name
+                                push_tag = service_tag_value  # 使用服务配置的 tag
+                                push_stream = docker_builder.push_image(
+                                    push_repository, push_tag, auth_config=auth_config
+                                )
+                                for chunk in push_stream:
+                                    if isinstance(chunk, dict):
+                                        if "status" in chunk:
+                                            log(f"[{service_name}] {chunk['status']}\n")
+                                        elif "error" in chunk:
+                                            error_msg = chunk["error"]
+                                            log(
+                                                f"[{service_name}] ❌ 推送错误: {error_msg}\n"
+                                            )
+                                            raise RuntimeError(
+                                                f"服务 {service_name} 推送失败: {error_msg}"
+                                            )
+
+                                log(f"✅ 服务 {service_name} 推送完成\n")
+                            except Exception as e:
+                                log(f"❌ 服务 {service_name} 推送失败: {str(e)}\n")
+                                # 推送失败不影响构建成功
+                        else:
+                            log(f"⏭️  服务 {service_name} 跳过推送\n")
+
+                log(f"\n{'='*60}\n")
+                log(f"✅ 所有服务构建完成，共构建 {len(built_services)} 个服务\n")
+                log(f"📋 已构建的服务: {', '.join(built_services)}\n")
+
+            else:
+                # 单服务构建（原有逻辑）
+                log(f"🔨 开始构建镜像: {full_tag}\n")
+                log(f"📂 构建上下文: {build_context}\n")
+                log(f"📄 Dockerfile 绝对路径: {dockerfile_path}\n")
+
+                log(f"🐳 准备调用 Docker 构建器...\n")
+                try:
+                    build_stream = docker_builder.build_image(
+                        path=build_context, tag=full_tag, dockerfile=dockerfile_relative
+                    )
+                    log(f"✅ Docker 构建流已启动\n")
+                except Exception as e:
+                    log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
+                    import traceback
+
+                    log(f"详细错误:\n{traceback.format_exc()}\n")
+                    raise
+
+                log(f"🔍 开始处理 Docker 构建流输出...\n")
+                chunk_count = 0
+                for chunk in build_stream:
+                    chunk_count += 1
+                    if isinstance(chunk, dict):
+                        # 记录所有字段，确保不遗漏任何信息
+                        if "stream" in chunk:
+                            log(chunk["stream"])  # 编译日志在这里
+                        if "status" in chunk:
+                            log(f"📊 {chunk['status']}\n")
+                        if "progress" in chunk:
+                            log(f"⏳ {chunk['progress']}\n")
+                        if "error" in chunk:
+                            error_msg = chunk["error"]
+                            log(f"❌ 构建错误: {error_msg}\n")
+                            raise RuntimeError(error_msg)
+                        if "errorDetail" in chunk:
+                            error_detail = chunk["errorDetail"]
+                            log(f"💥 错误详情: {error_detail}\n")
+                        # 记录其他未知字段
+                        unknown_keys = set(chunk.keys()) - {
+                            "stream",
+                            "status",
+                            "progress",
+                            "error",
+                            "errorDetail",
+                            "aux",
+                            "id",
+                        }
+                        if unknown_keys:
+                            log(f"🔧 其他信息: {chunk}\n")
+                    else:
+                        log(f"📦 原始输出: {str(chunk)}\n")
+                log(f"✅ Docker 构建流处理完成，共 {chunk_count} 个数据块\n")
+
+                log(f"✅ 镜像构建完成: {full_tag}\n")
 
             # 如果需要推送，直接使用构建好的镜像名推送，从激活的registry获取认证信息
             if should_push:

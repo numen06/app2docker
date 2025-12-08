@@ -52,6 +52,15 @@
             <td class="text-end">
               <div class="btn-group btn-group-sm">
                 <button 
+                  class="btn btn-outline-info" 
+                  @click="parseTemplate(tpl)"
+                  title="解析"
+                  :disabled="parsing === tpl.name"
+                >
+                  <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
+                  <i v-else class="fas fa-search"></i>
+                </button>
+                <button 
                   class="btn btn-outline-secondary" 
                   @click="previewTemplate(tpl)"
                   title="预览"
@@ -131,6 +140,115 @@
       v-model="showPreview"
       :template="currentTemplate"
     />
+
+    <!-- 模板解析信息模态框 -->
+    <div 
+      v-if="showParseModal" 
+      class="modal fade show d-block" 
+      tabindex="-1"
+      @click.self="closeParseModal"
+      style="z-index: 1055;"
+    >
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-info text-white">
+            <h5 class="modal-title">
+              <i class="fas fa-search"></i> 模板解析信息
+              <span v-if="parseTemplateData" class="ms-2">{{ parseTemplateData.name }}</span>
+            </h5>
+            <button type="button" class="btn-close btn-close-white" @click="closeParseModal"></button>
+          </div>
+          <div class="modal-body">
+            <div v-if="parsing" class="text-center py-4">
+              <div class="spinner-border spinner-border-sm me-2"></div>
+              正在解析模板...
+            </div>
+            <div v-else-if="parseError" class="alert alert-danger">
+              <i class="fas fa-exclamation-triangle"></i> {{ parseError }}
+            </div>
+            <div v-else-if="parseInfo">
+              <!-- 模板参数 -->
+              <div class="mb-4">
+                <h6 class="mb-3">
+                  <i class="fas fa-sliders-h text-primary"></i> 模板参数
+                  <span class="badge bg-primary ms-2">{{ parseInfo.params?.length || 0 }} 个</span>
+                </h6>
+                <div v-if="parseInfo.params && parseInfo.params.length > 0" class="table-responsive">
+                  <table class="table table-sm table-bordered table-hover">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width: 200px;">参数名称</th>
+                        <th>描述</th>
+                        <th style="width: 100px;">默认值</th>
+                        <th style="width: 80px;">必填</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="param in parseInfo.params" :key="param.name">
+                        <td><code>{{ param.name }}</code></td>
+                        <td>{{ param.description || '-' }}</td>
+                        <td>
+                          <span v-if="param.default" class="badge bg-secondary">{{ param.default }}</span>
+                          <span v-else class="text-muted">-</span>
+                        </td>
+                        <td>
+                          <span v-if="param.required" class="badge bg-danger">是</span>
+                          <span v-else class="badge bg-success">否</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="alert alert-info mb-0">
+                  <i class="fas fa-info-circle"></i> 该模板没有可配置参数
+                </div>
+              </div>
+
+              <!-- 服务阶段（多阶段构建） -->
+              <div>
+                <h6 class="mb-3">
+                  <i class="fas fa-server text-info"></i> 服务阶段（多阶段构建）
+                  <span class="badge bg-info ms-2">{{ parseInfo.services?.length || 0 }} 个</span>
+                </h6>
+                <div v-if="parseInfo.services && parseInfo.services.length > 0" class="table-responsive">
+                  <table class="table table-sm table-bordered table-hover">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width: 250px;">服务名称</th>
+                        <th style="width: 100px;">端口</th>
+                        <th style="width: 100px;">用户</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="service in parseInfo.services" :key="service.name">
+                        <td><code>{{ service.name }}</code></td>
+                        <td>
+                          <span v-if="service.port" class="badge bg-secondary">{{ service.port }}</span>
+                          <span v-else class="text-muted">-</span>
+                        </td>
+                        <td>
+                          <span v-if="service.user" class="badge bg-secondary">{{ service.user }}</span>
+                          <span v-else class="text-muted">-</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="alert alert-info mb-0">
+                  <i class="fas fa-info-circle"></i> 该模板不是多阶段构建，或没有服务阶段
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="closeParseModal">
+              <i class="fas fa-times"></i> 关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showParseModal" class="modal-backdrop fade show"></div>
   </div>
 </template>
 
@@ -148,6 +266,13 @@ const currentTemplate = ref(null)
 const isNew = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
+
+// 解析相关状态
+const showParseModal = ref(false)
+const parsing = ref(null)  // 正在解析的模板名称
+const parseInfo = ref(null)  // 解析结果
+const parseError = ref('')
+const parseTemplateData = ref(null)  // 当前解析的模板数据
 
 // 总页数
 const totalPages = computed(() => Math.ceil(templates.value.length / pageSize.value))
@@ -223,6 +348,40 @@ function openEditor(tpl, isNewTemplate) {
 function previewTemplate(tpl) {
   currentTemplate.value = tpl
   showPreview.value = true
+}
+
+async function parseTemplate(tpl) {
+  parseTemplateData.value = tpl
+  showParseModal.value = true
+  parsing.value = tpl.name
+  parseInfo.value = null
+  parseError.value = ''
+  
+  try {
+    const res = await axios.get('/api/template-params', {
+      params: {
+        template: tpl.name,
+        project_type: tpl.project_type
+      }
+    })
+    
+    parseInfo.value = {
+      params: res.data.params || [],
+      services: res.data.services || []
+    }
+  } catch (error) {
+    console.error('解析模板失败:', error)
+    parseError.value = error.response?.data?.detail || '解析模板失败'
+  } finally {
+    parsing.value = null
+  }
+}
+
+function closeParseModal() {
+  showParseModal.value = false
+  parseInfo.value = null
+  parseError.value = ''
+  parseTemplateData.value = null
 }
 
 async function deleteTemplate(tpl) {

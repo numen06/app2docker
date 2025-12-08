@@ -3,77 +3,30 @@
     <form @submit.prevent="handleBuild">
       <div class="mb-3">
         <label class="form-label">
-          Git 数据源
+          Git 数据源 <span class="text-danger">*</span>
         </label>
         <select 
           v-model="selectedSourceId" 
           class="form-select mb-2"
           @change="onSourceSelected"
+          required
         >
-          <option value="">-- 选择数据源或手动输入 --</option>
+          <option value="">-- 请选择数据源 --</option>
           <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
             {{ source.name }} ({{ formatGitUrl(source.git_url) }})
           </option>
         </select>
         <div class="form-text small text-muted mb-2">
           <i class="fas fa-info-circle"></i> 
-          可以从已保存的数据源中选择，或手动输入 Git 仓库地址
+          请从已保存的数据源中选择，如需添加新数据源，请前往"数据源管理"
         </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">
-          Git 仓库地址 <span class="text-danger">*</span>
-        </label>
-        <div class="input-group">
-          <input 
-            v-model="form.gitUrl" 
-            type="text" 
-            class="form-control" 
-            placeholder="https://github.com/user/repo.git 或 git@github.com:user/repo.git"
-            :disabled="verifying"
-            required
-          />
-          <button 
-            type="button" 
-            class="btn btn-outline-primary" 
-            @click="verifyGitRepo"
-            :disabled="!form.gitUrl || verifying || repoVerified"
-          >
-            <span v-if="verifying" class="spinner-border spinner-border-sm me-1"></span>
-            <i v-else-if="repoVerified" class="fas fa-check-circle me-1"></i>
-            <i v-else class="fas fa-search me-1"></i>
-            {{ verifying ? '验证中...' : (repoVerified ? '已验证' : '验证仓库') }}
-          </button>
+        <div v-if="selectedSourceId && repoVerified" class="alert alert-success alert-sm mt-2 mb-0">
+          <i class="fas fa-check-circle"></i> 
+          数据源已选择：{{ branchesAndTags.branches.length }} 个分支、{{ branchesAndTags.tags.length }} 个标签
         </div>
-        <div class="form-text small">
-          <i class="fas fa-info-circle"></i> 
-          支持 HTTPS 和 SSH 协议的 Git 仓库地址，请先验证仓库再选择分支
-        </div>
-        <div v-if="repoVerified && !selectedSourceId" class="form-check mt-2">
-          <input 
-            v-model="saveAsSource" 
-            class="form-check-input" 
-            type="checkbox" 
-            id="saveAsSource"
-          >
-          <label class="form-check-label" for="saveAsSource">
-            <i class="fas fa-save"></i> 保存为数据源
-          </label>
-        </div>
-        <div v-if="saveAsSource" class="ms-4 mt-2">
-          <input 
-            v-model="sourceName" 
-            type="text" 
-            class="form-control form-control-sm" 
-            placeholder="数据源名称（可选）"
-          >
-        </div>
-        <div v-if="repoError" class="alert alert-danger alert-sm mt-2 mb-0">
-          <i class="fas fa-exclamation-triangle"></i> {{ repoError }}
-        </div>
-        <div v-if="repoVerified" class="alert alert-success alert-sm mt-2 mb-0">
-          <i class="fas fa-check-circle"></i> 仓库验证成功！找到 {{ branchesAndTags.branches.length }} 个分支、{{ branchesAndTags.tags.length }} 个标签
+        <div v-if="selectedSourceId && !repoVerified" class="alert alert-warning alert-sm mt-2 mb-0">
+          <i class="fas fa-exclamation-triangle"></i> 
+          数据源信息加载中...
         </div>
       </div>
 
@@ -141,6 +94,7 @@
               type="checkbox" 
               class="form-check-input" 
               id="useProjectDockerfile"
+              @change="onUseProjectDockerfileChange"
             />
             <label class="form-check-label" for="useProjectDockerfile">
               <i class="fas fa-file-code"></i> 优先使用项目中的 Dockerfile
@@ -185,6 +139,186 @@
             <span v-else>
               请先选择分支并扫描，或使用默认的 Dockerfile
             </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 多服务选择面板（项目 Dockerfile 或模板） -->
+      <div v-if="services.length > 0" class="mb-3">
+        <div class="card border-info">
+          <div class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+            <div>
+              <i class="fas fa-server"></i> 服务选择
+              <span class="badge bg-info ms-2">{{ services.length }} 个服务</span>
+              <small class="text-muted ms-2">
+                <i v-if="form.useProjectDockerfile" class="fas fa-file-code"></i>
+                <i v-else class="fas fa-layer-group"></i>
+                {{ form.useProjectDockerfile ? '来自项目 Dockerfile' : '来自模板' }}
+              </small>
+            </div>
+            <div>
+              <button 
+                type="button"
+                class="btn btn-sm btn-outline-info me-2"
+                @click="selectAllServices"
+                title="全选"
+              >
+                <i class="fas fa-check-square"></i> 全选
+              </button>
+              <button 
+                type="button"
+                class="btn btn-sm btn-outline-info"
+                @click="deselectAllServices"
+                title="全不选"
+              >
+                <i class="fas fa-square"></i> 全不选
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div v-if="parsingServices" class="text-center py-3">
+              <span class="spinner-border spinner-border-sm me-2"></span>
+              正在解析服务...
+            </div>
+            <div v-else-if="servicesError" class="alert alert-warning mb-0">
+              <i class="fas fa-exclamation-triangle"></i> {{ servicesError }}
+            </div>
+            <div v-else class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">
+                      <input 
+                        type="checkbox" 
+                        :checked="selectedServices.length === services.length && services.length > 0"
+                        @change="toggleAllServices"
+                        class="form-check-input"
+                      />
+                    </th>
+                    <th>服务名称</th>
+                    <th v-if="form.pushMode === 'multi' || form.useProjectDockerfile">镜像名</th>
+                    <th v-if="form.pushMode === 'multi' || form.useProjectDockerfile">标签</th>
+                    <th v-if="form.pushMode === 'multi' || form.useProjectDockerfile">推送仓库</th>
+                    <th>端口</th>
+                    <th>用户</th>
+                    <th>构建</th>
+                    <th v-if="form.pushMode === 'multi' || form.useProjectDockerfile">推送</th>
+                    <th v-if="form.pushMode === 'single' && !form.useProjectDockerfile">包含</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="service in services" :key="service.name">
+                    <td>
+                      <input 
+                        type="checkbox" 
+                        :value="service.name"
+                        v-model="selectedServices"
+                        class="form-check-input"
+                        @change="onServiceSelectionChange(service.name)"
+                      />
+                    </td>
+                    <td>
+                      <code>{{ service.name }}</code>
+                    </td>
+                    <!-- 多阶段推送模式或项目 Dockerfile：显示独立配置 -->
+                    <template v-if="form.pushMode === 'multi' || form.useProjectDockerfile">
+                      <td>
+                        <input 
+                          type="text" 
+                          v-model="getServiceConfig(service.name).imageName"
+                          :disabled="!selectedServices.includes(service.name)"
+                          class="form-control form-control-sm"
+                          :placeholder="getDefaultImageName(service.name)"
+                          @blur="normalizeServiceConfig(service.name)"
+                        />
+                      </td>
+                      <td>
+                        <input 
+                          type="text" 
+                          v-model="getServiceConfig(service.name).tag"
+                          :disabled="!selectedServices.includes(service.name)"
+                          class="form-control form-control-sm"
+                          :placeholder="form.tag || 'latest'"
+                          @blur="normalizeServiceConfig(service.name)"
+                        />
+                      </td>
+                      <td>
+                        <select 
+                          v-model="getServiceConfig(service.name).registry"
+                          :disabled="!selectedServices.includes(service.name) || !getServiceConfig(service.name).push"
+                          class="form-select form-select-sm"
+                        >
+                          <option value="">使用默认仓库</option>
+                          <option v-for="reg in registries" :key="reg.name" :value="reg.name">
+                            {{ reg.name }}
+                          </option>
+                        </select>
+                      </td>
+                      <td>
+                        <span v-if="service.port" class="badge bg-secondary">{{ service.port }}</span>
+                        <span v-else class="text-muted">-</span>
+                      </td>
+                      <td>
+                        <span v-if="service.user" class="badge bg-secondary">{{ service.user }}</span>
+                        <span v-else class="text-muted">-</span>
+                      </td>
+                      <td>
+                        <span v-if="selectedServices.includes(service.name)" class="badge bg-success">
+                          <i class="fas fa-check"></i> 是
+                        </span>
+                        <span v-else class="badge bg-secondary">
+                          <i class="fas fa-times"></i> 否
+                        </span>
+                      </td>
+                      <td>
+                        <input 
+                          type="checkbox" 
+                          v-model="getServiceConfig(service.name).push"
+                          :disabled="!selectedServices.includes(service.name)"
+                          class="form-check-input"
+                          :title="selectedServices.includes(service.name) ? '选择是否推送此服务镜像' : '请先选择构建此服务'"
+                        />
+                      </td>
+                    </template>
+                    <!-- 单一推送模式（仅模板）：简化显示 -->
+                    <template v-else>
+                      <td>
+                        <span v-if="service.port" class="badge bg-secondary">{{ service.port }}</span>
+                        <span v-else class="text-muted">-</span>
+                      </td>
+                      <td>
+                        <span v-if="service.user" class="badge bg-secondary">{{ service.user }}</span>
+                        <span v-else class="text-muted">-</span>
+                      </td>
+                      <td>
+                        <span v-if="selectedServices.includes(service.name)" class="badge bg-success">
+                          <i class="fas fa-check"></i> 是
+                        </span>
+                        <span v-else class="badge bg-secondary">
+                          <i class="fas fa-times"></i> 否
+                        </span>
+                      </td>
+                      <td>
+                        <span v-if="selectedServices.includes(service.name)" class="badge bg-info">
+                          <i class="fas fa-check"></i> 包含
+                        </span>
+                        <span v-else class="badge bg-secondary">
+                          <i class="fas fa-times"></i> 不包含
+                        </span>
+                      </td>
+                    </template>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="selectedServices.length > 0" class="mt-3 text-muted small">
+              <i class="fas fa-info-circle"></i> 
+              <span v-if="form.pushMode === 'single' && !form.useProjectDockerfile">
+                单一推送模式：选中的 {{ selectedServices.length }} 个服务将构建到一个镜像中，使用统一的镜像名和标签。
+              </span>
+              <span v-else>
+              已选择 {{ selectedServices.length }} 个服务进行构建
+            </div>
           </div>
         </div>
       </div>
@@ -284,24 +418,36 @@
       </div>
 
       <!-- 模板参数动态输入框 -->
-      <div v-if="templateParams.length > 0" class="mb-3 p-3 bg-light rounded">
-        <h6 class="mb-3">
-          <i class="fas fa-sliders-h"></i> 模板参数
-        </h6>
-        <div class="row g-3">
-          <div v-for="param in templateParams" :key="param.name" class="col-md-6">
-            <label class="form-label">
-              {{ param.description }}
-              <span v-if="param.required" class="text-danger">*</span>
-              <small v-if="param.default" class="text-muted">(默认: {{ param.default }})</small>
-            </label>
-            <input 
-              v-model="form.templateParams[param.name]"
-              type="text" 
-              class="form-control form-control-sm"
-              :placeholder="param.default || param.name"
-              :required="param.required && !param.default"
-            />
+      <div v-if="!form.useProjectDockerfile && templateParams.length > 0" class="mb-3">
+        <div class="card border-primary">
+          <div class="card-header bg-primary bg-opacity-10">
+            <h6 class="mb-0">
+              <i class="fas fa-sliders-h"></i> 模板参数配置
+            </h6>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div v-for="param in templateParams" :key="param.name" class="col-md-6">
+                <label class="form-label">
+                  {{ param.description || param.name }}
+                  <span v-if="param.required" class="text-danger">*</span>
+                  <small v-if="param.default" class="text-muted">(默认: {{ param.default }})</small>
+                </label>
+                <input 
+                  v-model="form.templateParams[param.name]"
+                  type="text" 
+                  class="form-control form-control-sm"
+                  :placeholder="param.default || param.name"
+                  :required="param.required && !param.default"
+                />
+                <small v-if="param.description && param.description !== param.name" class="form-text text-muted">
+                  {{ param.description }}
+                </small>
+              </div>
+            </div>
+            <div v-if="templateParams.length === 0" class="text-muted small">
+              <i class="fas fa-info-circle"></i> 当前模板无需配置参数
+            </div>
           </div>
         </div>
       </div>
@@ -330,7 +476,8 @@ const form = ref({
   push: false,
   templateParams: {},
   useProjectDockerfile: true,  // 默认优先使用项目中的 Dockerfile
-  dockerfileName: 'Dockerfile'  // Dockerfile文件名，默认Dockerfile
+  dockerfileName: 'Dockerfile',  // Dockerfile文件名，默认Dockerfile
+  pushMode: 'multi'  // 推送模式：'single' 单一推送，'multi' 多阶段推送
 })
 
 const templates = ref([])
@@ -342,20 +489,24 @@ const templateSearch = ref('')  // 模板搜索关键字
 // Git 数据源相关状态
 const gitSources = ref([])
 const selectedSourceId = ref('')
-const saveAsSource = ref(false)
-const sourceName = ref('')
 const availableDockerfiles = ref([]) // 当前数据源可用的 Dockerfile 列表
 const scanningDockerfiles = ref(false) // 扫描 Dockerfile 状态
 
 // Git 仓库验证相关状态
-const verifying = ref(false)
 const repoVerified = ref(false)
-const repoError = ref('')
 const branchesAndTags = ref({
   branches: [],
   tags: [],
   default_branch: null
 })
+
+// 多服务构建相关状态
+const services = ref([])  // 从 Dockerfile 或模板解析出的服务列表
+const selectedServices = ref([])  // 选中的服务列表
+const servicePushConfig = ref({})  // 每个服务的推送配置
+const parsingServices = ref(false)  // 解析服务状态
+const servicesError = ref('')  // 解析服务错误信息
+const templateServices = ref([])  // 从模板解析出的服务列表
 
 const projectTypes = computed(() => {
   const types = new Set()
@@ -484,6 +635,11 @@ async function loadTemplateParams() {
   templateParams.value = []
   form.value.templateParams = {}
   
+  // 如果使用项目 Dockerfile，不需要加载模板参数
+  if (form.value.useProjectDockerfile) {
+    return
+  }
+  
   if (!form.value.template || !form.value.projectType) {
     return
   }
@@ -498,125 +654,229 @@ async function loadTemplateParams() {
     
     templateParams.value = res.data.params || []
     
+    // 初始化参数值
     templateParams.value.forEach(param => {
       if (param.default) {
         form.value.templateParams[param.name] = param.default
+      } else if (param.required) {
+        // 必填参数但没有默认值，初始化为空字符串
+        form.value.templateParams[param.name] = ''
       }
     })
+    
+    // 解析模板服务阶段（多阶段构建）
+    templateServices.value = res.data.services || []
+    if (templateServices.value.length > 0) {
+      // 如果模板有服务阶段，合并到 services 中
+      services.value = templateServices.value
+      // 默认全选所有服务
+      selectedServices.value = services.value.map(s => s.name)
+      // 初始化推送配置（默认都不推送）
+      servicePushConfig.value = {}
+      services.value.forEach(s => {
+        const config = getServiceConfig(s.name)
+        config.push = false
+        config.imageName = getDefaultImageName(s.name)
+        config.tag = form.value.tag.trim() || 'latest'
+        config.registry = ''
+      })
+    } else {
+      // 如果模板没有服务阶段，清空服务列表
+      services.value = []
+      selectedServices.value = []
+      servicePushConfig.value = {}
+    }
   } catch (error) {
     console.error('加载模板参数失败:', error)
+    templateParams.value = []
+    templateServices.value = []
+    services.value = []
+    selectedServices.value = []
+    servicePushConfig.value = {}
   }
 }
 
 
-// 验证 Git 仓库
-async function verifyGitRepo() {
-  if (!form.value.gitUrl) {
+// 解析 Dockerfile 服务列表（仅用于项目 Dockerfile）
+async function parseDockerfileServices() {
+  // 只有在使用项目 Dockerfile 时才解析
+  if (!form.value.useProjectDockerfile) {
+    // 如果使用模板，服务应该已经从模板中加载了，不需要从项目 Dockerfile 解析
     return
   }
   
-  verifying.value = true
-  repoError.value = ''
-  repoVerified.value = false
-  branchesAndTags.value = {
-    branches: [],
-    tags: [],
-    default_branch: null
+  if (!repoVerified.value || !selectedSourceId.value || !form.value.gitUrl) {
+    services.value = []
+    selectedServices.value = []
+    servicePushConfig.value = {}
+    return
   }
+  
+  parsingServices.value = true
+  servicesError.value = ''
   
   try {
-    // 如果勾选了保存为数据源，生成默认名称
-    let saveName = saveAsSource.value ? (sourceName.value || '') : undefined
-    if (!saveName && saveAsSource.value) {
-      const urlParts = form.value.gitUrl.trim().replace('.git', '').split('/')
-      saveName = urlParts[urlParts.length - 1] || '未命名数据源'
+    const payload = {
+      git_url: form.value.gitUrl,
+      branch: form.value.branch || undefined,
+      dockerfile_name: form.value.dockerfileName || 'Dockerfile',
+      source_id: selectedSourceId.value
     }
     
-    const res = await axios.post('/api/verify-git-repo', {
-      git_url: form.value.gitUrl.trim(),
-      save_as_source: saveAsSource.value,
-      source_name: saveName,
-      source_description: ''
-    })
+    const res = await axios.post('/api/parse-dockerfile-services', payload)
     
-    if (res.data.success) {
-      branchesAndTags.value = {
-        branches: res.data.branches || [],
-        tags: res.data.tags || [],
-        default_branch: res.data.default_branch
-      }
-      repoVerified.value = true
-      // 清空之前选择的分支
-      form.value.branch = ''
-      
-      // 如果保存成功，刷新数据源列表
-      if (saveAsSource.value && res.data.source_saved) {
-        await loadGitSources()
-        // 自动选择刚保存的数据源
-        if (res.data.source_id) {
-          selectedSourceId.value = res.data.source_id
-          await loadSourceDockerfiles(res.data.source_id)
-        }
-        saveAsSource.value = false
-        sourceName.value = ''
-        alert('数据源保存成功！')
-      }
+    if (res.data.services && res.data.services.length > 0) {
+      services.value = res.data.services
+      // 默认全选所有服务
+      selectedServices.value = services.value.map(s => s.name)
+      // 初始化推送配置（默认都不推送）
+      servicePushConfig.value = {}
+      services.value.forEach(s => {
+        const config = getServiceConfig(s.name)
+        config.push = false
+        config.imageName = getDefaultImageName(s.name)
+        config.tag = form.value.tag.trim() || 'latest'
+        config.registry = ''
+      })
     } else {
-      repoError.value = '仓库验证失败'
+      services.value = []
+      selectedServices.value = []
+      servicePushConfig.value = {}
     }
   } catch (error) {
-    console.error('❗ 验证仓库失败:', error)
-    repoError.value = error.response?.data?.detail || '无法访问仓库，请检查 URL 是否正确'
+    console.error('解析 Dockerfile 服务失败:', error)
+    servicesError.value = error.response?.data?.detail || '解析 Dockerfile 失败'
+    services.value = []
+    selectedServices.value = []
+    servicePushConfig.value = {}
   } finally {
-    verifying.value = false
+    parsingServices.value = false
   }
 }
 
-// 监听 Git URL 变化，自动匹配数据源
-watch(() => form.value.gitUrl, () => {
-  if (!form.value.gitUrl) {
-    selectedSourceId.value = ''
+// 监听相关变化，自动解析服务（仅当使用项目 Dockerfile 时）
+watch(() => [form.value.useProjectDockerfile, selectedSourceId.value, form.value.branch, form.value.dockerfileName, repoVerified.value], () => {
+  // 如果使用模板，不从这里解析服务（服务应该从 loadTemplateParams 中获取）
+  if (!form.value.useProjectDockerfile) {
+    // 使用模板时，不清空服务列表，因为服务应该已经从模板中加载
     return
   }
   
-  // 查找匹配的数据源
-  const source = gitSources.value.find(s => s.git_url === form.value.gitUrl)
-  if (source) {
-    // 如果找到匹配的数据源，自动选择
-    if (selectedSourceId.value !== source.source_id) {
-      selectedSourceId.value = source.source_id
-      branchesAndTags.value = {
-        branches: source.branches || [],
-        tags: source.tags || [],
-        default_branch: source.default_branch || null
-      }
-      repoVerified.value = true
-      if (source.default_branch && !form.value.branch) {
-        form.value.branch = source.default_branch
-      }
-    }
+  // 只有在使用项目 Dockerfile 时才解析服务
+  if (repoVerified.value && selectedSourceId.value && form.value.gitUrl) {
+    parseDockerfileServices()
   } else {
-    // 如果没有匹配的数据源，且之前已验证，重置状态
-    if (repoVerified.value && selectedSourceId.value) {
-      repoVerified.value = false
-      repoError.value = ''
-      form.value.branch = ''
-      selectedSourceId.value = ''
-      branchesAndTags.value = {
-        branches: [],
-        tags: [],
-        default_branch: null
-      }
+    // 数据源未验证或其他情况，清空服务列表
+    services.value = []
+    selectedServices.value = []
+    servicePushConfig.value = {}
+  }
+}, { immediate: false })
+
+// 获取服务的配置对象（如果不存在则创建默认配置）
+function getServiceConfig(serviceName) {
+  if (!servicePushConfig.value[serviceName]) {
+    servicePushConfig.value[serviceName] = {
+      push: false,
+      imageName: '',
+      tag: '',
+      registry: ''
     }
   }
-})
+  return servicePushConfig.value[serviceName]
+}
+
+// 获取默认镜像名
+function getDefaultImageName(serviceName) {
+  const baseName = form.value.imageName.trim() || 'myapp/demo'
+  return `${baseName}-${serviceName}`
+}
+
+// 规范化服务配置（填充默认值）
+function normalizeServiceConfig(serviceName) {
+  const config = getServiceConfig(serviceName)
+  if (!config.imageName.trim()) {
+    config.imageName = getDefaultImageName(serviceName)
+  }
+  if (!config.tag.trim()) {
+    config.tag = form.value.tag.trim() || 'latest'
+  }
+}
+
+// 服务选择变化时的处理
+function onServiceSelectionChange(serviceName) {
+  if (selectedServices.value.includes(serviceName)) {
+    // 选中时，初始化配置
+    normalizeServiceConfig(serviceName)
+  } else {
+    // 取消选中时，清空推送配置
+    const config = getServiceConfig(serviceName)
+    config.push = false
+    config.registry = ''
+  }
+}
+
+// 全选/全不选服务
+function selectAllServices() {
+  selectedServices.value = services.value.map(s => s.name)
+  // 全选时，初始化所有服务的配置
+  services.value.forEach(service => {
+    normalizeServiceConfig(service.name)
+  })
+}
+
+function deselectAllServices() {
+  selectedServices.value = []
+  // 全不选时，清空所有推送配置
+  services.value.forEach(service => {
+    const config = getServiceConfig(service.name)
+    config.push = false
+    config.registry = ''
+  })
+}
+
+function toggleAllServices(event) {
+  if (event.target.checked) {
+    selectAllServices()
+  } else {
+    deselectAllServices()
+  }
+}
+
+// 处理使用项目 Dockerfile 选项变化
+function onUseProjectDockerfileChange() {
+  if (!form.value.useProjectDockerfile) {
+    // 切换到使用模板，重新加载模板参数和服务阶段
+    loadTemplateParams()
+    // 模板模式默认使用多阶段推送
+    form.value.pushMode = 'multi'
+  } else {
+    // 切换到使用项目 Dockerfile，清空模板参数和服务
+    templateParams.value = []
+    form.value.templateParams = {}
+    templateServices.value = []
+    // 项目 Dockerfile 模式总是使用多阶段推送
+    form.value.pushMode = 'multi'
+    // 注意：services 会在 parseDockerfileServices 中重新填充
+  }
+}
 
 async function handleBuild() {
-  if (!form.value.gitUrl) {
-    alert('请输入 Git 仓库地址')
+  if (!selectedSourceId.value) {
+    alert('请选择 Git 数据源')
     return
   }
   
+  if (!repoVerified.value) {
+    alert('数据源信息未加载完成，请稍候再试')
+    return
+  }
+  
+  // 如果有服务阶段（无论是模板还是项目 Dockerfile），验证至少选择一个服务
+  if (services.value.length > 0 && selectedServices.value.length === 0) {
+    alert('请至少选择一个服务进行构建')
+    return
+  }
   
   building.value = true
   
@@ -634,7 +894,27 @@ async function handleBuild() {
         : undefined,
       use_project_dockerfile: form.value.useProjectDockerfile,
       dockerfile_name: form.value.dockerfileName || 'Dockerfile',
-      source_id: selectedSourceId.value || undefined
+      source_id: selectedSourceId.value || undefined,
+      push_mode: (!form.value.useProjectDockerfile) ? form.value.pushMode : undefined,  // 推送模式（仅模板模式）
+      // 多服务构建参数（无论是模板还是项目 Dockerfile）
+      selected_services: (selectedServices.value.length > 0) 
+        ? selectedServices.value 
+        : undefined,
+      service_push_config: (selectedServices.value.length > 0) 
+        ? Object.fromEntries(
+            selectedServices.value.map(serviceName => {
+              const config = getServiceConfig(serviceName)
+              // 确保配置已规范化
+              normalizeServiceConfig(serviceName)
+              return [serviceName, {
+                push: config.push || false,
+                imageName: config.imageName || getDefaultImageName(serviceName),
+                tag: config.tag || form.value.tag.trim() || 'latest',
+                registry: config.registry || ''
+              }]
+            })
+          )
+        : undefined
     }
   
   try {
@@ -770,6 +1050,14 @@ async function loadGitSources() {
 async function onSourceSelected() {
   if (!selectedSourceId.value) {
     availableDockerfiles.value = []
+    form.value.gitUrl = ''
+    repoVerified.value = false
+    branchesAndTags.value = {
+      branches: [],
+      tags: [],
+      default_branch: null
+    }
+    form.value.branch = ''
     return
   }
   
@@ -783,14 +1071,13 @@ async function onSourceSelected() {
     }
     repoVerified.value = true
     form.value.branch = source.default_branch || ''
-    saveAsSource.value = false  // 已选择数据源，不需要再保存
     
     // 清空 Dockerfile 列表，需要根据分支扫描
     availableDockerfiles.value = []
     form.value.dockerfileName = 'Dockerfile'
     
-    // 如果选择了分支，自动扫描该分支的 Dockerfile
-    if (form.value.branch) {
+    // 如果选择了分支且使用项目 Dockerfile，自动扫描该分支的 Dockerfile
+    if (form.value.branch && form.value.useProjectDockerfile) {
       setTimeout(() => {
         scanDockerfiles()
       }, 300)
@@ -818,10 +1105,15 @@ async function loadSourceDockerfiles(sourceId) {
   }
 }
 
-// 扫描指定分支的 Dockerfile
+// 扫描指定分支的 Dockerfile（仅在使用项目 Dockerfile 时）
 async function scanDockerfiles() {
-  if (!form.value.gitUrl || !repoVerified.value) {
-    alert('请先验证 Git 仓库')
+  // 只有在使用项目 Dockerfile 时才扫描
+  if (!form.value.useProjectDockerfile) {
+    return
+  }
+  
+  if (!selectedSourceId.value || !repoVerified.value) {
+    alert('请先选择数据源')
     return
   }
   
@@ -878,8 +1170,8 @@ function onBranchChanged() {
   availableDockerfiles.value = []
   form.value.dockerfileName = 'Dockerfile'
   
-  // 如果选择了分支且有数据源，可以自动扫描
-  if (form.value.branch && selectedSourceId.value && repoVerified.value) {
+  // 如果选择了分支且有数据源，且使用项目 Dockerfile，可以自动扫描
+  if (form.value.branch && selectedSourceId.value && repoVerified.value && form.value.useProjectDockerfile) {
     // 延迟一下，让用户看到变化
     setTimeout(() => {
       scanDockerfiles()
