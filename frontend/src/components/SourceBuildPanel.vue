@@ -152,16 +152,39 @@
           </div>
         </div>
         <div class="col-md-12" v-if="form.useProjectDockerfile">
-          <label class="form-label">Dockerfile 文件名</label>
-          <input 
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label mb-0">Dockerfile 文件名</label>
+            <button 
+              type="button"
+              class="btn btn-sm btn-outline-info"
+              @click="scanDockerfiles"
+              :disabled="!repoVerified || scanningDockerfiles"
+              title="扫描当前分支的 Dockerfile"
+            >
+              <i class="fas fa-search" :class="{ 'fa-spin': scanningDockerfiles }"></i> 
+              {{ scanningDockerfiles ? '扫描中...' : '扫描' }}
+            </button>
+          </div>
+          <select 
             v-model="form.dockerfileName" 
-            type="text" 
-            class="form-control form-control-sm"
-            placeholder="Dockerfile"
-          />
+            class="form-select form-select-sm"
+          >
+            <option value="Dockerfile">Dockerfile（默认）</option>
+            <option v-for="dockerfile in availableDockerfiles" :key="dockerfile" :value="dockerfile">
+              {{ dockerfile }}
+            </option>
+          </select>
           <div class="form-text small text-muted">
             <i class="fas fa-info-circle"></i> 
-            默认为 Dockerfile，可自定义文件名（当使用项目中的 Dockerfile 时）
+            <span v-if="form.branch && availableDockerfiles.length > 0">
+              当前分支 "{{ form.branch }}" 的 Dockerfile 列表，或使用默认的 Dockerfile
+            </span>
+            <span v-else-if="form.branch">
+              请先扫描分支 "{{ form.branch }}" 的 Dockerfile，或使用默认的 Dockerfile
+            </span>
+            <span v-else>
+              请先选择分支并扫描，或使用默认的 Dockerfile
+            </span>
           </div>
         </div>
       </div>
@@ -175,6 +198,7 @@
             v-if="repoVerified"
             v-model="form.branch" 
             class="form-select"
+            @change="onBranchChanged"
           >
             <option value="">使用默认分支 ({{ branchesAndTags.default_branch || 'main' }})</option>
             <optgroup v-if="branchesAndTags.branches.length > 0" label="分支">
@@ -320,6 +344,8 @@ const gitSources = ref([])
 const selectedSourceId = ref('')
 const saveAsSource = ref(false)
 const sourceName = ref('')
+const availableDockerfiles = ref([]) // 当前数据源可用的 Dockerfile 列表
+const scanningDockerfiles = ref(false) // 扫描 Dockerfile 状态
 
 // Git 仓库验证相关状态
 const verifying = ref(false)
@@ -529,6 +555,7 @@ async function verifyGitRepo() {
         // 自动选择刚保存的数据源
         if (res.data.source_id) {
           selectedSourceId.value = res.data.source_id
+          await loadSourceDockerfiles(res.data.source_id)
         }
         saveAsSource.value = false
         sourceName.value = ''
@@ -740,8 +767,9 @@ async function loadGitSources() {
   }
 }
 
-function onSourceSelected() {
+async function onSourceSelected() {
   if (!selectedSourceId.value) {
+    availableDockerfiles.value = []
     return
   }
   
@@ -756,6 +784,106 @@ function onSourceSelected() {
     repoVerified.value = true
     form.value.branch = source.default_branch || ''
     saveAsSource.value = false  // 已选择数据源，不需要再保存
+    
+    // 清空 Dockerfile 列表，需要根据分支扫描
+    availableDockerfiles.value = []
+    form.value.dockerfileName = 'Dockerfile'
+    
+    // 如果选择了分支，自动扫描该分支的 Dockerfile
+    if (form.value.branch) {
+      setTimeout(() => {
+        scanDockerfiles()
+      }, 300)
+    }
+  }
+}
+
+// 加载数据源的 Dockerfile 列表（从数据源管理获取）
+async function loadSourceDockerfiles(sourceId) {
+  try {
+    const res = await axios.get(`/api/git-sources/${sourceId}/dockerfiles`)
+    const dockerfiles = res.data.dockerfiles || {}
+    availableDockerfiles.value = Object.keys(dockerfiles).sort()
+    
+    // 如果当前选择的 Dockerfile 不在列表中，且列表不为空，则选择第一个
+    if (availableDockerfiles.value.length > 0 && !availableDockerfiles.value.includes(form.value.dockerfileName)) {
+      // 如果默认的 Dockerfile 不在列表中，选择列表中的第一个
+      if (form.value.dockerfileName === 'Dockerfile' && !availableDockerfiles.value.includes('Dockerfile')) {
+        form.value.dockerfileName = availableDockerfiles.value[0]
+      }
+    }
+  } catch (error) {
+    console.error('加载 Dockerfile 列表失败:', error)
+    availableDockerfiles.value = []
+  }
+}
+
+// 扫描指定分支的 Dockerfile
+async function scanDockerfiles() {
+  if (!form.value.gitUrl || !repoVerified.value) {
+    alert('请先验证 Git 仓库')
+    return
+  }
+  
+  const branch = form.value.branch || branchesAndTags.value.default_branch || 'main'
+  if (!branch) {
+    alert('请先选择分支')
+    return
+  }
+  
+  scanningDockerfiles.value = true
+  try {
+    const payload = {
+      git_url: form.value.gitUrl.trim(),
+      save_as_source: false,
+      branch: branch  // 指定要扫描的分支
+    }
+    
+    // 如果选择了数据源，使用数据源的认证信息
+    if (selectedSourceId.value) {
+      payload.source_id = selectedSourceId.value
+    }
+    
+    const res = await axios.post('/api/verify-git-repo', payload)
+    
+    if (res.data.success && res.data.dockerfiles) {
+      const dockerfileCount = Object.keys(res.data.dockerfiles).length
+      if (dockerfileCount > 0) {
+        availableDockerfiles.value = Object.keys(res.data.dockerfiles).sort()
+        // 如果当前选择的 Dockerfile 不在列表中，选择第一个
+        if (!availableDockerfiles.value.includes(form.value.dockerfileName)) {
+          form.value.dockerfileName = availableDockerfiles.value[0]
+        }
+        // 扫描完成，不显示提示，只更新选择框
+      } else {
+        availableDockerfiles.value = []
+        // 如果列表为空，重置为默认值
+        form.value.dockerfileName = 'Dockerfile'
+      }
+    } else {
+      // 扫描失败时显示错误提示
+      alert('扫描失败：' + (res.data.detail || '未知错误'))
+    }
+  } catch (error) {
+    console.error('扫描 Dockerfile 失败:', error)
+    alert(error.response?.data?.detail || '扫描 Dockerfile 失败')
+  } finally {
+    scanningDockerfiles.value = false
+  }
+}
+
+// 分支变化时的处理
+function onBranchChanged() {
+  // 清空 Dockerfile 列表，需要重新扫描
+  availableDockerfiles.value = []
+  form.value.dockerfileName = 'Dockerfile'
+  
+  // 如果选择了分支且有数据源，可以自动扫描
+  if (form.value.branch && selectedSourceId.value && repoVerified.value) {
+    // 延迟一下，让用户看到变化
+    setTimeout(() => {
+      scanDockerfiles()
+    }, 300)
   }
 }
 

@@ -235,7 +235,21 @@
                   </span>
                 </div>
               </div>
-              <div v-if="formData.default_branch" class="mb-3">
+              <div v-if="formData.branches && formData.branches.length > 0" class="mb-3">
+                <label class="form-label">默认分支</label>
+                <select 
+                  v-model="formData.default_branch" 
+                  class="form-select form-select-sm"
+                  :disabled="!isVerified && !editingSource"
+                >
+                  <option value="">请选择默认分支</option>
+                  <option v-for="branch in formData.branches" :key="branch" :value="branch">
+                    {{ branch }}
+                  </option>
+                </select>
+                <small class="text-muted">选择该数据源的默认分支</small>
+              </div>
+              <div v-else-if="formData.default_branch" class="mb-3">
                 <label class="form-label">默认分支</label>
                 <input 
                   :value="formData.default_branch" 
@@ -274,8 +288,27 @@
             <button type="button" class="btn-close" @click="closeDockerfileModal"></button>
           </div>
           <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label">分支</label>
+                <select 
+                  v-model="selectedBranch" 
+                  class="form-select form-select-sm"
+                  @change="onDockerfileBranchChanged"
+                >
+                  <option value="">默认分支 ({{ currentSource.default_branch || 'main' }})</option>
+                  <option v-for="branch in currentSource.branches || []" :key="branch" :value="branch">
+                    {{ branch }}
+                  </option>
+                </select>
+                <small class="text-muted">选择分支以查看该分支的 Dockerfile</small>
+              </div>
+              <div class="col-md-6 d-flex align-items-end">
+                <div class="text-muted small">共 {{ dockerfileList.length }} 个 Dockerfile</div>
+              </div>
+            </div>
             <div class="d-flex justify-content-between align-items-center mb-3">
-              <span class="text-muted">共 {{ dockerfileList.length }} 个 Dockerfile</span>
+              <span class="text-muted"></span>
               <div class="btn-group btn-group-sm">
                 <button 
                   class="btn btn-outline-info" 
@@ -312,6 +345,14 @@
                   <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-primary" @click="editDockerfile(item.path, item.content)" title="编辑">
                       <i class="fas fa-edit"></i>
+                    </button>
+                    <button 
+                      v-if="item.hasChanges || item.originalContent === ''"
+                      class="btn btn-outline-success" 
+                      @click="openCommitModal(item.path)"
+                      title="提交到 Git 仓库"
+                    >
+                      <i class="fas fa-code-branch"></i>
                     </button>
                     <button class="btn btn-outline-danger" @click="deleteDockerfile(item.path)" title="删除">
                       <i class="fas fa-trash"></i>
@@ -372,16 +413,83 @@
       </div>
     </div>
     <div v-if="showDockerfileEditor" class="modal-backdrop fade show" style="z-index: 1065;"></div>
+
+    <!-- 提交 Dockerfile 模态框 -->
+    <div v-if="showCommitModal && currentSource" class="modal fade show" style="display: block; z-index: 1070;" tabindex="-1" @click.self="closeCommitModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-code-branch"></i> 提交 Dockerfile 到 Git 仓库
+            </h5>
+            <button type="button" class="btn-close" @click="closeCommitModal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Dockerfile 路径</label>
+              <input 
+                :value="committingDockerfilePath" 
+                type="text" 
+                class="form-control form-control-sm" 
+                readonly
+              >
+            </div>
+            <div class="mb-3">
+              <label class="form-label">目标分支 <span class="text-danger">*</span></label>
+              <select 
+                v-model="commitForm.branch" 
+                class="form-select form-select-sm"
+                required
+              >
+                <option value="">请选择分支</option>
+                <option v-for="branch in currentSource.branches || []" :key="branch" :value="branch">
+                  {{ branch }}
+                </option>
+              </select>
+              <small class="text-muted">选择要提交到的分支</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">提交信息</label>
+              <input 
+                v-model="commitForm.commitMessage" 
+                type="text" 
+                class="form-control form-control-sm"
+                placeholder="例如：Update Dockerfile"
+              >
+              <small class="text-muted">如果不填写，将使用默认提交信息</small>
+            </div>
+            <div class="alert alert-info alert-sm mb-0">
+              <i class="fas fa-info-circle"></i> 
+              <strong>提示：</strong>提交前会自动同步远程仓库，确保与远程保持一致。如有冲突，将使用本地版本。
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="closeCommitModal">取消</button>
+            <button 
+              type="button" 
+              class="btn btn-primary btn-sm" 
+              @click="commitDockerfile"
+              :disabled="!commitForm.branch || committing"
+            >
+              <span v-if="committing" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="fas fa-code-branch me-1"></i>
+              {{ committing ? '提交中...' : '提交' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showCommitModal" class="modal-backdrop fade show" style="z-index: 1065;"></div>
   </div>
 </template>
 
 <script setup>
-import axios from 'axios'
-import { onMounted, ref, watch } from 'vue'
-import { Codemirror } from 'vue-codemirror'
 import { StreamLanguage } from '@codemirror/language'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { oneDark } from '@codemirror/theme-one-dark'
+import axios from 'axios'
+import { onMounted, ref, watch } from 'vue'
+import { Codemirror } from 'vue-codemirror'
 
 const sources = ref([])
 const loading = ref(false)
@@ -399,9 +507,19 @@ const dockerfileList = ref([])
 const loadingDockerfiles = ref(false)
 const scanningDockerfiles = ref(false)
 const editingDockerfilePath = ref(null)
+const selectedBranch = ref('') // 当前选择的分支
 const dockerfileForm = ref({
   path: '',
   content: ''
+})
+
+// 提交相关状态
+const showCommitModal = ref(false)
+const committingDockerfilePath = ref('')
+const committing = ref(false)
+const commitForm = ref({
+  branch: '',
+  commitMessage: ''
 })
 
 // CodeMirror 扩展配置（Dockerfile 使用 shell 模式近似）
@@ -695,20 +813,77 @@ function formatDateTime(isoString) {
 // Dockerfile 管理函数
 async function manageDockerfiles(source) {
   currentSource.value = source
+  selectedBranch.value = '' // 重置分支选择
   showDockerfileModal.value = true
-  await loadDockerfiles(source.source_id)
+  await loadDockerfiles(source.source_id, true) // 保留更改状态
 }
 
-async function loadDockerfiles(sourceId) {
+async function loadDockerfiles(sourceId, preserveChanges = false) {
   loadingDockerfiles.value = true
   try {
     const res = await axios.get(`/api/git-sources/${sourceId}/dockerfiles`)
     const dockerfiles = res.data.dockerfiles || {}
-    dockerfileList.value = Object.keys(dockerfiles).map(path => ({
-      path,
-      content: dockerfiles[path],
-      lineCount: dockerfiles[path].split('\n').length
-    }))
+    
+    // 保留现有的新创建项（originalContent === '' 的项）
+    const existingNewItems = dockerfileList.value.filter(item => item.originalContent === '')
+    const existingNewPaths = new Set(existingNewItems.map(item => item.path))
+    
+    // 如果 preserveChanges 为 true，保留现有的 hasChanges 状态
+    if (preserveChanges) {
+      const existingItems = dockerfileList.value.reduce((acc, item) => {
+        acc[item.path] = item.hasChanges
+        return acc
+      }, {})
+      
+      dockerfileList.value = Object.keys(dockerfiles).map(path => {
+        // 如果是新创建的项，保留其状态
+        if (existingNewPaths.has(path)) {
+          const existingItem = existingNewItems.find(item => item.path === path)
+          return {
+            path,
+            content: dockerfiles[path],
+            originalContent: '', // 保持为空，表示未提交
+            lineCount: dockerfiles[path].split('\n').length,
+            hasChanges: true // 新创建的应该显示提交按钮
+          }
+        }
+        return {
+          path,
+          content: dockerfiles[path],
+          originalContent: dockerfiles[path], // 保存原始内容用于比较
+          lineCount: dockerfiles[path].split('\n').length,
+          hasChanges: existingItems[path] || false // 保留原有的 hasChanges 状态
+        }
+      })
+    } else {
+      dockerfileList.value = Object.keys(dockerfiles).map(path => {
+        // 如果是新创建的项，保留其状态
+        if (existingNewPaths.has(path)) {
+          const existingItem = existingNewItems.find(item => item.path === path)
+          return {
+            path,
+            content: dockerfiles[path],
+            originalContent: '', // 保持为空，表示未提交
+            lineCount: dockerfiles[path].split('\n').length,
+            hasChanges: true // 新创建的应该显示提交按钮
+          }
+        }
+        return {
+          path,
+          content: dockerfiles[path],
+          originalContent: dockerfiles[path], // 保存原始内容用于比较
+          lineCount: dockerfiles[path].split('\n').length,
+          hasChanges: false // 初始状态没有差异
+        }
+      })
+    }
+    
+    // 添加新创建但不在服务器列表中的项（可能还未保存）
+    existingNewItems.forEach(item => {
+      if (!dockerfiles[item.path]) {
+        dockerfileList.value.push(item)
+      }
+    })
   } catch (error) {
     console.error('加载 Dockerfile 列表失败:', error)
     alert('加载 Dockerfile 列表失败')
@@ -722,6 +897,7 @@ function closeDockerfileModal() {
   showDockerfileModal.value = false
   currentSource.value = null
   dockerfileList.value = []
+  selectedBranch.value = ''
 }
 
 function showCreateDockerfile() {
@@ -758,13 +934,36 @@ async function saveDockerfile() {
   }
 
   try {
+    const isNew = !editingDockerfilePath.value // 判断是否是新建的
+    
     await axios.put(
       `/api/git-sources/${currentSource.value.source_id}/dockerfiles/${encodeURIComponent(dockerfileForm.value.path)}`,
       { content: dockerfileForm.value.content }
     )
+    
+    // 更新本地列表中的内容，并检查是否有差异
+    const dockerfileItem = dockerfileList.value.find(item => item.path === dockerfileForm.value.path)
+    if (dockerfileItem) {
+      // 已存在的 Dockerfile，更新内容并检查差异
+      dockerfileItem.content = dockerfileForm.value.content
+      dockerfileItem.lineCount = dockerfileForm.value.content.split('\n').length
+      // 检查是否有差异（与原始内容比较）
+      // 如果 originalContent 为空字符串，说明是新创建的，应该显示提交按钮
+      dockerfileItem.hasChanges = dockerfileItem.originalContent === '' || dockerfileItem.content !== dockerfileItem.originalContent
+    } else {
+      // 如果是新创建的，添加到列表中并标记为有更改（需要提交）
+      const newItem = {
+        path: dockerfileForm.value.path,
+        content: dockerfileForm.value.content,
+        originalContent: '', // 新创建的没有原始内容（还未提交到 Git），设为空字符串表示未提交
+        lineCount: dockerfileForm.value.content.split('\n').length,
+        hasChanges: true // 新创建的应该显示提交按钮
+      }
+      dockerfileList.value.push(newItem)
+    }
+    
     alert('Dockerfile 保存成功')
     closeDockerfileEditor()
-    await loadDockerfiles(currentSource.value.source_id)
     // 刷新数据源列表以更新 Dockerfile 数量
     loadSources()
   } catch (error) {
@@ -783,7 +982,7 @@ async function deleteDockerfile(path) {
       `/api/git-sources/${currentSource.value.source_id}/dockerfiles/${encodeURIComponent(path)}`
     )
     alert('Dockerfile 已删除')
-    await loadDockerfiles(currentSource.value.source_id)
+    await loadDockerfiles(currentSource.value.source_id, true) // 保留更改状态
     // 刷新数据源列表以更新 Dockerfile 数量
     loadSources()
   } catch (error) {
@@ -797,7 +996,10 @@ async function scanDockerfiles() {
     return
   }
   
-  if (!confirm(`确定要扫描数据源 "${currentSource.value.name}" 的 Dockerfile 吗？\n\n这将从 Git 仓库的默认分支扫描所有 Dockerfile。`)) {
+  const branch = selectedBranch.value || currentSource.value.default_branch || 'main'
+  const branchText = branch ? `分支 "${branch}"` : '默认分支'
+  
+  if (!confirm(`确定要扫描数据源 "${currentSource.value.name}" 的 Dockerfile 吗？\n\n这将从 Git 仓库的 ${branchText} 扫描所有 Dockerfile。`)) {
     return
   }
   
@@ -807,25 +1009,44 @@ async function scanDockerfiles() {
     const res = await axios.post('/api/verify-git-repo', {
       git_url: currentSource.value.git_url,
       save_as_source: false,
-      source_id: currentSource.value.source_id  // 使用数据源的认证信息
+      source_id: currentSource.value.source_id,  // 使用数据源的认证信息
+      branch: branch || undefined  // 指定分支
     })
     
     if (res.data.success && res.data.dockerfiles) {
       // 更新扫描到的 Dockerfile
       const dockerfileCount = Object.keys(res.data.dockerfiles).length
       if (dockerfileCount > 0) {
+        // 保留现有的 hasChanges 状态
+        const existingChanges = dockerfileList.value.reduce((acc, item) => {
+          acc[item.path] = item.hasChanges
+          return acc
+        }, {})
+        const existingOriginalContent = dockerfileList.value.reduce((acc, item) => {
+          acc[item.path] = item.originalContent
+          return acc
+        }, {})
+        
         for (const [dockerfile_path, content] of Object.entries(res.data.dockerfiles)) {
           await axios.put(
             `/api/git-sources/${currentSource.value.source_id}/dockerfiles/${encodeURIComponent(dockerfile_path)}`,
             { content: content }
           )
         }
-        alert(`扫描完成！发现 ${dockerfileCount} 个 Dockerfile`)
-      } else {
-        alert('扫描完成，但未发现 Dockerfile')
+        
+        // 刷新 Dockerfile 列表，保留更改状态
+        await loadDockerfiles(currentSource.value.source_id, true)
+        
+        // 恢复 hasChanges 状态
+        dockerfileList.value.forEach(item => {
+          if (existingChanges[item.path] !== undefined) {
+            item.hasChanges = existingChanges[item.path]
+          }
+          if (existingOriginalContent[item.path] !== undefined && existingOriginalContent[item.path] !== '') {
+            item.originalContent = existingOriginalContent[item.path]
+          }
+        })
       }
-      // 刷新 Dockerfile 列表
-      await loadDockerfiles(currentSource.value.source_id)
       // 刷新数据源列表以更新 Dockerfile 数量
       loadSources()
     } else {
@@ -836,6 +1057,117 @@ async function scanDockerfiles() {
     alert(error.response?.data?.detail || '扫描 Dockerfile 失败')
   } finally {
     scanningDockerfiles.value = false
+  }
+}
+
+// 分支变化时的处理
+async function onDockerfileBranchChanged() {
+  if (!currentSource.value) {
+    return
+  }
+  
+  // 清空列表
+  dockerfileList.value = []
+  
+  // 如果有选择分支，扫描该分支的 Dockerfile
+  if (selectedBranch.value) {
+    scanningDockerfiles.value = true
+    try {
+      const res = await axios.post('/api/verify-git-repo', {
+        git_url: currentSource.value.git_url,
+        save_as_source: false,
+        source_id: currentSource.value.source_id,
+        branch: selectedBranch.value
+      })
+      
+      if (res.data.success && res.data.dockerfiles) {
+        const dockerfiles = res.data.dockerfiles || {}
+        dockerfileList.value = Object.keys(dockerfiles).map(path => ({
+          path,
+          content: dockerfiles[path],
+          originalContent: dockerfiles[path], // 从分支扫描的，设为已提交状态
+          lineCount: dockerfiles[path].split('\n').length,
+          hasChanges: false
+        }))
+      }
+    } catch (error) {
+      console.error('加载分支 Dockerfile 失败:', error)
+    } finally {
+      scanningDockerfiles.value = false
+    }
+  } else {
+    // 使用默认分支，从数据源加载
+    await loadDockerfiles(currentSource.value.source_id, true)
+  }
+}
+
+function openCommitModal(dockerfilePath) {
+  if (!currentSource.value) {
+    return
+  }
+  committingDockerfilePath.value = dockerfilePath
+  commitForm.value = {
+    branch: currentSource.value.default_branch || (currentSource.value.branches && currentSource.value.branches[0]) || '',
+    commitMessage: `Update ${dockerfilePath} via jar2docker`
+  }
+  showCommitModal.value = true
+}
+
+function closeCommitModal() {
+  showCommitModal.value = false
+  committingDockerfilePath.value = ''
+  commitForm.value = {
+    branch: '',
+    commitMessage: ''
+  }
+}
+
+async function commitDockerfile() {
+  if (!commitForm.value.branch) {
+    alert('请选择目标分支')
+    return
+  }
+  
+  if (!currentSource.value || !committingDockerfilePath.value) {
+    return
+  }
+  
+  committing.value = true
+  try {
+    const res = await axios.post(
+      `/api/git-sources/${currentSource.value.source_id}/dockerfiles/${encodeURIComponent(committingDockerfilePath.value)}/commit`,
+      {
+        branch: commitForm.value.branch,
+        commit_message: commitForm.value.commitMessage || undefined
+      }
+    )
+    
+    if (res.data.success) {
+      if (res.data.no_changes) {
+        alert('没有更改需要提交')
+        // 如果没有更改，重置差异状态
+        const dockerfileItem = dockerfileList.value.find(item => item.path === committingDockerfilePath.value)
+        if (dockerfileItem) {
+          dockerfileItem.hasChanges = false
+        }
+      } else {
+        alert(`✅ ${res.data.message}`)
+        // 提交成功后，更新原始内容并重置差异状态
+        const dockerfileItem = dockerfileList.value.find(item => item.path === committingDockerfilePath.value)
+        if (dockerfileItem) {
+          dockerfileItem.originalContent = dockerfileItem.content
+          dockerfileItem.hasChanges = false
+        }
+      }
+      closeCommitModal()
+    } else {
+      alert('提交失败：' + (res.data.detail || '未知错误'))
+    }
+  } catch (error) {
+    console.error('提交 Dockerfile 失败:', error)
+    alert(error.response?.data?.detail || '提交 Dockerfile 失败')
+  } finally {
+    committing.value = false
   }
 }
 </script>

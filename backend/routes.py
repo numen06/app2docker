@@ -630,6 +630,7 @@ async def verify_git_repo(
     username: Optional[str] = Body(None, embed=True, description="Git 用户名（可选）"),
     password: Optional[str] = Body(None, embed=True, description="Git 密码或 token（可选）"),
     source_id: Optional[str] = Body(None, embed=True, description="数据源 ID（如果提供，将使用数据源的认证信息）"),
+    branch: Optional[str] = Body(None, embed=True, description="指定分支（用于扫描该分支的 Dockerfile）"),
 ):
     """验证 Git 仓库并获取分支和标签列表"""
     import subprocess
@@ -716,11 +717,14 @@ async def verify_git_repo(
                 if not tag_name.endswith('^{}'):
                     tags.append(tag_name)
         
-        # 扫描 Dockerfile（需要克隆仓库的默认分支）
+        # 扫描 Dockerfile（需要克隆仓库的指定分支或默认分支）
         dockerfiles = {}
+        # 确定默认分支
         default_branch = next((b for b in branches if b in ['main', 'master']), branches[0] if branches else None)
+        # 如果指定了分支，使用指定分支；否则使用默认分支
+        scan_branch = branch if branch and branch in branches else default_branch
         
-        if default_branch:
+        if scan_branch:
             try:
                 # 临时克隆仓库以扫描 Dockerfile
                 import tempfile
@@ -728,7 +732,7 @@ async def verify_git_repo(
                 clone_url = verify_url
                 
                 # 准备克隆命令
-                clone_cmd = ["git", "clone", "--depth", "1", "--branch", default_branch, clone_url, temp_dir]
+                clone_cmd = ["git", "clone", "--depth", "1", "--branch", scan_branch, clone_url, temp_dir]
                 
                 clone_result = subprocess.run(
                     clone_cmd,
@@ -2984,3 +2988,301 @@ async def delete_dockerfile(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除 Dockerfile 失败: {str(e)}")
+
+
+@router.post("/git-sources/{source_id}/dockerfiles/{dockerfile_path:path}/commit")
+async def commit_dockerfile(
+    source_id: str,
+    dockerfile_path: str,
+    branch: str = Body(..., embed=True, description="目标分支"),
+    commit_message: str = Body(None, embed=True, description="提交信息（可选）"),
+    http_request: Request = None
+):
+    """提交 Dockerfile 到 Git 仓库"""
+    import subprocess
+    import tempfile
+    import shutil
+    from urllib.parse import urlparse, urlunparse
+    
+    try:
+        username = get_current_username(http_request)  # 验证登录
+        manager = GitSourceManager()
+        
+        # 获取数据源信息
+        source = manager.get_source(source_id, include_password=True)
+        if not source:
+            raise HTTPException(status_code=404, detail="数据源不存在")
+        
+        # 获取 Dockerfile 内容
+        dockerfile_content = manager.get_dockerfile(source_id, dockerfile_path)
+        if not dockerfile_content:
+            raise HTTPException(status_code=404, detail="Dockerfile 不存在")
+        
+        # 获取认证信息
+        auth_config = manager.get_auth_config(source_id)
+        git_url = source["git_url"]
+        username_auth = auth_config.get("username")
+        password_auth = auth_config.get("password")
+        
+        # 构建带认证信息的 URL
+        verify_url = git_url
+        if username_auth and password_auth and git_url.startswith("https://"):
+            parsed = urlparse(git_url)
+            verify_url = urlunparse(
+                (
+                    parsed.scheme,
+                    f"{username_auth}:{password_auth}@{parsed.netloc}",
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
+        
+        # 创建临时目录
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            # 克隆仓库
+            clone_cmd = ["git", "clone", "--depth", "1", "--branch", branch, verify_url, temp_dir]
+            clone_result = subprocess.run(
+                clone_cmd,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if clone_result.returncode != 0:
+                # 如果分支不存在，尝试克隆默认分支然后切换
+                if "not found" in clone_result.stderr.lower() or "does not exist" in clone_result.stderr.lower():
+                    # 先克隆默认分支
+                    default_branch = source.get("default_branch") or "main"
+                    clone_cmd_default = ["git", "clone", "--depth", "1", "--branch", default_branch, verify_url, temp_dir]
+                    clone_result_default = subprocess.run(
+                        clone_cmd_default,
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+                    
+                    if clone_result_default.returncode != 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"无法克隆仓库: {clone_result_default.stderr.strip()}"
+                        )
+                    
+                    # 切换到目标分支（如果不存在则创建）
+                    checkout_cmd = ["git", "checkout", "-b", branch]
+                    checkout_result = subprocess.run(
+                        checkout_cmd,
+                        cwd=temp_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                    
+                    # 如果分支已存在，直接切换
+                    if checkout_result.returncode != 0:
+                        checkout_cmd = ["git", "checkout", branch]
+                        checkout_result = subprocess.run(
+                            checkout_cmd,
+                            cwd=temp_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=30
+                        )
+                        if checkout_result.returncode != 0:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"无法切换到分支 {branch}: {checkout_result.stderr.strip()}"
+                            )
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"无法克隆仓库: {clone_result.stderr.strip()}"
+                    )
+            
+            # 先拉取最新更改，确保与远程同步
+            fetch_cmd = ["git", "fetch", "origin", branch]
+            fetch_result = subprocess.run(
+                fetch_cmd,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # 尝试合并远程更改
+            merge_cmd = ["git", "merge", f"origin/{branch}", "--no-edit"]
+            merge_result = subprocess.run(
+                merge_cmd,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # 如果有冲突，使用本地版本（ours）
+            if merge_result.returncode != 0:
+                # 检查是否有冲突
+                status_cmd = ["git", "status", "--porcelain"]
+                status_result = subprocess.run(
+                    status_cmd,
+                    cwd=temp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if "UU" in status_result.stdout or "AA" in status_result.stdout:
+                    # 有冲突，使用本地版本
+                    checkout_ours_cmd = ["git", "checkout", "--ours", dockerfile_path]
+                    subprocess.run(
+                        checkout_ours_cmd,
+                        cwd=temp_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    # 添加解决冲突的文件
+                    add_cmd = ["git", "add", dockerfile_path]
+                    subprocess.run(
+                        add_cmd,
+                        cwd=temp_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    # 继续合并
+                    continue_cmd = ["git", "merge", "--continue", "--no-edit"]
+                    subprocess.run(
+                        continue_cmd,
+                        cwd=temp_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                else:
+                    # 其他错误，重置合并
+                    abort_cmd = ["git", "merge", "--abort"]
+                    subprocess.run(
+                        abort_cmd,
+                        cwd=temp_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+            
+            # 写入 Dockerfile
+            dockerfile_full_path = os.path.join(temp_dir, dockerfile_path)
+            os.makedirs(os.path.dirname(dockerfile_full_path), exist_ok=True)
+            
+            with open(dockerfile_full_path, 'w', encoding='utf-8') as f:
+                f.write(dockerfile_content)
+            
+            # 配置 Git 用户信息（如果没有配置）
+            config_cmd = ["git", "config", "user.name"]
+            config_result = subprocess.run(
+                config_cmd,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if config_result.returncode != 0 or not config_result.stdout.strip():
+                subprocess.run(
+                    ["git", "config", "user.name", "jar2docker"],
+                    cwd=temp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                subprocess.run(
+                    ["git", "config", "user.email", "jar2docker@localhost"],
+                    cwd=temp_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+            
+            # 添加文件
+            add_cmd = ["git", "add", dockerfile_path]
+            add_result = subprocess.run(
+                add_cmd,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if add_result.returncode != 0:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"添加文件到 Git 失败: {add_result.stderr.strip()}"
+                )
+            
+            # 提交
+            commit_msg = commit_message or f"Update {dockerfile_path} via jar2docker"
+            commit_cmd = ["git", "commit", "-m", commit_msg]
+            commit_result = subprocess.run(
+                commit_cmd,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if commit_result.returncode != 0:
+                # 检查是否没有更改
+                if "nothing to commit" in commit_result.stdout.lower():
+                    return JSONResponse({
+                        "success": True,
+                        "message": "没有更改需要提交",
+                        "no_changes": True
+                    })
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"提交失败: {commit_result.stderr.strip()}"
+                )
+            
+            # 推送到远程
+            push_cmd = ["git", "push", "origin", branch]
+            push_result = subprocess.run(
+                push_cmd,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if push_result.returncode != 0:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"推送失败: {push_result.stderr.strip()}"
+                )
+            
+            # 记录操作日志
+            OperationLogger.log(username, "commit_dockerfile", {
+                "source_id": source_id,
+                "dockerfile_path": dockerfile_path,
+                "branch": branch,
+                "commit_message": commit_msg
+            })
+            
+            return JSONResponse({
+                "success": True,
+                "message": f"Dockerfile 已成功提交并推送到分支 {branch}",
+                "branch": branch,
+                "commit_message": commit_msg
+            })
+            
+        finally:
+            # 清理临时目录
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"提交 Dockerfile 失败: {str(e)}")
