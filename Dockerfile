@@ -68,6 +68,18 @@ RUN echo "✅ Python version:" && python --version && \
     echo "✅ buildx version:" && docker buildx version && \
     echo "✅ QEMU arm64 registered:" && ls /proc/sys/fs/binfmt_misc/qemu-arm64 2>/dev/null || echo "⚠️ QEMU not found (should not happen)"
 
+#设置时区
+# 1. 安装 tzdata（Alpine 官方时区数据包）
+RUN apk add --no-cache tzdata
+
+# 2. 设置默认时区（影响 date 命令 & 大多数应用）
+ENV TZ=Asia/Shanghai
+
+# 3. （可选）让 `date` 命令显示正确本地时间（软链接 localtime）
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo "$TZ" > /etc/timezone
+
+
 WORKDIR /app
 
 # 复制 Python 依赖文件
