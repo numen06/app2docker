@@ -275,57 +275,11 @@
     </div>
 
     <!-- 日志模态框 -->
-    <div v-if="showLogModal && selectedTask" class="modal fade show" style="display: block;" tabindex="-1" @click.self="closeLogModal">
-      <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header" :class="getStatusHeaderClass(selectedTask.status)">
-            <h5 class="modal-title">
-              <i :class="getStatusIcon(selectedTask.status)"></i>
-              任务日志 - {{ selectedTask.image }}:{{ selectedTask.tag }}
-            </h5>
-            <button type="button" class="btn-close" :class="selectedTask.status === 'failed' ? 'btn-close-white' : ''" @click="closeLogModal"></button>
-          </div>
-          <div class="modal-body">
-            <!-- 任务概况 -->
-            <div v-if="selectedTask.status === 'failed' || selectedTask.status === 'completed' || selectedTask.status === 'stopped'" 
-                 class="mb-3 p-3 rounded" 
-                 :class="getStatusSummaryClass(selectedTask.status)">
-              <div class="d-flex align-items-center mb-2">
-                <i :class="getStatusIcon(selectedTask.status)" class="me-2"></i>
-                <strong>{{ getStatusText(selectedTask.status) }}</strong>
-              </div>
-              <div v-if="selectedTask.status === 'failed' && selectedTask.error" class="mt-2">
-                <strong>错误信息：</strong>
-                <pre class="mb-0 mt-1 p-2 bg-dark text-light rounded" style="font-size: 0.85rem; max-height: 150px; overflow-y: auto;">{{ selectedTask.error }}</pre>
-              </div>
-              <div v-if="selectedTask.status === 'completed'" class="mt-2 small">
-                <div><strong>创建时间：</strong>{{ formatTime(selectedTask.created_at) }}</div>
-                <div v-if="selectedTask.completed_at"><strong>完成时间：</strong>{{ formatTime(selectedTask.completed_at) }}</div>
-                <div v-if="selectedTask.completed_at"><strong>耗时：</strong>{{ calculateDuration(selectedTask.created_at, selectedTask.completed_at) }}</div>
-              </div>
-              <div v-if="selectedTask.status === 'stopped'" class="mt-2 small">
-                <div><strong>创建时间：</strong>{{ formatTime(selectedTask.created_at) }}</div>
-                <div v-if="selectedTask.completed_at"><strong>停止时间：</strong>{{ formatTime(selectedTask.completed_at) }}</div>
-              </div>
-            </div>
-            <!-- 日志内容 -->
-            <div>
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong>构建日志：</strong>
-                <button class="btn btn-sm btn-outline-secondary" @click="copyLogs">
-                  <i class="fas fa-copy"></i> 复制
-                </button>
-              </div>
-              <pre class="bg-dark text-light p-3 rounded" style="max-height: 500px; overflow-y: auto; font-size: 0.85rem;">{{ taskLogs }}</pre>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeLogModal">关闭</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div v-if="showLogModal" class="modal-backdrop fade show" @click="closeLogModal"></div>
+    <TaskLogModal 
+      v-model="showLogModal" 
+      :task="selectedTask"
+      @task-status-updated="onTaskStatusUpdated"
+    />
 
 
     <!-- 加入流水线模态框 -->
@@ -479,6 +433,7 @@
 <script setup>
 import axios from 'axios'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import TaskLogModal from './TaskLogModal.vue'
 
 const tasks = ref([])
 const loading = ref(false)
@@ -493,7 +448,6 @@ const stopping = ref(null)  // 停止中的任务ID
 const viewingLogs = ref(null)
 const showLogModal = ref(false)
 const selectedTask = ref(null)
-const taskLogs = ref('')
 // 错误弹窗已移除，错误信息现在显示在日志顶部
 const currentPage = ref(1)  // 当前页码
 const pageSize = ref(10)    // 每页显示数量
@@ -739,77 +693,23 @@ async function refreshRunningTasks() {
   }
 }
 
+// 任务状态更新处理
+function onTaskStatusUpdated(newStatus) {
+  if (selectedTask.value) {
+    selectedTask.value.status = newStatus
+    // 刷新任务列表
+    loadTasks()
+  }
+}
+
 async function viewLogs(task) {
   if (viewingLogs.value) return
   
   viewingLogs.value = task.task_id
   selectedTask.value = task
   showLogModal.value = true
-  taskLogs.value = '加载中...'
   
-  try {
-    const res = await axios.get(`/api/build-tasks/${task.task_id}/logs`)
-    // 直接使用 res.data,不设置 responseType
-    if (typeof res.data === 'string') {
-      taskLogs.value = res.data || '暂无日志'
-    } else {
-      // 如果返回的不是字符串,尝试转换
-      taskLogs.value = JSON.stringify(res.data, null, 2)
-    }
-  } catch (err) {
-    console.error('获取日志失败:', err)
-    const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '未知错误'
-    taskLogs.value = `加载日志失败: ${errorMsg}`
-  } finally {
-    viewingLogs.value = null
-  }
-}
-
-function getStatusHeaderClass(status) {
-  if (status === 'failed') return 'bg-danger text-white'
-  if (status === 'completed') return 'bg-success text-white'
-  if (status === 'stopped') return 'bg-warning text-dark'
-  return ''
-}
-
-function getStatusSummaryClass(status) {
-  if (status === 'failed') return 'bg-danger bg-opacity-10 border border-danger'
-  if (status === 'completed') return 'bg-success bg-opacity-10 border border-success'
-  if (status === 'stopped') return 'bg-warning bg-opacity-10 border border-warning'
-  return 'bg-secondary bg-opacity-10'
-}
-
-function getStatusIcon(status) {
-  if (status === 'failed') return 'fas fa-times-circle'
-  if (status === 'completed') return 'fas fa-check-circle'
-  if (status === 'stopped') return 'fas fa-stop-circle'
-  if (status === 'running') return 'fas fa-spinner fa-spin'
-  if (status === 'pending') return 'fas fa-clock'
-  return 'fas fa-info-circle'
-}
-
-function getStatusText(status) {
-  if (status === 'failed') return '任务失败'
-  if (status === 'completed') return '任务成功'
-  if (status === 'stopped') return '任务已停止'
-  if (status === 'running') return '任务进行中'
-  if (status === 'pending') return '任务等待中'
-  return '未知状态'
-}
-
-function copyLogs() {
-  navigator.clipboard.writeText(taskLogs.value).then(() => {
-    alert('日志已复制到剪贴板')
-  }).catch(err => {
-    console.error('复制失败:', err)
-    alert('复制失败，请手动选择文本复制')
-  })
-}
-
-function closeLogModal() {
-  showLogModal.value = false
-  selectedTask.value = null
-  taskLogs.value = ''
+  viewingLogs.value = null
 }
 
 async function downloadTask(task) {

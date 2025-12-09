@@ -176,27 +176,32 @@
               </div>
             </div>
             
-            <!-- 当前任务状态（固定布局，始终显示） -->
-            <div class="mb-3" style="min-height: 24px;">
-              <div class="d-flex align-items-center justify-content-between">
-                <span class="text-muted" style="font-size: 0.9rem;">当前任务：</span>
-                <div v-if="pipeline.current_task_info && (pipeline.current_task_status === 'running' || pipeline.current_task_status === 'pending')">
-                  <span v-if="pipeline.current_task_status === 'running'" class="badge bg-primary">
-                    <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
-                  </span>
-                  <span v-else-if="pipeline.current_task_status === 'pending'" class="badge bg-warning">
-                    <i class="fas fa-clock"></i> 等待中
-                  </span>
-                </div>
-                <span v-else class="text-muted" style="font-size: 0.85rem;">-</span>
-              </div>
-            </div>
-            
-            <!-- 最后构建（固定布局，始终显示） -->
+            <!-- 当前任务/最后构建（合并显示） -->
             <div class="mb-3" style="min-height: 48px;">
               <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted" style="font-size: 0.9rem;">最后构建：</span>
-                <div v-if="pipeline.last_build" class="d-flex align-items-center gap-2">
+                <span class="text-muted" style="font-size: 0.9rem;">
+                  {{ isLastBuildRunning(pipeline) ? '当前任务：' : '最后构建：' }}
+                </span>
+                <!-- 如果最后构建是运行中或等待中，显示为当前任务 -->
+                <div v-if="pipeline.last_build && (pipeline.last_build.status === 'running' || pipeline.last_build.status === 'pending')" class="d-flex align-items-center gap-2">
+                  <span v-if="pipeline.last_build.status === 'running'" class="badge bg-primary">
+                    <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
+                  </span>
+                  <span v-else-if="pipeline.last_build.status === 'pending'" class="badge bg-warning">
+                    <i class="fas fa-clock"></i> 等待中
+                  </span>
+                  <button 
+                    v-if="pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
+                    class="btn btn-sm btn-outline-info p-1" 
+                    style="width: 24px; height: 24px; line-height: 1;"
+                    @click="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
+                    title="查看日志"
+                  >
+                    <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
+                  </button>
+                </div>
+                <!-- 如果最后构建已完成或失败，显示为历史构建 -->
+                <div v-else-if="pipeline.last_build && (pipeline.last_build.status === 'completed' || pipeline.last_build.status === 'failed')" class="d-flex align-items-center gap-2">
                   <span 
                     :class="{
                       'badge': true,
@@ -220,12 +225,13 @@
                 </div>
                 <span v-else class="text-muted" style="font-size: 0.85rem;">暂无</span>
               </div>
+              <!-- 显示任务详情 -->
               <div v-if="pipeline.last_build" class="d-flex justify-content-between align-items-center ms-4">
                 <small class="text-muted" :title="formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at)" style="font-size: 0.85rem;">
                   {{ formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at) }}
                 </small>
                 <small class="text-muted">
-                  <code style="font-size: 0.85rem;">{{ pipeline.last_build.task_id.substring(0, 8) }}</code>
+                  <code style="font-size: 0.85rem;">{{ pipeline.last_build.task_id?.substring(0, 8) || '-' }}</code>
                 </small>
               </div>
               <div v-else class="ms-4" style="height: 20px;"></div>
@@ -980,25 +986,11 @@
     <div v-if="showWebhookModal" class="modal-backdrop fade show" style="z-index: 1045;"></div>
 
     <!-- 日志查看模态框 -->
-    <div v-if="showLogModal && selectedTask" class="modal fade show" style="display: block; z-index: 1070;" tabindex="-1" @click.self="closeLogModal">
-      <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-terminal"></i> 任务日志 - {{ selectedTask.image || '未知' }}:{{ selectedTask.tag || 'latest' }}
-            </h5>
-            <button type="button" class="btn-close" @click="closeLogModal"></button>
-          </div>
-          <div class="modal-body">
-            <pre class="bg-dark text-light p-3 rounded" style="max-height: 500px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word;">{{ taskLogs }}</pre>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="closeLogModal">关闭</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div v-if="showLogModal" class="modal-backdrop fade show" style="z-index: 1065;"></div>
+    <TaskLogModal 
+      v-model="showLogModal" 
+      :task="selectedTask"
+      @task-status-updated="onTaskStatusUpdated"
+    />
 
     <!-- 历史构建模态框 -->
     <div v-if="showHistoryModal" class="modal fade show" style="display: block; z-index: 1050;" tabindex="-1" @click.self="closeHistoryModal">
@@ -1274,7 +1266,6 @@ const historyPagination = ref({
 })
 const showLogModal = ref(false)
 const selectedTask = ref(null)
-const taskLogs = ref('')
 const viewingLogs = ref(null)
 const showResourcePackageModal = ref(false)
 const resourcePackages = ref([])  // 资源包列表
@@ -1320,6 +1311,7 @@ onMounted(() => {
   loadTemplates()
   loadRegistries()
   loadGitSources()
+  loadResourcePackages()
 })
 
 async function loadGitSources() {
@@ -2087,36 +2079,29 @@ function changeHistoryPage(page) {
   loadHistory(page)
 }
 
+// 判断最后构建是否正在运行
+function isLastBuildRunning(pipeline) {
+  return pipeline.last_build && (pipeline.last_build.status === 'running' || pipeline.last_build.status === 'pending')
+}
+
+// 任务状态更新处理
+function onTaskStatusUpdated(newStatus) {
+  if (selectedTask.value) {
+    selectedTask.value.status = newStatus
+    // 如果任务状态改变，刷新流水线列表
+    if (newStatus === 'completed' || newStatus === 'failed') {
+      loadPipelines()
+    }
+  }
+}
+
 async function viewTaskLogs(taskId, task) {
   if (viewingLogs.value) return
   
   viewingLogs.value = taskId
   selectedTask.value = task
   showLogModal.value = true
-  taskLogs.value = '加载中...'
   
-  try {
-    const res = await axios.get(`/api/build-tasks/${taskId}/logs`)
-    // 直接使用 res.data,不设置 responseType
-    if (typeof res.data === 'string') {
-      taskLogs.value = res.data || '暂无日志'
-    } else {
-      // 如果返回的不是字符串,尝试转换
-      taskLogs.value = JSON.stringify(res.data, null, 2)
-    }
-  } catch (err) {
-    console.error('获取日志失败:', err)
-    const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '未知错误'
-    taskLogs.value = `加载日志失败: ${errorMsg}`
-  } finally {
-    viewingLogs.value = null
-  }
-}
-
-function closeLogModal() {
-  showLogModal.value = false
-  selectedTask.value = null
-  taskLogs.value = ''
   viewingLogs.value = null
 }
 </script>

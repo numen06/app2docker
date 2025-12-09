@@ -2960,7 +2960,7 @@ async def list_pipelines(
                     manager.unbind_task(pipeline_id)
                     pipeline["current_task_id"] = None
 
-            # 查找最后一次完成的构建任务（completed 或 failed）
+            # 查找最后一个构建任务（包括所有状态：running, pending, completed, failed）
             all_tasks = build_manager.task_manager.list_tasks(
                 task_type="build_from_source"
             )
@@ -2969,15 +2969,13 @@ async def list_pipelines(
                 # 检查任务是否属于该流水线
                 task_pipeline_id = task.get("pipeline_id")
                 if task_pipeline_id == pipeline_id:
-                    task_status = task.get("status")
-                    # 只考虑已完成的任务（completed 或 failed）
-                    if task_status in ["completed", "failed"]:
-                        if not last_task or task.get("created_at", "") > last_task.get(
-                            "created_at", ""
-                        ):
-                            last_task = task
+                    # 查找所有状态的任务，取最新的一个
+                    if not last_task or task.get("created_at", "") > last_task.get(
+                        "created_at", ""
+                    ):
+                        last_task = task
 
-            # 添加最后一次构建信息
+            # 添加最后一次构建信息（包含所有状态）
             if last_task:
                 pipeline["last_build"] = {
                     "task_id": last_task.get("task_id"),
@@ -2988,7 +2986,7 @@ async def list_pipelines(
                     "tag": last_task.get("tag"),
                     "error": last_task.get("error"),
                 }
-                # 添加一个便捷的成功状态字段
+                # 添加一个便捷的成功状态字段（仅对已完成的任务）
                 pipeline["last_build_success"] = last_task.get("status") == "completed"
             else:
                 pipeline["last_build"] = None
