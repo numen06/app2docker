@@ -59,15 +59,13 @@ RUN apt-get update && \
     apt-get install -y docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
 
-# ✅ 5. 手动安装 buildx 插件（使用 GitHub 国内代理）
-RUN mkdir -p ~/.docker/cli-plugins
-RUN curl -fsSL https://ghproxy.com/https://github.com/docker/buildx/releases/download/v0.16.3/buildx-v0.16.3.linux-amd64 \
-    -o ~/.docker/cli-plugins/docker-buildx && \
-    chmod a+x ~/.docker/cli-plugins/docker-buildx
+# 3. 添加 buildx 插件（从本地复制）
+COPY buildx-v0.16.3.linux-amd64 /root/.docker/cli-plugins/docker-buildx
+RUN chmod a+x /root/.docker/cli-plugins/docker-buildx
 
-# ✅ 6. 验证
-RUN echo "✅ docker version:" && docker --version && \
-    echo "✅ buildx version:" && docker buildx version
+# 4. 验证
+RUN docker --version && docker buildx version
+
 
 
 
