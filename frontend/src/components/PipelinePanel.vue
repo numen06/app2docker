@@ -191,10 +191,10 @@
                     <i class="fas fa-clock"></i> 等待中
                   </span>
                   <button 
-                    v-if="pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
+                    v-if="pipeline.last_build && pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
                     class="btn btn-sm btn-outline-info p-1" 
                     style="width: 24px; height: 24px; line-height: 1;"
-                    @click="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
+                    @click.stop="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
                     title="查看日志"
                   >
                     <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
@@ -214,10 +214,10 @@
                     {{ pipeline.last_build.status === 'completed' ? '成功' : '失败' }}
                   </span>
                   <button 
-                    v-if="pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
+                    v-if="pipeline.last_build && pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
                     class="btn btn-sm btn-outline-info p-1" 
                     style="width: 24px; height: 24px; line-height: 1;"
-                    @click="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
+                    @click.stop="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
                     title="查看日志"
                   >
                     <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
@@ -1121,7 +1121,7 @@
                       <button 
                         v-if="task.status !== 'deleted' && task.task_id"
                         class="btn btn-sm btn-outline-info" 
-                        @click="viewTaskLogs(task.task_id, task)"
+                        @click.stop="viewTaskLogs(task.task_id, task)"
                         :disabled="viewingLogs === task.task_id"
                         title="查看日志"
                       >
@@ -2095,21 +2095,44 @@ function onTaskStatusUpdated(newStatus) {
   }
 }
 
-async function viewTaskLogs(taskId, task) {
-  if (viewingLogs.value) return
+function viewTaskLogs(taskId, task) {
+  if (!taskId) {
+    console.error('viewTaskLogs: taskId 为空', { taskId, task })
+    alert('任务ID不存在，无法查看日志')
+    return
+  }
+  
+  if (viewingLogs.value === taskId) {
+    // 如果正在查看同一个任务的日志，直接返回
+    return
+  }
   
   viewingLogs.value = taskId
+  
   // 确保 task 对象有 task_id 属性
-  if (task && !task.task_id && taskId) {
-    task = { ...task, task_id: taskId }
-  } else if (taskId && !task) {
-    // 如果只有 taskId，创建一个基本的 task 对象
-    task = { task_id: taskId, status: 'unknown' }
+  if (task) {
+    if (!task.task_id) {
+      task = { ...task, task_id: taskId }
+    }
+  } else {
+    // 如果 task 为空，创建一个基本的 task 对象
+    task = { 
+      task_id: taskId, 
+      status: 'unknown',
+      image: '未知',
+      tag: 'latest'
+    }
   }
+  
   selectedTask.value = task
   showLogModal.value = true
   
-  viewingLogs.value = null
+  // 延迟清除 viewingLogs，避免重复点击
+  setTimeout(() => {
+    if (viewingLogs.value === taskId) {
+      viewingLogs.value = null
+    }
+  }, 100)
 }
 </script>
 
