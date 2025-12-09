@@ -37,43 +37,44 @@ RUN npm run build
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
 FROM ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/base:ubuntu24.04-py312
-# ✅ 切换为阿里云 apt 镜像源（国内加速）
-RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+# ✅ 1. 确保 apt 源配置正确（兼容缺失 sources.list 的情况）
+RUN mkdir -p /etc/apt && \
+    echo "deb http://archive.ubuntu.com/ubuntu jammy main universe" > /etc/apt/sources.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe" >> /etc/apt/sources.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu jammy-security main universe" >> /etc/apt/sources.list
 
-# ✅ 更新 + 安装基础依赖
-RUN apt-get update && apt-get install -y \
+# ✅ 2. 更新 apt 并安装基础依赖
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
     lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
-# ✅ 添加 Docker 官方 GPG 密钥（阿里云镜像同步，安全可信）
+# ✅ 3. 添加 Docker 官方 GPG 密钥（使用阿里云镜像加速）
 RUN mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg \
     | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-# ✅ 添加 Docker APT 源（阿里云镜像站，含 stable + test）
+# ✅ 4. 添加 Docker APT 源（阿里云镜像）
 RUN echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
     https://mirrors.aliyun.com/docker-ce/linux/ubuntu \
     $(lsb_release -cs) stable" \
     | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# ✅ 安装 docker-ce-cli 和 buildx 插件（Ubuntu 原生支持！）
-RUN apt-get update && \
-    apt-get install -y \
+# ✅ 5. 安装 Docker CLI + buildx 插件
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
     docker-ce-cli \
     docker-buildx-plugin \
     containerd.io \
     && rm -rf /var/lib/apt/lists/*
 
-# ✅ 验证安装（构建阶段即失败即知）
+# ✅ 6. 验证（构建阶段即失败即知）
 RUN echo "✅ docker version:" && docker --version && \
-    echo "✅ docker buildx version:" && docker buildx version && \
-    echo "✅ docker info (short):" && docker info --format '{{.ServerVersion}} {{.DefaultRuntime}}'
-
+    echo "✅ docker buildx version:" && docker buildx version
 
 WORKDIR /app
 
