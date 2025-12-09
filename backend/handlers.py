@@ -1278,6 +1278,7 @@ class BuildManager:
         push_registry: str = None,  # 已废弃，保留以兼容旧代码，实际不再使用
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
         build_steps: dict = None,  # 构建步骤信息
+        resource_package_ids: list = None,  # 资源包ID列表
     ):
         # 创建任务
         task_id = self.task_manager.create_task(
@@ -1308,6 +1309,7 @@ class BuildManager:
                 template_params or {},
                 push_registry,
                 extract_archive,
+                resource_package_ids or [],
             ),
             daemon=True,
         )
@@ -1329,6 +1331,7 @@ class BuildManager:
         template_params: dict = None,
         push_registry: str = None,  # 已废弃，保留以兼容旧代码，实际不再使用
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
+        resource_package_ids: list = None,  # 资源包ID列表
     ):
         full_tag = f"{image_name}:{tag}"
         # 使用 task_id 作为构建上下文目录名的一部分，避免冲突
@@ -1619,6 +1622,31 @@ class BuildManager:
                 os.path.join(build_context, "Dockerfile"), "w", encoding="utf-8"
             ) as f:
                 f.write(dockerfile_content)
+            log(f"✅ 已生成 Dockerfile\n")
+            
+            # 复制资源包到构建上下文
+            if resource_package_ids:
+                try:
+                    from backend.resource_package_manager import ResourcePackageManager
+                    package_manager = ResourcePackageManager()
+                    # 如果 resource_package_ids 是列表，转换为配置格式
+                    if isinstance(resource_package_ids, list) and len(resource_package_ids) > 0:
+                        if isinstance(resource_package_ids[0], dict):
+                            # 已经是配置格式
+                            package_configs = resource_package_ids
+                        else:
+                            # 只是ID列表，使用默认目录
+                            package_configs = [{'package_id': pid, 'target_dir': 'resources'} for pid in resource_package_ids]
+                        copied_packages = package_manager.copy_packages_to_build_context(
+                            package_configs,
+                            build_context
+                        )
+                        if copied_packages:
+                            log(f"✅ 已复制 {len(copied_packages)} 个资源包到构建上下文\n")
+                        else:
+                            log(f"⚠️ 资源包复制失败或资源包不存在\n")
+                except Exception as e:
+                    log(f"⚠️ 复制资源包失败: {str(e)}\n")
 
             log(f"\n🚀 开始构建镜像: {full_tag}\n")
             connection_info = docker_builder.get_connection_info()
@@ -1906,6 +1934,7 @@ class BuildManager:
         push_mode: str = "multi",  # 推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）
         build_steps: dict = None,  # 构建步骤信息
         service_template_params: dict = None,  # 服务模板参数
+        resource_package_ids: list = None,  # 资源包ID列表或配置列表
     ):
         """从 Git 源码开始构建"""
         try:
@@ -1932,6 +1961,7 @@ class BuildManager:
                 push_mode=push_mode,  # 传递推送模式
                 build_steps=build_steps or {},  # 传递构建步骤信息
                 service_template_params=service_template_params or {},  # 传递服务模板参数
+                resource_package_ids=resource_package_ids or [],  # 传递资源包ID列表
             )
             print(f"✅ 任务创建成功: task_id={task_id}")
         except Exception as e:
@@ -1964,6 +1994,7 @@ class BuildManager:
                     service_push_config,
                     push_mode,
                     service_template_params,  # 传递服务模板参数
+                    resource_package_ids or [],  # 传递资源包ID列表
                 ),
                 daemon=True,
             )
@@ -2008,6 +2039,7 @@ class BuildManager:
         service_push_config: dict = None,  # 每个服务的推送配置（key为服务名，value为是否推送）
         push_mode: str = "multi",  # 推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）
         service_template_params: dict = None,  # 服务模板参数
+        resource_package_ids: list = None,  # 资源包ID列表
     ):
         """从 Git 源码构建任务"""
         full_tag = f"{image_name}:{tag}"
@@ -2224,6 +2256,30 @@ class BuildManager:
                     all_template_params,
                 )
                 log(f"✅ 已生成 Dockerfile\n")
+
+            # 复制资源包到构建上下文
+            if resource_package_ids:
+                try:
+                    from backend.resource_package_manager import ResourcePackageManager
+                    package_manager = ResourcePackageManager()
+                    # 如果 resource_package_ids 是列表，转换为配置格式
+                    if isinstance(resource_package_ids, list) and len(resource_package_ids) > 0:
+                        if isinstance(resource_package_ids[0], dict):
+                            # 已经是配置格式
+                            package_configs = resource_package_ids
+                        else:
+                            # 只是ID列表，使用默认目录
+                            package_configs = [{'package_id': pid, 'target_dir': 'resources'} for pid in resource_package_ids]
+                        copied_packages = package_manager.copy_packages_to_build_context(
+                            package_configs,
+                            build_context
+                        )
+                        if copied_packages:
+                            log(f"✅ 已复制 {len(copied_packages)} 个资源包到构建上下文\n")
+                        else:
+                            log(f"⚠️ 资源包复制失败或资源包不存在\n")
+                except Exception as e:
+                    log(f"⚠️ 复制资源包失败: {str(e)}\n")
 
             # Docker API 需要相对于构建上下文的 Dockerfile 路径
             dockerfile_relative = os.path.relpath(dockerfile_path, build_context)

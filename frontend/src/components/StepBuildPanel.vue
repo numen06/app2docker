@@ -24,6 +24,11 @@
       <div class="step-connector" :class="{ completed: currentStep > 4 }"></div>
       <div class="step-item" :class="{ active: currentStep >= 5, completed: currentStep > 5 }">
         <div class="step-number">5</div>
+        <div class="step-label">选择资源包</div>
+      </div>
+      <div class="step-connector" :class="{ completed: currentStep > 5 }"></div>
+      <div class="step-item" :class="{ active: currentStep >= 6, completed: currentStep > 6 }">
+        <div class="step-number">6</div>
         <div class="step-label">开始构建</div>
       </div>
     </div>
@@ -740,10 +745,109 @@
         </div>
       </div>
 
-      <!-- 步骤5: 开始构建 -->
+      <!-- 步骤5: 选择资源包 -->
       <div v-if="currentStep === 5" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-play-circle text-primary"></i> 步骤 5：开始构建
+          <i class="fas fa-archive text-primary"></i> 步骤 5：选择资源包
+        </h5>
+        
+        <div class="mb-3">
+          <label class="form-label">
+            <i class="fas fa-info-circle text-info"></i> 资源包说明
+          </label>
+          <div class="alert alert-info small mb-3">
+            <p class="mb-1"><strong>资源包用于在构建时添加配置文件、密钥、证书等不能公开的内容。</strong></p>
+            <p class="mb-0">选择资源包后，它们将被复制到构建上下文的指定目录中，可以在 Dockerfile 中使用。</p>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">选择资源包</label>
+          <div v-if="loadingPackages" class="text-center py-2">
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            加载资源包列表...
+          </div>
+          <div v-else-if="packages.length === 0" class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> 暂无资源包，请先在"资源包"标签页上传资源包
+          </div>
+          <div v-else class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">
+                    <input 
+                      type="checkbox" 
+                      @change="toggleAllPackages"
+                      :checked="selectedResourcePackages.length === packages.length && packages.length > 0"
+                    />
+                  </th>
+                  <th>名称</th>
+                  <th>描述</th>
+                  <th>大小</th>
+                  <th>目标路径</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="pkg in packages" :key="pkg.package_id">
+                  <td>
+                    <input 
+                      type="checkbox" 
+                      :value="pkg.package_id"
+                      v-model="selectedResourcePackages"
+                    />
+                  </td>
+                  <td>
+                    <strong>{{ pkg.name }}</strong>
+                    <i v-if="pkg.extracted" class="fas fa-folder-open text-info ms-1" title="已解压"></i>
+                  </td>
+                  <td>
+                    <span class="text-muted small">{{ pkg.description || '无描述' }}</span>
+                  </td>
+                  <td>{{ formatBytes(pkg.size) }}</td>
+                  <td>
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text bg-light text-muted" style="font-size: 0.75rem;">
+                        <i class="fas fa-folder"></i>
+                      </span>
+                      <input 
+                        type="text" 
+                        class="form-control form-control-sm" 
+                        :value="resourcePackagePaths[pkg.package_id] || getDefaultResourcePath(pkg)"
+                        @input="updateResourcePackagePath(pkg.package_id, $event.target.value)"
+                      />
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                      <i class="fas fa-info-circle"></i> 
+                      相对路径，如：<code>test/b.txt</code> 或 <code>config/app.conf</code>
+                    </small>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div v-if="selectedResourcePackages.length > 0" class="alert alert-success">
+          <i class="fas fa-check-circle"></i> 已选择 <strong>{{ selectedResourcePackages.length }}</strong> 个资源包
+        </div>
+
+        <div class="d-flex justify-content-between mt-4">
+          <button class="btn btn-outline-secondary" @click="prevStep">
+            <i class="fas fa-arrow-left me-1"></i> 上一步
+          </button>
+          <button 
+            class="btn btn-primary" 
+            @click="nextStep"
+          >
+            下一步 <i class="fas fa-arrow-right ms-1"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 步骤6: 开始构建 -->
+      <div v-if="currentStep === 6" class="step-panel">
+        <h5 class="mb-3">
+          <i class="fas fa-play-circle text-primary"></i> 步骤 6：开始构建
         </h5>
         
         <!-- 构建配置摘要 -->
@@ -904,6 +1008,36 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 资源包 -->
+              <div v-if="buildConfig.resourcePackages && buildConfig.resourcePackages.length > 0" class="col-12">
+                <div class="border rounded p-3">
+                  <h6 class="text-secondary mb-3">
+                    <i class="fas fa-archive me-2"></i> 资源包
+                  </h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-borderless mb-0">
+                      <thead>
+                        <tr>
+                          <th style="width: 30%;">资源包名称</th>
+                          <th style="width: 70%;">目标路径</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="pkgConfig in buildConfig.resourcePackages" :key="pkgConfig.package_id">
+                          <td>
+                            <strong>{{ packages.find(p => p.package_id === pkgConfig.package_id)?.name || pkgConfig.package_id }}</strong>
+                          </td>
+                          <td>
+                            <code class="text-primary">{{ pkgConfig.target_path || pkgConfig.target_dir || 'resources' }}</code>
+                            <small class="text-muted ms-2">(相对构建上下文)</small>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -929,7 +1063,7 @@
 
 <script setup>
 import axios from 'axios'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const currentStep = ref(1)
 const building = ref(false)
@@ -980,6 +1114,12 @@ const registries = ref([])  // 仓库列表
 const batchImagePrefix = ref('')  // 批量设置镜像前缀
 const batchTag = ref('')  // 批量设置标签
 // 批量设置相关变量已移除，使用全局配置
+
+// 资源包相关
+const packages = ref([])
+const loadingPackages = ref(false)
+const selectedResourcePackages = ref([])  // 选中的资源包ID列表
+const resourcePackagePaths = ref({})  // 资源包路径映射 {package_id: target_dir}
 
 const projectTypes = computed(() => {
   const types = new Set()
@@ -1049,7 +1189,7 @@ const canProceedStep1 = computed(() => {
 
 // 步骤导航
 function nextStep() {
-  if (currentStep.value < 5) {
+  if (currentStep.value < 6) {
     currentStep.value++
     
     // 如果是文件上传模式，跳过步骤2（分支确认）
@@ -1060,6 +1200,25 @@ function nextStep() {
     // 步骤3完成后，自动分析模板
     if (currentStep.value === 4) {
       analyzeTemplate()
+    }
+    
+    // 步骤4完成后，进入步骤5（选择资源包）
+    if (currentStep.value === 5) {
+      loadResourcePackages()
+    }
+    
+    // 步骤5完成后，进入步骤6（开始构建）
+    if (currentStep.value === 6) {
+      // 保存资源包配置
+      buildConfig.value.resourcePackages = selectedResourcePackages.value.map(packageId => {
+        const pkg = packages.value.find(p => p.package_id === packageId)
+        // 如果用户没有输入路径，使用默认值（根目录下的文件名）
+        const targetPath = resourcePackagePaths.value[packageId] || getDefaultResourcePath(pkg)
+        return {
+          package_id: packageId,
+          target_path: targetPath  // 使用 target_path 替代 target_dir，支持完整路径
+        }
+      })
     }
   }
 }
@@ -1678,6 +1837,11 @@ async function startBuild() {
           isMultiService: false
         },
         step5: {
+          name: '选择资源包',
+          completed: true,
+          resourcePackageCount: buildConfig.value.resourcePackages?.length || 0
+        },
+        step6: {
           name: '开始构建',
           completed: false,
           imageName: buildConfig.value.imageName,
@@ -1697,6 +1861,9 @@ async function startBuild() {
       }
       if (Object.keys(buildConfig.value.templateParams).length > 0) {
         formData.append('template_params', JSON.stringify(buildConfig.value.templateParams))
+      }
+      if (buildConfig.value.resourcePackages && buildConfig.value.resourcePackages.length > 0) {
+        formData.append('resource_package_configs', JSON.stringify(buildConfig.value.resourcePackages))
       }
       formData.append('build_steps', JSON.stringify(buildSteps))  // 添加步骤信息
       
@@ -1742,6 +1909,11 @@ async function startBuild() {
           isMultiService: services.value.length > 0
         },
         step5: {
+          name: '选择资源包',
+          completed: true,
+          resourcePackageCount: buildConfig.value.resourcePackages?.length || 0
+        },
+        step6: {
           name: '开始构建',
           completed: false,
           imageName: buildConfig.value.imageName,
@@ -1936,6 +2108,63 @@ async function pollBuildLogs(buildId) {
       poll()
     }
   }, 1000)
+}
+
+// 加载资源包列表
+async function loadResourcePackages() {
+  loadingPackages.value = true
+  try {
+    const res = await axios.get('/api/resource-packages')
+    if (res.data.success) {
+      packages.value = res.data.packages || []
+      // 初始化所有资源包的路径（直接填入默认值，用户可以编辑）
+      packages.value.forEach(pkg => {
+        if (resourcePackagePaths.value[pkg.package_id] === undefined) {
+          resourcePackagePaths.value[pkg.package_id] = getDefaultResourcePath(pkg)
+        }
+      })
+    }
+  } catch (error) {
+    console.error('加载资源包列表失败:', error)
+  } finally {
+    loadingPackages.value = false
+  }
+}
+
+// 获取默认资源包路径（默认在根目录下，直接使用文件名）
+function getDefaultResourcePath(pkg) {
+  if (!pkg) return ''
+  // 默认在根目录下，直接使用文件名
+  return pkg.name
+}
+
+// 更新资源包路径
+function updateResourcePackagePath(packageId, path) {
+  // 用户编辑时，直接保存输入的值
+  resourcePackagePaths.value[packageId] = path ? path.trim() : ''
+}
+
+// 全选/取消全选资源包
+function toggleAllPackages(event) {
+  if (event.target.checked) {
+    selectedResourcePackages.value = packages.value.map(p => p.package_id)
+    packages.value.forEach(pkg => {
+      if (!resourcePackagePaths.value[pkg.package_id]) {
+        resourcePackagePaths.value[pkg.package_id] = getDefaultResourcePath(pkg)
+      }
+    })
+  } else {
+    selectedResourcePackages.value = []
+  }
+}
+
+// 格式化文件大小
+function formatBytes(bytes) {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
 async function loadRegistries() {

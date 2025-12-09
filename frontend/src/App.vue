@@ -87,6 +87,11 @@
                   <i class="fas fa-server"></i> Docker 管理
                 </button>
               </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'resource-package' }" @click="activeTab = 'resource-package'">
+                  <i class="fas fa-archive"></i> 资源包
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -102,6 +107,7 @@
             <PipelinePanel v-if="activeTab === 'pipeline'" />
             <DataSourcePanel v-if="activeTab === 'datasource'" />
             <TaskManager v-if="activeTab === 'tasks'" />
+            <ResourcePackagePanel v-if="activeTab === 'resource-package'" />
           </div>
         </div>
       </div>
@@ -126,6 +132,7 @@ import BuildPanel from './components/BuildPanel.vue'
 import ConfigModal from './components/ConfigModal.vue'
 import DataSourcePanel from './components/DataSourcePanel.vue'
 import DockerManager from './components/DockerManager.vue'
+import ResourcePackagePanel from './components/ResourcePackagePanel.vue'
 import ExportPanel from './components/ExportPanel.vue'
 import LoginPage from './components/LoginPage.vue'
 import OperationLogs from './components/OperationLogs.vue'

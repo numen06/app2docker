@@ -39,6 +39,7 @@ from backend.handlers import (
     DOCKER_AVAILABLE,
     parse_dockerfile_services,
 )
+from backend.resource_package_manager import ResourcePackageManager
 from backend.config import (
     load_config,
     save_config,
@@ -594,6 +595,14 @@ async def upload_file(
             except json.JSONDecodeError:
                 print(f"⚠️ 构建步骤信息格式错误，忽略: {build_steps}")
 
+        # 解析资源包配置
+        resource_package_configs_list = []
+        if resource_package_configs:
+            try:
+                resource_package_configs_list = json.loads(resource_package_configs)
+            except json.JSONDecodeError:
+                print(f"⚠️ 资源包配置格式错误，忽略: {resource_package_configs}")
+
         # 调用构建管理器
         manager = BuildManager()
         task_id = manager.start_build(
@@ -608,6 +617,7 @@ async def upload_file(
             push_registry=None,  # 已废弃，统一使用激活的registry
             extract_archive=(extract_archive == "on"),  # 传递解压选项
             build_steps=build_steps_dict,  # 传递构建步骤信息
+            resource_package_ids=resource_package_configs_list,  # 传递资源包配置
         )
 
         # 记录操作日志
@@ -1008,6 +1018,8 @@ async def build_from_source(
     push_mode: Optional[str] = Body("multi", description="推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）"),
     build_steps: Optional[dict] = Body(None, description="构建步骤信息（JSON对象）"),
     service_template_params: Optional[dict] = Body(None, description="服务模板参数（JSON对象）"),
+    resource_package_ids: Optional[list] = Body(None, description="资源包ID列表（已废弃，使用resource_package_configs）"),
+    resource_package_configs: Optional[list] = Body(None, description="资源包配置列表 [{package_id, target_path}]，target_path 为相对路径，如 'test/b.txt' 或 'resources'"),
 ):
     """从 Git 源码构建镜像"""
     try:
@@ -1020,6 +1032,18 @@ async def build_from_source(
                 params_dict = json.loads(template_params)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="模板参数格式错误")
+
+        # 解析服务模板参数
+        service_template_params_dict = {}
+        if service_template_params:
+            # 如果已经是字典，直接使用；如果是字符串，则解析
+            if isinstance(service_template_params, dict):
+                service_template_params_dict = service_template_params
+            elif isinstance(service_template_params, str):
+                try:
+                    service_template_params_dict = json.loads(service_template_params)
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=400, detail="服务模板参数格式错误")
 
         # 调用构建管理器
         try:
@@ -1057,6 +1081,7 @@ async def build_from_source(
                     push_mode=push_mode or "multi",
                     build_steps=build_steps,  # 传递构建步骤信息
                     service_template_params=service_template_params_dict,  # 传递服务模板参数
+                    resource_package_ids=resource_package_configs or [],  # 传递资源包配置
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")
@@ -3450,3 +3475,267 @@ async def commit_dockerfile(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"提交 Dockerfile 失败: {str(e)}")
+
+
+# ==================== 资源包管理 API ====================
+
+@router.post("/resource-packages/upload")
+async def upload_resource_package(
+    request: Request,
+    package_file: UploadFile = File(...),
+    description: str = Form(""),
+    extract: bool = Form(True),
+):
+    """上传资源包"""
+    try:
+        username = get_current_username(request)
+        
+        # 读取文件数据
+        file_data = await package_file.read()
+        
+        if not file_data:
+            raise HTTPException(status_code=400, detail="文件为空")
+        
+        # 上传资源包
+        manager = ResourcePackageManager()
+        package_info = manager.upload_package(
+            file_data=file_data,
+            filename=package_file.filename,
+            description=description,
+            extract=extract,
+        )
+        
+        # 记录操作日志
+        OperationLogger.log(username, "resource_package_upload", {
+            "package_id": package_info["package_id"],
+            "filename": package_file.filename,
+            "size": package_info["size"],
+        })
+        
+        return JSONResponse({
+            "success": True,
+            "package": package_info,
+            "message": "资源包上传成功",
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"上传资源包失败: {str(e)}")
+
+
+@router.get("/resource-packages")
+async def list_resource_packages(request: Request):
+    """获取资源包列表"""
+    try:
+        manager = ResourcePackageManager()
+        packages = manager.list_packages()
+        
+        return JSONResponse({
+            "success": True,
+            "packages": packages,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取资源包列表失败: {str(e)}")
+
+
+@router.get("/resource-packages/{package_id}")
+async def get_resource_package(request: Request, package_id: str):
+    """获取资源包信息"""
+    try:
+        manager = ResourcePackageManager()
+        package_info = manager.get_package(package_id)
+        
+        if not package_info:
+            raise HTTPException(status_code=404, detail="资源包不存在")
+        
+        return JSONResponse({
+            "success": True,
+            "package": package_info,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取资源包信息失败: {str(e)}")
+
+
+@router.delete("/resource-packages/{package_id}")
+async def delete_resource_package(request: Request, package_id: str):
+    """删除资源包"""
+    try:
+        username = get_current_username(request)
+        
+        manager = ResourcePackageManager()
+        success = manager.delete_package(package_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="资源包不存在")
+        
+        # 记录操作日志
+        OperationLogger.log(username, "resource_package_delete", {
+            "package_id": package_id,
+        })
+        
+        return JSONResponse({
+            "success": True,
+            "message": "资源包已删除",
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除资源包失败: {str(e)}")
+
+
+@router.get("/resource-packages/{package_id}/content")
+async def get_resource_package_content(request: Request, package_id: str):
+    """获取资源包文件内容（仅文本文件）"""
+    try:
+        manager = ResourcePackageManager()
+        package_info = manager.get_package(package_id)
+        
+        if not package_info:
+            raise HTTPException(status_code=404, detail="资源包不存在")
+        
+        # 检查是否为文本文件
+        filename = package_info.get('filename', '')
+        text_extensions = ['.txt', '.json', '.yaml', '.yml', '.xml', '.properties', 
+                          '.conf', '.config', '.ini', '.env', '.sh', '.bash', 
+                          '.py', '.js', '.ts', '.java', '.go', '.rs', '.md', 
+                          '.log', '.sql', '.csv', '.html', '.css', '.scss', 
+                          '.less', '.vue', '.tsx', '.jsx', '.dockerfile', 
+                          '.gitignore', '.gitattributes', '.editorconfig']
+        
+        filename_lower = filename.lower()
+        is_text_file = any(filename_lower.endswith(ext) for ext in text_extensions)
+        
+        if not is_text_file:
+            raise HTTPException(status_code=400, detail="该文件不是文本文件，无法在线编辑")
+        
+        # 读取文件内容
+        package_dir = os.path.join("data/resource_packages", package_id)
+        file_path = os.path.join(package_dir, filename)
+        
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="文件不存在")
+        
+        # 检查文件大小（限制为1MB）
+        file_size = os.path.getsize(file_path)
+        if file_size > 1024 * 1024:
+            raise HTTPException(status_code=400, detail="文件过大（超过1MB），无法在线编辑")
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except UnicodeDecodeError:
+            # 尝试其他编码
+            try:
+                with open(file_path, 'r', encoding='gbk') as f:
+                    content = f.read()
+            except:
+                raise HTTPException(status_code=400, detail="文件编码不支持，无法在线编辑")
+        
+        return JSONResponse({
+            "success": True,
+            "content": content,
+            "filename": filename,
+            "encoding": "utf-8"
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取资源包内容失败: {str(e)}")
+
+
+@router.put("/resource-packages/{package_id}/content")
+async def update_resource_package_content(
+    request: Request,
+    package_id: str,
+    content: str = Body(..., embed=True, description="文件内容")
+):
+    """更新资源包文件内容（仅文本文件）"""
+    try:
+        username = get_current_username(request)
+        
+        manager = ResourcePackageManager()
+        package_info = manager.get_package(package_id)
+        
+        if not package_info:
+            raise HTTPException(status_code=404, detail="资源包不存在")
+        
+        # 检查是否为文本文件
+        filename = package_info.get('filename', '')
+        text_extensions = ['.txt', '.json', '.yaml', '.yml', '.xml', '.properties', 
+                          '.conf', '.config', '.ini', '.env', '.sh', '.bash', 
+                          '.py', '.js', '.ts', '.java', '.go', '.rs', '.md', 
+                          '.log', '.sql', '.csv', '.html', '.css', '.scss', 
+                          '.less', '.vue', '.tsx', '.jsx', '.dockerfile', 
+                          '.gitignore', '.gitattributes', '.editorconfig']
+        
+        filename_lower = filename.lower()
+        is_text_file = any(filename_lower.endswith(ext) for ext in text_extensions)
+        
+        if not is_text_file:
+            raise HTTPException(status_code=400, detail="该文件不是文本文件，无法在线编辑")
+        
+        # 保存文件内容
+        package_dir = os.path.join("data/resource_packages", package_id)
+        file_path = os.path.join(package_dir, filename)
+        
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="文件不存在")
+        
+        # 备份原文件
+        backup_path = file_path + '.bak'
+        try:
+            import shutil
+            shutil.copy2(file_path, backup_path)
+        except:
+            pass
+        
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # 更新文件大小
+            new_size = len(content.encode('utf-8'))
+            metadata = manager._load_metadata()
+            if package_id in metadata:
+                metadata[package_id]['size'] = new_size
+                metadata[package_id]['updated_at'] = datetime.now().isoformat()
+                manager._save_metadata(metadata)
+            
+            # 删除备份文件
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            
+            # 记录操作日志
+            OperationLogger.log(username, "resource_package_edit", {
+                "package_id": package_id,
+                "filename": filename,
+            })
+            
+            return JSONResponse({
+                "success": True,
+                "message": "文件已保存",
+            })
+        except Exception as e:
+            # 恢复备份
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, file_path)
+            raise e
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新资源包内容失败: {str(e)}")
