@@ -42,45 +42,35 @@ FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3
 RUN sed -i 's|mirrors\.cloud\.aliyuncs\.com|mirrors.aliyun.com|g' /etc/yum.repos.d/*.repo 2>/dev/null || true
 
 ENV TZ=Asia/Shanghai
+# ✅ 步骤 1：创建官方 alinux3-docker.repo（启用 + 阿里云镜像 + GPG 校验）
+RUN cat > /etc/yum.repos.d/alinux3-docker.repo <<'EOF'
+[alinux3-docker]
+name=Alibaba Cloud Linux 3 - Docker
+baseurl=https://mirrors.aliyun.com/alinux/3/docker/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/alinux/RPM-GPG-KEY-Alibaba-Cloud
+repo_gpgcheck=0
+skip_if_unavailable=True
+EOF
 
-# 安装 docker CLI 和 buildx 插件
-RUN dnf install -y tzdata curl git \
-    && ln -sf /usr/share/zoneinfo=$TZ /etc/localtime \
-    && echo "$TZ" > /etc/timezone 
-# ✅ 自动检测架构：amd64 → x86_64, arm64 → aarch64
-RUN ARCH=$(echo "${TARGETARCH:-$(uname -m)}" | sed -E 's/amd64|x86_64/x86_64/; s/arm64|aarch64/aarch64/') && \
-    echo "🎯 Detected architecture: $ARCH" && \
-    #
-    # --- 安装 docker CLI ---
-    echo "📦 Installing Docker CLI ${DOCKER_CLI_VERSION}..." && \
-    curl -fsSL --retry 3 "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
-    | tar -xz -C /tmp && \
-    cp /tmp/docker/docker /usr/local/bin/ && \
-    chmod +x /usr/local/bin/docker && \
-    rm -rf /tmp/docker && \
-    echo "✅ Docker CLI installed"
-
-# --- 安装 buildx 插件 ---
-RUN ARCH=$(echo "${TARGETARCH:-$(uname -m)}" | sed -E 's/amd64|x86_64/x86_64/; s/arm64|aarch64/aarch64/') && \
+# ✅ 步骤 2：清理缓存 + 生成新元数据 + 安装（带详细日志）
+RUN dnf clean all && \
+    dnf makecache --refresh && \
+    echo "🔍 可用包列表：" && \
+    dnf list available docker-ce-cli docker-buildx-plugin | head -n 10 && \
+    \
+    echo "📦 正在安装 docker-ce-cli 和 buildx 插件..." && \
+    dnf install -y docker-ce-cli docker-buildx-plugin && \
+    \
+    # ✅ 步骤 3：确保插件路径可写（ALinux3 默认 root home 权限安全）
     mkdir -p ~/.docker/cli-plugins && \
-    echo "📦 Installing Buildx ${BUILDX_VERSION} for $ARCH..." && \
-    # 🔁 双重 fallback：清华源 → 官方 GitHub Release
-    if ! curl -fsSL --retry 3 \
-    "https://mirrors.tuna.tsinghua.edu.cn/github-release/docker/buildx/${BUILDX_VERSION}/download/buildx-${BUILDX_VERSION}.linux-${ARCH}" \
-    -o ~/.docker/cli-plugins/docker-buildx; \
-    then \
-    echo "⚠️  清华源失败，回退到 GitHub..."; \
-    curl -fsSL --retry 3 \
-    "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-${ARCH}" \
-    -o ~/.docker/cli-plugins/docker-buildx; \
-    fi && \
-    chmod +x ~/.docker/cli-plugins/docker-buildx && \
-    echo "✅ Buildx plugin installed"
-
-# ✅ 验证安装结果
-RUN docker --version && \
-    docker buildx version && \
-    echo "🎉 Success: docker + buildx ready!"
+    chmod 755 ~/.docker ~/.docker/cli-plugins && \
+    \
+    # ✅ 步骤 4：验证（构建阶段即失败即知）
+    echo "✅ docker --version:" && docker --version && \
+    echo "✅ docker buildx version:" && docker buildx version && \
+    echo "🎉 dnf 安装成功！符合 ALinux3 官方最佳实践。"
 
 
 WORKDIR /app
