@@ -48,23 +48,27 @@ RUN dnf install -y tzdata curl git \
     && ln -sf /usr/share/zoneinfo=$TZ /etc/localtime \
     && echo "$TZ" > /etc/timezone 
 
-# === 步骤 1：安装 docker-cli（最小依赖，不装 dockerd）===
-# 启用 alinux3-docker 仓库（核心修复！）
-RUN sed -i '/^\[alinux3-docker\]$/,/^$/ s/enabled=0/enabled=1/' /etc/yum.repos.d/alinux3-docker.repo && \
-    # 可选：确认已启用
-    grep -A 3 '\[alinux3-docker\]' /etc/yum.repos.d/alinux3-docker.repo
+# ✅ STEP 1: 安装 Docker CLI 官方静态二进制（v24.0.7，适配 ALinux3 glibc 2.28）
+ARG DOCKER_CLI_VERSION=24.0.7
+ARG ARCH=$(uname -m | sed 's/x86_64/x86_64/; s/aarch64/aarch64/')
+RUN curl -fsSL "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-${DOCKER_CLI_VERSION}.tgz" \
+    | tar -xz -C /tmp && \
+    cp /tmp/docker/docker /usr/local/bin/docker && \
+    chmod +x /usr/local/bin/docker && \
+    rm -rf /tmp/docker
 
-# ✅ 步骤 2：安装官方 docker-ce-cli 和 buildx 插件（RPM 包，安全可靠）
-RUN dnf install -y docker-ce-cli docker-buildx-plugin && \
-    dnf clean all
-
-# === 步骤 2：安装 buildx 插件（清华镜像加速）===
-ARG BUILDX_VERSION=v0.14.1  # ✅ 建议升级到最新稳定版：https://github.com/docker/buildx/releases
+# ✅ STEP 2: 安装 buildx 插件（官方 release，清华镜像）
+ARG BUILDX_VERSION=v0.14.1
 RUN mkdir -p ~/.docker/cli-plugins && \
-    ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/') && \
     curl -fsSL "https://mirrors.tuna.tsinghua.edu.cn/github-release/docker/buildx/${BUILDX_VERSION}/download/buildx-${BUILDX_VERSION}.linux-${ARCH}" \
     -o ~/.docker/cli-plugins/docker-buildx && \
     chmod +x ~/.docker/cli-plugins/docker-buildx
+
+# ✅ STEP 3: 验证（构建阶段即保障可用性）
+RUN docker --version && \
+    docker buildx version && \
+    echo "✅ Docker CLI ${DOCKER_CLI_VERSION} + Buildx ${BUILDX_VERSION} installed successfully."
+
 
 WORKDIR /app
 
