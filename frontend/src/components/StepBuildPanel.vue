@@ -1965,7 +1965,10 @@ async function startBuild() {
             )
           : undefined,
         push_mode: (buildConfig.value.sourceType === 'file' || buildConfig.value.useProjectDockerfile) ? 'multi' : (buildConfig.value.pushMode || 'multi'),
-        build_steps: buildSteps  // 添加步骤信息
+        build_steps: buildSteps,  // 添加步骤信息
+        resource_package_configs: (buildConfig.value.resourcePackages && buildConfig.value.resourcePackages.length > 0)
+          ? buildConfig.value.resourcePackages
+          : undefined  // 添加资源包配置
       }
       
       const res = await axios.post('/api/build-from-source', payload)

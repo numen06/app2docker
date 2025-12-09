@@ -2264,7 +2264,9 @@ class BuildManager:
                 log(f"✅ 已生成 Dockerfile\n")
 
             # 复制资源包到构建上下文
+            log(f"📦 检查资源包配置...\n")
             if resource_package_ids:
+                log(f"📋 发现 {len(resource_package_ids)} 个资源包配置\n")
                 try:
                     from backend.resource_package_manager import ResourcePackageManager
                     package_manager = ResourcePackageManager()
@@ -2292,6 +2294,8 @@ class BuildManager:
                             log(f"⚠️ 资源包复制失败或资源包不存在\n")
                 except Exception as e:
                     log(f"⚠️ 复制资源包失败: {str(e)}\n")
+            else:
+                log(f"ℹ️  未配置资源包，跳过资源包复制\n")
 
             # Docker API 需要相对于构建上下文的 Dockerfile 路径
             dockerfile_relative = os.path.relpath(dockerfile_path, build_context)
