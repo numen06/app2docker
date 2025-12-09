@@ -36,47 +36,13 @@ RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
-FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.11.1
+FROM build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/docker
 
 # 👇 【统一修复源】—— 外网构建必加！
 RUN sed -i 's|mirrors\.cloud\.aliyuncs\.com|mirrors.aliyun.com|g' /etc/yum.repos.d/*.repo 2>/dev/null || true
 
 ENV TZ=Asia/Shanghai
 
-
-# ✅ 创建官方 alinux3-docker.repo（阿里云镜像 + GPG 校验）
-RUN cat > /etc/yum.repos.d/alinux3-docker.repo <<'EOF'
-[alinux3-docker]
-name=Alibaba Cloud Linux 3 - Docker
-baseurl=https://mirrors.aliyun.com/alinux/3/docker/$basearch/
-enabled=1
-gpgcheck=1
-gpgkey=https://mirrors.aliyun.com/alinux/RPM-GPG-KEY-Alibaba-Cloud
-repo_gpgcheck=0
-skip_if_unavailable=True
-EOF
-
-# ✅ 清理缓存 + 更新元数据
-RUN dnf clean all && \
-    dnf makecache --refresh
-
-# ✅ 关键：安装 docker-ce（它自带 docker CLI 和 buildx 插件！）
-RUN echo "📦 正在安装 docker-ce（含 CLI + buildx）..." && \
-    dnf install -y docker-ce containerd.io && \
-    \
-    # ✅ 启动 containerd（buildx 需要运行时）
-    systemctl enable --now containerd && \
-    \
-    # ✅ 验证 buildx 插件是否已就位（它被自动安装到 /usr/libexec/docker/cli-plugins/）
-    ls -l /usr/libexec/docker/cli-plugins/docker-buildx 2>/dev/null || \
-    (echo "⚠️  buildx 插件未自动安装，手动链接..." && \
-    mkdir -p ~/.docker/cli-plugins && \
-    ln -sf /usr/libexec/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/)
-
-# ✅ 验证（构建阶段即检查）
-RUN echo "✅ docker version:" && docker --version && \
-    echo "✅ docker buildx version:" && docker buildx version && \
-    echo "✅ docker info (short):" && docker info --format '{{.ServerVersion}} {{.DefaultRuntime}}'
 
 
 WORKDIR /app
