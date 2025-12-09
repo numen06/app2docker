@@ -82,7 +82,7 @@ RUN ln -sf python3 /usr/bin/python && \
 RUN python -m venv /opt/venv && \
     /opt/venv/bin/pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
     /opt/venv/bin/pip install --upgrade pip && \
-    /opt/venv/bin/pip install --no-cache-dir -r /path/to/requirements.txt
+    /opt/venv/bin/pip install --no-cache-dir -rrequirements.txt
 
 # 复制后端代码
 COPY backend/ ./backend/
