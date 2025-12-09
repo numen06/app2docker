@@ -2099,6 +2099,13 @@ async function viewTaskLogs(taskId, task) {
   if (viewingLogs.value) return
   
   viewingLogs.value = taskId
+  // 确保 task 对象有 task_id 属性
+  if (task && !task.task_id && taskId) {
+    task = { ...task, task_id: taskId }
+  } else if (taskId && !task) {
+    // 如果只有 taskId，创建一个基本的 task 对象
+    task = { task_id: taskId, status: 'unknown' }
+  }
   selectedTask.value = task
   showLogModal.value = true
   

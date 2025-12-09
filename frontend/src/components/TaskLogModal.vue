@@ -7,7 +7,7 @@
       tabindex="-1"
       @click.self="close"
     >
-      <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width: 90%;">
+      <div class="modal-dialog modal-xl" style="max-width: 90%;">
         <div class="modal-content">
           <div class="modal-header" :class="getStatusHeaderClass(task.status)">
             <h5 class="modal-title">
@@ -19,7 +19,7 @@
             </h5>
             <button type="button" class="btn-close" :class="task.status === 'failed' ? 'btn-close-white' : ''" @click="close"></button>
           </div>
-          <div class="modal-body p-0">
+          <div class="modal-body p-0" style="display: flex; flex-direction: column; max-height: 80vh;">
             <!-- 工具栏 -->
             <div class="d-flex justify-content-between align-items-center p-2 border-bottom bg-light">
               <div class="d-flex align-items-center gap-2">
@@ -80,11 +80,13 @@
             </div>
             
             <!-- 日志内容 -->
-            <pre 
-              ref="logContainer"
-              class="bg-dark text-light p-3 mb-0" 
-              style="min-height: 400px; max-height: 70vh; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; line-height: 1.5;"
-            >{{ logs || '暂无日志' }}</pre>
+            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+              <pre 
+                ref="logContainer"
+                class="bg-dark text-light p-3 mb-0" 
+                style="flex: 1; overflow-y: auto; overflow-x: hidden; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; line-height: 1.5; min-height: 0;"
+              >{{ logs || '暂无日志' }}</pre>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary btn-sm" @click="close">关闭</button>
@@ -306,10 +308,16 @@ function calculateDuration(startTime, endTime) {
 
 // 监听 modelValue 和 task 变化
 watch(() => [props.modelValue, props.task], ([newValue, newTask]) => {
-  if (newValue && newTask && newTask.task_id) {
-    logs.value = '加载中...'
-    fetchTaskLogs(newTask.task_id)
-    startLogPolling(newTask.task_id)
+  if (newValue && newTask) {
+    const taskId = newTask.task_id
+    if (taskId) {
+      logs.value = '加载中...'
+      fetchTaskLogs(taskId)
+      startLogPolling(taskId)
+    } else {
+      logs.value = '任务ID不存在'
+      stopLogPolling()
+    }
   } else {
     stopLogPolling()
     logs.value = ''
@@ -321,8 +329,9 @@ watch(() => props.task?.status, (newStatus) => {
   if (newStatus === 'completed' || newStatus === 'failed') {
     stopLogPolling()
   } else if (newStatus === 'running' || newStatus === 'pending') {
-    if (props.task && props.task.task_id) {
-      startLogPolling(props.task.task_id)
+    const taskId = props.task?.task_id
+    if (taskId) {
+      startLogPolling(taskId)
     }
   }
 })
