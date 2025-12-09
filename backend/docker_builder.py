@@ -123,19 +123,57 @@ class DockerBuilder(ABC):
             if result.returncode == 0:
                 # 查找默认的 builder（标记为 * 的）
                 for line in result.stdout.splitlines():
-                    if "*" in line and "docker-container" in line:
-                        # 找到 docker-container driver 的 builder
-                        builder_name = line.split()[0]
-                        return builder_name
-                    elif "*" in line:
-                        # 使用默认 builder
-                        builder_name = line.split()[0]
-                        return builder_name
-        except Exception:
-            pass
+                    # 跳过标题行
+                    if "NAME" in line or "BUILDER" in line or not line.strip():
+                        continue
 
-        # 如果没有找到合适的 builder，尝试创建或使用默认的
-        return "default"
+                    # 查找包含 * 的行（默认 builder）
+                    if "*" in line:
+                        # 分割行，第一个字段是 builder 名称
+                        parts = line.split()
+                        if parts:
+                            builder_name = parts[0].strip()
+                            # 确保 builder 名称不包含 * 符号
+                            if "*" in builder_name:
+                                # 如果名称中包含 *，尝试移除或使用默认值
+                                builder_name = builder_name.replace("*", "").strip()
+                                if not builder_name:
+                                    continue
+
+                            # 优先选择 docker-container driver 的 builder
+                            if "docker-container" in line:
+                                return builder_name
+                            # 否则返回第一个找到的默认 builder
+                            return builder_name
+        except Exception as e:
+            print(f"⚠️ 检查 buildx builder 失败: {e}")
+
+        # 如果没有找到合适的 builder，尝试创建默认的
+        try:
+            # 尝试创建默认的 docker-container builder
+            result = subprocess.run(
+                [
+                    docker_path,
+                    "buildx",
+                    "create",
+                    "--name",
+                    "default",
+                    "--driver",
+                    "docker-container",
+                    "--use",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                return "default"
+        except Exception as e:
+            print(f"⚠️ 创建 buildx builder 失败: {e}")
+
+        # 如果创建失败，尝试使用默认的 builder（不指定 --builder）
+        # 返回空字符串表示使用默认 builder
+        return ""
 
     def _build_with_buildx(
         self,
@@ -216,8 +254,8 @@ class DockerBuilder(ABC):
         # 构建 buildx 命令
         cmd = [docker_path, "buildx", "build"]
 
-        # 使用指定的 builder（如果需要）
-        if builder_name != "default":
+        # 使用指定的 builder（如果提供了名称）
+        if builder_name and builder_name.strip():
             cmd.extend(["--builder", builder_name])
 
         # 处理标签（支持多标签）

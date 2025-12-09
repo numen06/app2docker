@@ -47,6 +47,12 @@
                 <i class="fas fa-calendar-alt"></i> 清理N天前的任务
               </a>
             </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="cleanupBuildDir">
+                <i class="fas fa-folder-open"></i> 清空编译目录
+              </a>
+            </li>
           </ul>
         </div>
       </div>
@@ -936,6 +942,49 @@ async function cleanupByDaysPrompt() {
     await loadTasks()
   } catch (err) {
     console.error('清理任务失败:', err)
+    alert(err.response?.data?.detail || '清理失败')
+  } finally {
+    cleaning.value = false
+  }
+}
+
+async function cleanupBuildDir() {
+  if (cleaning.value) return
+  
+  const daysInput = prompt('请输入要保留的天数（例如：7 表示保留最近7天的编译目录，其他将被清理）：', '7')
+  if (!daysInput) {
+    return
+  }
+  
+  const days = parseInt(daysInput)
+  if (isNaN(days) || days < 0) {
+    alert('请输入有效的天数（必须大于等于0，0表示清空所有）')
+    return
+  }
+  
+  const confirmMsg = days === 0 
+    ? '确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！'
+    : `确定要清理 ${days} 天前的编译目录吗？\n\n此操作将删除旧的构建上下文目录，无法恢复，请谨慎操作！`
+  
+  if (!confirm(confirmMsg)) {
+    return
+  }
+  
+  cleaning.value = true
+  error.value = null
+  
+  try {
+    const res = await axios.post('/api/docker-build/cleanup', {
+      keep_days: days
+    })
+    
+    const message = days === 0
+      ? `成功清空编译目录，释放空间 ${res.data.freed_space_mb || 0} MB`
+      : `成功清理编译目录，删除了 ${res.data.removed_count || 0} 个目录，释放空间 ${res.data.freed_space_mb || 0} MB`
+    
+    alert(message)
+  } catch (err) {
+    console.error('清理编译目录失败:', err)
     alert(err.response?.data?.detail || '清理失败')
   } finally {
     cleaning.value = false

@@ -34,6 +34,7 @@ from backend.handlers import (
     BUILTIN_TEMPLATES_DIR,
     USER_TEMPLATES_DIR,
     EXPORT_DIR,
+    BUILD_DIR,
     natural_sort_key,
     docker_builder,
     DOCKER_AVAILABLE,
@@ -1452,6 +1453,71 @@ async def cleanup_tasks(
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"清理任务失败: {str(e)}")
+
+
+@router.post("/docker-build/cleanup")
+async def cleanup_docker_build_dir(
+    request: Request,
+    keep_days: Optional[int] = Body(7, description="保留最近N天的构建上下文，默认7天"),
+):
+    """清理 docker_build 目录中的旧构建上下文"""
+    try:
+        username = get_current_username(request)
+
+        if not os.path.exists(BUILD_DIR):
+            return {
+                "success": True,
+                "message": "构建目录不存在，无需清理",
+                "removed_count": 0,
+                "freed_space_mb": 0,
+            }
+
+        # 计算截止时间
+        from datetime import timedelta
+
+        cutoff_time = datetime.now() - timedelta(days=keep_days)
+
+        removed_count = 0
+        total_size = 0
+
+        # 遍历构建目录
+        for item in os.listdir(BUILD_DIR):
+            item_path = os.path.join(BUILD_DIR, item)
+            if not os.path.isdir(item_path):
+                continue
+
+            # 检查目录的修改时间
+            try:
+                mtime = os.path.getmtime(item_path)
+                if mtime < cutoff_time.timestamp():
+                    # 计算目录大小
+                    dir_size = sum(
+                        os.path.getsize(os.path.join(dirpath, filename))
+                        for dirpath, dirnames, filenames in os.walk(item_path)
+                        for filename in filenames
+                    )
+                    total_size += dir_size
+
+                    # 删除目录
+                    shutil.rmtree(item_path, ignore_errors=True)
+                    removed_count += 1
+            except Exception as e:
+                print(f"⚠️ 清理构建上下文失败 ({item_path}): {e}")
+
+        # 记录操作日志
+        OperationLogger().log(
+            username=username,
+            action="清理构建上下文",
+            details=f"清理了 {removed_count} 个构建上下文目录，释放空间 {total_size / 1024 / 1024:.2f} MB",
+        )
+
+        return {
+            "success": True,
+            "removed_count": removed_count,
+            "freed_space_mb": round(total_size / 1024 / 1024, 2),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"清理构建上下文失败: {str(e)}")
 
 
 @router.get("/get-logs")

@@ -1358,6 +1358,14 @@ class BuildManager:
             BUILD_DIR, f"{image_name.replace('/', '_')}_{task_id[:8]}"
         )
 
+        # 保存构建上下文路径到任务信息中
+        try:
+            with self.task_manager.lock:
+                if task_id in self.task_manager.tasks:
+                    self.task_manager.tasks[task_id]["build_context"] = build_context
+        except Exception as e:
+            print(f"⚠️ 保存构建上下文路径失败: {e}")
+
         def log(msg: str):
             """添加日志，自动确保以换行符结尾"""
             if not msg.endswith("\n"):
@@ -2100,6 +2108,14 @@ class BuildManager:
         build_context = os.path.join(
             BUILD_DIR, f"{image_name.replace('/', '_')}_{task_id[:8]}"
         )
+
+        # 保存构建上下文路径到任务信息中
+        try:
+            with self.task_manager.lock:
+                if task_id in self.task_manager.tasks:
+                    self.task_manager.tasks[task_id]["build_context"] = build_context
+        except Exception as e:
+            print(f"⚠️ 保存构建上下文路径失败: {e}")
 
         def log(msg: str):
             """添加日志（增强错误处理）"""
@@ -3438,6 +3454,7 @@ class BuildTaskManager:
 
     def delete_task(self, task_id: str) -> bool:
         """删除任务（只有停止、完成或失败的任务才能删除）"""
+        build_context = None
         with self.lock:
             if task_id not in self.tasks:
                 return False
@@ -3446,7 +3463,29 @@ class BuildTaskManager:
             # 只有停止、完成或失败的任务才能删除
             if status not in ("stopped", "completed", "failed"):
                 return False
+
+            # 获取构建上下文路径（如果存在）
+            build_context = task.get("build_context")
+            if not build_context:
+                # 如果没有保存，尝试从 image_name 和 task_id 推导
+                image_name = task.get("image", "")
+                if image_name:
+                    build_context = os.path.join(
+                        BUILD_DIR, f"{image_name.replace('/', '_')}_{task_id[:8]}"
+                    )
+
             del self.tasks[task_id]
+
+        # 清理构建上下文目录
+        if build_context and os.path.exists(build_context):
+            try:
+                import shutil
+
+                shutil.rmtree(build_context, ignore_errors=True)
+                print(f"🧹 已清理构建上下文: {build_context}")
+            except Exception as e:
+                print(f"⚠️ 清理构建上下文失败 ({build_context}): {e}")
+
         self._save_tasks()
         return True
 
@@ -3455,19 +3494,44 @@ class BuildTaskManager:
         cutoff_time = datetime.now() - timedelta(days=1)
         cutoff_iso = cutoff_time.isoformat()
 
+        expired_tasks_info = []
         with self.lock:
             expired_tasks = [
-                task_id
+                (task_id, task)
                 for task_id, task in self.tasks.items()
                 if task.get("created_at", "") < cutoff_iso
             ]
 
-            for task_id in expired_tasks:
+            for task_id, task in expired_tasks:
+                # 获取构建上下文路径
+                build_context = task.get("build_context")
+                if not build_context:
+                    # 如果没有保存，尝试从 image_name 和 task_id 推导
+                    image_name = task.get("image", "")
+                    if image_name:
+                        build_context = os.path.join(
+                            BUILD_DIR, f"{image_name.replace('/', '_')}_{task_id[:8]}"
+                        )
+                expired_tasks_info.append((task_id, build_context))
                 del self.tasks[task_id]
+
+        # 清理构建上下文目录
+        cleaned_count = 0
+        for task_id, build_context in expired_tasks_info:
+            if build_context and os.path.exists(build_context):
+                try:
+                    import shutil
+
+                    shutil.rmtree(build_context, ignore_errors=True)
+                    cleaned_count += 1
+                except Exception as e:
+                    print(f"⚠️ 清理构建上下文失败 ({build_context}): {e}")
 
         if expired_tasks:
             self._save_tasks()
-            print(f"🧹 已清理 {len(expired_tasks)} 个过期构建任务")
+            print(
+                f"🧹 已清理 {len(expired_tasks)} 个过期构建任务，清理了 {cleaned_count} 个构建上下文目录"
+            )
 
 
 # ============ 导出任务管理器 ============
