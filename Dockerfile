@@ -49,9 +49,8 @@ RUN dnf install -y tzdata curl git \
     && echo "$TZ" > /etc/timezone 
 
 # === 步骤 1：安装 docker-cli（最小依赖，不装 dockerd）===
-# ALinux3 使用 dnf；启用 epel（含 docker-cli）
-RUN dnf install -y epel-release && \
-    dnf install -y docker-cli && \
+# ✅ 步骤 1：安装 docker-ce-cli（ALinux3 官方支持的 CLI）
+RUN dnf install -y docker-ce-cli && \
     dnf clean all
 
 # === 步骤 2：安装 buildx 插件（清华镜像加速）===
