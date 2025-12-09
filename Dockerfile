@@ -38,6 +38,9 @@ RUN npm run build
 # 使用阿里云 Python 镜像加速下载
 FROM docker.jajachina.com/public/docker:27.2.0-cli
 
+# ✅ 替换 apk 源为阿里云镜像（关键！提速 5–10×）
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
 RUN apk add --no-cache \
     python3 \
     py3-pip \
