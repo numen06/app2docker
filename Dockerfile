@@ -75,7 +75,7 @@ COPY requirements.txt .
 
 # 安装 Python 依赖
 RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
-    pip install --upgrade pip && \
+    pip install --upgrade pip --break-system-packages && \
     pip install --no-cache-dir -r requirements.txt
 
 # 复制后端代码
