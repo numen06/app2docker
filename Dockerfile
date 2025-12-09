@@ -36,13 +36,34 @@ RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
-FROM build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/docker
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.11.1
 
 # 👇 【统一修复源】—— 外网构建必加！
 RUN sed -i 's|mirrors\.cloud\.aliyuncs\.com|mirrors.aliyun.com|g' /etc/yum.repos.d/*.repo 2>/dev/null || true
 
 ENV TZ=Asia/Shanghai
 
+
+# ✅ 步骤 1：安装必要工具（yum-utils 提供 yum-config-manager）
+RUN dnf install -y yum-utils device-mapper-persistent-data lvm2
+
+# ✅ 步骤 2：添加阿里云 docker-ce 源（自动启用 + GPG 校验）
+RUN yum-config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+
+# ✅ 步骤 3：清理缓存 + 生成元数据
+RUN dnf clean all && \
+    dnf makecache --refresh
+
+# ✅ 步骤 4：安装 docker-ce（会自动包含 CLI 和 buildx 插件）
+RUN echo "📦 正在安装 docker-ce..." && \
+    dnf install -y docker-ce --allowerasing && \
+    \
+    # ✅ 启动 containerd（buildx 需要运行时）
+    systemctl enable --now containerd && \
+    \
+    # ✅ 确保插件路径存在（部分环境需要手动创建）
+    mkdir -p ~/.docker/cli-plugins && \
+    chmod 755 ~/.docker ~/.docker/cli-plugins
 
 
 WORKDIR /app
