@@ -2096,6 +2096,8 @@ function onTaskStatusUpdated(newStatus) {
 }
 
 function viewTaskLogs(taskId, task) {
+  console.log('viewTaskLogs 被调用', { taskId, task })
+  
   if (!taskId) {
     console.error('viewTaskLogs: taskId 为空', { taskId, task })
     alert('任务ID不存在，无法查看日志')
@@ -2104,6 +2106,7 @@ function viewTaskLogs(taskId, task) {
   
   if (viewingLogs.value === taskId) {
     // 如果正在查看同一个任务的日志，直接返回
+    console.log('正在查看同一个任务，跳过')
     return
   }
   
@@ -2124,8 +2127,11 @@ function viewTaskLogs(taskId, task) {
     }
   }
   
+  console.log('设置 selectedTask', task)
+  // 先设置 task，再显示模态框，确保 watch 能正确触发
   selectedTask.value = task
   showLogModal.value = true
+  console.log('显示日志模态框', { showLogModal: showLogModal.value, selectedTask: selectedTask.value })
   
   // 延迟清除 viewingLogs，避免重复点击
   setTimeout(() => {

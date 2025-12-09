@@ -1,7 +1,7 @@
 <template>
   <div>
     <div 
-      v-if="modelValue && task"
+      v-if="modelValue"
       class="modal fade show d-block" 
       style="z-index: 1070;"
       tabindex="-1"
@@ -9,15 +9,15 @@
     >
       <div class="modal-dialog modal-xl" style="max-width: 90%;">
         <div class="modal-content">
-          <div class="modal-header" :class="getStatusHeaderClass(task.status)">
+          <div class="modal-header" :class="task ? getStatusHeaderClass(task.status) : ''">
             <h5 class="modal-title">
-              <i :class="getStatusIcon(task.status)"></i>
-              任务日志 - {{ task.image || '未知' }}:{{ task.tag || 'latest' }}
-              <span v-if="isTaskRunning" class="badge bg-primary ms-2">
+              <i :class="task ? getStatusIcon(task.status) : 'fas fa-info-circle'"></i>
+              任务日志 - {{ task?.image || '未知' }}:{{ task?.tag || 'latest' }}
+              <span v-if="task && isTaskRunning" class="badge bg-primary ms-2">
                 <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
               </span>
             </h5>
-            <button type="button" class="btn-close" :class="task.status === 'failed' ? 'btn-close-white' : ''" @click="close"></button>
+            <button type="button" class="btn-close" :class="task && task.status === 'failed' ? 'btn-close-white' : ''" @click="close"></button>
           </div>
           <div class="modal-body p-0" style="display: flex; flex-direction: column; max-height: 80vh;">
             <!-- 工具栏 -->
@@ -50,13 +50,13 @@
                 </span>
               </div>
               <div class="text-muted small">
-                任务ID: <code>{{ task.task_id?.substring(0, 8) || '未知' }}</code>
+                任务ID: <code>{{ task?.task_id?.substring(0, 8) || '未知' }}</code>
               </div>
             </div>
             
             <!-- 任务概况（仅已完成/失败/停止时显示） -->
             <div 
-              v-if="task.status === 'failed' || task.status === 'completed' || task.status === 'stopped'" 
+              v-if="task && (task.status === 'failed' || task.status === 'completed' || task.status === 'stopped')" 
               class="p-3 border-bottom" 
               :class="getStatusSummaryClass(task.status)"
             >
@@ -306,23 +306,44 @@ function calculateDuration(startTime, endTime) {
   }
 }
 
-// 监听 modelValue 和 task 变化
-watch(() => [props.modelValue, props.task], ([newValue, newTask]) => {
-  if (newValue && newTask) {
+// 监听 modelValue 变化
+watch(() => props.modelValue, (newValue) => {
+  console.log('TaskLogModal modelValue 变化', { modelValue: newValue, task: props.task })
+  if (newValue && props.task) {
+    const taskId = props.task.task_id
+    console.log('准备加载日志', { taskId, task: props.task })
+    if (taskId) {
+      logs.value = '加载中...'
+      fetchTaskLogs(taskId)
+      startLogPolling(taskId)
+    } else {
+      console.error('任务ID不存在', props.task)
+      logs.value = '任务ID不存在'
+      stopLogPolling()
+    }
+  } else {
+    console.log('关闭日志模态框或任务为空')
+    stopLogPolling()
+    logs.value = ''
+  }
+})
+
+// 监听 task 变化（当模态框已打开时）
+watch(() => props.task, (newTask) => {
+  console.log('TaskLogModal task 变化', { modelValue: props.modelValue, task: newTask })
+  if (props.modelValue && newTask) {
     const taskId = newTask.task_id
     if (taskId) {
       logs.value = '加载中...'
       fetchTaskLogs(taskId)
       startLogPolling(taskId)
     } else {
+      console.error('任务ID不存在', newTask)
       logs.value = '任务ID不存在'
       stopLogPolling()
     }
-  } else {
-    stopLogPolling()
-    logs.value = ''
   }
-}, { immediate: true })
+})
 
 // 监听任务状态变化
 watch(() => props.task?.status, (newStatus) => {
