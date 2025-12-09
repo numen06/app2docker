@@ -2803,6 +2803,7 @@ class CreatePipelineRequest(BaseModel):
     branch_tag_mapping: Optional[dict] = (
         None  # 分支到标签的映射，如 {"main": "latest", "dev": "dev"}
     )
+    source_id: Optional[str] = None  # Git 数据源 ID（可选）
 
 
 class UpdatePipelineRequest(BaseModel):

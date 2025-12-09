@@ -34,16 +34,20 @@
           <div class="card-header bg-white">
             <!-- 标题行 -->
             <div class="mb-2">
+              <!-- 流水线名字单独一行 -->
+              <h5 class="card-title mb-2">
+                <strong>{{ pipeline.name }}</strong>
+              </h5>
+              <!-- 徽章行 -->
               <div class="d-flex align-items-center justify-content-between mb-1">
-                <h5 class="card-title mb-0">
-                  <strong>{{ pipeline.name }}</strong>
-                  <span v-if="pipeline.enabled" class="badge bg-success ms-2">
+                <div>
+                  <span v-if="pipeline.enabled" class="badge bg-success">
                     <i class="fas fa-check-circle"></i> 已启用
                   </span>
-                  <span v-else class="badge bg-secondary ms-2">
+                  <span v-else class="badge bg-secondary">
                     <i class="fas fa-times-circle"></i> 已禁用
                   </span>
-                </h5>
+                </div>
                 <span class="badge" :class="getProjectTypeBadgeClass(pipeline.project_type)" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">
                   <i :class="getProjectTypeIcon(pipeline.project_type)"></i>
                   {{ getProjectTypeLabel(pipeline.project_type) }}
@@ -96,7 +100,7 @@
           <!-- 卡片内容 -->
           <div class="card-body">
             <!-- Git 信息 -->
-            <div class="mb-3">
+            <div class="mb-3" style="min-height: 60px;">
               <div class="d-flex align-items-center mb-2">
                 <i class="fas fa-code-branch text-muted me-2" style="width: 18px; flex-shrink: 0;"></i>
                 <small class="font-monospace text-truncate flex-grow-1" :title="pipeline.git_url" style="font-size: 0.9rem; min-width: 0;">
@@ -111,7 +115,7 @@
                   <i class="fas fa-copy" style="font-size: 0.7rem;"></i>
                 </button>
               </div>
-              <div class="d-flex align-items-center flex-wrap gap-2 ms-4">
+              <div class="d-flex align-items-center flex-wrap gap-2 ms-4" style="min-height: 24px;">
                 <span class="badge bg-secondary" style="font-size: 0.75rem;">
                   <i class="fas fa-code-branch"></i> {{ pipeline.branch || '默认' }}
                 </span>
@@ -128,7 +132,7 @@
             </div>
             
             <!-- 镜像信息 -->
-            <div class="mb-3">
+            <div class="mb-3" style="min-height: 24px;">
               <div class="d-flex align-items-center">
                 <i class="fab fa-docker text-muted me-2" style="width: 18px; flex-shrink: 0;"></i>
                 <small class="font-monospace text-truncate flex-grow-1" :title="`${pipeline.image_name}:${pipeline.tag}`" style="font-size: 0.9rem; min-width: 0;">
@@ -145,24 +149,27 @@
               </div>
             </div>
             
-            <!-- 当前任务状态 -->
-            <div class="mb-3" v-if="pipeline.current_task_info">
+            <!-- 当前任务状态（固定布局，始终显示） -->
+            <div class="mb-3" style="min-height: 24px;">
               <div class="d-flex align-items-center justify-content-between">
                 <span class="text-muted" style="font-size: 0.9rem;">当前任务：</span>
-                <span v-if="pipeline.current_task_status === 'running'" class="badge bg-primary">
-                  <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
-                </span>
-                <span v-else-if="pipeline.current_task_status === 'pending'" class="badge bg-warning">
-                  <i class="fas fa-clock"></i> 等待中
-                </span>
+                <div v-if="pipeline.current_task_info && (pipeline.current_task_status === 'running' || pipeline.current_task_status === 'pending')">
+                  <span v-if="pipeline.current_task_status === 'running'" class="badge bg-primary">
+                    <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
+                  </span>
+                  <span v-else-if="pipeline.current_task_status === 'pending'" class="badge bg-warning">
+                    <i class="fas fa-clock"></i> 等待中
+                  </span>
+                </div>
+                <span v-else class="text-muted" style="font-size: 0.85rem;">-</span>
               </div>
             </div>
             
-            <!-- 最后构建 -->
-            <div class="mb-3" v-if="pipeline.last_build">
+            <!-- 最后构建（固定布局，始终显示） -->
+            <div class="mb-3" style="min-height: 48px;">
               <div class="d-flex align-items-center justify-content-between mb-1">
                 <span class="text-muted" style="font-size: 0.9rem;">最后构建：</span>
-                <div class="d-flex align-items-center gap-2">
+                <div v-if="pipeline.last_build" class="d-flex align-items-center gap-2">
                   <span 
                     :class="{
                       'badge': true,
@@ -184,8 +191,9 @@
                     <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
                   </button>
                 </div>
+                <span v-else class="text-muted" style="font-size: 0.85rem;">暂无</span>
               </div>
-              <div class="d-flex justify-content-between align-items-center ms-4">
+              <div v-if="pipeline.last_build" class="d-flex justify-content-between align-items-center ms-4">
                 <small class="text-muted" :title="formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at)" style="font-size: 0.85rem;">
                   {{ formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at) }}
                 </small>
@@ -193,24 +201,22 @@
                   <code style="font-size: 0.85rem;">{{ pipeline.last_build.task_id.substring(0, 8) }}</code>
                 </small>
               </div>
-            </div>
-            <div v-else class="mb-3">
-              <span class="text-muted" style="font-size: 0.9rem;">最后构建：暂无</span>
+              <div v-else class="ms-4" style="height: 20px;"></div>
             </div>
             
             <!-- 统计信息 -->
-            <div class="border-top pt-2 mt-2">
+            <div class="border-top pt-2 mt-2" style="min-height: 60px;">
               <div class="row text-center">
                 <div class="col-6">
                   <div class="text-muted mb-1" style="font-size: 0.85rem;">触发次数</div>
-                  <div class="fw-bold" style="font-size: 1.1rem;">{{ pipeline.trigger_count || 0 }}</div>
+                  <div class="fw-bold" style="font-size: 1.1rem; min-height: 24px;">{{ pipeline.trigger_count || 0 }}</div>
                 </div>
                 <div class="col-6">
                   <div class="text-muted mb-1" style="font-size: 0.85rem;">最后触发</div>
-                  <div class="small" v-if="pipeline.last_triggered_at" :title="formatDateTime(pipeline.last_triggered_at)" style="font-size: 0.85rem;">
+                  <div class="small" v-if="pipeline.last_triggered_at" :title="formatDateTime(pipeline.last_triggered_at)" style="font-size: 0.85rem; min-height: 24px;">
                     {{ formatDateTime(pipeline.last_triggered_at) }}
                   </div>
-                  <div class="small text-muted" v-else style="font-size: 0.85rem;">-</div>
+                  <div class="small text-muted" v-else style="font-size: 0.85rem; min-height: 24px;">-</div>
                 </div>
               </div>
             </div>
