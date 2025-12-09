@@ -36,35 +36,35 @@ RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
-FROM ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/base:ubuntu22.04-py310-optimised
-# ✅ 步骤 1：确保 apt 源可用（兼容无 sources.list 的镜像）
+FROM ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/base:ubuntu22.04-py310
+
+
+# ✅ 1. 确保 apt 源配置正确（兼容无 sources.list 的情况）
 RUN mkdir -p /etc/apt && \
     echo "deb http://archive.ubuntu.com/ubuntu jammy main universe" > /etc/apt/sources.list && \
     echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe" >> /etc/apt/sources.list && \
     echo "deb http://archive.ubuntu.com/ubuntu jammy-security main universe" >> /etc/apt/sources.list
 
-# ✅ 步骤 2：只安装真正必需的包（跳过 gnupg & lsb-release）
+# ✅ 2. 更新并安装 ca-certificates + curl（HTTPS 支持）
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# ✅ 步骤 3：使用预装的 gpgv 校验密钥（无需 gnupg）
+# ✅ 3. 直接下载 GPG 密钥到 keyring（跳过 gpg 校验步骤）
 RUN mkdir -p /etc/apt/keyrings && \
     curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg \
-    | gpgv --keyring /dev/null -o /dev/null - 2>/dev/null || true && \
-    curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg \
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    -o /etc/apt/keyrings/docker.gpg
 
-# ✅ 步骤 4：手动写死发行版名 "jammy"（替代 lsb-release）
+# ✅ 4. 添加 Docker APT 源（使用阿里云镜像）
 RUN echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
     https://mirrors.aliyun.com/docker-ce/linux/ubuntu \
     jammy stable" \
     | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# ✅ 步骤 5：安装 docker-ce-cli + buildx（无冲突）
+# ✅ 5. 安装 docker-ce-cli + buildx 插件
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends \
     docker-ce-cli \
@@ -72,7 +72,7 @@ RUN apt-get update -y && \
     containerd.io \
     && rm -rf /var/lib/apt/lists/*
 
-# ✅ 验证
+# ✅ 6. 验证
 RUN echo "✅ docker version:" && docker --version && \
     echo "✅ docker buildx version:" && docker buildx version
 
