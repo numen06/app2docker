@@ -702,7 +702,7 @@
             <div class="row mb-3">
               <div class="col-md-4">
                 <label class="form-label small">触发来源</label>
-                <select v-model="historyFilter.trigger_source" class="form-select form-select-sm" @change="loadHistory">
+                <select v-model="historyFilter.trigger_source" class="form-select form-select-sm" @change="() => { historyPagination.currentPage = 1; loadHistory(); }">
                   <option value="">全部</option>
                   <option value="webhook">Webhook</option>
                   <option value="manual">手动</option>
@@ -711,7 +711,7 @@
               </div>
               <div class="col-md-4">
                 <label class="form-label small">任务状态</label>
-                <select v-model="historyFilter.status" class="form-select form-select-sm" @change="loadHistory">
+                <select v-model="historyFilter.status" class="form-select form-select-sm" @change="() => { historyPagination.currentPage = 1; loadHistory(); }">
                   <option value="">全部</option>
                   <option value="pending">等待中</option>
                   <option value="running">进行中</option>
@@ -720,7 +720,7 @@
                 </select>
               </div>
               <div class="col-md-4 d-flex align-items-end">
-                <button class="btn btn-sm btn-outline-primary" @click="loadHistory">
+                <button class="btn btn-sm btn-outline-primary" @click="() => { historyPagination.currentPage = 1; loadHistory(); }">
                   <i class="fas fa-sync-alt"></i> 刷新
                 </button>
               </div>
@@ -831,10 +831,41 @@
             </div>
           </div>
           <div class="modal-footer">
-            <div class="text-muted small">
-              共 {{ historyTasks.length }} 条记录
+            <div class="text-muted small me-auto">
+              共 {{ historyPagination.total }} 条记录
+              <span v-if="historyPagination.total > 0">
+                ，第 {{ historyPagination.currentPage }} / {{ Math.ceil(historyPagination.total / historyPagination.pageSize) }} 页
+              </span>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" @click="closeHistoryModal">关闭</button>
+            <!-- 分页控件 -->
+            <nav v-if="historyPagination.total > 0">
+              <ul class="pagination pagination-sm mb-0">
+                <li class="page-item" :class="{ disabled: historyPagination.currentPage === 1 }">
+                  <a class="page-link" href="#" @click.prevent="changeHistoryPage(1)" title="首页">
+                    <i class="fas fa-angle-double-left"></i>
+                  </a>
+                </li>
+                <li class="page-item" :class="{ disabled: historyPagination.currentPage === 1 }">
+                  <a class="page-link" href="#" @click.prevent="changeHistoryPage(historyPagination.currentPage - 1)" title="上一页">
+                    <i class="fas fa-angle-left"></i>
+                  </a>
+                </li>
+                <li class="page-item active">
+                  <span class="page-link">{{ historyPagination.currentPage }}</span>
+                </li>
+                <li class="page-item" :class="{ disabled: !historyPagination.hasMore }">
+                  <a class="page-link" href="#" @click.prevent="changeHistoryPage(historyPagination.currentPage + 1)" title="下一页">
+                    <i class="fas fa-angle-right"></i>
+                  </a>
+                </li>
+                <li class="page-item" :class="{ disabled: !historyPagination.hasMore }">
+                  <a class="page-link" href="#" @click.prevent="changeHistoryPage(Math.ceil(historyPagination.total / historyPagination.pageSize))" title="末页">
+                    <i class="fas fa-angle-double-right"></i>
+                  </a>
+                </li>
+              </ul>
+            </nav>
+            <button type="button" class="btn btn-secondary btn-sm ms-2" @click="closeHistoryModal">关闭</button>
           </div>
         </div>
       </div>
@@ -866,6 +897,12 @@ const historyLoading = ref(false)
 const historyFilter = ref({
   trigger_source: '',
   status: ''
+})
+const historyPagination = ref({
+  currentPage: 1,
+  pageSize: 20,
+  total: 0,
+  hasMore: false
 })
 const showLogModal = ref(false)
 const selectedTask = ref(null)
@@ -1300,6 +1337,12 @@ function showHistory(pipeline) {
     trigger_source: '',
     status: ''
   }
+  historyPagination.value = {
+    currentPage: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false
+  }
   showHistoryModal.value = true
   loadHistory()
 }
@@ -1308,10 +1351,21 @@ function closeHistoryModal() {
   showHistoryModal.value = false
   currentPipeline.value = null
   historyTasks.value = []
+  historyPagination.value = {
+    currentPage: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false
+  }
 }
 
-async function loadHistory() {
+async function loadHistory(page = null) {
   if (!currentPipeline.value) return
+  
+  // 如果指定了页码，更新当前页
+  if (page !== null) {
+    historyPagination.value.currentPage = page
+  }
   
   historyLoading.value = true
   try {
@@ -1322,18 +1376,34 @@ async function loadHistory() {
     if (historyFilter.value.status) {
       params.append('status', historyFilter.value.status)
     }
-    params.append('limit', '100')
+    
+    const offset = (historyPagination.value.currentPage - 1) * historyPagination.value.pageSize
+    params.append('limit', historyPagination.value.pageSize.toString())
+    params.append('offset', offset.toString())
     
     const url = `/api/pipelines/${currentPipeline.value.pipeline_id}/tasks?${params.toString()}`
     const res = await axios.get(url)
     historyTasks.value = res.data.tasks || []
+    
+    // 更新分页信息
+    historyPagination.value.total = res.data.total || 0
+    historyPagination.value.hasMore = res.data.has_more || false
   } catch (error) {
     console.error('加载历史构建失败:', error)
     alert('加载历史构建失败')
     historyTasks.value = []
+    historyPagination.value.total = 0
+    historyPagination.value.hasMore = false
   } finally {
     historyLoading.value = false
   }
+}
+
+function changeHistoryPage(page) {
+  if (page < 1) return
+  const totalPages = Math.ceil(historyPagination.value.total / historyPagination.value.pageSize)
+  if (page > totalPages) return
+  loadHistory(page)
 }
 
 async function viewTaskLogs(taskId, task) {

@@ -2971,12 +2971,13 @@ async def get_pipeline(pipeline_id: str):
 async def get_pipeline_tasks(
     pipeline_id: str,
     status: Optional[str] = Query(None, description="过滤任务状态"),
-    limit: Optional[int] = Query(50, description="返回任务数量限制", ge=1, le=200),
+    limit: Optional[int] = Query(20, description="每页任务数量", ge=1, le=200),
+    offset: Optional[int] = Query(0, description="偏移量（分页）", ge=0),
     trigger_source: Optional[str] = Query(
         None, description="过滤触发来源: webhook, manual, cron"
     ),
 ):
-    """获取流水线关联的所有任务历史记录"""
+    """获取流水线关联的所有任务历史记录（支持分页）"""
     try:
         # 获取流水线配置
         manager = PipelineManager()
@@ -3040,13 +3041,19 @@ async def get_pipeline_tasks(
         # 按触发时间倒序排列
         tasks_with_details.sort(key=lambda x: x.get("triggered_at", ""), reverse=True)
 
-        # 限制返回数量
-        tasks_with_details = tasks_with_details[:limit]
+        # 计算总数（过滤后）
+        total = len(tasks_with_details)
+
+        # 应用分页
+        paginated_tasks = tasks_with_details[offset : offset + limit]
 
         return JSONResponse(
             {
-                "tasks": tasks_with_details,
-                "total": len(tasks_with_details),
+                "tasks": paginated_tasks,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": offset + limit < total,
                 "pipeline_id": pipeline_id,
                 "pipeline_name": pipeline.get("name"),
             }
