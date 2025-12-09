@@ -48,7 +48,7 @@ RUN mkdir -p /etc/apt && \
 RUN apt-get update && apt-get install -y curl jq && rm -rf /var/lib/apt/lists/*
 # 安装 buildx（推荐从官方 release 下载）
 RUN mkdir -p ~/.docker/cli-plugins && \
-    curl -sL https://github.com/docker/buildx/releases/download/v0.15.0/buildx-v0.15.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx && \
+    curl -sL https://numen-share.oss-accelerate.aliyuncs.com/docker/buildx-v0.27.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx && \
     chmod +x ~/.docker/cli-plugins/docker-buildx
 # 安装 qemu（支持多架构）
 RUN apt-get update && apt-get install -y qemu-user-static && \
