@@ -58,7 +58,9 @@ RUN ln -sf python3 /usr/bin/python && \
     ln -sf pip3 /usr/bin/pip
 
 # ✅ 升级 pip（可选，推荐）
-RUN pip install --upgrade pip
+# ✅ 【关键修复】用户级升级 pip（不破坏系统）
+RUN pip install --user --upgrade pip && \
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> /root/.profile
 
 # ✅ 验证 Python 环境
 RUN echo "✅ Python version:" && python --version && \
