@@ -42,7 +42,9 @@ FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3
 RUN sed -i 's|mirrors\.cloud\.aliyuncs\.com|mirrors.aliyun.com|g' /etc/yum.repos.d/*.repo 2>/dev/null || true
 
 ENV TZ=Asia/Shanghai
-# ✅ 步骤 1：创建官方 alinux3-docker.repo（启用 + 阿里云镜像 + GPG 校验）
+
+
+# ✅ 创建官方 alinux3-docker.repo（阿里云镜像 + GPG 校验）
 RUN cat > /etc/yum.repos.d/alinux3-docker.repo <<'EOF'
 [alinux3-docker]
 name=Alibaba Cloud Linux 3 - Docker
@@ -54,23 +56,27 @@ repo_gpgcheck=0
 skip_if_unavailable=True
 EOF
 
-# ✅ 步骤 2：清理缓存 + 生成新元数据 + 安装（带详细日志）
+# ✅ 清理缓存 + 更新元数据
 RUN dnf clean all && \
-    dnf makecache --refresh && \
-    echo "🔍 可用包列表：" && \
-    dnf list available docker-ce-cli docker-buildx-plugin | head -n 10 && \
+    dnf makecache --refresh
+
+# ✅ 关键：安装 docker-ce（它自带 docker CLI 和 buildx 插件！）
+RUN echo "📦 正在安装 docker-ce（含 CLI + buildx）..." && \
+    dnf install -y docker-ce containerd.io && \
     \
-    echo "📦 正在安装 docker-ce-cli 和 buildx 插件..." && \
-    dnf install -y docker-ce-cli docker-buildx-plugin && \
+    # ✅ 启动 containerd（buildx 需要运行时）
+    systemctl enable --now containerd && \
     \
-    # ✅ 步骤 3：确保插件路径可写（ALinux3 默认 root home 权限安全）
+    # ✅ 验证 buildx 插件是否已就位（它被自动安装到 /usr/libexec/docker/cli-plugins/）
+    ls -l /usr/libexec/docker/cli-plugins/docker-buildx 2>/dev/null || \
+    (echo "⚠️  buildx 插件未自动安装，手动链接..." && \
     mkdir -p ~/.docker/cli-plugins && \
-    chmod 755 ~/.docker ~/.docker/cli-plugins && \
-    \
-    # ✅ 步骤 4：验证（构建阶段即失败即知）
-    echo "✅ docker --version:" && docker --version && \
+    ln -sf /usr/libexec/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/)
+
+# ✅ 验证（构建阶段即检查）
+RUN echo "✅ docker version:" && docker --version && \
     echo "✅ docker buildx version:" && docker buildx version && \
-    echo "🎉 dnf 安装成功！符合 ALinux3 官方最佳实践。"
+    echo "✅ docker info (short):" && docker info --format '{{.ServerVersion}} {{.DefaultRuntime}}'
 
 
 WORKDIR /app
