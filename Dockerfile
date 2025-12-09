@@ -74,9 +74,15 @@ WORKDIR /app
 COPY requirements.txt .
 
 # 安装 Python 依赖
-RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
-    pip install --upgrade pip --break-system-packages && \
-    pip install --no-cache-dir -r requirements.txt
+# 创建软链接（可选）
+RUN ln -sf python3 /usr/bin/python && \
+    ln -sf pip3 /usr/bin/pip
+
+# ✅ 创建虚拟环境并激活安装
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    /opt/venv/bin/pip install --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r /path/to/requirements.txt
 
 # 复制后端代码
 COPY backend/ ./backend/
