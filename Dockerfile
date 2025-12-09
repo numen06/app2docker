@@ -57,10 +57,9 @@ RUN apk add --no-cache \
 RUN ln -sf python3 /usr/bin/python && \
     ln -sf pip3 /usr/bin/pip
 
-# ✅ 升级 pip（可选，推荐）
-# ✅ 【关键修复】用户级升级 pip（不破坏系统）
-RUN pip install --user --upgrade pip && \
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> /root/.profile
+# ✅ 【关键修复】用户级升级 pip + 当前 shell 立即生效
+# （注意：用 `sh -c` 显式执行，避免 shell 解析歧义）
+RUN sh -c 'pip install --user --upgrade pip && export PATH="$HOME/.local/bin:$PATH" && pip --version'
 
 # ✅ 验证 Python 环境
 RUN echo "✅ Python version:" && python --version && \
