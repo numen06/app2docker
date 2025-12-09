@@ -2,7 +2,7 @@
 
 # ============ 阶段 1: 构建前端 ============
 # 使用阿里云 Node.js 镜像加速下载
-FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS builder
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20.16 AS frontend-builder
 
 # 切换到 root 用户以创建目录
 USER root
