@@ -1064,27 +1064,51 @@ async function cleanupBuildDir() {
 }
 
 // 打开流水线模态框
-function addToPipeline(task) {
+async function addToPipeline(task) {
   selectedPipelineTask.value = task
   
   // 从任务中提取配置信息
-  const config = task.config || {}
+  // 优先从 config 字段获取，如果没有则从任务本身获取
+  const taskConfig = task.config || {}
+  
+  // 获取 source_id
+  const sourceId = taskConfig.source_id || task.source_id || null
+  
+  // 如果提供了 source_id，从数据源获取 git_url 和 branch
+  let gitUrl = taskConfig.git_url || task.git_url || ''
+  let branch = taskConfig.branch || task.branch || 'main'
+  
+  if (sourceId) {
+    try {
+      const res = await axios.get(`/api/git-sources/${sourceId}`)
+      if (res.data && res.data.git_url) {
+        gitUrl = res.data.git_url
+        // 如果任务中没有指定分支，使用数据源的默认分支
+        if (!taskConfig.branch && !task.branch && res.data.default_branch) {
+          branch = res.data.default_branch
+        }
+      }
+    } catch (err) {
+      console.warn('获取数据源信息失败:', err)
+      // 如果获取失败，继续使用任务中的 git_url
+    }
+  }
   
   pipelineForm.value = {
     name: `${task.image || 'unnamed'}-pipeline`,
     description: `基于任务 ${task.task_id.substring(0, 8)} 创建`,
-    git_url: config.git_url || '',
-    branch: config.branch || 'main',
+    git_url: gitUrl,
+    branch: branch,
     image_name: task.image || '',
     tag: task.tag || 'latest',
-    project_type: config.project_type || 'jar',
-    template: config.template || '',
-    template_params: config.template_params || {},
-    sub_path: config.sub_path || '',
-    use_project_dockerfile: config.use_project_dockerfile !== false,
-    dockerfile_name: config.dockerfile_name || task.dockerfile_name || 'Dockerfile',
-    source_id: config.source_id || task.source_id || null,
-    push: config.push || false,
+    project_type: taskConfig.project_type || task.project_type || 'jar',
+    template: taskConfig.template || task.template || task.selected_template || '',
+    template_params: taskConfig.template_params || task.template_params || {},
+    sub_path: taskConfig.sub_path || task.sub_path || '',
+    use_project_dockerfile: taskConfig.use_project_dockerfile !== false && task.use_project_dockerfile !== false,
+    dockerfile_name: taskConfig.dockerfile_name || task.dockerfile_name || 'Dockerfile',
+    source_id: sourceId,
+    push: taskConfig.push || task.should_push || false,
     trigger_webhook: true,
     trigger_schedule: false,
     cron_expression: '',

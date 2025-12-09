@@ -2783,7 +2783,7 @@ from backend.git_source_manager import GitSourceManager
 
 class CreatePipelineRequest(BaseModel):
     name: str
-    git_url: str
+    git_url: Optional[str] = None  # 如果提供了 source_id，git_url 可以从数据源获取
     branch: Optional[str] = None
     project_type: str = "jar"
     template: Optional[str] = None
@@ -2838,10 +2838,37 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
         username = get_current_username(http_request)
         manager = PipelineManager()
 
+        # 如果提供了 source_id，从数据源获取 git_url 和 branch
+        git_url = request.git_url
+        branch = request.branch
+
+        if request.source_id:
+            from backend.git_source_manager import GitSourceManager
+
+            source_manager = GitSourceManager()
+            source = source_manager.get_source(
+                request.source_id, include_password=False
+            )
+            if source:
+                # 如果提供了 source_id，优先使用数据源的 git_url
+                if source.get("git_url"):
+                    git_url = source["git_url"]
+                # 如果没有指定分支，使用数据源的默认分支
+                if not branch and source.get("default_branch"):
+                    branch = source["default_branch"]
+            else:
+                raise HTTPException(
+                    status_code=404, detail=f"数据源不存在: {request.source_id}"
+                )
+
+        # 验证：如果没有 source_id 也没有 git_url，则报错
+        if not request.source_id and not git_url:
+            raise HTTPException(status_code=400, detail="必须提供 git_url 或 source_id")
+
         pipeline_id = manager.create_pipeline(
             name=request.name,
-            git_url=request.git_url,
-            branch=request.branch,
+            git_url=git_url,
+            branch=branch,
             project_type=request.project_type,
             template=request.template,
             image_name=request.image_name,
