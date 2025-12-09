@@ -79,10 +79,13 @@ RUN ln -sf python3 /usr/bin/python && \
     ln -sf pip3 /usr/bin/pip
 
 # ✅ 创建虚拟环境并激活安装
-RUN python -m venv /opt/venv && \
-    /opt/venv/bin/pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
-    /opt/venv/bin/pip install --upgrade pip && \
-    /opt/venv/bin/pip install --no-cache-dir -rrequirements.txt
+RUN python -m venv .venv && \
+    .venv/bin/pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    .venv/bin/pip install --upgrade pip && \
+    .venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
+ENV PATH="/app/.venv/bin:$PATH"
 
 # 复制后端代码
 COPY backend/ ./backend/
