@@ -51,15 +51,8 @@ RUN mkdir -p ~/.docker/cli-plugins && \
     curl -sL https://numen-share.oss-accelerate.aliyuncs.com/docker/buildx-v0.27.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx && \
     chmod +x ~/.docker/cli-plugins/docker-buildx
 
-RUN curl -fsSL https://archive.ubuntu.com/ubuntu/pool/universe/q/qemu/qemu-user-static_7.2+dfsg-2ubuntu2.11_amd64.deb \
-    -o /tmp/qemu-user-static.deb && \
-    dpkg -i /tmp/qemu-user-static.deb && \
-    rm -f /tmp/qemu-user-static.deb && \
-    /usr/bin/qemu-user-static --reset -p
-
 # ✅ 5. 验证
 RUN echo "✅ buildx version:" && docker buildx version
-RUN echo "✅ QEMU registered:" && ls /proc/sys/fs/binfmt_misc/qemu-* 2>/dev/null || echo "⚠️ No QEMU binfmt found"
 
 WORKDIR /app
 
