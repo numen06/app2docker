@@ -1311,6 +1311,7 @@ class BuildManager:
             push_registry=push_registry,
             extract_archive=extract_archive,
             build_steps=build_steps or {},  # 传递构建步骤信息
+            resource_package_ids=resource_package_ids or [],  # 传递资源包配置
         )
 
         thread = threading.Thread(
@@ -3271,6 +3272,17 @@ class BuildTaskManager:
                     print(f"⚠️ 参数 {key} 无法序列化，转换为字符串: {e}")
                     serializable_kwargs[key] = str(value)
 
+            # 确定任务来源
+            source = "手动构建"
+            if serializable_kwargs.get("pipeline_id"):
+                source = "流水线"
+            elif serializable_kwargs.get("git_url"):
+                source = "Git源码"
+            elif serializable_kwargs.get("original_filename"):
+                source = "文件上传"
+            elif serializable_kwargs.get("build_steps"):
+                source = "分步构建"
+
             task_info = {
                 "task_id": task_id,
                 "task_type": task_type,  # "build" 或 "build_from_source"
@@ -3281,6 +3293,7 @@ class BuildTaskManager:
                 "completed_at": None,
                 "error": None,
                 "logs": [],  # 任务日志
+                "source": source,  # 任务来源
                 **serializable_kwargs,  # 其他任务参数
             }
 
@@ -3593,6 +3606,7 @@ class ExportTaskManager:
             "file_path": None,
             "file_size": None,
             "error": None,
+            "source": "手动导出",  # 导出任务来源
         }
 
         with self.lock:

@@ -2539,6 +2539,14 @@ async function startBuild() {
         console.warn("⚠️ 保存构建配置失败:", saveError);
       }
 
+      // 显示成功提示
+      const imageName = buildConfig.value.imageName || '未知镜像';
+      const tag = buildConfig.value.tag || 'latest';
+      alert(`✅ 构建任务已创建！\n\n镜像: ${imageName}:${tag}\n任务ID: ${taskId}\n\n请到"任务管理"标签页查看进度和日志。`);
+
+      // 重置构建状态
+      building.value = false;
+
       window.dispatchEvent(new CustomEvent("show-build-log"));
 
       setTimeout(() => {
@@ -2774,28 +2782,22 @@ function getBuildModeLabel() {
     // 优先使用 remote_config，如果没有则从 remote_host 解析
     const remoteConfig = dockerInfo.value.remote_config;
     if (remoteConfig) {
-      if (remoteConfig.use_tls) {
-        return "远程 Docker 主机（TLS）";
-      } else if (remoteConfig.port === 2375) {
-        return "TCP 2375 编译";
-      } else {
-        return `远程 Docker 主机 (${remoteConfig.host}:${remoteConfig.port})`;
-      }
+      // 统一显示为"远程 Docker"
+      const protocol = remoteConfig.use_tls ? "TLS" : "TCP";
+      const port = remoteConfig.port || (remoteConfig.use_tls ? 2376 : 2375);
+      return `远程 Docker (${protocol}://${remoteConfig.host}:${port})`;
     } else {
       // 兼容旧格式：从 remote_host 解析
       const remoteHost = dockerInfo.value.remote_host || "";
       const portMatch = remoteHost.match(/:(\d+)$/);
       if (portMatch) {
         const port = parseInt(portMatch[1]);
-        if (port === 2375) {
-          return "TCP 2375 编译";
-        } else if (port === 2376) {
-          return "远程 Docker 主机（TLS）";
-        }
+        const protocol = port === 2376 ? "TLS" : "TCP";
+        return `远程 Docker (${protocol}://${remoteHost})`;
       }
       return remoteHost
-        ? `远程 Docker 主机 (${remoteHost})`
-        : "远程 Docker 主机";
+        ? `远程 Docker (${remoteHost})`
+        : "远程 Docker";
     }
   } else if (dockerInfo.value.builder_type === "mock") {
     return "模拟模式";

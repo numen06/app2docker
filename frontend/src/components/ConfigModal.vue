@@ -47,7 +47,7 @@
                       </div>
                       <small class="text-muted d-block mt-2">
                         通过挂载的 docker.sock 连接本地 Docker<br/>
-                        <span class="text-warning"><i class="fas fa-exclamation-triangle"></i> 仅支持简单编译任务</span>
+                        <span class="text-warning"><i class="fas fa-exclamation-triangle"></i> 支持复杂编译流程</span>
                       </small>
                     </div>
                   </div>
@@ -64,11 +64,11 @@
                           id="buildModeTcp2375"
                         />
                         <label class="form-check-label fw-bold" for="buildModeTcp2375">
-                          <i class="fas fa-network-wired text-warning"></i> TCP 2375 编译
+                          <i class="fas fa-network-wired text-warning"></i> 远程 Docker (TCP)
                         </label>
                       </div>
                       <small class="text-muted d-block mt-2">
-                        通过 TCP 2375 端口连接远程 Docker<br/>
+                        通过 TCP 端口连接远程 Docker<br/>
                         <span class="text-danger"><i class="fas fa-shield-alt"></i> 明文传输，不安全</span>
                       </small>
                     </div>
@@ -86,7 +86,7 @@
                           id="buildModeTls"
                         />
                         <label class="form-check-label fw-bold" for="buildModeTls">
-                          <i class="fas fa-lock text-success"></i> 远程 Docker（TLS）
+                          <i class="fas fa-lock text-success"></i> 远程 Docker (TLS)
                         </label>
                       </div>
                       <small class="text-muted d-block mt-2">
@@ -128,8 +128,7 @@
                     :placeholder="buildMode === 'tls' ? '2376' : '2375'"
                   />
                   <small class="text-muted">
-                    TCP 2375 模式默认端口：2375<br/>
-                    TLS 模式默认端口：2376
+                    默认端口：{{ buildMode === 'tls' ? '2376 (TLS)' : '2375 (TCP)' }}
                   </small>
                 </div>
                 <div class="col-md-6" v-if="buildMode === 'tls'">
@@ -208,7 +207,7 @@
 
 <script setup>
 import axios from 'axios'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   modelValue: Boolean

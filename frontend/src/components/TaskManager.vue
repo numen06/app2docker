@@ -71,6 +71,7 @@
             <th style="width: 100px;">类型</th>
             <th style="width: 200px;">镜像/任务</th>
             <th style="width: 100px;">标签</th>
+            <th style="width: 100px;">来源</th>
             <th style="width: 120px;">状态</th>
             <th style="width: 150px;">创建时间</th>
             <th style="width: 100px;">时长</th>
@@ -95,6 +96,23 @@
               <code class="small">{{ task.image || (task.task_type ? task.task_type : '未知') }}</code>
             </td>
             <td>{{ task.tag || '-' }}</td>
+            <td>
+              <span v-if="task.source === '流水线'" class="badge bg-primary">
+                <i class="fas fa-project-diagram"></i> 流水线
+              </span>
+              <span v-else-if="task.source === 'Git源码'" class="badge bg-info">
+                <i class="fas fa-code-branch"></i> Git源码
+              </span>
+              <span v-else-if="task.source === '文件上传'" class="badge bg-success">
+                <i class="fas fa-upload"></i> 文件上传
+              </span>
+              <span v-else-if="task.source === '分步构建'" class="badge bg-warning">
+                <i class="fas fa-list-ol"></i> 分步构建
+              </span>
+              <span v-else class="badge bg-secondary">
+                <i class="fas fa-hammer"></i> {{ task.source || '手动构建' }}
+              </span>
+            </td>
             <td>
               <span v-if="task.status === 'pending'" class="badge bg-secondary">
                 <i class="fas fa-clock"></i> 等待中

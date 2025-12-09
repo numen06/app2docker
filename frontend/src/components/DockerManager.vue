@@ -218,14 +218,10 @@
                   Docker，仅支持简单的编译任务，适用于基础项目构建
                 </li>
                 <li>
-                  <strong>TCP 2375 编译：</strong>
-                  通过 TCP 2375 端口连接远程
-                  Docker（明文传输，不安全），支持完整的编译功能，适用于复杂项目构建
-                </li>
-                <li>
-                  <strong>远程 Docker 主机（TLS）：</strong>
-                  通过 TLS 加密连接远程
-                  Docker（安全），支持完整的编译功能，适用于复杂项目构建和生产环境
+                  <strong>远程 Docker：</strong>
+                  通过 TCP 或 TLS 连接远程 Docker 服务器进行构建。
+                  TCP 模式（默认端口 2375）为明文传输，TLS 模式（默认端口 2376）为加密传输。
+                  支持完整的编译功能，适用于复杂项目构建和生产环境
                 </li>
               </ul>
               <div
@@ -1104,7 +1100,10 @@ function getCurrentBuildMode() {
     } else if (remoteConfig.port === 2375) {
       return "TCP 2375 编译";
     } else {
-      return `远程 Docker 主机 (${remoteConfig.host}:${remoteConfig.port})`;
+      // 统一显示为"远程 Docker"
+      const protocol = remoteConfig.use_tls ? "TLS" : "TCP";
+      const port = remoteConfig.port || (remoteConfig.use_tls ? 2376 : 2375);
+      return `远程 Docker (${protocol}://${remoteConfig.host}:${port})`;
     }
   } else {
     // 兼容旧格式：从 remote_host 解析
@@ -1112,13 +1111,10 @@ function getCurrentBuildMode() {
     const portMatch = remoteHost.match(/:(\d+)$/);
     if (portMatch) {
       const port = parseInt(portMatch[1]);
-      if (port === 2375) {
-        return "TCP 2375 编译";
-      } else if (port === 2376) {
-        return "远程 Docker 主机（TLS）";
-      }
+      const protocol = port === 2376 ? "TLS" : "TCP";
+      return `远程 Docker (${protocol}://${remoteHost})`;
     }
-    return remoteHost ? `远程 Docker 主机 (${remoteHost})` : "远程 Docker 主机";
+    return remoteHost ? `远程 Docker (${remoteHost})` : "远程 Docker";
   }
 }
 

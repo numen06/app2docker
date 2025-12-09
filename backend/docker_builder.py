@@ -133,13 +133,17 @@ class DockerBuilder(ABC):
                         return builder_name
         except Exception:
             pass
-        
+
         # 如果没有找到合适的 builder，尝试创建或使用默认的
         return "default"
-    
+
     def _build_with_buildx(
-        self, path: str, tag: str, dockerfile: Optional[str] = None, 
-        target: Optional[str] = None, platform: Optional[str] = None,
+        self,
+        path: str,
+        tag: str,
+        dockerfile: Optional[str] = None,
+        target: Optional[str] = None,
+        platform: Optional[str] = None,
         platforms: Optional[list] = None,
         build_args: Optional[Dict[str, str]] = None,
         cache_from: Optional[list] = None,
@@ -147,12 +151,12 @@ class DockerBuilder(ABC):
         load: bool = False,
         push: bool = False,
         outputs: Optional[list] = None,
-        **kwargs
+        **kwargs,
     ) -> Iterator[Dict]:
         """
         使用 docker buildx build 命令构建镜像
         参考: https://github.com/docker/build-push-action
-        
+
         Args:
             path: 构建上下文路径
             tag: 镜像标签（可以是列表，支持多标签）
@@ -170,11 +174,30 @@ class DockerBuilder(ABC):
         Returns:
             构建日志流（格式与 Docker API 兼容）
         """
-        # 检查 buildx 是否可用
+        # 查找 docker 命令路径
+        # 参考: https://github.com/docker/build-push-action
         docker_path = shutil.which("docker")
+
+        # 如果找不到，尝试常见路径
         if not docker_path:
-            raise RuntimeError("未找到 docker 命令")
-        
+            common_paths = [
+                "/usr/bin/docker",
+                "/usr/local/bin/docker",
+                "/bin/docker",
+            ]
+            for path in common_paths:
+                if os.path.exists(path) and os.access(path, os.X_OK):
+                    docker_path = path
+                    break
+
+        if not docker_path:
+            # 检查 PATH 环境变量
+            path_env = os.environ.get("PATH", "")
+            error_msg = f"未找到 docker 命令\n"
+            error_msg += f"PATH 环境变量: {path_env}\n"
+            error_msg += f"请确保 docker 已安装并在 PATH 中"
+            raise RuntimeError(error_msg)
+
         # 检查 buildx 是否可用
         try:
             result = subprocess.run(
@@ -186,25 +209,25 @@ class DockerBuilder(ABC):
                 raise RuntimeError("docker buildx 不可用")
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             raise RuntimeError(f"docker buildx 不可用: {e}")
-        
+
         # 确保 builder 存在
         builder_name = self._ensure_buildx_builder(docker_path)
-        
+
         # 构建 buildx 命令
         cmd = [docker_path, "buildx", "build"]
-        
+
         # 使用指定的 builder（如果需要）
         if builder_name != "default":
             cmd.extend(["--builder", builder_name])
-        
+
         # 处理标签（支持多标签）
         tags = tag if isinstance(tag, list) else [tag]
         for t in tags:
             cmd.extend(["--tag", t])
-        
+
         # 构建上下文路径应该是绝对路径
         build_context = os.path.abspath(path)
-        
+
         # 添加 Dockerfile 路径
         if dockerfile:
             # dockerfile 路径应该是相对于构建上下文的
@@ -213,11 +236,11 @@ class DockerBuilder(ABC):
             else:
                 dockerfile_rel = dockerfile
             cmd.extend(["--file", dockerfile_rel])
-        
+
         # 添加目标阶段（多阶段构建）
         if target:
             cmd.extend(["--target", target])
-        
+
         # 添加平台（支持多平台构建）
         if platforms:
             # 多平台构建
@@ -226,21 +249,21 @@ class DockerBuilder(ABC):
         elif platform:
             # 单平台构建（向后兼容）
             cmd.extend(["--platform", platform])
-        
+
         # 添加构建参数
         if build_args:
             for key, value in build_args.items():
                 if value is not None:
                     cmd.extend(["--build-arg", f"{key}={value}"])
-        
+
         # 添加缓存选项
         if cache_from:
             for cache in cache_from:
                 cmd.extend(["--cache-from", cache])
-        
+
         if cache_to:
             cmd.extend(["--cache-to", cache_to])
-        
+
         # 添加输出选项
         if outputs:
             for output in outputs:
@@ -252,30 +275,37 @@ class DockerBuilder(ABC):
             # 如果指定了 load，且没有多平台构建，则加载到本地
             # 注意：多平台构建不能使用 --load，必须使用 --push 或 --output
             if platforms and len(platforms) > 1:
-                raise RuntimeError("多平台构建不能使用 --load，请使用 --push 或 --output")
+                raise RuntimeError(
+                    "多平台构建不能使用 --load，请使用 --push 或 --output"
+                )
             if platform:
                 # 单平台构建可以使用 --load
                 cmd.append("--load")
             else:
                 # 没有指定平台，默认加载到本地
                 cmd.append("--load")
-        
+
         # 添加其他常用参数
         if kwargs.get("pull", False):
             cmd.append("--pull")
-        
+
         if kwargs.get("no_cache", False):
             cmd.append("--no-cache")
-        
+
         # 添加进度输出格式（plain 格式，与 Docker API 兼容）
         # 使用 plain 格式以便更好地解析输出
         cmd.extend(["--progress", "plain"])
-        
+
         # 添加构建上下文路径（使用绝对路径）
         cmd.append(build_context)
-        
+
         # 启动构建进程
         try:
+            # 准备环境变量（继承当前环境，包括 DOCKER_HOST）
+            # 参考: https://github.com/docker/build-push-action
+            # buildx 会读取 DOCKER_HOST 环境变量来连接远程 Docker
+            env = os.environ.copy()
+
             # 使用 PIPE 分别捕获 stdout 和 stderr，以便更好地处理错误
             process = subprocess.Popen(
                 cmd,
@@ -284,12 +314,13 @@ class DockerBuilder(ABC):
                 text=True,
                 bufsize=1,
                 cwd=build_context,
+                env=env,  # 传递环境变量，确保 DOCKER_HOST 被使用
             )
-            
+
             # 使用线程同时读取 stdout 和 stderr
             output_queue = queue.Queue()
             error_lines = []
-            
+
             def read_stdout():
                 try:
                     for line in process.stdout:
@@ -298,7 +329,7 @@ class DockerBuilder(ABC):
                 except Exception:
                     pass
                 output_queue.put(("stdout", None))
-            
+
             def read_stderr():
                 try:
                     for line in process.stderr:
@@ -308,17 +339,17 @@ class DockerBuilder(ABC):
                 except Exception:
                     pass
                 output_queue.put(("stderr", None))
-            
+
             # 启动读取线程
             stdout_thread = threading.Thread(target=read_stdout, daemon=True)
             stderr_thread = threading.Thread(target=read_stderr, daemon=True)
             stdout_thread.start()
             stderr_thread.start()
-            
+
             # 流式读取输出
             stdout_done = False
             stderr_done = False
-            
+
             while not (stdout_done and stderr_done):
                 try:
                     source, line = output_queue.get(timeout=0.1)
@@ -335,10 +366,10 @@ class DockerBuilder(ABC):
                     if process.poll() is not None:
                         # 进程已结束，读取剩余输出
                         break
-            
+
             # 等待进程完成
             return_code = process.wait()
-            
+
             # 读取剩余输出
             while not output_queue.empty():
                 try:
@@ -347,16 +378,16 @@ class DockerBuilder(ABC):
                         yield {"stream": line}
                 except queue.Empty:
                     break
-            
+
             if return_code != 0:
                 error_msg = f"docker buildx build 失败，退出码: {return_code}"
                 if error_lines:
                     error_msg += f"\n错误信息:\n{''.join(error_lines[-10:])}"  # 只显示最后10行错误
                 raise RuntimeError(error_msg)
-            
+
             # 构建成功，返回最终结果
             yield {"stream": f"Successfully built and tagged {', '.join(tags)}\n"}
-            
+
         except Exception as e:
             raise RuntimeError(f"执行 docker buildx build 失败: {e}")
 
@@ -414,7 +445,9 @@ class LocalDockerBuilder(DockerBuilder):
         except Exception:
             return False
 
-    def build_image(self, path: str, tag: Union[str, List[str]], **kwargs) -> Iterator[Dict]:
+    def build_image(
+        self, path: str, tag: Union[str, List[str]], **kwargs
+    ) -> Iterator[Dict]:
         """
         构建 Docker 镜像（使用 buildx）
         参考: https://github.com/docker/build-push-action
@@ -438,17 +471,17 @@ class LocalDockerBuilder(DockerBuilder):
                 print(f"⚠️ 仓库登录失败: {e}")
 
         # 提取 buildx 相关参数
-        dockerfile = kwargs.get("dockerfile")
-        target = kwargs.get("target")
-        platform = kwargs.get("platform")
-        platforms = kwargs.get("platforms")
-        build_args = kwargs.get("buildargs") or kwargs.get("build_args")
-        cache_from = kwargs.get("cache_from")
-        cache_to = kwargs.get("cache_to")
-        load = kwargs.get("load", False)
-        push = kwargs.get("push", False)
-        outputs = kwargs.get("outputs")
-        
+        dockerfile = kwargs.pop("dockerfile", None)
+        target = kwargs.pop("target", None)
+        platform = kwargs.pop("platform", None)
+        platforms = kwargs.pop("platforms", None)
+        build_args = kwargs.pop("buildargs", None) or kwargs.pop("build_args", None)
+        cache_from = kwargs.pop("cache_from", None)
+        cache_to = kwargs.pop("cache_to", None)
+        load = kwargs.pop("load", False)
+        push = kwargs.pop("push", False)
+        outputs = kwargs.pop("outputs", None)
+
         # 使用 buildx 构建
         return self._build_with_buildx(
             path=path,
@@ -463,7 +496,7 @@ class LocalDockerBuilder(DockerBuilder):
             load=load,
             push=push,
             outputs=outputs,
-            **kwargs
+            **kwargs,  # 剩余的 kwargs（如 pull, no_cache 等）
         )
 
     def push_image(
@@ -649,9 +682,11 @@ class RemoteDockerBuilder(DockerBuilder):
         """获取连接错误信息"""
         return getattr(self, "_connection_error", None) or "未知错误"
 
-    def build_image(self, path: str, tag: Union[str, List[str]], **kwargs) -> Iterator[Dict]:
+    def build_image(
+        self, path: str, tag: Union[str, List[str]], **kwargs
+    ) -> Iterator[Dict]:
         """
-        构建 Docker 镜像（使用 buildx，远程 Docker 需要在本地执行 buildx）
+        构建 Docker 镜像（直接使用远程 Docker API，不依赖本地 docker 命令）
         参考: https://github.com/docker/build-push-action
         """
         if not self.available:
@@ -660,7 +695,6 @@ class RemoteDockerBuilder(DockerBuilder):
                 error_msg += f": {self._connection_error}"
             raise RuntimeError(error_msg)
 
-        # 注意：buildx 需要在本地执行，但构建的镜像会推送到远程 Docker
         # 如果有认证信息，先尝试登录
         if hasattr(self, "auth_config") and self.auth_config:
             try:
@@ -676,54 +710,194 @@ class RemoteDockerBuilder(DockerBuilder):
             except Exception as e:
                 print(f"⚠️ 仓库登录失败: {e}")
 
-        # 提取 buildx 相关参数
-        dockerfile = kwargs.get("dockerfile")
-        target = kwargs.get("target")
-        platform = kwargs.get("platform")
-        platforms = kwargs.get("platforms")
-        build_args = kwargs.get("buildargs") or kwargs.get("build_args")
-        cache_from = kwargs.get("cache_from")
-        cache_to = kwargs.get("cache_to")
-        load = kwargs.get("load", False)
-        push = kwargs.get("push", False)
-        outputs = kwargs.get("outputs")
-        
-        # 对于远程 Docker，需要设置 DOCKER_HOST 环境变量
-        # 获取远程配置
+        # 提取构建参数
+        dockerfile = kwargs.pop("dockerfile", None)
+        target = kwargs.pop("target", None)
+        platform = kwargs.pop("platform", None)
+        platforms = kwargs.pop("platforms", None)
+        build_args = kwargs.pop("buildargs", None) or kwargs.pop("build_args", None)
+        pull = kwargs.pop("pull", False)
+        no_cache = kwargs.pop("no_cache", False)
+        load = kwargs.pop("load", True)  # 远程 Docker 构建后默认加载到远程
+        push = kwargs.pop("push", False)
+
+        # 处理标签（支持多标签）
+        tags = tag if isinstance(tag, list) else [tag]
+
+        # 构建上下文路径（必须是绝对路径）
+        build_context = os.path.abspath(path)
+
+        # 准备 Dockerfile 路径
+        dockerfile_path = None
+        if dockerfile:
+            if os.path.isabs(dockerfile):
+                dockerfile_path = dockerfile
+            else:
+                dockerfile_path = os.path.join(build_context, dockerfile)
+        else:
+            dockerfile_path = os.path.join(build_context, "Dockerfile")
+
+        # 检查 Dockerfile 是否存在
+        if not os.path.exists(dockerfile_path):
+            raise RuntimeError(f"Dockerfile 不存在: {dockerfile_path}")
+
+        # 使用 Docker API 直接构建（不需要本地 docker 命令）
+        # 参考: https://docker-py.readthedocs.io/en/stable/images.html#docker.models.images.ImageCollection.build
+        try:
+            print(f"🔗 使用远程 Docker API 构建镜像: {', '.join(tags)}")
+            print(f"   构建上下文: {build_context}")
+            print(f"   Dockerfile: {dockerfile_path}")
+
+            # 准备构建参数（Docker API 只支持单个标签）
+            primary_tag = tags[0]
+            build_kwargs = {
+                "path": build_context,
+                "tag": primary_tag,  # Docker API 只接受单个标签字符串
+                "dockerfile": os.path.relpath(dockerfile_path, build_context),
+                "stream": True,
+                "decode": True,
+                "pull": pull,
+                "nocache": no_cache,
+            }
+
+            # 添加目标阶段（多阶段构建）
+            if target:
+                build_kwargs["target"] = target
+
+            # 添加平台（注意：Docker API 的 build 方法不支持多平台构建，需要使用 buildx）
+            if platform:
+                build_kwargs["platform"] = platform
+            elif platforms and len(platforms) == 1:
+                build_kwargs["platform"] = platforms[0]
+            elif platforms and len(platforms) > 1:
+                # 多平台构建需要使用 buildx，回退到 buildx 方法
+                print("⚠️ 多平台构建需要使用 buildx，尝试使用 buildx...")
+                return self._build_with_buildx_via_remote(
+                    path=build_context,
+                    tag=tags,
+                    dockerfile=os.path.relpath(dockerfile_path, build_context),
+                    target=target,
+                    platforms=platforms,
+                    build_args=build_args,
+                    load=load,
+                    push=push,
+                    **kwargs,
+                )
+
+            # 添加构建参数
+            if build_args:
+                build_kwargs["buildargs"] = build_args
+
+            # 使用 Docker API 构建
+            build_logs = self.client.api.build(**build_kwargs)
+
+            # 流式返回构建日志
+            for chunk in build_logs:
+                if isinstance(chunk, dict):
+                    # Docker API 返回的格式
+                    if "stream" in chunk:
+                        yield {"stream": chunk["stream"]}
+                    elif "error" in chunk:
+                        yield {"error": chunk["error"]}
+                    elif "status" in chunk:
+                        yield {"status": chunk["status"]}
+                    elif "aux" in chunk:
+                        yield {"aux": chunk["aux"]}
+                else:
+                    # 字符串格式
+                    yield {"stream": str(chunk)}
+
+            # 构建成功后，如果需要多标签，为其他标签打标签
+            if len(tags) > 1:
+                base_image = primary_tag
+                for tag_name in tags[1:]:
+                    try:
+                        image = self.client.images.get(base_image)
+                        # 解析标签（格式：repository:tag）
+                        if ":" in tag_name:
+                            repo, tag = tag_name.rsplit(":", 1)
+                        else:
+                            repo, tag = tag_name, "latest"
+                        image.tag(repo, tag)
+                        yield {"stream": f"Successfully tagged {tag_name}\n"}
+                    except Exception as e:
+                        yield {"error": f"Failed to tag {tag_name}: {str(e)}\n"}
+
+            # 如果需要推送
+            if push:
+                for tag_name in tags:
+                    # 解析标签（格式：repository:tag）
+                    if ":" in tag_name:
+                        repo, tag = tag_name.rsplit(":", 1)
+                    else:
+                        repo, tag = tag_name, "latest"
+                    yield from self.push_image(repository=repo, tag=tag)
+
+        except Exception as e:
+            import traceback
+
+            error_msg = f"远程 Docker 构建失败: {str(e)}"
+            print(f"❌ {error_msg}")
+            traceback.print_exc()
+            yield {"error": error_msg}
+            raise RuntimeError(error_msg)
+
+    def _build_with_buildx_via_remote(
+        self,
+        path: str,
+        tag: Union[str, List[str]],
+        dockerfile: Optional[str] = None,
+        target: Optional[str] = None,
+        platforms: Optional[list] = None,
+        build_args: Optional[Dict[str, str]] = None,
+        load: bool = True,
+        push: bool = False,
+        **kwargs,
+    ) -> Iterator[Dict]:
+        """
+        通过远程 Docker 使用 buildx 构建（需要远程 Docker 支持 buildx）
+        如果本地没有 docker 命令，尝试通过远程 Docker API 执行 buildx
+        """
+        # 检查本地是否有 docker 命令
+        docker_path = shutil.which("docker")
+        if not docker_path:
+            # 如果没有本地 docker 命令，尝试使用远程 Docker API
+            # 但 buildx 的高级功能（多平台构建）需要通过命令行
+            raise RuntimeError(
+                "多平台构建需要本地 docker buildx 命令，或者使用单平台构建。\n"
+                "请安装 docker 客户端，或使用单平台构建。"
+            )
+
+        # 使用本地 docker 命令，但通过 DOCKER_HOST 连接到远程 Docker
         remote_config = self.config.get("remote", {})
         original_docker_host = os.environ.get("DOCKER_HOST")
-        
+
         try:
             if remote_config.get("host"):
                 host = remote_config.get("host")
                 port = remote_config.get("port", 2375)
                 use_tls = remote_config.get("use_tls", False)
-                
+
                 if use_tls:
                     docker_host = f"https://{host}:{port}"
                 else:
                     docker_host = f"tcp://{host}:{port}"
-                
+
                 os.environ["DOCKER_HOST"] = docker_host
-            
-            # 使用 buildx 构建
+                print(f"🔗 设置 DOCKER_HOST={docker_host} 用于 buildx 构建")
+
             return self._build_with_buildx(
                 path=path,
                 tag=tag,
                 dockerfile=dockerfile,
                 target=target,
-                platform=platform,
                 platforms=platforms,
                 build_args=build_args,
-                cache_from=cache_from,
-                cache_to=cache_to,
                 load=load,
                 push=push,
-                outputs=outputs,
-                **kwargs
+                **kwargs,
             )
         finally:
-            # 恢复原始 DOCKER_HOST
             if original_docker_host is not None:
                 os.environ["DOCKER_HOST"] = original_docker_host
             elif "DOCKER_HOST" in os.environ:
