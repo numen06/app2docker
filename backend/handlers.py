@@ -3297,7 +3297,7 @@ class BuildTaskManager:
             elif serializable_kwargs.get("original_filename"):
                 source = "文件上传"
             elif serializable_kwargs.get("build_steps"):
-                source = "分步构建"
+                source = "镜像构建"
 
             task_info = {
                 "task_id": task_id,

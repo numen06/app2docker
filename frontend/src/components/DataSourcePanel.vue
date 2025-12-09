@@ -52,7 +52,7 @@
       <div v-else-if="sources.length === 0" class="text-center py-5 text-muted">
         <i class="fas fa-inbox fa-3x mb-3"></i>
         <p class="mb-0">暂无数据源</p>
-        <p class="text-muted small mt-2">在源码构建或流水线中验证 Git 仓库时可保存为数据源</p>
+        <p class="text-muted small mt-2">在镜像构建或流水线中验证 Git 仓库时可保存为数据源</p>
       </div>
       <div v-else class="row g-4">
       <div v-for="source in sources" :key="source.source_id" class="col-12 col-md-6 col-xl-4">

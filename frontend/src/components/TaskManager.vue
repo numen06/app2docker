@@ -121,8 +121,8 @@
               <span v-else-if="task.source === '文件上传'" class="badge bg-success">
                 <i class="fas fa-upload"></i> 文件上传
               </span>
-              <span v-else-if="task.source === '分步构建'" class="badge bg-warning">
-                <i class="fas fa-list-ol"></i> 分步构建
+              <span v-else-if="task.source === '镜像构建' || task.source === '分步构建'" class="badge bg-warning">
+                <i class="fas fa-list-ol"></i> 镜像构建
               </span>
               <span v-else class="badge bg-secondary">
                 <i class="fas fa-hammer"></i> {{ task.source || '手动构建' }}

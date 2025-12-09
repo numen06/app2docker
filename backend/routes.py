@@ -605,6 +605,7 @@ async def upload_file(
     push_registry: Optional[str] = Form(None),  # 已废弃，保留以兼容旧代码，实际不再使用
     extract_archive: str = Form("on"),  # 是否解压压缩包（默认解压）
     build_steps: Optional[str] = Form(None),  # JSON 字符串格式的构建步骤信息
+    resource_package_configs: Optional[str] = Form(None),  # JSON 字符串格式的资源包配置
 ):
     """上传文件并开始构建"""
     try:

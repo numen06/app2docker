@@ -41,18 +41,8 @@
           <div class="card-header bg-white py-0 border-top-0">
             <ul class="nav nav-tabs border-0">
               <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeTab === 'build' }" @click="activeTab = 'build'">
-                  <i class="fas fa-cloud-upload-alt"></i> 构建镜像
-                </button>
-              </li>
-              <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeTab === 'source-build' }" @click="activeTab = 'source-build'">
-                  <i class="fas fa-code-branch"></i> 源码构建
-                </button>
-              </li>
-              <li class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'step-build' }" @click="activeTab = 'step-build'">
-                  <i class="fas fa-list-ol"></i> 分步构建
+                  <i class="fas fa-list-ol"></i> 镜像构建
                 </button>
               </li>
               <li class="nav-item">
@@ -100,8 +90,6 @@
 
           <!-- 标签页内容 -->
           <div class="card-body p-3">
-            <BuildPanel v-if="activeTab === 'build'" />
-            <SourceBuildPanel v-if="activeTab === 'source-build'" />
             <StepBuildPanel v-if="activeTab === 'step-build'" />
             <ExportPanel v-if="activeTab === 'export'" />
             <TemplatePanel v-if="activeTab === 'template'" />
@@ -132,7 +120,6 @@ import { getToken, getUsername, isAuthenticated, logout } from './utils/auth'
 import { useModalEscape } from './composables/useModalEscape'
 
 // 懒加载组件
-import BuildPanel from './components/BuildPanel.vue'
 import ConfigModal from './components/ConfigModal.vue'
 import DataSourcePanel from './components/DataSourcePanel.vue'
 import DockerManager from './components/DockerManager.vue'
@@ -142,7 +129,6 @@ import HostManager from './components/HostManager.vue'
 import LoginPage from './components/LoginPage.vue'
 import OperationLogs from './components/OperationLogs.vue'
 import PipelinePanel from './components/PipelinePanel.vue'
-import SourceBuildPanel from './components/SourceBuildPanel.vue'
 import StepBuildPanel from './components/StepBuildPanel.vue'
 import TaskManager from './components/TaskManager.vue'
 import TemplatePanel from './components/TemplatePanel.vue'
@@ -150,7 +136,7 @@ import UserCenterModal from './components/UserCenterModal.vue'
 
 const authenticated = ref(false)
 const username = ref('')
-const activeTab = ref('build')
+const activeTab = ref('step-build')
 const showConfig = ref(false)
 const showUserCenter = ref(false)
 
