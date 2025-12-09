@@ -20,6 +20,14 @@
         <button class="btn btn-sm btn-outline-primary" @click="loadTasks">
           <i class="fas fa-sync-alt"></i> 刷新
         </button>
+        <!-- 编译目录容量显示 -->
+        <div class="d-flex align-items-center ms-2 me-2">
+          <span class="text-muted small">
+            <i class="fas fa-folder-open"></i> 编译目录：
+            <span class="fw-bold">{{ buildDirSize }}</span>
+            <span v-if="buildDirCount > 0" class="text-muted">({{ buildDirCount }} 个目录)</span>
+          </span>
+        </div>
         <div class="btn-group">
           <button 
             class="btn btn-sm btn-outline-danger dropdown-toggle" 
@@ -27,7 +35,7 @@
             data-bs-toggle="dropdown"
             :disabled="cleaning"
           >
-            <i class="fas fa-broom"></i> 清理
+            <i class="fas fa-broom"></i> 清理任务
             <span v-if="cleaning" class="spinner-border spinner-border-sm ms-1"></span>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
@@ -49,8 +57,9 @@
             </li>
             <li><hr class="dropdown-divider"></li>
             <li>
-              <a class="dropdown-item" href="#" @click.prevent="cleanupBuildDir">
-                <i class="fas fa-folder-open"></i> 清空编译目录
+              <a class="dropdown-item" href="#" @click.prevent="cleanupBuildDir" :class="{ 'text-muted': buildDirCount === 0 }">
+                <i class="fas fa-folder-open"></i> 清理目录
+                <span v-if="buildDirCount > 0" class="text-muted small ms-2">({{ buildDirSize }})</span>
               </a>
             </li>
           </ul>
@@ -489,6 +498,8 @@ const taskLogs = ref('')
 const currentPage = ref(1)  // 当前页码
 const pageSize = ref(10)    // 每页显示数量
 const cleaning = ref(false)  // 清理中状态
+const buildDirSize = ref('0 MB')  // 编译目录容量
+const buildDirCount = ref(0)  // 编译目录数量
 const showPipelineModal = ref(false)  // 流水线模态框
 const selectedPipelineTask = ref(null)  // 选中的任务
 const saving = ref(false)  // 保存中状态
@@ -636,9 +647,30 @@ function calculateDuration(startTime, endTime) {
   }
 }
 
+// 加载编译目录统计信息
+async function loadBuildDirStats() {
+  try {
+    const res = await axios.get('/api/docker-build/stats')
+    if (res.data.success) {
+      buildDirSize.value = res.data.total_size_mb > 0 
+        ? `${res.data.total_size_mb} MB` 
+        : '0 MB'
+      buildDirCount.value = res.data.dir_count || 0
+    }
+  } catch (err) {
+    console.error('获取编译目录统计失败:', err)
+    buildDirSize.value = '0 MB'
+    buildDirCount.value = 0
+  }
+}
+
 async function loadTasks() {
   loading.value = true
   error.value = null
+  
+  // 同时加载编译目录统计
+  await loadBuildDirStats()
+  
   try {
     const params = {}
     if (statusFilter.value) params.status = statusFilter.value
@@ -951,22 +983,7 @@ async function cleanupByDaysPrompt() {
 async function cleanupBuildDir() {
   if (cleaning.value) return
   
-  const daysInput = prompt('请输入要保留的天数（例如：7 表示保留最近7天的编译目录，其他将被清理）：', '7')
-  if (!daysInput) {
-    return
-  }
-  
-  const days = parseInt(daysInput)
-  if (isNaN(days) || days < 0) {
-    alert('请输入有效的天数（必须大于等于0，0表示清空所有）')
-    return
-  }
-  
-  const confirmMsg = days === 0 
-    ? '确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！'
-    : `确定要清理 ${days} 天前的编译目录吗？\n\n此操作将删除旧的构建上下文目录，无法恢复，请谨慎操作！`
-  
-  if (!confirm(confirmMsg)) {
+  if (!confirm('确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！')) {
     return
   }
   
@@ -974,18 +991,68 @@ async function cleanupBuildDir() {
   error.value = null
   
   try {
+    console.log('开始清理编译目录...')
     const res = await axios.post('/api/docker-build/cleanup', {
-      keep_days: days
+      keep_days: 0
     })
     
-    const message = days === 0
-      ? `成功清空编译目录，释放空间 ${res.data.freed_space_mb || 0} MB`
-      : `成功清理编译目录，删除了 ${res.data.removed_count || 0} 个目录，释放空间 ${res.data.freed_space_mb || 0} MB`
+    console.log('清理目录响应:', res)
+    console.log('响应数据:', res.data)
     
-    alert(message)
+    // 检查响应数据
+    if (res.data) {
+      if (res.data.success === true) {
+        // 成功情况
+        const removedCount = res.data.removed_count || 0
+        const freedSpace = res.data.freed_space_mb || 0
+        let message = res.data.message || `成功清空编译目录，删除了 ${removedCount} 个目录，释放空间 ${freedSpace} MB`
+        
+        // 如果有错误信息，也显示出来
+        if (res.data.errors && res.data.errors.length > 0) {
+          message += `\n\n部分目录清理失败: ${res.data.errors.length} 个`
+        }
+        
+        alert(message)
+        
+        // 刷新统计信息
+        await loadBuildDirStats()
+      } else {
+        // 失败情况
+        const errorMsg = res.data.message || res.data.detail || '清理失败'
+        alert(typeof errorMsg === 'string' ? errorMsg : String(errorMsg))
+      }
+    } else {
+      console.warn('响应数据为空')
+      alert('清理完成，但未收到响应数据')
+      // 仍然刷新统计信息
+      await loadBuildDirStats()
+    }
   } catch (err) {
     console.error('清理编译目录失败:', err)
-    alert(err.response?.data?.detail || '清理失败')
+    console.error('错误对象:', err)
+    console.error('错误响应:', err.response)
+    console.error('错误数据:', err.response?.data)
+    
+    let errorMsg = '清理失败'
+    if (err.response) {
+      if (err.response.data) {
+        if (typeof err.response.data.detail === 'string') {
+          errorMsg = err.response.data.detail
+        } else if (typeof err.response.data.message === 'string') {
+          errorMsg = err.response.data.message
+        } else if (err.response.data.detail) {
+          errorMsg = String(err.response.data.detail)
+        } else {
+          errorMsg = `清理失败: ${err.response.status} ${err.response.statusText || ''}`
+        }
+      } else {
+        errorMsg = `清理失败: ${err.response.status} ${err.response.statusText || ''}`
+      }
+    } else if (err.message) {
+      errorMsg = `清理失败: ${err.message}`
+    }
+    
+    alert(errorMsg)
   } finally {
     cleaning.value = false
   }

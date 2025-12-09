@@ -1455,30 +1455,20 @@ async def cleanup_tasks(
         raise HTTPException(status_code=500, detail=f"清理任务失败: {str(e)}")
 
 
-@router.post("/docker-build/cleanup")
-async def cleanup_docker_build_dir(
-    request: Request,
-    keep_days: Optional[int] = Body(7, description="保留最近N天的构建上下文，默认7天"),
-):
-    """清理 docker_build 目录中的旧构建上下文"""
+@router.get("/docker-build/stats")
+async def get_docker_build_stats(request: Request):
+    """获取 docker_build 目录的统计信息（容量、目录数量等）"""
     try:
-        username = get_current_username(request)
-
         if not os.path.exists(BUILD_DIR):
             return {
                 "success": True,
-                "message": "构建目录不存在，无需清理",
-                "removed_count": 0,
-                "freed_space_mb": 0,
+                "total_size_mb": 0,
+                "dir_count": 0,
+                "exists": False,
             }
 
-        # 计算截止时间
-        from datetime import timedelta
-
-        cutoff_time = datetime.now() - timedelta(days=keep_days)
-
-        removed_count = 0
         total_size = 0
+        dir_count = 0
 
         # 遍历构建目录
         for item in os.listdir(BUILD_DIR):
@@ -1486,37 +1476,172 @@ async def cleanup_docker_build_dir(
             if not os.path.isdir(item_path):
                 continue
 
-            # 检查目录的修改时间
             try:
-                mtime = os.path.getmtime(item_path)
-                if mtime < cutoff_time.timestamp():
+                # 计算目录大小
+                dir_size = sum(
+                    os.path.getsize(os.path.join(dirpath, filename))
+                    for dirpath, dirnames, filenames in os.walk(item_path)
+                    for filename in filenames
+                )
+                total_size += dir_size
+                dir_count += 1
+            except Exception as e:
+                print(f"⚠️ 计算目录大小失败 ({item_path}): {e}")
+
+        return {
+            "success": True,
+            "total_size_mb": round(total_size / 1024 / 1024, 2),
+            "dir_count": dir_count,
+            "exists": True,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取构建目录统计失败: {str(e)}")
+
+
+@router.post("/docker-build/cleanup")
+async def cleanup_docker_build_dir(
+    request: Request,
+    keep_days: Optional[int] = Body(
+        0, description="保留最近N天的构建上下文，0表示清空所有"
+    ),
+):
+    """清理 docker_build 目录中的构建上下文"""
+    try:
+        username = get_current_username(request)
+
+        # 确保 BUILD_DIR 是绝对路径
+        build_dir = os.path.abspath(BUILD_DIR)
+        print(f"🔍 清理编译目录: {build_dir}")
+        print(f"🔍 keep_days: {keep_days}")
+
+        if not os.path.exists(build_dir):
+            print(f"⚠️ 构建目录不存在: {build_dir}")
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": "构建目录不存在，无需清理",
+                    "removed_count": 0,
+                    "freed_space_mb": 0,
+                }
+            )
+
+        removed_count = 0
+        total_size = 0
+        errors = []
+
+        # 如果 keep_days 为 0，清空所有目录
+        if keep_days == 0:
+            print(f"🗑️ 开始清空所有目录...")
+            # 遍历构建目录，删除所有
+            try:
+                items = os.listdir(build_dir)
+                print(f"🔍 找到 {len(items)} 个项目")
+            except Exception as e:
+                print(f"❌ 无法列出目录内容: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"无法访问构建目录: {str(e)}"
+                )
+
+            for item in items:
+                item_path = os.path.join(build_dir, item)
+                if not os.path.isdir(item_path):
+                    print(f"⏭️ 跳过非目录项: {item}")
+                    continue
+
+                try:
+                    print(f"🗑️ 正在删除: {item_path}")
                     # 计算目录大小
-                    dir_size = sum(
-                        os.path.getsize(os.path.join(dirpath, filename))
-                        for dirpath, dirnames, filenames in os.walk(item_path)
-                        for filename in filenames
-                    )
+                    dir_size = 0
+                    try:
+                        for dirpath, dirnames, filenames in os.walk(item_path):
+                            for filename in filenames:
+                                file_path = os.path.join(dirpath, filename)
+                                try:
+                                    dir_size += os.path.getsize(file_path)
+                                except Exception as e:
+                                    print(f"⚠️ 无法获取文件大小 ({file_path}): {e}")
+                    except Exception as e:
+                        print(f"⚠️ 遍历目录失败 ({item_path}): {e}")
+
                     total_size += dir_size
 
                     # 删除目录
                     shutil.rmtree(item_path, ignore_errors=True)
                     removed_count += 1
-            except Exception as e:
-                print(f"⚠️ 清理构建上下文失败 ({item_path}): {e}")
+                    print(f"✅ 成功删除: {item_path}")
+                except Exception as e:
+                    error_msg = f"清理构建上下文失败 ({item_path}): {e}"
+                    print(f"❌ {error_msg}")
+                    errors.append(error_msg)
+        else:
+            # 计算截止时间，清理指定天数前的目录
+            from datetime import timedelta
+
+            cutoff_time = datetime.now() - timedelta(days=keep_days)
+
+            # 遍历构建目录
+            for item in os.listdir(build_dir):
+                item_path = os.path.join(build_dir, item)
+                if not os.path.isdir(item_path):
+                    continue
+
+                # 检查目录的修改时间
+                try:
+                    mtime = os.path.getmtime(item_path)
+                    if mtime < cutoff_time.timestamp():
+                        # 计算目录大小
+                        dir_size = sum(
+                            os.path.getsize(os.path.join(dirpath, filename))
+                            for dirpath, dirnames, filenames in os.walk(item_path)
+                            for filename in filenames
+                        )
+                        total_size += dir_size
+
+                        # 删除目录
+                        shutil.rmtree(item_path, ignore_errors=True)
+                        removed_count += 1
+                except Exception as e:
+                    print(f"⚠️ 清理构建上下文失败 ({item_path}): {e}")
 
         # 记录操作日志
-        OperationLogger().log(
-            username=username,
-            action="清理构建上下文",
-            details=f"清理了 {removed_count} 个构建上下文目录，释放空间 {total_size / 1024 / 1024:.2f} MB",
-        )
+        try:
+            OperationLogger.log(
+                username=username,
+                operation="清理构建上下文",
+                details={
+                    "removed_count": removed_count,
+                    "freed_space_mb": round(total_size / 1024 / 1024, 2),
+                },
+            )
+        except Exception as log_error:
+            print(f"⚠️ 记录操作日志失败: {log_error}")
 
-        return {
-            "success": True,
-            "removed_count": removed_count,
-            "freed_space_mb": round(total_size / 1024 / 1024, 2),
-        }
+        freed_space_mb = round(total_size / 1024 / 1024, 2)
+        message = f"成功清理了 {removed_count} 个目录，释放空间 {freed_space_mb} MB"
+
+        if errors:
+            message += f"\n警告: {len(errors)} 个目录清理失败"
+            print(f"⚠️ 清理过程中有错误: {errors}")
+
+        print(f"✅ 清理完成: {message}")
+
+        return JSONResponse(
+            {
+                "success": True,
+                "removed_count": removed_count,
+                "freed_space_mb": freed_space_mb,
+                "message": message,
+                "errors": errors if errors else None,
+            }
+        )
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+
+        error_trace = traceback.format_exc()
+        print(f"❌ 清理构建上下文异常: {e}")
+        print(f"错误堆栈:\n{error_trace}")
         raise HTTPException(status_code=500, detail=f"清理构建上下文失败: {str(e)}")
 
 
