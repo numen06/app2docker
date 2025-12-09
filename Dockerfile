@@ -37,39 +37,23 @@ RUN npm run build
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
 FROM ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/base:ubuntu22.04-py310
+# 安装 curl
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# 初始化 apt 源
-RUN mkdir -p /etc/apt && \
-    echo "deb http://archive.ubuntu.com/ubuntu jammy main universe" > /etc/apt/sources.list && \
-    echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe" >> /etc/apt/sources.list && \
-    echo "deb http://archive.ubuntu.com/ubuntu jammy-security main universe" >> /etc/apt/sources.list
+# 下载 docker 和 buildx（静态二进制）
+RUN mkdir -p /usr/local/bin
+RUN curl -fsSL https://mirrors.aliyun.com/docker-ce/release/linux/static/stable/x86_64/docker-25.0.3.tgz | tar xz -C /tmp && \
+    mv /tmp/docker/* /usr/local/bin/ && \
+    rm -rf /tmp/docker
 
-# 安装基础工具
-RUN apt-get update && \
-    apt-get install -y ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/*
-
-# 下载 GPG 密钥（阿里云镜像）+ 设置权限
-RUN mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg \
-    -o /etc/apt/keyrings/docker.gpg && \
-    chmod 644 /etc/apt/keyrings/docker.gpg
-
-# 添加源
-RUN echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://mirrors.aliyun.com/docker-ce/linux/ubuntu \
-    jammy stable" \
-    | tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# 安装 Docker CLI + buildx
-RUN apt-get update && \
-    apt-get install -y docker-ce-cli docker-buildx-plugin containerd.io && \
-    rm -rf /var/lib/apt/lists/*
+# 下载 buildx 插件
+RUN mkdir -p ~/.docker/cli-plugins
+RUN curl -fsSL https://github.com/docker/buildx/releases/download/v0.16.3/buildx-v0.16.3.linux-amd64 \
+    -o ~/.docker/cli-plugins/docker-buildx && \
+    chmod a+x ~/.docker/cli-plugins/docker-buildx
 
 # 验证
 RUN docker --version && docker buildx version
-
 
 
 WORKDIR /app
