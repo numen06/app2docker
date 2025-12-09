@@ -51,6 +51,8 @@ RUN mkdir -p ~/.docker/cli-plugins && \
     curl -sL https://numen-share.oss-accelerate.aliyuncs.com/docker/buildx-v0.27.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx && \
     chmod +x ~/.docker/cli-plugins/docker-buildx
 
+RUN apt-get update && apt-get install -y docker-ce-cli
+
 # ✅ 5. 验证
 RUN echo "✅ buildx version:" && docker buildx version
 
