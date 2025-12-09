@@ -36,25 +36,33 @@ RUN npm run build
 
 # ============ 阶段 2: Python 后端 ============
 # 使用阿里云 Python 镜像加速下载
-FROM ac2-registry.cn-hangzhou.cr.aliyuncs.com/ac2/base:ubuntu22.04-py310-optimised
+FROM docker.jajachina.com/public/docker:27.2.0-cli
 
-# 初始化 apt 源
-RUN mkdir -p /etc/apt && \
-    echo "deb http://archive.ubuntu.com/ubuntu jammy main universe" > /etc/apt/sources.list && \
-    echo "deb http://archive.ubuntu.com/ubuntu jammy-updates main universe" >> /etc/apt/sources.list && \
-    echo "deb http://archive.ubuntu.com/ubuntu jammy-security main universe" >> /etc/apt/sources.list
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-setuptools \
+    curl \
+    jq \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    linux-headers
 
+# ✅ 创建软链接 python → python3（适配多数脚本）
+RUN ln -sf python3 /usr/bin/python && \
+    ln -sf pip3 /usr/bin/pip
 
-RUN apt-get update && apt-get install -y curl jq && rm -rf /var/lib/apt/lists/*
-# 安装 buildx（推荐从官方 release 下载）
-RUN mkdir -p ~/.docker/cli-plugins && \
-    curl -sL https://numen-share.oss-accelerate.aliyuncs.com/docker/buildx-v0.27.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx && \
-    chmod +x ~/.docker/cli-plugins/docker-buildx
+# ✅ 升级 pip（可选，推荐）
+RUN pip install --upgrade pip
 
-RUN apt-get install -y docker-ce-cli
-
-# ✅ 5. 验证
-RUN echo "✅ buildx version:" && docker buildx version
+# ✅ 验证 Python 环境
+RUN echo "✅ Python version:" && python --version && \
+    echo "✅ pip version:" && pip --version && \
+    echo "✅ docker version:" && docker --version && \
+    echo "✅ buildx version:" && docker buildx version && \
+    echo "✅ QEMU arm64 registered:" && ls /proc/sys/fs/binfmt_misc/qemu-arm64 2>/dev/null || echo "⚠️ QEMU not found (should not happen)"
 
 WORKDIR /app
 
