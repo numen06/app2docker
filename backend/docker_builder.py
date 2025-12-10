@@ -353,6 +353,17 @@ class DockerBuilder(ABC):
         # 添加构建上下文路径（使用绝对路径）
         cmd.append(build_context)
 
+        # 打印完整的构建命令，方便排查问题
+        cmd_str = " ".join(
+            f'"{arg}"' if " " in str(arg) or any(c in str(arg) for c in ["&", "|", ";", "<", ">", "(", ")"]) 
+            else str(arg) 
+            for arg in cmd
+        )
+        print(f"🔧 执行 Docker 构建命令:")
+        print(f"   {cmd_str}")
+        print(f"   工作目录: {build_context}")
+        print(f"   构建上下文: {build_context}")
+
         # 启动构建进程
         try:
             # 准备环境变量（继承当前环境，包括 DOCKER_HOST）
@@ -840,6 +851,19 @@ class RemoteDockerBuilder(DockerBuilder):
             # 添加构建参数
             if build_args:
                 build_kwargs["buildargs"] = build_args
+
+            # 打印构建参数，方便排查问题
+            print(f"🔧 使用 Docker API 构建镜像:")
+            print(f"   镜像标签: {primary_tag}")
+            print(f"   构建上下文: {build_context}")
+            print(f"   Dockerfile: {build_kwargs['dockerfile']}")
+            if target:
+                print(f"   目标阶段: {target}")
+            if platform or (platforms and len(platforms) == 1):
+                print(f"   平台: {build_kwargs.get('platform', 'default')}")
+            if build_args:
+                print(f"   构建参数: {build_args}")
+            print(f"   完整参数: {build_kwargs}")
 
             # 使用 Docker API 构建（默认返回生成器，流式返回日志）
             build_logs = self.client.api.build(**build_kwargs)
