@@ -2312,10 +2312,22 @@ class BuildManager:
                 log(
                     f"📄 检测到项目中的 Dockerfile ({dockerfile_name})，使用项目中的 Dockerfile\n"
                 )
-                # 复制项目中的 Dockerfile 到构建上下文（始终命名为Dockerfile，因为Docker构建时需要）
-                dockerfile_path = os.path.join(build_context, "Dockerfile")
+                # 复制项目中的 Dockerfile 到构建上下文
+                # 如果文件名包含路径（如 frontend/Dockerfile.prod），提取文件名部分
+                # 如果文件名就是 "Dockerfile"，保持为 "Dockerfile"
+                # 否则保持原始文件名（如 Dockerfile.prod）
+                dockerfile_basename = os.path.basename(normalized_dockerfile_name)
+                
+                # 如果文件名不是 "Dockerfile"，保持原始文件名
+                # 这样可以在构建时使用 -f 参数指定正确的文件
+                if dockerfile_basename.lower() == "dockerfile":
+                    dockerfile_path = os.path.join(build_context, "Dockerfile")
+                else:
+                    # 保持原始文件名（如 Dockerfile.prod）
+                    dockerfile_path = os.path.join(build_context, dockerfile_basename)
+                
                 shutil.copy2(project_dockerfile_path, dockerfile_path)
-                log(f"✅ 已使用项目中的 Dockerfile ({dockerfile_name})\n")
+                log(f"✅ 已使用项目中的 Dockerfile ({dockerfile_name})，复制为 {os.path.basename(dockerfile_path)}\n")
             else:
                 if has_project_dockerfile and not use_project_dockerfile:
                     log(f"📋 项目中有 Dockerfile，但用户选择使用模板\n")

@@ -267,12 +267,24 @@ class DockerBuilder(ABC):
         build_context = os.path.abspath(path)
 
         # 添加 Dockerfile 路径
+        # 重要：即使文件名是 "Dockerfile"，也要明确指定 -f 参数
+        # 这样可以避免 buildx 静默加载错误的文件
         if dockerfile:
             # dockerfile 路径应该是相对于构建上下文的
             if os.path.isabs(dockerfile):
                 dockerfile_rel = os.path.relpath(dockerfile, build_context)
             else:
                 dockerfile_rel = dockerfile
+            
+            # 验证 Dockerfile 文件是否存在
+            dockerfile_full_path = os.path.join(build_context, dockerfile_rel)
+            if not os.path.exists(dockerfile_full_path):
+                raise RuntimeError(
+                    f"Dockerfile 不存在: {dockerfile_rel} (完整路径: {dockerfile_full_path})"
+                )
+            
+            # 始终使用 --file 参数，即使文件名是 "Dockerfile"
+            # 这样可以确保 buildx 使用正确的文件，避免静默失败
             cmd.extend(["--file", dockerfile_rel])
 
         # 添加目标阶段（多阶段构建）
