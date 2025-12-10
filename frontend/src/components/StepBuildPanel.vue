@@ -2090,10 +2090,19 @@ async function parseDockerfileServices() {
     if (res.data.services && res.data.services.length > 0) {
       services.value = res.data.services;
       // 项目 Dockerfile 模式总是多服务推送
-      selectedServices.value = services.value.map((s) => s.name);
-      buildConfig.value.selectedService = "";
-      // 初始化推送配置（默认都不推送）
-      servicePushConfig.value = {};
+        selectedServices.value = services.value.map((s) => s.name);
+        buildConfig.value.selectedService = "";
+        
+        // 如果是多服务模式且镜像前缀为空，自动从 Git URL 或文件名生成
+        if (services.value.length > 1 && (!buildConfig.value.imagePrefix || !buildConfig.value.imagePrefix.trim())) {
+          const projectName = extractProjectName();
+          if (projectName) {
+            buildConfig.value.imagePrefix = projectName;
+          }
+        }
+        
+        // 初始化推送配置（默认都不推送）
+        servicePushConfig.value = {};
       services.value.forEach((s) => {
         const config = getServiceConfig(s.name);
         config.push = false;
@@ -2194,13 +2203,80 @@ function setServiceTemplateParam(serviceName, paramName, value) {
   buildConfig.value.serviceTemplateParams[serviceName][paramName] = value;
 }
 
+// 从 Git URL 提取项目名
+function extractProjectNameFromGitUrl(gitUrl) {
+  if (!gitUrl) return null;
+  try {
+    // 移除协议和 .git 后缀
+    let url = gitUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '');
+    // 提取最后一部分（项目名）
+    const parts = url.split('/');
+    if (parts.length > 0) {
+      const projectName = parts[parts.length - 1];
+      // 移除特殊字符，只保留字母、数字、连字符和下划线
+      return projectName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+    }
+  } catch (e) {
+    console.error('提取 Git URL 项目名失败:', e);
+  }
+  return null;
+}
+
+// 从文件名提取项目名
+function extractProjectNameFromFileName(fileName) {
+  if (!fileName) return null;
+  try {
+    // 移除扩展名
+    const nameWithoutExt = fileName.replace(/\.[^.]*$/, '');
+    // 移除特殊字符，只保留字母、数字、连字符和下划线
+    return nameWithoutExt.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+  } catch (e) {
+    console.error('提取文件名项目名失败:', e);
+  }
+  return null;
+}
+
+// 提取项目名（从 Git URL 或文件名）
+function extractProjectName() {
+  if (buildConfig.value.sourceType === 'git' && buildConfig.value.sourceId) {
+    const source = gitSources.value.find(
+      (s) => s.source_id === buildConfig.value.sourceId
+    );
+    if (source && source.git_url) {
+      return extractProjectNameFromGitUrl(source.git_url);
+    }
+  } else if (buildConfig.value.sourceType === 'file' && buildConfig.value.file) {
+    return extractProjectNameFromFileName(buildConfig.value.file.name);
+  }
+  return null;
+}
+
 // 获取默认镜像前缀
 function getDefaultImagePrefix() {
-  return (
-    buildConfig.value.imagePrefix.trim() ||
-    buildConfig.value.imageName.trim() ||
-    "myapp/demo"
-  );
+  // 优先使用用户设置的镜像前缀
+  if (buildConfig.value.imagePrefix && buildConfig.value.imagePrefix.trim()) {
+    return buildConfig.value.imagePrefix.trim();
+  }
+  
+  // 如果设置了镜像名称，使用镜像名称（去掉标签部分）
+  if (buildConfig.value.imageName && buildConfig.value.imageName.trim()) {
+    const imageName = buildConfig.value.imageName.trim();
+    // 如果包含斜杠，说明是完整路径，直接返回
+    if (imageName.includes('/')) {
+      return imageName;
+    }
+    // 否则作为项目名使用
+    return imageName;
+  }
+  
+  // 尝试从 Git URL 或文件名提取项目名
+  const projectName = extractProjectName();
+  if (projectName) {
+    return projectName;
+  }
+  
+  // 默认值
+  return "myapp/demo";
 }
 
 // 获取服务的完整镜像名（自定义或前缀 + 服务名称）

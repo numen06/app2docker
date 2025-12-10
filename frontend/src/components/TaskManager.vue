@@ -143,7 +143,34 @@
               </span>
             </td>
             <td>
-              <code class="small">{{ task.image || (task.task_type ? task.task_type : '未知') }}</code>
+              <div>
+                <code class="small">{{ task.image || (task.task_type ? task.task_type : '未知') }}</code>
+                <div v-if="task.selected_services && task.selected_services.length > 0" class="mt-1">
+                  <span class="badge bg-info me-1" style="font-size: 0.7rem;">
+                    <i class="fas fa-layer-group"></i> 多服务 ({{ task.selected_services.length }})
+                  </span>
+                  <div class="d-flex flex-wrap gap-1 mt-1">
+                    <span 
+                      v-for="service in task.selected_services.slice(0, 5)" 
+                      :key="service"
+                      class="badge bg-secondary" 
+                      style="font-size: 0.65rem;"
+                    >
+                      {{ service }}
+                    </span>
+                    <span 
+                      v-if="task.selected_services.length > 5"
+                      class="badge bg-secondary" 
+                      style="font-size: 0.65rem;"
+                    >
+                      +{{ task.selected_services.length - 5 }}
+                    </span>
+                  </div>
+                </div>
+                <span v-else-if="task.push_mode === 'multi' && !task.selected_services" class="badge bg-secondary me-1" style="font-size: 0.7rem;">
+                  <i class="fas fa-cube"></i> 单应用
+                </span>
+              </div>
             </td>
             <td>{{ task.tag || '-' }}</td>
             <td>
@@ -1271,6 +1298,22 @@ async function rebuildTask(task) {
     // 从任务信息中提取构建参数
     // 优先从 config 字段获取，如果没有则从任务本身获取
     const taskConfig = task.config || {}
+    
+    // 处理服务模板参数
+    let service_template_params = null
+    if (taskConfig.service_template_params || task.service_template_params) {
+      const params = taskConfig.service_template_params || task.service_template_params
+      if (typeof params === 'string') {
+        try {
+          service_template_params = JSON.parse(params)
+        } catch (e) {
+          service_template_params = params
+        }
+      } else {
+        service_template_params = params
+      }
+    }
+    
     const config = {
       git_url: taskConfig.git_url || task.git_url,
       branch: taskConfig.branch || task.branch || 'main',
@@ -1283,6 +1326,12 @@ async function rebuildTask(task) {
       use_project_dockerfile: taskConfig.use_project_dockerfile !== false && task.use_project_dockerfile !== false,
       dockerfile_name: taskConfig.dockerfile_name || task.dockerfile_name || 'Dockerfile',
       push: (taskConfig.push || task.should_push) ? 'on' : 'off',  // API 使用 'on'/'off' 字符串
+      source_id: taskConfig.source_id || task.source_id || null,
+      selected_services: taskConfig.selected_services || task.selected_services || null,
+      service_push_config: taskConfig.service_push_config || task.service_push_config || null,
+      service_template_params: service_template_params,
+      push_mode: taskConfig.push_mode || task.push_mode || 'multi',
+      resource_package_configs: taskConfig.resource_package_configs || taskConfig.resource_package_ids || task.resource_package_configs || task.resource_package_ids || null,
     }
     
     // 验证必要参数
