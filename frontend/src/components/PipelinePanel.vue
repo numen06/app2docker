@@ -1257,12 +1257,12 @@
                 <li class="page-item active">
                   <span class="page-link">{{ historyPagination.currentPage }}</span>
                 </li>
-                <li class="page-item" :class="{ disabled: !historyPagination.hasMore }">
+                <li class="page-item" :class="{ disabled: historyPagination.currentPage >= Math.ceil(historyPagination.total / historyPagination.pageSize) }">
                   <a class="page-link" href="#" @click.prevent="changeHistoryPage(historyPagination.currentPage + 1)" title="下一页">
                     <i class="fas fa-angle-right"></i>
                   </a>
                 </li>
-                <li class="page-item" :class="{ disabled: !historyPagination.hasMore }">
+                <li class="page-item" :class="{ disabled: historyPagination.currentPage >= Math.ceil(historyPagination.total / historyPagination.pageSize) }">
                   <a class="page-link" href="#" @click.prevent="changeHistoryPage(Math.ceil(historyPagination.total / historyPagination.pageSize))" title="末页">
                     <i class="fas fa-angle-double-right"></i>
                   </a>

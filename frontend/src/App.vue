@@ -22,6 +22,65 @@
               <i class="fas fa-tools text-primary"></i> 操作面板
             </h5>
             <div class="d-flex gap-2">
+              <div class="position-relative" v-if="runningTasksCount > 0">
+                <button 
+                  class="btn btn-outline-warning btn-sm" 
+                  @click.stop="toggleRunningTasksPopup"
+                  :class="{ 'active': showRunningTasksPopup }"
+                >
+                  <i class="fas fa-spinner fa-spin"></i> 运行任务 <span class="badge bg-danger ms-1">{{ runningTasksCount }}</span>
+                </button>
+                <!-- 任务概况弹出框 -->
+                <div 
+                  v-if="showRunningTasksPopup && runningTasksList.length > 0"
+                  class="running-tasks-popup position-absolute top-100 start-0 mt-1 shadow-lg"
+                  @click.stop
+                >
+                  <div class="card border-warning" style="min-width: 300px; max-width: 400px;">
+                    <div class="card-header bg-warning bg-opacity-10 py-2 d-flex justify-content-between align-items-center">
+                      <h6 class="mb-0">
+                        <i class="fas fa-spinner fa-spin text-warning"></i> 正在运行的任务 ({{ runningTasksCount }})
+                      </h6>
+                      <button 
+                        class="btn-close btn-close-sm" 
+                        @click="showRunningTasksPopup = false"
+                        aria-label="关闭"
+                      ></button>
+                    </div>
+                    <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
+                      <div v-for="task in runningTasksList.slice(0, 10)" :key="task.task_id" class="mb-2 pb-2 border-bottom">
+                        <div class="d-flex align-items-start">
+                          <code class="small me-2">{{ task.task_id?.substring(0, 8) || '-' }}</code>
+                          <span class="badge" :class="getTaskTypeBadge(task.task_category)">
+                            {{ getTaskTypeLabel(task.task_category) }}
+                          </span>
+                        </div>
+                        <div v-if="task.image || task.task_name" class="mt-1 small text-muted">
+                          {{ task.image || task.task_name || '-' }}
+                          <span v-if="task.tag" class="ms-1">:{{ task.tag }}</span>
+                        </div>
+                      </div>
+                      <div v-if="runningTasksCount > 10" class="text-center text-muted small mt-2">
+                        还有 {{ runningTasksCount - 10 }} 个任务...
+                      </div>
+                      <div class="text-center mt-3">
+                        <button class="btn btn-primary btn-sm" @click="goToRunningTasks">
+                          <i class="fas fa-arrow-right"></i> 查看详情
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button 
+                v-else
+                class="btn btn-outline-secondary btn-sm" 
+                @click="goToRunningTasks"
+                title="暂无运行中的任务"
+                disabled
+              >
+                <i class="fas fa-check-circle"></i> 运行任务 <span class="badge bg-secondary ms-1">0</span>
+              </button>
               <button class="btn btn-outline-primary btn-sm" @click="showUserCenter = true">
                 <i class="fas fa-user-circle"></i> 用户中心
               </button>
@@ -40,6 +99,11 @@
           <!-- Tab 导航 -->
           <div class="card-header bg-white py-0 border-top-0">
             <ul class="nav nav-tabs border-0">
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'dashboard' }" @click="activeTab = 'dashboard'">
+                  <i class="fas fa-chart-line"></i> 仪表盘
+                </button>
+              </li>
               <li class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'step-build' }" @click="activeTab = 'step-build'">
                   <i class="fas fa-list-ol"></i> 镜像构建
@@ -95,6 +159,7 @@
 
           <!-- 标签页内容 -->
           <div class="card-body p-3">
+            <DashboardPanel v-if="activeTab === 'dashboard'" @navigate="handleNavigate" />
             <StepBuildPanel v-if="activeTab === 'step-build'" />
             <ExportPanel v-if="activeTab === 'export'" />
             <TemplatePanel v-if="activeTab === 'template'" />
@@ -121,12 +186,13 @@
 
 <script setup>
 import axios from 'axios'
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { getToken, getUsername, isAuthenticated, logout } from './utils/auth'
 import { useModalEscape } from './composables/useModalEscape'
 
 // 懒加载组件
 import ConfigModal from './components/ConfigModal.vue'
+import DashboardPanel from './components/DashboardPanel.vue'
 import DataSourcePanel from './components/DataSourcePanel.vue'
 import DockerManager from './components/DockerManager.vue'
 import RegistryPanel from './components/RegistryPanel.vue'
@@ -143,14 +209,102 @@ import UserCenterModal from './components/UserCenterModal.vue'
 
 const authenticated = ref(false)
 const username = ref('')
-const activeTab = ref('step-build')
+const activeTab = ref('dashboard')
 const showConfig = ref(false)
 const showUserCenter = ref(false)
+const runningTasksCount = ref(0)
+const runningTasksList = ref([])
+const showRunningTasksPopup = ref(false)
+let runningTasksTimer = null
+
+function handleNavigate(tab, params) {
+  activeTab.value = tab
+  // 如果传递了参数（比如筛选条件），可以在这里处理
+  // 例如设置到localStorage或通过其他方式传递给目标组件
+  if (params && params.status) {
+    sessionStorage.setItem('taskStatusFilter', params.status)
+  }
+}
+
+// 切换运行任务弹出框显示
+function toggleRunningTasksPopup() {
+  showRunningTasksPopup.value = !showRunningTasksPopup.value
+}
+
+// 跳转到运行中的任务
+function goToRunningTasks() {
+  showRunningTasksPopup.value = false
+  handleNavigate('tasks', { status: 'running' })
+}
+
+// 获取运行中的任务数量
+async function updateRunningTasksCount() {
+  if (!authenticated.value) return
+  try {
+    const res = await axios.get('/api/tasks')
+    const tasks = res.data.tasks || []
+    const running = tasks
+      .filter(t => t.status === 'running')
+      .sort((a, b) => {
+        const timeA = new Date(a.created_at || 0).getTime()
+        const timeB = new Date(b.created_at || 0).getTime()
+        return timeB - timeA
+      })
+    runningTasksCount.value = running.length
+    runningTasksList.value = running
+  } catch (error) {
+    console.error('获取运行任务数量失败:', error)
+  }
+}
+
+// 获取任务类型标签
+function getTaskTypeLabel(type) {
+  const map = {
+    build: '构建',
+    export: '导出'
+  }
+  return map[type] || type
+}
+
+// 获取任务类型徽章样式
+function getTaskTypeBadge(type) {
+  const map = {
+    build: 'bg-primary',
+    export: 'bg-info'
+  }
+  return map[type] || 'bg-secondary'
+}
+
+// 启动运行任务数量定时刷新
+function startRunningTasksTimer() {
+  // 清除之前的定时器
+  if (runningTasksTimer) {
+    clearInterval(runningTasksTimer)
+  }
+  
+  // 立即获取一次
+  updateRunningTasksCount()
+  
+  // 每10秒刷新一次
+  runningTasksTimer = setInterval(() => {
+    updateRunningTasksCount()
+  }, 10000)
+}
+
+// 停止运行任务数量定时刷新
+function stopRunningTasksTimer() {
+  if (runningTasksTimer) {
+    clearInterval(runningTasksTimer)
+    runningTasksTimer = null
+  }
+}
 
 function handleLoginSuccess(data) {
   authenticated.value = true
   username.value = data.username
   console.log('✅ 登录成功:', data.username)
+  // 登录后启动运行任务数量定时刷新
+  startRunningTasksTimer()
 }
 
 async function handleLogout() {
@@ -158,12 +312,26 @@ async function handleLogout() {
     await logout()
     authenticated.value = false
     username.value = ''
+    runningTasksCount.value = 0
+    runningTasksList.value = []
+    showRunningTasksPopup.value = false
+    stopRunningTasksTimer()
     console.log('👋 已登出')
   }
 }
 
 // 统一处理所有模态框的 ESC 键
 useModalEscape()
+
+// 点击外部关闭运行任务弹出框
+function handleClickOutside(event) {
+  const popup = document.querySelector('.running-tasks-popup')
+  const button = event.target.closest('.btn-outline-warning')
+  
+  if (showRunningTasksPopup.value && popup && !popup.contains(event.target) && !button) {
+    showRunningTasksPopup.value = false
+  }
+}
 
 onMounted(() => {
   console.log('🚀 App 组件挂载')
@@ -179,10 +347,21 @@ onMounted(() => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
     }
     
+    // 启动运行任务数量定时刷新
+    startRunningTasksTimer()
+    
     console.log('✅ 已登录用户:', username.value)
   } else {
     console.log('🔒 未登录，显示登录页面')
   }
+  
+  // 添加点击外部关闭弹出框的监听
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  stopRunningTasksTimer()
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -319,5 +498,27 @@ onMounted(() => {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a1a1a1;
+}
+
+/* 运行任务弹出框样式 */
+.running-tasks-popup {
+  z-index: 1050;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.running-tasks-tooltip .card {
+  border: 2px solid #ffc107;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
 }
 </style>

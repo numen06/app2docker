@@ -1378,6 +1378,12 @@ async function retryExportTask(task) {
 }
 
 onMounted(() => {
+  // 检查是否有从仪表盘传递过来的筛选条件
+  const statusFilterFromStorage = sessionStorage.getItem('taskStatusFilter')
+  if (statusFilterFromStorage) {
+    statusFilter.value = statusFilterFromStorage
+    sessionStorage.removeItem('taskStatusFilter') // 使用后清除
+  }
   loadTasks()
   // 每5秒自动刷新一次（只刷新运行中任务的状态，不刷新整个列表）
   refreshInterval = setInterval(() => {
