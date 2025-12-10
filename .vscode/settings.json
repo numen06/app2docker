@@ -5,7 +5,8 @@
   },
   
   // Python 设置
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  // 自动检测虚拟环境（支持 Windows 和 Linux）
+  "python.defaultInterpreterPath": "${command:python.interpreterPath}",
   "python.analysis.typeCheckingMode": "basic",
   "python.linting.enabled": true,
   "python.linting.pylintEnabled": false,

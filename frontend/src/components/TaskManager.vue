@@ -1,5 +1,37 @@
 <template>
   <div class="task-manager">
+    <!-- 基本信息块：下载目录和编译目录大小 -->
+    <div class="info-cards mb-3">
+      <div class="card info-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="info-icon me-3">
+              <i class="fas fa-download"></i>
+            </div>
+            <div class="flex-grow-1">
+              <div class="info-label">下载目录大小</div>
+              <div class="info-value">{{ exportDirSize }}</div>
+              <div v-if="exportDirCount > 0" class="info-sub">{{ exportDirCount }} 个文件</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card info-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="info-icon me-3">
+              <i class="fas fa-folder-open"></i>
+            </div>
+            <div class="flex-grow-1">
+              <div class="info-label">编译目录大小</div>
+              <div class="info-value">{{ buildDirSize }}</div>
+              <div v-if="buildDirCount > 0" class="info-sub">{{ buildDirCount }} 个目录</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">
         <i class="fas fa-tasks"></i> 任务管理
@@ -20,14 +52,6 @@
         <button class="btn btn-sm btn-outline-primary" @click="loadTasks">
           <i class="fas fa-sync-alt"></i> 刷新
         </button>
-        <!-- 编译目录容量显示 -->
-        <div class="d-flex align-items-center ms-2 me-2">
-          <span class="text-muted small">
-            <i class="fas fa-folder-open"></i> 编译目录：
-            <span class="fw-bold">{{ buildDirSize }}</span>
-            <span v-if="buildDirCount > 0" class="text-muted">({{ buildDirCount }} 个目录)</span>
-          </span>
-        </div>
         <div class="btn-group">
           <button 
             class="btn btn-sm btn-outline-danger dropdown-toggle" 
@@ -39,6 +63,12 @@
             <span v-if="cleaning" class="spinner-border spinner-border-sm ms-1"></span>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item text-danger" href="#" @click.prevent="cleanupAll">
+                <i class="fas fa-trash-alt"></i> 清理全部（非运行中）
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item" href="#" @click.prevent="cleanupByStatus('completed')">
                 <i class="fas fa-check-circle"></i> 清理已完成的任务
@@ -57,8 +87,13 @@
             </li>
             <li><hr class="dropdown-divider"></li>
             <li>
+              <a class="dropdown-item" href="#" @click.prevent="cleanupOrphanDirs">
+                <i class="fas fa-exclamation-triangle"></i> 清理异常目录
+              </a>
+            </li>
+            <li>
               <a class="dropdown-item" href="#" @click.prevent="cleanupBuildDir" :class="{ 'text-muted': buildDirCount === 0 }">
-                <i class="fas fa-folder-open"></i> 清理目录
+                <i class="fas fa-folder-open"></i> 清理编译目录（全部）
                 <span v-if="buildDirCount > 0" class="text-muted small ms-2">({{ buildDirSize }})</span>
               </a>
             </li>
@@ -454,6 +489,8 @@ const pageSize = ref(10)    // 每页显示数量
 const cleaning = ref(false)  // 清理中状态
 const buildDirSize = ref('0 MB')  // 编译目录容量
 const buildDirCount = ref(0)  // 编译目录数量
+const exportDirSize = ref('0 MB')  // 下载目录容量
+const exportDirCount = ref(0)  // 下载目录文件数量
 const showPipelineModal = ref(false)  // 流水线模态框
 const selectedPipelineTask = ref(null)  // 选中的任务
 const saving = ref(false)  // 保存中状态
@@ -628,12 +665,29 @@ async function loadBuildDirStats() {
   }
 }
 
+// 加载下载目录统计信息
+async function loadExportDirStats() {
+  try {
+    const res = await axios.get('/api/exports/stats')
+    if (res.data.success) {
+      exportDirSize.value = res.data.total_size_mb > 0 
+        ? `${res.data.total_size_mb} MB` 
+        : '0 MB'
+      exportDirCount.value = res.data.file_count || 0
+    }
+  } catch (err) {
+    console.error('获取下载目录统计失败:', err)
+    exportDirSize.value = '0 MB'
+    exportDirCount.value = 0
+  }
+}
+
 async function loadTasks() {
   loading.value = true
   error.value = null
   
-  // 同时加载编译目录统计
-  await loadBuildDirStats()
+  // 同时加载编译目录和下载目录统计
+  await Promise.all([loadBuildDirStats(), loadExportDirStats()])
   
   try {
     const params = {}
@@ -828,6 +882,29 @@ async function deleteTask(task) {
   }
 }
 
+async function cleanupAll() {
+  if (cleaning.value) return
+  
+  if (!confirm(`确定要清理所有非运行中的任务吗？\n\n这将清理所有已完成、失败、已停止的任务，清理后的任务无法恢复，请谨慎操作！`)) {
+    return
+  }
+  
+  cleaning.value = true
+  error.value = null
+  
+  try {
+    const res = await axios.post('/api/tasks/cleanup', {})
+    
+    alert(`成功清理 ${res.data.removed_count} 个任务`)
+    await loadTasks()
+  } catch (err) {
+    console.error('清理全部任务失败:', err)
+    alert(err.response?.data?.detail || '清理失败')
+  } finally {
+    cleaning.value = false
+  }
+}
+
 async function cleanupByStatus(status) {
   if (cleaning.value) return
   
@@ -890,6 +967,76 @@ async function cleanupByDaysPrompt() {
   }
 }
 
+async function cleanupOrphanDirs() {
+  if (cleaning.value) return
+  
+  if (!confirm('确定要清理所有异常目录吗？\n\n此操作将删除所有没有对应任务的构建上下文目录，无法恢复，请谨慎操作！')) {
+    return
+  }
+  
+  cleaning.value = true
+  error.value = null
+  
+  try {
+    console.log('开始清理异常目录...')
+    const res = await axios.post('/api/docker-build/cleanup', {
+      cleanup_orphans_only: true
+    })
+    
+    console.log('清理异常目录响应:', res)
+    console.log('响应数据:', res.data)
+    
+    // 检查响应数据
+    if (res.data) {
+      if (res.data.success === true) {
+        const removedCount = res.data.removed_count || 0
+        const freedSpace = res.data.freed_space_mb || 0
+        let message = res.data.message || `成功清理 ${removedCount} 个异常目录，释放空间 ${freedSpace} MB`
+        
+        if (res.data.errors && res.data.errors.length > 0) {
+          message += `\n\n部分目录清理失败: ${res.data.errors.length} 个`
+        }
+        
+        alert(message)
+        
+        // 刷新统计信息
+        await Promise.all([loadBuildDirStats(), loadExportDirStats()])
+      } else {
+        const errorMsg = res.data.message || res.data.detail || '清理失败'
+        alert(typeof errorMsg === 'string' ? errorMsg : String(errorMsg))
+      }
+    } else {
+      console.warn('响应数据为空')
+      alert('清理完成，但未收到响应数据')
+      await Promise.all([loadBuildDirStats(), loadExportDirStats()])
+    }
+  } catch (err) {
+    console.error('清理异常目录失败:', err)
+    let errorMsg = '清理失败'
+    if (err.response) {
+      if (err.response.data) {
+        if (typeof err.response.data.detail === 'string') {
+          errorMsg = err.response.data.detail
+        } else if (typeof err.response.data.message === 'string') {
+          errorMsg = err.response.data.message
+        } else if (err.response.data.detail) {
+          errorMsg = String(err.response.data.detail)
+        } else {
+          errorMsg = `清理失败: ${err.response.status} ${err.response.statusText || ''}`
+        }
+      } else {
+        errorMsg = `清理失败: ${err.response.status} ${err.response.statusText || ''}`
+      }
+    } else if (err.message) {
+      errorMsg = `清理失败: ${err.message}`
+    }
+    
+    alert(errorMsg)
+  } finally {
+    cleaning.value = false
+  }
+}
+
 async function cleanupBuildDir() {
   if (cleaning.value) return
   
@@ -925,7 +1072,7 @@ async function cleanupBuildDir() {
         alert(message)
         
         // 刷新统计信息
-        await loadBuildDirStats()
+        await Promise.all([loadBuildDirStats(), loadExportDirStats()])
       } else {
         // 失败情况
         const errorMsg = res.data.message || res.data.detail || '清理失败'
@@ -1253,6 +1400,71 @@ onUnmounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* 基本信息块样式 */
+.info-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.info-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+}
+
+.info-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.info-card .card-body {
+  padding: 1rem 1.25rem;
+}
+
+.info-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  flex-shrink: 0;
+}
+
+.info-card:first-child .info-icon {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.info-card:last-child .info-icon {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.info-label {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #212529;
+  line-height: 1.2;
+  margin-bottom: 0.25rem;
+}
+
+.info-sub {
+  font-size: 0.75rem;
+  color: #adb5bd;
+  margin-top: 0.25rem;
 }
 
 .table {

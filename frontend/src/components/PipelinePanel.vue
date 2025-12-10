@@ -176,80 +176,93 @@
               </div>
             </div>
             
-            <!-- 当前任务/最后构建（合并显示） -->
-            <div class="mb-3" style="min-height: 48px;">
-              <div class="d-flex align-items-center justify-content-between mb-1">
-                <span class="text-muted" style="font-size: 0.9rem;">
-                  {{ isLastBuildRunning(pipeline) ? '当前任务：' : '最后构建：' }}
-                </span>
-                <!-- 如果最后构建是运行中或等待中，显示为当前任务 -->
-                <div v-if="pipeline.last_build && (pipeline.last_build.status === 'running' || pipeline.last_build.status === 'pending')" class="d-flex align-items-center gap-2">
-                  <span v-if="pipeline.last_build.status === 'running'" class="badge bg-primary">
-                    <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
+            <!-- 构建状态区域 -->
+            <div class="border-top pt-3 mt-3">
+              <!-- 最后构建 -->
+              <div class="mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="text-muted fw-semibold" style="font-size: 0.9rem;">
+                    <i class="fas fa-hammer me-1"></i>
+                    {{ isLastBuildRunning(pipeline) ? '当前任务' : '最后构建' }}
                   </span>
-                  <span v-else-if="pipeline.last_build.status === 'pending'" class="badge bg-warning">
-                    <i class="fas fa-clock"></i> 等待中
-                  </span>
-                  <button 
-                    v-if="pipeline.last_build && pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
-                    class="btn btn-sm btn-outline-info p-1" 
-                    style="width: 24px; height: 24px; line-height: 1;"
-                    @click.stop="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
-                    title="查看日志"
-                  >
-                    <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
-                  </button>
+                  <!-- 如果最后构建是运行中或等待中，显示为当前任务 -->
+                  <div v-if="pipeline.last_build && (pipeline.last_build.status === 'running' || pipeline.last_build.status === 'pending')" class="d-flex align-items-center gap-2">
+                    <span v-if="pipeline.last_build.status === 'running'" class="badge bg-primary">
+                      <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span> 运行中
+                    </span>
+                    <span v-else-if="pipeline.last_build.status === 'pending'" class="badge bg-warning">
+                      <i class="fas fa-clock"></i> 等待中
+                    </span>
+                    <button 
+                      v-if="pipeline.last_build && pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
+                      class="btn btn-sm btn-outline-info p-1" 
+                      style="width: 24px; height: 24px; line-height: 1;"
+                      @click.stop="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
+                      title="查看日志"
+                    >
+                      <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
+                    </button>
+                  </div>
+                  <!-- 如果最后构建已完成或失败，显示为历史构建 -->
+                  <div v-else-if="pipeline.last_build && (pipeline.last_build.status === 'completed' || pipeline.last_build.status === 'failed')" class="d-flex align-items-center gap-2">
+                    <span 
+                      :class="{
+                        'badge': true,
+                        'bg-success': pipeline.last_build.status === 'completed',
+                        'bg-danger': pipeline.last_build.status === 'failed',
+                      }"
+                    >
+                      <i v-if="pipeline.last_build.status === 'completed'" class="fas fa-check-circle"></i>
+                      <i v-else-if="pipeline.last_build.status === 'failed'" class="fas fa-times-circle"></i>
+                      {{ pipeline.last_build.status === 'completed' ? '成功' : '失败' }}
+                    </span>
+                    <button 
+                      v-if="pipeline.last_build && pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
+                      class="btn btn-sm btn-outline-info p-1" 
+                      style="width: 24px; height: 24px; line-height: 1;"
+                      @click.stop="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
+                      title="查看日志"
+                    >
+                      <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
+                    </button>
+                  </div>
+                  <span v-else class="text-muted" style="font-size: 0.85rem;">暂无构建</span>
                 </div>
-                <!-- 如果最后构建已完成或失败，显示为历史构建 -->
-                <div v-else-if="pipeline.last_build && (pipeline.last_build.status === 'completed' || pipeline.last_build.status === 'failed')" class="d-flex align-items-center gap-2">
-                  <span 
-                    :class="{
-                      'badge': true,
-                      'bg-success': pipeline.last_build.status === 'completed',
-                      'bg-danger': pipeline.last_build.status === 'failed',
-                    }"
-                  >
-                    <i v-if="pipeline.last_build.status === 'completed'" class="fas fa-check-circle"></i>
-                    <i v-else-if="pipeline.last_build.status === 'failed'" class="fas fa-times-circle"></i>
-                    {{ pipeline.last_build.status === 'completed' ? '成功' : '失败' }}
-                  </span>
-                  <button 
-                    v-if="pipeline.last_build && pipeline.last_build.task_id && pipeline.last_build.status !== 'deleted'"
-                    class="btn btn-sm btn-outline-info p-1" 
-                    style="width: 24px; height: 24px; line-height: 1;"
-                    @click.stop="viewTaskLogs(pipeline.last_build.task_id, pipeline.last_build)"
-                    title="查看日志"
-                  >
-                    <i class="fas fa-terminal" style="font-size: 0.75rem;"></i>
-                  </button>
+                <!-- 构建详情 -->
+                <div v-if="pipeline.last_build" class="d-flex justify-content-between align-items-center ms-3">
+                  <small class="text-muted" :title="formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at)" style="font-size: 0.8rem;">
+                    <i class="fas fa-calendar-alt me-1"></i>
+                    {{ formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at) }}
+                  </small>
+                  <small class="text-muted">
+                    <i class="fas fa-hashtag me-1"></i>
+                    <code style="font-size: 0.8rem;">{{ pipeline.last_build.task_id?.substring(0, 8) || '-' }}</code>
+                  </small>
                 </div>
-                <span v-else class="text-muted" style="font-size: 0.85rem;">暂无</span>
               </div>
-              <!-- 显示任务详情 -->
-              <div v-if="pipeline.last_build" class="d-flex justify-content-between align-items-center ms-4">
-                <small class="text-muted" :title="formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at)" style="font-size: 0.85rem;">
-                  {{ formatDateTime(pipeline.last_build.completed_at || pipeline.last_build.created_at) }}
-                </small>
-                <small class="text-muted">
-                  <code style="font-size: 0.85rem;">{{ pipeline.last_build.task_id?.substring(0, 8) || '-' }}</code>
-                </small>
+              
+              <!-- 最后触发 -->
+              <div class="mb-2">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <span class="text-muted fw-semibold" style="font-size: 0.9rem;">
+                    <i class="fas fa-bolt me-1"></i>最后触发
+                  </span>
+                  <div class="text-muted small" v-if="pipeline.last_triggered_at" :title="formatDateTime(pipeline.last_triggered_at)" style="font-size: 0.8rem;">
+                    {{ formatDateTime(pipeline.last_triggered_at) }}
+                  </div>
+                  <div class="text-muted small" v-else style="font-size: 0.8rem;">-</div>
+                </div>
               </div>
-              <div v-else class="ms-4" style="height: 20px;"></div>
             </div>
             
             <!-- 统计信息 -->
-            <div class="border-top pt-2 mt-2" style="min-height: 60px;">
+            <div class="border-top pt-2 mt-2">
               <div class="row text-center">
-                <div class="col-6">
-                  <div class="text-muted mb-1" style="font-size: 0.85rem;">触发次数</div>
-                  <div class="fw-bold" style="font-size: 1.1rem; min-height: 24px;">{{ pipeline.trigger_count || 0 }}</div>
-                </div>
-                <div class="col-6">
-                  <div class="text-muted mb-1" style="font-size: 0.85rem;">最后触发</div>
-                  <div class="small" v-if="pipeline.last_triggered_at" :title="formatDateTime(pipeline.last_triggered_at)" style="font-size: 0.85rem; min-height: 24px;">
-                    {{ formatDateTime(pipeline.last_triggered_at) }}
+                <div class="col-12">
+                  <div class="text-muted mb-1" style="font-size: 0.85rem;">
+                    <i class="fas fa-chart-line me-1"></i>触发次数
                   </div>
-                  <div class="small text-muted" v-else style="font-size: 0.85rem; min-height: 24px;">-</div>
+                  <div class="fw-bold" style="font-size: 1.2rem;">{{ pipeline.trigger_count || 0 }}</div>
                 </div>
               </div>
             </div>
@@ -935,9 +948,10 @@
             </form>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="closeModal">取消</button>
-            <button type="button" class="btn btn-primary btn-sm" @click="savePipeline">
-              <i class="fas fa-save"></i> 保存
+            <button type="button" class="btn btn-secondary btn-sm" @click="closeModal" :disabled="saving">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" @click="savePipeline" :disabled="saving">
+              <span v-if="saving" class="spinner-border spinner-border-sm me-1" style="width: 0.8rem; height: 0.8rem;"></span>
+              <i v-else class="fas fa-save"></i> {{ saving ? '保存中...' : '保存' }}
             </button>
           </div>
         </div>
@@ -1314,6 +1328,7 @@ const registries = ref([])
 const gitSources = ref([])
 const selectedSourceId = ref('')
 const loading = ref(false)
+const saving = ref(false)  // 正在保存流水线
 const running = ref(null)  // 正在运行的流水线ID
 const showModal = ref(false)
 const showWebhookModal = ref(false)
@@ -1565,6 +1580,12 @@ function getWebhookBranchStrategy(pipeline) {
 }
 
 async function savePipeline() {
+  // 防止重复提交
+  if (saving.value) {
+    return
+  }
+  
+  saving.value = true
   try {
     // 将分支标签映射从数组转换为对象
     const branch_tag_mapping = {}
@@ -1600,6 +1621,7 @@ async function savePipeline() {
       // 使用模板时，确保选择了模板
       if (!formData.value.template) {
         alert('请选择 Dockerfile 模板')
+        saving.value = false
         return
       }
     }
@@ -1645,12 +1667,14 @@ async function savePipeline() {
     // 验证：如果启用定时触发，必须填写cron表达式
     if (payload.trigger_schedule && !payload.cron_expression) {
       alert('请填写 Cron 表达式')
+      saving.value = false
       return
     }
     
     // 验证：如果使用模板，必须选择了模板
     if (!payload.use_project_dockerfile && !payload.template) {
       alert('使用模板时必须选择 Dockerfile 模板')
+      saving.value = false
       return
     }
     
@@ -1675,15 +1699,22 @@ async function savePipeline() {
   } catch (error) {
     console.error('保存流水线失败:', error)
     alert(error.response?.data?.detail || '保存流水线失败')
+  } finally {
+    saving.value = false
   }
 }
 
 function closeModal() {
+  // 如果正在保存，不允许关闭
+  if (saving.value) {
+    return
+  }
   showModal.value = false
   editingPipeline.value = null
   services.value = []
   loadingServices.value = false
   servicesError.value = ''
+  saving.value = false  // 重置保存状态
 }
 
 // 加载服务列表

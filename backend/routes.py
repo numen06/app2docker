@@ -1392,6 +1392,19 @@ async def cleanup_tasks(
                 for task_id in tasks_to_remove:
                     build_manager.delete_task(task_id)
                     removed_count += 1
+            elif not days and not status:
+                # 清理全部（只清理非运行中的任务）
+                with build_manager.lock:
+                    tasks_to_remove = [
+                        task_id
+                        for task_id, task in build_manager.tasks.items()
+                        if task.get("status") not in ["running", "pending"]
+                    ]
+
+                # 在锁外执行删除，避免死锁
+                for task_id in tasks_to_remove:
+                    build_manager.delete_task(task_id)
+                    removed_count += 1
 
         # 清理导出任务
         if not task_type or task_type == "export":
@@ -1423,6 +1436,19 @@ async def cleanup_tasks(
                         task_id
                         for task_id, task in export_manager.tasks.items()
                         if task.get("status") == status
+                    ]
+
+                # 在锁外执行删除，避免死锁
+                for task_id in tasks_to_remove:
+                    export_manager.delete_task(task_id)
+                    removed_count += 1
+            elif not days and not status:
+                # 清理全部（只清理非运行中的任务）
+                with export_manager.lock:
+                    tasks_to_remove = [
+                        task_id
+                        for task_id, task in export_manager.tasks.items()
+                        if task.get("status") not in ["running", "pending"]
                     ]
 
                 # 在锁外执行删除，避免死锁
@@ -1477,6 +1503,10 @@ async def get_docker_build_stats(request: Request):
             if not os.path.isdir(item_path):
                 continue
 
+            # 跳过 tasks 目录（任务元数据目录）
+            if item == "tasks":
+                continue
+
             try:
                 # 计算目录大小
                 dir_size = sum(
@@ -1499,11 +1529,132 @@ async def get_docker_build_stats(request: Request):
         raise HTTPException(status_code=500, detail=f"获取构建目录统计失败: {str(e)}")
 
 
+@router.get("/exports/stats")
+async def get_exports_stats(request: Request):
+    """获取 exports 目录的统计信息（容量、文件数量等）"""
+    try:
+        if not os.path.exists(EXPORT_DIR):
+            return {
+                "success": True,
+                "total_size_mb": 0,
+                "file_count": 0,
+                "exists": False,
+            }
+
+        total_size = 0
+        file_count = 0
+
+        # 遍历导出目录（包括所有子目录）
+        for root, dirs, files in os.walk(EXPORT_DIR):
+            # 跳过 tasks.json 元数据文件，但统计 tasks 子目录下的实际导出文件
+            for filename in files:
+                # 跳过 tasks.json 元数据文件
+                if filename == "tasks.json":
+                    continue
+                file_path = os.path.join(root, filename)
+                try:
+                    file_size = os.path.getsize(file_path)
+                    total_size += file_size
+                    file_count += 1
+                except Exception as e:
+                    print(f"⚠️ 计算文件大小失败 ({file_path}): {e}")
+
+        return {
+            "success": True,
+            "total_size_mb": round(total_size / 1024 / 1024, 2),
+            "file_count": file_count,
+            "exists": True,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取导出目录统计失败: {str(e)}")
+
+
+def force_remove_directory(dir_path: str) -> tuple[bool, str]:
+    """
+    强制删除目录（适用于Windows）
+    返回: (是否成功, 错误信息)
+    """
+    import errno
+    import stat
+    import time
+    import platform
+    
+    def handle_remove_readonly(func, path, exc):
+        excvalue = exc[1]
+        if func in (os.rmdir, os.remove, os.unlink) and excvalue.errno == errno.EACCES:
+            try:
+                os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                func(path)
+            except Exception:
+                raise
+    
+    try:
+        # 首先尝试使用onerror回调删除
+        shutil.rmtree(dir_path, onerror=handle_remove_readonly)
+        
+        # 等待文件系统更新
+        for _ in range(5):
+            time.sleep(0.1)
+            if not os.path.exists(dir_path):
+                return True, ""
+        
+        # 如果还存在，尝试手动删除
+        if os.path.exists(dir_path):
+            for root, dirs, files in os.walk(dir_path, topdown=False):
+                for name in files:
+                    file_path = os.path.join(root, name)
+                    try:
+                        os.chmod(file_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                        os.remove(file_path)
+                    except Exception as e:
+                        print(f"⚠️ 删除文件失败 ({file_path}): {e}")
+                for name in dirs:
+                    dir_path_full = os.path.join(root, name)
+                    try:
+                        os.chmod(dir_path_full, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                        os.rmdir(dir_path_full)
+                    except Exception as e:
+                        print(f"⚠️ 删除子目录失败 ({dir_path_full}): {e}")
+            try:
+                os.chmod(dir_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+                os.rmdir(dir_path)
+            except Exception as e:
+                # 最后尝试Windows系统命令
+                if platform.system() == 'Windows':
+                    try:
+                        import subprocess
+                        result = subprocess.run(
+                            ['cmd', '/c', 'rmdir', '/s', '/q', dir_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=30
+                        )
+                        if result.returncode != 0:
+                            return False, f"系统命令删除失败: {result.stderr or result.stdout}"
+                    except Exception as sub_err:
+                        return False, f"系统命令执行失败: {sub_err}"
+                else:
+                    return False, f"删除失败: {e}"
+        
+        # 最终验证
+        time.sleep(0.2)
+        if os.path.exists(dir_path):
+            return False, "删除后目录仍然存在"
+        
+        return True, ""
+    except Exception as e:
+        import traceback
+        return False, f"删除异常: {str(e)}\n{traceback.format_exc()}"
+
+
 @router.post("/docker-build/cleanup")
 async def cleanup_docker_build_dir(
     request: Request,
     keep_days: Optional[int] = Body(
         0, description="保留最近N天的构建上下文，0表示清空所有"
+    ),
+    cleanup_orphans_only: Optional[bool] = Body(
+        False, description="仅清理异常文件夹（无对应任务的文件夹）"
     ),
 ):
     """清理 docker_build 目录中的构建上下文"""
@@ -1514,6 +1665,7 @@ async def cleanup_docker_build_dir(
         build_dir = os.path.abspath(BUILD_DIR)
         print(f"🔍 清理编译目录: {build_dir}")
         print(f"🔍 keep_days: {keep_days}")
+        print(f"🔍 cleanup_orphans_only: {cleanup_orphans_only}")
 
         if not os.path.exists(build_dir):
             print(f"⚠️ 构建目录不存在: {build_dir}")
@@ -1529,9 +1681,108 @@ async def cleanup_docker_build_dir(
         removed_count = 0
         total_size = 0
         errors = []
+        orphan_count = 0  # 异常文件夹计数
+
+        # 获取所有有效任务的构建上下文路径集合
+        valid_build_contexts = set()
+        try:
+            build_manager = BuildTaskManager()
+            with build_manager.lock:
+                for task_id, task in build_manager.tasks.items():
+                    # 获取构建上下文路径
+                    build_context = task.get("build_context")
+                    if not build_context:
+                        # 如果没有保存，尝试从 image_name 和 task_id 推导
+                        image_name = task.get("image", "")
+                        if image_name:
+                            build_context = os.path.join(
+                                BUILD_DIR, f"{image_name.replace('/', '_')}_{task_id[:8]}"
+                            )
+                    if build_context:
+                        # 转换为绝对路径并规范化
+                        abs_path = os.path.abspath(build_context)
+                        valid_build_contexts.add(abs_path)
+                        # 同时添加相对路径到 BUILD_DIR 的路径，以防匹配问题
+                        if not os.path.isabs(build_context):
+                            valid_build_contexts.add(os.path.abspath(build_context))
+            print(f"🔍 找到 {len(valid_build_contexts)} 个有效任务的构建上下文")
+            if len(valid_build_contexts) > 0:
+                print(f"🔍 有效路径示例: {list(valid_build_contexts)[:3]}")
+        except Exception as e:
+            print(f"⚠️ 获取有效任务列表失败: {e}")
+
+        # 如果仅清理异常文件夹
+        if cleanup_orphans_only:
+            print(f"🗑️ 开始清理异常文件夹...")
+            try:
+                items = os.listdir(build_dir)
+                print(f"🔍 找到 {len(items)} 个项目")
+            except Exception as e:
+                print(f"❌ 无法列出目录内容: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"无法访问构建目录: {str(e)}"
+                )
+
+            for item in items:
+                item_path = os.path.join(build_dir, item)
+                if not os.path.isdir(item_path):
+                    continue
+
+                # 跳过 tasks 目录（任务元数据目录）
+                if item == "tasks":
+                    continue
+
+                abs_item_path = os.path.abspath(item_path)
+                # 尝试多种路径匹配方式
+                is_valid = (
+                    abs_item_path in valid_build_contexts or
+                    item_path in valid_build_contexts or
+                    os.path.normpath(abs_item_path) in {os.path.normpath(p) for p in valid_build_contexts}
+                )
+                
+                # 只清理异常文件夹
+                if not is_valid:
+                    orphan_count += 1
+                    print(f"⚠️ 发现异常文件夹（无对应任务）: {item_path}")
+                    try:
+                        # 检查目录是否存在
+                        if not os.path.exists(item_path):
+                            print(f"⏭️ 目录不存在，跳过: {item_path}")
+                            continue
+                        
+                        # 计算目录大小
+                        dir_size = 0
+                        try:
+                            dir_size = sum(
+                                os.path.getsize(os.path.join(dirpath, filename))
+                                for dirpath, dirnames, filenames in os.walk(item_path)
+                                for filename in filenames
+                            )
+                        except Exception as size_err:
+                            print(f"⚠️ 计算目录大小失败 ({item_path}): {size_err}")
+
+                        total_size += dir_size
+
+                        # 删除目录
+                        print(f"🗑️ 正在删除目录: {item_path}")
+                        success, error_detail = force_remove_directory(item_path)
+                        
+                        if success:
+                            removed_count += 1
+                            print(f"✅ 成功清理异常文件夹: {item_path}")
+                        else:
+                            error_msg = f"清理异常文件夹失败 ({item_path}): {error_detail}"
+                            print(f"❌ {error_msg}")
+                            errors.append(error_msg)
+                    except Exception as e:
+                        import traceback
+                        error_detail = traceback.format_exc()
+                        error_msg = f"清理异常文件夹失败 ({item_path}): {e}\n{error_detail}"
+                        print(f"❌ {error_msg}")
+                        errors.append(error_msg)
 
         # 如果 keep_days 为 0，清空所有目录
-        if keep_days == 0:
+        elif keep_days == 0:
             print(f"🗑️ 开始清空所有目录...")
             # 遍历构建目录，删除所有
             try:
@@ -1549,7 +1800,18 @@ async def cleanup_docker_build_dir(
                     print(f"⏭️ 跳过非目录项: {item}")
                     continue
 
+                # 跳过 tasks 目录（任务元数据目录）
+                if item == "tasks":
+                    continue
+
                 try:
+                    abs_item_path = os.path.abspath(item_path)
+                    is_valid = abs_item_path in valid_build_contexts
+                    
+                    if not is_valid:
+                        orphan_count += 1
+                        print(f"⚠️ 发现异常文件夹（无对应任务）: {item_path}")
+
                     print(f"🗑️ 正在删除: {item_path}")
                     # 计算目录大小
                     dir_size = 0
@@ -1567,11 +1829,20 @@ async def cleanup_docker_build_dir(
                     total_size += dir_size
 
                     # 删除目录
-                    shutil.rmtree(item_path, ignore_errors=True)
-                    removed_count += 1
-                    print(f"✅ 成功删除: {item_path}")
+                    print(f"🗑️ 正在删除目录: {item_path}")
+                    success, error_detail = force_remove_directory(item_path)
+                    
+                    if success:
+                        removed_count += 1
+                        print(f"✅ 成功删除: {item_path}")
+                    else:
+                        error_msg = f"清理目录失败 ({item_path}): {error_detail}"
+                        print(f"❌ {error_msg}")
+                        errors.append(error_msg)
                 except Exception as e:
-                    error_msg = f"清理构建上下文失败 ({item_path}): {e}"
+                    import traceback
+                    error_detail = traceback.format_exc()
+                    error_msg = f"清理构建上下文失败 ({item_path}): {e}\n{error_detail}"
                     print(f"❌ {error_msg}")
                     errors.append(error_msg)
         else:
@@ -1586,23 +1857,95 @@ async def cleanup_docker_build_dir(
                 if not os.path.isdir(item_path):
                     continue
 
-                # 检查目录的修改时间
-                try:
-                    mtime = os.path.getmtime(item_path)
-                    if mtime < cutoff_time.timestamp():
+                # 跳过 tasks 目录（任务元数据目录）
+                if item == "tasks":
+                    continue
+
+                abs_item_path = os.path.abspath(item_path)
+                # 尝试多种路径匹配方式
+                is_valid = (
+                    abs_item_path in valid_build_contexts or
+                    item_path in valid_build_contexts or
+                    os.path.normpath(abs_item_path) in {os.path.normpath(p) for p in valid_build_contexts}
+                )
+                
+                # 异常文件夹无论时间如何都要清理
+                if not is_valid:
+                    orphan_count += 1
+                    print(f"⚠️ 发现异常文件夹（无对应任务）: {item_path}")
+                    try:
+                        # 检查目录是否存在
+                        if not os.path.exists(item_path):
+                            print(f"⏭️ 目录不存在，跳过: {item_path}")
+                            continue
+                        
                         # 计算目录大小
-                        dir_size = sum(
-                            os.path.getsize(os.path.join(dirpath, filename))
-                            for dirpath, dirnames, filenames in os.walk(item_path)
-                            for filename in filenames
-                        )
+                        dir_size = 0
+                        try:
+                            dir_size = sum(
+                                os.path.getsize(os.path.join(dirpath, filename))
+                                for dirpath, dirnames, filenames in os.walk(item_path)
+                                for filename in filenames
+                            )
+                        except Exception as size_err:
+                            print(f"⚠️ 计算目录大小失败 ({item_path}): {size_err}")
                         total_size += dir_size
 
                         # 删除目录
-                        shutil.rmtree(item_path, ignore_errors=True)
-                        removed_count += 1
+                        print(f"🗑️ 正在删除异常文件夹: {item_path}")
+                        success, error_detail = force_remove_directory(item_path)
+                        
+                        if success:
+                            removed_count += 1
+                            print(f"✅ 清理异常文件夹: {item_path}")
+                        else:
+                            error_msg = f"清理异常文件夹失败 ({item_path}): {error_detail}"
+                            print(f"❌ {error_msg}")
+                            errors.append(error_msg)
+                    except Exception as e:
+                        import traceback
+                        error_detail = traceback.format_exc()
+                        error_msg = f"清理异常文件夹失败 ({item_path}): {e}\n{error_detail}"
+                        print(f"❌ {error_msg}")
+                        errors.append(error_msg)
+                    continue  # 异常文件夹已处理，跳过时间检查
+
+                # 对于有效文件夹，检查是否超过保留天数
+                try:
+                    mtime = os.path.getmtime(item_path)
+                    is_old = mtime < cutoff_time.timestamp()
+                    
+                    # 超过保留天数的有效文件夹也要清理
+                    if is_old:
+                        # 计算目录大小
+                        dir_size = 0
+                        try:
+                            dir_size = sum(
+                                os.path.getsize(os.path.join(dirpath, filename))
+                                for dirpath, dirnames, filenames in os.walk(item_path)
+                                for filename in filenames
+                            )
+                        except Exception as size_err:
+                            print(f"⚠️ 计算目录大小失败 ({item_path}): {size_err}")
+                        total_size += dir_size
+
+                        # 删除目录
+                        print(f"🗑️ 正在删除目录（超过保留天数）: {item_path}")
+                        success, error_detail = force_remove_directory(item_path)
+                        
+                        if success:
+                            removed_count += 1
+                            print(f"✅ 清理目录（超过保留天数）: {item_path}")
+                        else:
+                            error_msg = f"清理目录失败 ({item_path}): {error_detail}"
+                            print(f"❌ {error_msg}")
+                            errors.append(error_msg)
                 except Exception as e:
-                    print(f"⚠️ 清理构建上下文失败 ({item_path}): {e}")
+                    import traceback
+                    error_detail = traceback.format_exc()
+                    error_msg = f"清理构建上下文失败 ({item_path}): {e}\n{error_detail}"
+                    print(f"❌ {error_msg}")
+                    errors.append(error_msg)
 
         # 记录操作日志
         try:
@@ -1619,6 +1962,8 @@ async def cleanup_docker_build_dir(
 
         freed_space_mb = round(total_size / 1024 / 1024, 2)
         message = f"成功清理了 {removed_count} 个目录，释放空间 {freed_space_mb} MB"
+        if orphan_count > 0:
+            message += f"（其中 {orphan_count} 个异常文件夹）"
 
         if errors:
             message += f"\n警告: {len(errors)} 个目录清理失败"
