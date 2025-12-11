@@ -418,7 +418,12 @@
                 <i class="fas fa-copy"></i> 复制JSON
               </button>
             </div>
-            <pre class="bg-light p-3 rounded border" style="max-height: 500px; overflow: auto; font-size: 0.85rem; margin: 0;"><code>{{ configJson }}</code></pre>
+            <codemirror
+              v-model="configJsonText"
+              :style="{ height: '500px', fontSize: '13px' }"
+              :disabled="true"
+              :extensions="jsonEditorExtensions"
+            />
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary btn-sm" @click="showJsonModal = false">关闭</button>
@@ -432,7 +437,11 @@
 
 <script setup>
 import axios from 'axios'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { Codemirror } from 'vue-codemirror'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { StreamLanguage } from '@codemirror/language'
+import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 
 const props = defineProps({
   initialConfig: {
@@ -445,6 +454,13 @@ const emit = defineEmits(['save', 'cancel'])
 
 const saving = ref(false)
 const showJsonModal = ref(false)
+const configJsonText = ref('')  // JSON文本内容（用于CodeMirror）
+
+// CodeMirror 扩展配置（JSON模式，使用JavaScript模式）
+const jsonEditorExtensions = [
+  StreamLanguage.define(javascript),
+  oneDark
+]
 const gitSources = ref([])
 const templates = ref([])
 const templateParams = ref([])
@@ -721,13 +737,54 @@ function toggleAllPackages(event) {
   }
 }
 
-function copyJson() {
-  navigator.clipboard.writeText(configJson.value).then(() => {
-    alert('JSON已复制到剪贴板')
-  }).catch(err => {
+// 复制配置JSON（带降级方案）
+async function copyJson() {
+  const text = configJson.value
+  
+  // 优先使用 Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      alert('JSON已复制到剪贴板')
+      return
+    } catch (err) {
+      console.warn('Clipboard API 失败，尝试降级方案:', err)
+    }
+  }
+  
+  // 降级方案：使用传统的选择文本方式
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    textarea.setSelectionRange(0, text.length)
+    
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    
+    if (successful) {
+      alert('JSON已复制到剪贴板')
+    } else {
+      throw new Error('execCommand 复制失败')
+    }
+  } catch (err) {
     console.error('复制失败:', err)
-    alert('复制失败，请手动选择复制')
-  })
+    alert('自动复制失败，请手动选择并复制文本（已自动选中）')
+    nextTick(() => {
+      const editor = document.querySelector('.cm-editor')
+      if (editor) {
+        const range = document.createRange()
+        range.selectNodeContents(editor)
+        const selection = window.getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+    })
+  }
 }
 
 function saveConfig() {
@@ -746,6 +803,15 @@ function saveConfig() {
 function cancel() {
   emit('cancel')
 }
+
+// 监听模态框显示，确保内容同步（只在显示时更新，避免递归）
+watch(showJsonModal, (isVisible) => {
+  if (isVisible) {
+    nextTick(() => {
+      configJsonText.value = configJson.value
+    })
+  }
+})
 
 // 监听变化
 watch(() => formData.value.git_url, () => {

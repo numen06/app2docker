@@ -376,7 +376,12 @@
               <i class="fas fa-copy"></i> 复制JSON
             </button>
           </div>
-          <pre class="bg-light p-3 rounded" style="max-height: 500px; overflow: auto; font-size: 0.85rem;"><code>{{ taskConfigJson }}</code></pre>
+          <codemirror
+            v-model="taskConfigJsonText"
+            :style="{ height: '500px', fontSize: '13px' }"
+            :disabled="true"
+            :extensions="jsonEditorExtensions"
+          />
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="showConfigModal = false">关闭</button>
@@ -424,7 +429,11 @@
 
 <script setup>
 import axios from 'axios'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Codemirror } from 'vue-codemirror'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { StreamLanguage } from '@codemirror/language'
+import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 import TaskLogModal from './TaskLogModal.vue'
 
 const tasks = ref([])
@@ -451,6 +460,14 @@ const exportDirCount = ref(0)  // 下载目录文件数量
 const saving = ref(false)  // 保存中状态
 const showConfigModal = ref(false)  // 任务配置JSON模态框
 const taskConfigJson = ref('')  // 任务配置JSON
+const taskConfigJsonText = ref('')  // JSON文本内容（用于CodeMirror）
+
+// CodeMirror 扩展配置（JSON模式，使用JavaScript模式）
+const jsonEditorExtensions = [
+  StreamLanguage.define(javascript),
+  oneDark
+]
+
 const showSaveAsPipelineModal = ref(false)  // 另存为流水线模态框
 const pipelineForm = ref({
   name: '',
@@ -735,6 +752,7 @@ async function viewTaskConfig(task) {
     })
     
     taskConfigJson.value = JSON.stringify(res.data, null, 2)
+    taskConfigJsonText.value = taskConfigJson.value
     showConfigModal.value = true
   } catch (err) {
     console.error('获取任务配置失败:', err)
@@ -743,14 +761,54 @@ async function viewTaskConfig(task) {
   }
 }
 
-// 复制JSON到剪贴板
-function copyTaskConfigJson() {
-  navigator.clipboard.writeText(taskConfigJson.value).then(() => {
-    alert('JSON配置已复制到剪贴板')
-  }).catch(err => {
+// 复制JSON到剪贴板（带降级方案）
+async function copyTaskConfigJson() {
+  const text = taskConfigJson.value
+  
+  // 优先使用 Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      alert('JSON配置已复制到剪贴板')
+      return
+    } catch (err) {
+      console.warn('Clipboard API 失败，尝试降级方案:', err)
+    }
+  }
+  
+  // 降级方案：使用传统的选择文本方式
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    textarea.setSelectionRange(0, text.length)
+    
+    const successful = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    
+    if (successful) {
+      alert('JSON配置已复制到剪贴板')
+    } else {
+      throw new Error('execCommand 复制失败')
+    }
+  } catch (err) {
     console.error('复制失败:', err)
-    alert('复制失败，请手动选择复制')
-  })
+    alert('自动复制失败，请手动选择并复制文本（已自动选中）')
+    nextTick(() => {
+      const editor = document.querySelector('.cm-editor')
+      if (editor) {
+        const range = document.createRange()
+        range.selectNodeContents(editor)
+        const selection = window.getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+    })
+  }
 }
 
 // 另存为流水线
