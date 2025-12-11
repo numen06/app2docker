@@ -412,120 +412,175 @@
                   </div>
                 </div>
 
-                <!-- 构建配置 Tab -->
+                <!-- 构建配置 Tab（合并了构建、镜像、推送配置） -->
                 <div 
                   class="tab-pane fade" 
                   :class="{ 'show active': activeTab === 'build' }"
                   role="tabpanel"
                   id="build-pane"
                 >
-                  <div class="row">
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">分支名称</label>
-                    <input 
-                      v-model="formData.branch" 
-                      type="text" 
-                      class="form-control form-control-sm"
-                      placeholder="main（Webhook触发时使用推送的分支）"
-                    >
-                    <small class="text-muted">留空则使用推送的分支</small>
+                  <!-- 视图切换和查看JSON按钮 -->
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">
+                      <i class="fas fa-cogs"></i> 构建配置
+                    </h6>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button 
+                        type="button"
+                        class="btn btn-outline-success"
+                        @click="editBuildConfigInStepBuild"
+                        title="使用分步构建页面编辑，保持一致性"
+                      >
+                        <i class="fas fa-list-ol"></i> 使用分步构建编辑
+                      </button>
+                      <button 
+                        type="button"
+                        class="btn btn-outline-info"
+                        @click="showBuildConfigJsonModal = true"
+                      >
+                        <i class="fas fa-code"></i> 查看构建JSON
+                      </button>
+                    </div>
                   </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">项目类型</label>
-                    <select v-model="formData.project_type" class="form-select form-select-sm">
-                      <option value="jar">Java (JAR)</option>
-                      <option value="nodejs">Node.js</option>
-                      <option value="python">Python</option>
-                      <option value="go">Go</option>
-                      <option value="web">静态网站</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
-                    <input 
-                      v-model="formData.image_name" 
-                      type="text" 
-                      class="form-control form-control-sm" 
-                      required
-                      placeholder="myapp/demo"
-                    >
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">镜像标签</label>
-                    <input 
-                      v-model="formData.tag" 
-                      type="text" 
-                      class="form-control form-control-sm"
-                      placeholder="latest"
-                    >
-                  </div>
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">Dockerfile 来源</label>
-                  <div class="btn-group w-100 mb-2" role="group">
-                    <input 
-                      type="radio" 
-                      class="btn-check" 
-                      id="use-project-dockerfile" 
-                      :value="true"
-                      v-model="formData.use_project_dockerfile"
-                    >
-                    <label class="btn btn-outline-primary" for="use-project-dockerfile">
-                      <i class="fas fa-file-code"></i> 使用项目中的 Dockerfile
-                    </label>
+
+                  <!-- 构建配置表单 -->
+                  <div class="row g-3">
+                    <!-- Git配置 -->
+                    <div class="col-md-6">
+                      <label class="form-label">分支名称</label>
+                      <input 
+                        v-model="formData.branch" 
+                        type="text" 
+                        class="form-control form-control-sm"
+                        placeholder="main"
+                      >
+                      <small class="text-muted">留空则使用推送的分支</small>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">项目类型</label>
+                      <select v-model="formData.project_type" class="form-select form-select-sm">
+                        <option value="jar">Java (JAR)</option>
+                        <option value="nodejs">Node.js</option>
+                        <option value="python">Python</option>
+                        <option value="go">Go</option>
+                        <option value="web">静态网站</option>
+                      </select>
+                    </div>
                     
-                    <input 
-                      type="radio" 
-                      class="btn-check" 
-                      id="use-template" 
-                      :value="false"
-                      v-model="formData.use_project_dockerfile"
-                    >
-                    <label class="btn btn-outline-primary" for="use-template">
-                      <i class="fas fa-layer-group"></i> 使用模板
-                    </label>
+                    <!-- 镜像配置 -->
+                    <div class="col-md-6">
+                      <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+                      <input 
+                        v-model="formData.image_name" 
+                        type="text" 
+                        class="form-control form-control-sm" 
+                        required
+                        placeholder="myapp/demo"
+                      >
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">镜像标签</label>
+                      <input 
+                        v-model="formData.tag" 
+                        type="text" 
+                        class="form-control form-control-sm"
+                        placeholder="latest"
+                      >
+                    </div>
+                    
+                    <!-- Dockerfile配置 -->
+                    <div class="col-12">
+                      <label class="form-label">Dockerfile 来源</label>
+                      <div class="btn-group w-100 mb-2" role="group">
+                        <input 
+                          type="radio" 
+                          class="btn-check" 
+                          id="use-project-dockerfile" 
+                          :value="true"
+                          v-model="formData.use_project_dockerfile"
+                        >
+                        <label class="btn btn-outline-primary" for="use-project-dockerfile">
+                          <i class="fas fa-file-code"></i> 项目Dockerfile
+                        </label>
+                        
+                        <input 
+                          type="radio" 
+                          class="btn-check" 
+                          id="use-template" 
+                          :value="false"
+                          v-model="formData.use_project_dockerfile"
+                        >
+                        <label class="btn btn-outline-primary" for="use-template">
+                          <i class="fas fa-layer-group"></i> 模板
+                        </label>
+                      </div>
+                      
+                      <div v-if="formData.use_project_dockerfile" class="mt-2">
+                        <input 
+                          v-model="formData.dockerfile_name" 
+                          type="text" 
+                          class="form-control form-control-sm"
+                          placeholder="Dockerfile"
+                        >
+                      </div>
+                      
+                      <div v-else class="mt-2">
+                        <select 
+                          v-model="formData.template" 
+                          class="form-select form-select-sm" 
+                          required
+                          @change="onTemplateChange"
+                        >
+                          <option value="">-- 请选择模板 --</option>
+                          <option v-for="tpl in templates" :key="tpl.name" :value="tpl.name">
+                            {{ tpl.name }} ({{ tpl.project_type }})
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <!-- 推送配置 -->
+                    <div class="col-12">
+                      <div class="card border-primary">
+                        <div class="card-header bg-primary bg-opacity-10">
+                          <i class="fas fa-upload"></i> 推送配置
+                        </div>
+                        <div class="card-body">
+                          <div class="form-check mb-3">
+                            <input 
+                              v-model="formData.push" 
+                              class="form-check-input" 
+                              type="checkbox" 
+                              id="pushCheck"
+                            >
+                            <label class="form-check-label" for="pushCheck">
+                              <strong>构建完成后推送镜像到仓库</strong>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- 其他配置 -->
+                    <div class="col-md-6">
+                      <label class="form-label">子路径</label>
+                      <input 
+                        v-model="formData.sub_path" 
+                        type="text" 
+                        class="form-control form-control-sm"
+                        placeholder="留空表示根目录"
+                      >
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">数据源</label>
+                      <select v-model="formData.source_id" class="form-select form-select-sm">
+                        <option value="">使用全局配置</option>
+                        <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
+                          {{ source.name }}
+                        </option>
+                      </select>
+                    </div>
                   </div>
-                  
-                  <!-- 使用项目中的 Dockerfile -->
-                  <div v-if="formData.use_project_dockerfile" class="mt-2">
-                    <label class="form-label">Dockerfile 文件名</label>
-                    <input 
-                      v-model="formData.dockerfile_name" 
-                      type="text" 
-                      class="form-control form-control-sm"
-                      placeholder="Dockerfile"
-                    >
-                    <small class="text-muted">默认为 Dockerfile，可自定义文件名</small>
-                  </div>
-                  
-                  <!-- 使用模板 -->
-                  <div v-else class="mt-2">
-                    <label class="form-label">Dockerfile 模板 <span class="text-danger">*</span></label>
-                    <select 
-                      v-model="formData.template" 
-                      class="form-select form-select-sm" 
-                      required
-                      @change="onTemplateChange"
-                    >
-                      <option value="">-- 请选择模板 --</option>
-                      <option v-for="tpl in templates" :key="tpl.name" :value="tpl.name">
-                        {{ tpl.name }} ({{ tpl.project_type }})
-                      </option>
-                    </select>
-                    <small class="text-muted">选择一个 Dockerfile 模板来生成 Dockerfile</small>
-                  </div>
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">子路径</label>
-                  <input 
-                    v-model="formData.sub_path" 
-                    type="text" 
-                    class="form-control form-control-sm"
-                    placeholder="留空表示根目录"
-                  >
-                </div>
                 </div>
 
                 <!-- 多服务配置 Tab -->
@@ -935,17 +990,6 @@
                   role="tabpanel"
                   id="other-pane"
                 >
-                <div class="form-check mb-3">
-                  <input 
-                    v-model="formData.push" 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    id="pushCheck"
-                  >
-                  <label class="form-check-label" for="pushCheck">
-                    构建完成后推送镜像
-                  </label>
-                </div>
                 <div class="form-check mb-3">
                   <input 
                     v-model="formData.enabled" 
@@ -1364,6 +1408,36 @@
       </div>
     </div>
     <div v-if="showResourcePackageModal" class="modal-backdrop fade show" style="z-index: 1045;"></div>
+
+    <!-- 构建配置JSON模态框 -->
+    <div v-if="showBuildConfigJsonModal" class="modal fade show" style="display: block; z-index: 1055;" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-code"></i> 构建配置JSON
+            </h5>
+            <button type="button" class="btn-close" @click="showBuildConfigJsonModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex justify-content-end mb-2">
+              <button 
+                type="button"
+                class="btn btn-sm btn-outline-primary"
+                @click="copyBuildConfigJson"
+              >
+                <i class="fas fa-copy"></i> 复制JSON
+              </button>
+            </div>
+            <pre class="bg-light p-3 rounded border" style="max-height: 500px; overflow: auto; font-size: 0.85rem; margin: 0;"><code>{{ buildConfigJson }}</code></pre>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="showBuildConfigJsonModal = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showBuildConfigJsonModal" class="modal-backdrop fade show" style="z-index: 1050;"></div>
   </div>
 </template>
 
@@ -1417,6 +1491,7 @@ const loadingServices = ref(false)  // 加载服务中
 const servicesError = ref('')  // 服务加载错误
 
 const activeTab = ref('basic')  // 当前激活的Tab
+const showBuildConfigJsonModal = ref(false)  // 显示构建配置JSON模态框
 
 const formData = ref({
   name: '',
@@ -1454,6 +1529,39 @@ onMounted(() => {
   loadRegistries()
   loadGitSources()
   loadResourcePackages()
+  
+  // 监听构建配置保存事件
+  window.addEventListener('buildConfigSaved', () => {
+    const configStr = localStorage.getItem('buildConfigEdited')
+    if (configStr) {
+      try {
+        const config = JSON.parse(configStr)
+        localStorage.removeItem('buildConfigEdited')
+        
+        // 将配置填充回表单
+        if (config.git_url) formData.value.git_url = config.git_url
+        if (config.branch !== undefined) formData.value.branch = config.branch
+        if (config.source_id) formData.value.source_id = config.source_id
+        if (config.project_type) formData.value.project_type = config.project_type
+        if (config.template !== undefined) formData.value.template = config.template || ''
+        if (config.use_project_dockerfile !== undefined) formData.value.use_project_dockerfile = config.use_project_dockerfile
+        if (config.dockerfile_name) formData.value.dockerfile_name = config.dockerfile_name
+        if (config.template_params) formData.value.template_params = config.template_params
+        if (config.image_name) formData.value.image_name = config.image_name
+        if (config.tag) formData.value.tag = config.tag
+        if (config.push_mode) formData.value.push_mode = config.push_mode
+        if (config.should_push !== undefined) formData.value.should_push = config.should_push
+        if (config.selected_services) formData.value.selected_services = config.selected_services
+        if (config.service_push_config) formData.value.service_push_config = config.service_push_config
+        if (config.service_template_params) formData.value.service_template_params = config.service_template_params
+        if (config.resource_package_ids) formData.value.resource_package_ids = config.resource_package_ids
+        
+        alert('构建配置已更新')
+      } catch (error) {
+        console.error('解析构建配置失败:', error)
+      }
+    }
+  })
 })
 
 async function loadGitSources() {
@@ -1998,6 +2106,71 @@ function onTemplateChange() {
   // 选择模板时，确保 use_project_dockerfile 为 false
   if (formData.value.template) {
     formData.value.use_project_dockerfile = false
+  }
+}
+
+// 构建配置JSON（基于统一的任务配置结构）
+const buildConfigJson = computed(() => {
+  const config = {
+    git_url: formData.value.git_url || '',
+    image_name: formData.value.image_name || '',
+    tag: formData.value.tag || 'latest',
+    branch: formData.value.branch || null,
+    project_type: formData.value.project_type || 'jar',
+    template: formData.value.template || '',
+    template_params: formData.value.template_params || {},
+    should_push: formData.value.push || false,
+    sub_path: formData.value.sub_path || null,
+    use_project_dockerfile: formData.value.use_project_dockerfile !== false,
+    dockerfile_name: formData.value.dockerfile_name || 'Dockerfile',
+    source_id: formData.value.source_id || null,
+    selected_services: formData.value.selected_services || [],
+    service_push_config: formData.value.service_push_config || {},
+    service_template_params: formData.value.service_template_params || {},
+    push_mode: formData.value.push_mode || 'multi',
+    resource_package_ids: (formData.value.resource_package_configs || []).map(pkg => pkg.package_id || pkg),
+  }
+  
+  // 移除null值和空值（保留false和0）
+  Object.keys(config).forEach(key => {
+    if (config[key] === null || config[key] === '' || 
+        (Array.isArray(config[key]) && config[key].length === 0) ||
+        (typeof config[key] === 'object' && !Array.isArray(config[key]) && Object.keys(config[key]).length === 0)) {
+      delete config[key]
+    }
+  })
+  
+  return JSON.stringify(config, null, 2)
+})
+
+// 复制构建配置JSON
+function copyBuildConfigJson() {
+  navigator.clipboard.writeText(buildConfigJson.value).then(() => {
+    alert('构建配置JSON已复制到剪贴板')
+  }).catch(err => {
+    console.error('复制失败:', err)
+    alert('复制失败，请手动选择复制')
+  })
+}
+
+// 跳转到构建配置编辑页面
+function editBuildConfigInStepBuild() {
+  if (!formData.value.git_url) {
+    alert('请先填写Git仓库地址')
+    return
+  }
+  
+  // 将当前构建配置转换为JSON
+  try {
+    const config = JSON.parse(buildConfigJson.value)
+    // 存储到localStorage，供编辑页面使用
+    localStorage.setItem('buildConfigToEdit', JSON.stringify(config))
+    
+    // 触发事件通知App.vue切换到构建配置编辑页面
+    window.dispatchEvent(new CustomEvent('switchToBuildConfigEditor'))
+  } catch (error) {
+    console.error('转换配置失败:', error)
+    alert('配置转换失败')
   }
 }
 

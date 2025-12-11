@@ -2000,6 +2000,62 @@ class BuildManager:
         with self.lock:
             return list(self.logs[build_id])
 
+    def _trigger_task_from_config(self, task_config: dict) -> str:
+        """
+        统一的任务触发函数，从任务配置JSON触发任务
+        
+        Args:
+            task_config: 标准化的任务配置字典
+        
+        Returns:
+            task_id: 任务ID
+        """
+        # 从配置中提取参数
+        git_url = task_config.get("git_url")
+        image_name = task_config.get("image_name")
+        tag = task_config.get("tag", "latest")
+        branch = task_config.get("branch")
+        project_type = task_config.get("project_type", "jar")
+        template = task_config.get("template", "")
+        template_params = task_config.get("template_params", {})
+        should_push = task_config.get("should_push", False)
+        sub_path = task_config.get("sub_path")
+        use_project_dockerfile = task_config.get("use_project_dockerfile", True)
+        dockerfile_name = task_config.get("dockerfile_name", "Dockerfile")
+        source_id = task_config.get("source_id")
+        selected_services = task_config.get("selected_services")
+        service_push_config = task_config.get("service_push_config")
+        service_template_params = task_config.get("service_template_params", {})
+        push_mode = task_config.get("push_mode", "multi")
+        resource_package_ids = task_config.get("resource_package_ids", [])
+        pipeline_id = task_config.get("pipeline_id")
+        trigger_source = task_config.get("trigger_source", "manual")
+        
+        # 调用原有的start_build_from_source方法
+        return self.start_build_from_source(
+            git_url=git_url,
+            image_name=image_name,
+            tag=tag,
+            should_push=should_push,
+            selected_template=template,
+            project_type=project_type,
+            template_params=template_params,
+            push_registry=None,  # 已废弃
+            branch=branch,
+            sub_path=sub_path,
+            use_project_dockerfile=use_project_dockerfile,
+            dockerfile_name=dockerfile_name,
+            pipeline_id=pipeline_id,
+            source_id=source_id,
+            selected_services=selected_services,
+            service_push_config=service_push_config,
+            push_mode=push_mode,
+            build_steps={},  # 构建步骤信息
+            service_template_params=service_template_params,
+            resource_package_ids=resource_package_ids,
+            trigger_source=trigger_source,
+        )
+
     def start_build_from_source(
         self,
         git_url: str,
@@ -2022,6 +2078,7 @@ class BuildManager:
         build_steps: dict = None,  # 构建步骤信息
         service_template_params: dict = None,  # 服务模板参数
         resource_package_ids: list = None,  # 资源包ID列表或配置列表
+        trigger_source: str = "manual",  # 触发来源
     ):
         """从 Git 源码开始构建"""
         try:
@@ -2050,6 +2107,7 @@ class BuildManager:
                 service_template_params=service_template_params
                 or {},  # 传递服务模板参数
                 resource_package_ids=resource_package_ids or [],  # 传递资源包ID列表
+                trigger_source=trigger_source,  # 传递触发来源
             )
             print(f"✅ 任务创建成功: task_id={task_id}")
         except Exception as e:
@@ -3211,29 +3269,13 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
             if pipeline:
                 tag = pipeline.get("tag", "latest")
         
-        # 启动构建任务
+        # 更新任务配置中的标签和流水线ID
+        task_config["tag"] = tag
+        task_config["pipeline_id"] = pipeline_id
+        
+        # 启动构建任务（使用统一触发函数）
         build_manager = BuildManager()
-        task_id = build_manager.start_build_from_source(
-            git_url=task_config.get("git_url"),
-            image_name=task_config.get("image_name") or "manual-build",
-            tag=tag,
-            should_push=task_config.get("should_push", False),
-            selected_template=task_config.get("selected_template", ""),
-            project_type=task_config.get("project_type", "jar"),
-            template_params=task_config.get("template_params", {}),
-            push_registry=None,
-            branch=task_config.get("branch"),
-            sub_path=task_config.get("sub_path"),
-            use_project_dockerfile=task_config.get("use_project_dockerfile", True),
-            dockerfile_name=task_config.get("dockerfile_name", "Dockerfile"),
-            source_id=task_config.get("source_id"),
-            pipeline_id=pipeline_id,
-            selected_services=task_config.get("selected_services"),
-            service_push_config=task_config.get("service_push_config"),
-            service_template_params=task_config.get("service_template_params"),
-            push_mode=task_config.get("push_mode", "multi"),
-            resource_package_ids=task_config.get("resource_package_ids"),
-        )
+        task_id = build_manager._trigger_task_from_config(task_config)
         
         # 从队列中移除已处理的任务
         pipeline_manager.remove_queued_task(pipeline_id, queued_task.get("queue_id"))
@@ -3256,6 +3298,147 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
         print(f"⚠️ 处理队列任务失败: {e}")
         import traceback
         traceback.print_exc()
+
+
+# ============ 任务配置JSON结构辅助函数 ============
+def build_task_config(
+    git_url: str,
+    image_name: str,
+    tag: str = "latest",
+    branch: str = None,
+    project_type: str = "jar",
+    template: str = None,
+    template_params: dict = None,
+    should_push: bool = False,
+    push_registry: str = None,
+    sub_path: str = None,
+    use_project_dockerfile: bool = True,
+    dockerfile_name: str = "Dockerfile",
+    source_id: str = None,
+    selected_services: list = None,
+    service_push_config: dict = None,
+    service_template_params: dict = None,
+    push_mode: str = "multi",
+    resource_package_ids: list = None,
+    pipeline_id: str = None,
+    trigger_source: str = "manual",
+    **kwargs
+) -> dict:
+    """
+    构建统一的任务配置JSON结构
+    
+    Args:
+        git_url: Git仓库地址
+        image_name: 镜像名称
+        tag: 镜像标签
+        branch: 分支名称
+        project_type: 项目类型
+        template: 模板名称
+        template_params: 模板参数
+        should_push: 是否推送
+        push_registry: 推送仓库（已废弃，保留向后兼容）
+        sub_path: 子路径
+        use_project_dockerfile: 是否使用项目Dockerfile
+        dockerfile_name: Dockerfile文件名
+        source_id: Git数据源ID
+        selected_services: 选中的服务列表
+        service_push_config: 服务推送配置
+        service_template_params: 服务模板参数
+        push_mode: 推送模式
+        resource_package_ids: 资源包ID列表
+        pipeline_id: 流水线ID
+        trigger_source: 触发来源
+        **kwargs: 其他参数
+    
+    Returns:
+        标准化的任务配置字典
+    """
+    config = {
+        "git_url": git_url,
+        "image_name": image_name,
+        "tag": tag,
+        "branch": branch,
+        "project_type": project_type,
+        "template": template or "",
+        "template_params": template_params or {},
+        "should_push": should_push,
+        "sub_path": sub_path,
+        "use_project_dockerfile": use_project_dockerfile,
+        "dockerfile_name": dockerfile_name,
+        "source_id": source_id,
+        "selected_services": selected_services or [],
+        "service_push_config": service_push_config or {},
+        "service_template_params": service_template_params or {},
+        "push_mode": push_mode,
+        "resource_package_ids": resource_package_ids or [],
+        "pipeline_id": pipeline_id,
+        "trigger_source": trigger_source,
+    }
+    
+    # 添加其他参数
+    config.update(kwargs)
+    
+    # 移除None值（保留空列表和空字典）
+    return {k: v for k, v in config.items() if v is not None}
+
+
+def pipeline_to_task_config(pipeline: dict, trigger_source: str = "manual", branch: str = None, tag: str = None, webhook_branch: str = None, branch_tag_mapping: dict = None, **kwargs) -> dict:
+    """
+    将流水线配置转换为任务配置JSON
+    
+    Args:
+        pipeline: 流水线配置字典
+        trigger_source: 触发来源
+        branch: 构建分支（如果指定则覆盖流水线配置）
+        tag: 镜像标签（如果指定则覆盖流水线配置）
+        webhook_branch: Webhook推送的分支（用于标签映射）
+        branch_tag_mapping: 分支标签映射（如果提供则使用，否则从pipeline获取）
+        **kwargs: 其他覆盖参数
+    
+    Returns:
+        标准化的任务配置字典
+    """
+    # 确定使用的分支和标签
+    final_branch = branch or pipeline.get("branch")
+    final_tag = tag or pipeline.get("tag", "latest")
+    
+    # 处理分支标签映射（仅在webhook触发时）
+    if trigger_source == "webhook":
+        mapping = branch_tag_mapping or pipeline.get("branch_tag_mapping", {})
+        branch_for_mapping = webhook_branch if webhook_branch else final_branch
+        if branch_for_mapping and mapping:
+            if branch_for_mapping in mapping:
+                final_tag = mapping[branch_for_mapping]
+            else:
+                # 尝试通配符匹配
+                import fnmatch
+                for pattern, mapped_tag in mapping.items():
+                    if fnmatch.fnmatch(branch_for_mapping, pattern):
+                        final_tag = mapped_tag
+                        break
+    
+    return build_task_config(
+        git_url=pipeline.get("git_url"),
+        image_name=pipeline.get("image_name") or "pipeline-build",
+        tag=final_tag,
+        branch=final_branch,
+        project_type=pipeline.get("project_type", "jar"),
+        template=pipeline.get("template"),
+        template_params=pipeline.get("template_params", {}),
+        should_push=pipeline.get("push", False),
+        sub_path=pipeline.get("sub_path"),
+        use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
+        dockerfile_name=pipeline.get("dockerfile_name", "Dockerfile"),
+        source_id=pipeline.get("source_id"),
+        selected_services=pipeline.get("selected_services", []),
+        service_push_config=pipeline.get("service_push_config", {}),
+        service_template_params=pipeline.get("service_template_params", {}),
+        push_mode=pipeline.get("push_mode", "multi"),
+        resource_package_ids=pipeline.get("resource_package_configs", []),
+        pipeline_id=pipeline.get("pipeline_id"),
+        trigger_source=trigger_source,
+        **kwargs
+    )
 
 
 # ============ 构建任务管理器 ============
@@ -3435,6 +3618,60 @@ class BuildTaskManager:
             elif serializable_kwargs.get("build_steps"):
                 source = "镜像构建"
 
+            # 构建任务配置JSON（对所有类型都保存）
+            task_config = None
+            try:
+                if task_type == "build_from_source":
+                    # Git源码构建
+                    task_config = build_task_config(
+                        git_url=serializable_kwargs.get("git_url", ""),
+                        image_name=image_name,
+                        tag=tag,
+                        branch=serializable_kwargs.get("branch"),
+                        project_type=serializable_kwargs.get("project_type", "jar"),
+                        template=serializable_kwargs.get("selected_template"),
+                        template_params=serializable_kwargs.get("template_params", {}),
+                        should_push=serializable_kwargs.get("should_push", False),
+                        sub_path=serializable_kwargs.get("sub_path"),
+                        use_project_dockerfile=serializable_kwargs.get("use_project_dockerfile", True),
+                        dockerfile_name=serializable_kwargs.get("dockerfile_name", "Dockerfile"),
+                        source_id=serializable_kwargs.get("source_id"),
+                        selected_services=serializable_kwargs.get("selected_services"),
+                        service_push_config=serializable_kwargs.get("service_push_config"),
+                        service_template_params=serializable_kwargs.get("service_template_params"),
+                        push_mode=serializable_kwargs.get("push_mode", "multi"),
+                        resource_package_ids=serializable_kwargs.get("resource_package_ids"),
+                        pipeline_id=serializable_kwargs.get("pipeline_id"),
+                        trigger_source=serializable_kwargs.get("trigger_source", "manual"),
+                    )
+                elif task_type == "build":
+                    # 文件上传构建（文件上传没有git_url，但可以保存其他配置）
+                    task_config = build_task_config(
+                        git_url="",  # 文件上传没有git_url
+                        image_name=image_name,
+                        tag=tag,
+                        branch=None,  # 文件上传没有分支
+                        project_type=serializable_kwargs.get("project_type", "jar"),
+                        template=serializable_kwargs.get("selected_template"),
+                        template_params=serializable_kwargs.get("template_params", {}),
+                        should_push=serializable_kwargs.get("should_push", False),
+                        sub_path=None,
+                        use_project_dockerfile=False,  # 文件上传默认不使用项目Dockerfile
+                        dockerfile_name="Dockerfile",
+                        source_id=None,
+                        selected_services=None,
+                        service_push_config=None,
+                        service_template_params=None,
+                        push_mode="single",  # 文件上传默认单服务模式
+                        resource_package_ids=serializable_kwargs.get("resource_package_ids"),
+                        pipeline_id=serializable_kwargs.get("pipeline_id"),
+                        trigger_source=serializable_kwargs.get("trigger_source", "manual"),
+                    )
+            except Exception as e:
+                print(f"⚠️ 构建任务配置JSON失败: {e}")
+                import traceback
+                traceback.print_exc()
+
             task_info = {
                 "task_id": task_id,
                 "task_type": task_type,  # "build" 或 "build_from_source"
@@ -3446,7 +3683,8 @@ class BuildTaskManager:
                 "error": None,
                 "logs": [],  # 任务日志
                 "source": source,  # 任务来源
-                **serializable_kwargs,  # 其他任务参数
+                "task_config": task_config,  # 保存完整的任务配置JSON
+                **serializable_kwargs,  # 其他任务参数（保持向后兼容）
             }
 
             with self.lock:

@@ -171,6 +171,12 @@
             <TaskManager v-if="activeTab === 'tasks'" />
             <ResourcePackagePanel v-if="activeTab === 'resource-package'" />
             <HostManager v-if="activeTab === 'host'" />
+            <BuildConfigEditor 
+              v-if="activeTab === 'build-config-editor'" 
+              :initial-config="buildConfigToEdit"
+              @save="handleBuildConfigSave"
+              @cancel="handleBuildConfigCancel"
+            />
           </div>
         </div>
       </div>
@@ -203,6 +209,7 @@ import LoginPage from './components/LoginPage.vue'
 import OperationLogs from './components/OperationLogs.vue'
 import PipelinePanel from './components/PipelinePanel.vue'
 import StepBuildPanel from './components/StepBuildPanel.vue'
+import BuildConfigEditor from './components/BuildConfigEditor.vue'
 import TaskManager from './components/TaskManager.vue'
 import TemplatePanel from './components/TemplatePanel.vue'
 import UserCenterModal from './components/UserCenterModal.vue'
@@ -335,6 +342,36 @@ function handleClickOutside(event) {
 
 onMounted(() => {
   console.log('🚀 App 组件挂载')
+  
+  // 监听切换到构建配置编辑页面的事件
+  window.addEventListener('switchToBuildConfigEditor', () => {
+    const configStr = localStorage.getItem('buildConfigToEdit')
+    if (configStr) {
+      try {
+        buildConfigToEdit.value = JSON.parse(configStr)
+        localStorage.removeItem('buildConfigToEdit')
+      } catch (error) {
+        console.error('解析构建配置失败:', error)
+        buildConfigToEdit.value = {}
+      }
+    }
+    activeTab.value = 'build-config-editor'
+  })
+  
+  // 处理构建配置保存
+  function handleBuildConfigSave(config) {
+    // 将配置保存回流水线编辑页面
+    localStorage.setItem('buildConfigEdited', JSON.stringify(config))
+    // 触发事件通知流水线编辑页面
+    window.dispatchEvent(new CustomEvent('buildConfigSaved'))
+    // 返回流水线页面
+    activeTab.value = 'pipeline'
+  }
+  
+  // 处理构建配置取消
+  function handleBuildConfigCancel() {
+    activeTab.value = 'pipeline'
+  }
   
   // 检查是否已登录
   if (isAuthenticated()) {

@@ -138,39 +138,12 @@ class PipelineScheduler:
             if self.build_manager is None:
                 self.build_manager = BuildManager()
             
-            # 提取构建参数
-            git_url = pipeline.get("git_url")
-            branch = pipeline.get("branch") or "main"
-            project_type = pipeline.get("project_type", "jar")
-            template = pipeline.get("template")
-            image_name = pipeline.get("image_name", "my-app")
-            tag = pipeline.get("tag", "latest")
-            push = pipeline.get("push", False)
-            # push_registry 已废弃，统一使用激活的registry
-            push_registry = None
-            template_params = pipeline.get("template_params", {})
-            sub_path = pipeline.get("sub_path")
-            use_project_dockerfile = pipeline.get("use_project_dockerfile", True)
-            dockerfile_name = pipeline.get("dockerfile_name", "Dockerfile")
-            source_id = pipeline.get("source_id")
+            # 从流水线配置生成任务配置JSON
+            from backend.handlers import pipeline_to_task_config
+            task_config = pipeline_to_task_config(pipeline, trigger_source="cron")
             
-            # 启动构建任务
-            task_id = self.build_manager.start_build_from_source(
-                git_url=git_url,
-                branch=branch,
-                project_type=project_type,
-                selected_template=template,
-                image_name=image_name,
-                tag=tag,
-                should_push=push,
-                push_registry=push_registry,
-                template_params=template_params,
-                sub_path=sub_path,
-                use_project_dockerfile=use_project_dockerfile,
-                dockerfile_name=dockerfile_name,
-                source_id=source_id,
-                pipeline_id=pipeline_id,  # 传递流水线ID
-            )
+            # 启动构建任务（使用统一触发函数）
+            task_id = self.build_manager._trigger_task_from_config(task_config)
             
             print(f"✅ 定时触发流水线: {pipeline_name}, 任务ID: {task_id[:8]}")
             

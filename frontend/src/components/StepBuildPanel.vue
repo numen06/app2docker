@@ -1,10 +1,15 @@
 <template>
   <div class="step-build-panel">
+
     <!-- 步骤指示器 -->
     <div class="steps-indicator mb-4">
       <div
         class="step-item"
-        :class="{ active: currentStep >= 1, completed: currentStep > 1 }"
+        :class="{ 
+          active: currentStep === 1, 
+          completed: currentStep > 1
+        }"
+        @click="goToStep(1)"
       >
         <div class="step-number">1</div>
         <div class="step-label">选择数据源</div>
@@ -12,7 +17,11 @@
       <div class="step-connector" :class="{ completed: currentStep > 1 }"></div>
       <div
         class="step-item"
-        :class="{ active: currentStep >= 2, completed: currentStep > 2 }"
+        :class="{ 
+          active: currentStep === 2, 
+          completed: currentStep > 2
+        }"
+        @click="goToStep(2)"
       >
         <div class="step-number">2</div>
         <div class="step-label">确认分支</div>
@@ -20,7 +29,11 @@
       <div class="step-connector" :class="{ completed: currentStep > 2 }"></div>
       <div
         class="step-item"
-        :class="{ active: currentStep >= 3, completed: currentStep > 3 }"
+        :class="{ 
+          active: currentStep === 3, 
+          completed: currentStep > 3
+        }"
+        @click="goToStep(3)"
       >
         <div class="step-number">3</div>
         <div class="step-label">选择模板</div>
@@ -28,7 +41,11 @@
       <div class="step-connector" :class="{ completed: currentStep > 3 }"></div>
       <div
         class="step-item"
-        :class="{ active: currentStep >= 4, completed: currentStep > 4 }"
+        :class="{ 
+          active: currentStep === 4, 
+          completed: currentStep > 4
+        }"
+        @click="goToStep(4)"
       >
         <div class="step-number">4</div>
         <div class="step-label">选择服务</div>
@@ -36,7 +53,11 @@
       <div class="step-connector" :class="{ completed: currentStep > 4 }"></div>
       <div
         class="step-item"
-        :class="{ active: currentStep >= 5, completed: currentStep > 5 }"
+        :class="{ 
+          active: currentStep === 5, 
+          completed: currentStep > 5
+        }"
+        @click="goToStep(5)"
       >
         <div class="step-number">5</div>
         <div class="step-label">选择资源包</div>
@@ -44,7 +65,11 @@
       <div class="step-connector" :class="{ completed: currentStep > 5 }"></div>
       <div
         class="step-item"
-        :class="{ active: currentStep >= 6, completed: currentStep > 6 }"
+        :class="{ 
+          active: currentStep === 6, 
+          completed: currentStep > 6
+        }"
+        @click="goToStep(6)"
       >
         <div class="step-number">6</div>
         <div class="step-label">开始构建</div>
@@ -1148,9 +1173,18 @@
 
       <!-- 步骤6: 开始构建 -->
       <div v-if="currentStep === 6" class="step-panel">
-        <h5 class="mb-3">
-          <i class="fas fa-play-circle text-primary"></i> 步骤 6：开始构建
-        </h5>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">
+            <i class="fas fa-play-circle text-primary"></i> 步骤 6：开始构建
+          </h5>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-info"
+            @click="showBuildConfigJsonModal = true"
+          >
+            <i class="fas fa-code"></i> 查看构建JSON
+          </button>
+        </div>
 
         <!-- 构建配置摘要 -->
         <div class="card mb-3 border-primary">
@@ -1199,7 +1233,7 @@
                 </div>
               </div>
 
-              <!-- 构建配置 -->
+              <!-- 构建、镜像、推送配置（合并） -->
               <div class="col-md-6">
                 <div class="border rounded p-3 h-100">
                   <h6 class="text-success mb-3">
@@ -1239,34 +1273,25 @@
                       <span class="badge bg-warning text-dark ms-2"
                         >多服务推送</span
                       >
-                      <div class="mt-2">
-                        <code class="small">{{
-                          selectedServices.join(", ")
-                        }}</code>
-                      </div>
                     </span>
                     <span v-else class="text-muted">未选择</span>
                   </div>
-                </div>
-              </div>
-
-              <!-- 镜像配置 -->
-              <div class="col-md-6">
-                <div class="border rounded p-3 h-100">
-                  <h6 class="text-warning mb-3">
-                    <i class="fas fa-docker me-2"></i> 镜像配置
-                  </h6>
-                  <div
-                    v-if="
-                      !forceSingleAppMode && services.length > 0 && buildConfig.pushMode === 'multi'
-                    "
-                  >
+                  
+                  <!-- 镜像配置 -->
+                  <div class="mb-2 border-top pt-2 mt-2">
+                    <h6 class="text-warning mb-2 small">
+                      <i class="fas fa-docker me-2"></i> 镜像配置
+                    </h6>
                     <div
-                      v-for="serviceName in selectedServices"
-                      :key="serviceName"
-                      class="mb-2"
+                      v-if="
+                        !forceSingleAppMode && services.length > 0 && buildConfig.pushMode === 'multi'
+                      "
                     >
-                      <div class="d-flex align-items-center mb-1">
+                      <div
+                        v-for="serviceName in selectedServices"
+                        :key="serviceName"
+                        class="mb-1 small"
+                      >
                         <span class="badge bg-warning text-dark me-2">{{
                           serviceName
                         }}</span>
@@ -1276,76 +1301,61 @@
                             getServiceDefaultImageName(serviceName)
                           }}:{{ buildConfig.tag || "latest" }}
                         </code>
-                      </div>
-                      <div class="ms-4 small text-muted">
                         <span
                           v-if="getServiceConfig(serviceName).push"
-                          class="badge bg-success me-1"
+                          class="badge bg-success ms-1"
                           >推送</span
                         >
-                        <span v-else class="badge bg-secondary me-1"
-                          >不推送</span
+                      </div>
+                    </div>
+                    <div v-else>
+                      <div class="mb-1">
+                        <span class="badge bg-warning text-dark me-2"
+                          >镜像名</span
                         >
-                        <span
-                          v-if="getServiceConfig(serviceName).registry"
-                          class="badge bg-info"
-                        >
-                          仓库: {{ getServiceConfig(serviceName).registry }}
-                        </span>
+                        <code class="small">{{
+                          buildConfig.imageName ||
+                          (buildConfig.pushMode === "single" &&
+                          buildConfig.selectedService
+                            ? `${buildConfig.imagePrefix || "myapp/demo"}/${
+                                buildConfig.selectedService
+                              }`
+                            : "myapp/demo")
+                        }}</code>
+                      </div>
+                      <div>
+                        <span class="badge bg-warning text-dark me-2">标签</span>
+                        <code class="small">{{ buildConfig.tag || "latest" }}</code>
                       </div>
                     </div>
                   </div>
-                  <div v-else>
-                    <div class="mb-2">
-                      <span class="badge bg-warning text-dark me-2"
-                        >镜像名</span
-                      >
-                      <code>{{
-                        buildConfig.imageName ||
-                        (buildConfig.pushMode === "single" &&
-                        buildConfig.selectedService
-                          ? `${buildConfig.imagePrefix || "myapp/demo"}/${
-                              buildConfig.selectedService
-                            }`
-                          : "myapp/demo")
-                      }}</code>
+                  
+                  <!-- 推送配置 -->
+                  <div class="border-top pt-2 mt-2">
+                    <h6 class="text-danger mb-2 small">
+                      <i class="fas fa-cloud-upload-alt me-2"></i> 推送配置
+                    </h6>
+                    <div
+                      v-if="
+                        !forceSingleAppMode && services.length > 0 && buildConfig.pushMode === 'multi'
+                      "
+                    >
+                      <div class="mb-1">
+                        <span class="badge bg-danger me-2">推送模式</span>
+                        <strong class="small">多服务推送</strong>
+                      </div>
+                      <div>
+                        <span class="badge bg-danger me-2">推送服务数</span>
+                        <strong class="small"
+                          >{{
+                            selectedServices.filter(
+                              (s) => getServiceConfig(s).push
+                            ).length
+                          }}/{{ selectedServices.length }}</strong
+                        >
+                      </div>
                     </div>
-                    <div>
-                      <span class="badge bg-warning text-dark me-2">标签</span>
-                      <code>{{ buildConfig.tag || "latest" }}</code>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 推送配置 -->
-              <div class="col-md-6">
-                <div class="border rounded p-3 h-100">
-                  <h6 class="text-danger mb-3">
-                    <i class="fas fa-cloud-upload-alt me-2"></i> 推送配置
-                  </h6>
-                  <div
-                    v-if="
-                      !forceSingleAppMode && services.length > 0 && buildConfig.pushMode === 'multi'
-                    "
-                  >
-                    <div class="mb-2">
-                      <span class="badge bg-danger me-2">推送模式</span>
-                      <strong>多服务推送</strong>
-                    </div>
-                    <div>
-                      <span class="badge bg-danger me-2">推送服务数</span>
-                      <strong
-                        >{{
-                          selectedServices.filter(
-                            (s) => getServiceConfig(s).push
-                          ).length
-                        }}/{{ selectedServices.length }}</strong
-                      >
-                    </div>
-                  </div>
-                  <div v-else>
-                    <div>
+                    <div v-else>
                       <span class="badge bg-danger me-2">推送</span>
                       <span
                         :class="
@@ -1356,68 +1366,6 @@
                       >
                         {{ buildConfig.push ? "是" : "否" }}
                       </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Docker 构建配置 -->
-              <div class="col-md-12">
-                <div class="border rounded p-3">
-                  <h6 class="text-secondary mb-3">
-                    <i class="fas fa-server me-2"></i> Docker 构建配置
-                  </h6>
-                  <div class="row g-3">
-                    <div class="col-md-4">
-                      <div class="mb-2">
-                        <span class="badge bg-secondary me-2">构建模式</span>
-                        <strong>{{
-                          dockerInfo ? getBuildModeLabel() : "加载中..."
-                        }}</strong>
-                      </div>
-                      <div
-                        v-if="dockerInfo && dockerInfo.buildx_available"
-                        class="mb-2"
-                      >
-                        <span class="badge bg-success me-2">
-                          <i class="fas fa-check"></i> Buildx 支持
-                        </span>
-                        <code class="small" v-if="dockerInfo.buildx_version">{{
-                          dockerInfo.buildx_version
-                        }}</code>
-                      </div>
-                      <div v-else-if="dockerInfo" class="mb-2">
-                        <span class="badge bg-warning text-dark me-2">
-                          <i class="fas fa-exclamation-triangle"></i> Buildx
-                          不可用
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      class="col-md-4"
-                      v-if="dockerInfo && dockerInfo.version"
-                    >
-                      <div class="mb-2">
-                        <span class="badge bg-info me-2">Docker 版本</span>
-                        <code class="small">{{ dockerInfo.version }}</code>
-                      </div>
-                      <div v-if="dockerInfo.api_version" class="mb-2">
-                        <span class="badge bg-info me-2">API 版本</span>
-                        <code class="small">{{ dockerInfo.api_version }}</code>
-                      </div>
-                    </div>
-                    <div
-                      class="col-md-4"
-                      v-if="
-                        dockerInfo &&
-                        dockerInfo.builder_type === 'remote' &&
-                        dockerInfo.remote_host
-                      "
-                    >
-                      <div class="mb-2">
-                        <span class="badge bg-primary me-2">远程主机</span>
-                        <code class="small">{{ dockerInfo.remote_host }}</code>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1556,6 +1504,37 @@
         </div>
       </div>
     </div>
+
+    <!-- 构建配置JSON模态框 -->
+    <div v-if="showBuildConfigJsonModal" class="modal fade show" style="display: block; z-index: 1055;" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-code"></i> 构建配置JSON
+            </h5>
+            <button type="button" class="btn-close" @click="showBuildConfigJsonModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex justify-content-end mb-2">
+              <button 
+                type="button"
+                class="btn btn-sm btn-outline-primary"
+                @click="copyBuildConfigJson"
+              >
+                <i class="fas fa-copy"></i> 复制JSON
+              </button>
+            </div>
+            <pre class="bg-light p-3 rounded border" style="max-height: 500px; overflow: auto; font-size: 0.85rem; margin: 0;"><code>{{ buildConfigJson }}</code></pre>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="showBuildConfigJsonModal = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showBuildConfigJsonModal" class="modal-backdrop fade show" style="z-index: 1050;"></div>
+
   </div>
 </template>
 
@@ -1624,6 +1603,7 @@ const resourcePackagePaths = ref({}); // 资源包路径映射 {package_id: targ
 
 // Docker 信息相关
 const dockerInfo = ref(null);
+const showBuildConfigJsonModal = ref(false);  // 显示构建配置JSON模态框
 
 const projectTypes = computed(() => {
   const types = new Set();
@@ -1695,6 +1675,7 @@ const canProceedStep1 = computed(() => {
   }
 });
 
+
 // 步骤导航
 function nextStep() {
   if (currentStep.value < 6) {
@@ -1738,6 +1719,13 @@ function nextStep() {
 function prevStep() {
   if (currentStep.value > 1) {
     currentStep.value--;
+  }
+}
+
+// 直接跳转到指定步骤
+function goToStep(step) {
+  if (step >= 1 && step <= 6) {
+    currentStep.value = step;
   }
 }
 
@@ -1909,6 +1897,120 @@ function getProjectTypeLabel(type) {
   };
   return labelMap[type] || type;
 }
+
+// 构建配置JSON（基于统一的任务配置结构）
+const buildConfigJson = computed(() => {
+  const source = buildConfig.value.sourceType === 'git' 
+    ? gitSources.value.find(s => s.source_id === buildConfig.value.sourceId)
+    : null
+  
+  // 确定镜像名（单服务推送模式需要特殊处理）
+  let imageName = buildConfig.value.imageName || ''
+  if (buildConfig.value.pushMode === 'single' && buildConfig.value.selectedService) {
+    if (buildConfig.value.customImageName && buildConfig.value.customImageName.trim()) {
+      imageName = buildConfig.value.customImageName.trim()
+    } else {
+      imageName = `${buildConfig.value.imagePrefix || buildConfig.value.imageName || 'myapp/demo'}/${buildConfig.value.selectedService}`
+    }
+  } else if (buildConfig.value.pushMode === 'multi' && selectedServices.value.length > 0) {
+    // 多服务模式下，image_name 应该是公共前缀（如果所有服务使用相同前缀）
+    // 否则使用全局 imagePrefix 或 imageName
+    const serviceConfigs = selectedServices.value.map(serviceName => getServiceConfig(serviceName))
+    const imageNames = serviceConfigs
+      .map(config => {
+        const customName = config.customImageName && config.customImageName.trim()
+        return customName || getServiceDefaultImageName(selectedServices.value[serviceConfigs.indexOf(config)])
+      })
+      .filter(name => name)
+    
+    if (imageNames.length > 0) {
+      // 提取所有镜像名的公共前缀
+      const prefixes = imageNames.map(name => {
+        const parts = name.split('/')
+        return parts.length >= 2 ? parts.slice(0, -1).join('/') : ''
+      }).filter(p => p)
+      
+      if (prefixes.length > 0) {
+        const commonPrefix = prefixes[0]
+        // 如果所有服务使用相同前缀，使用公共前缀作为 image_name
+        if (prefixes.every(p => p === commonPrefix)) {
+          imageName = commonPrefix
+        } else {
+          // 否则使用全局 imagePrefix 或 imageName
+          imageName = buildConfig.value.imagePrefix || buildConfig.value.imageName || ''
+        }
+      } else {
+        imageName = buildConfig.value.imagePrefix || buildConfig.value.imageName || ''
+      }
+    } else {
+      imageName = buildConfig.value.imagePrefix || buildConfig.value.imageName || ''
+    }
+  }
+  
+  // 构建服务推送配置
+  const servicePushConfig = {}
+  if (buildConfig.value.pushMode === 'multi' && selectedServices.value.length > 0) {
+    selectedServices.value.forEach(serviceName => {
+      const config = getServiceConfig(serviceName)
+      const customName = config.customImageName && config.customImageName.trim()
+      const finalImageName = customName || getServiceDefaultImageName(serviceName)
+      servicePushConfig[serviceName] = {
+        push: config.push || false,
+        imageName: finalImageName,
+        tag: config.tag?.trim() || buildConfig.value.tag?.trim() || 'latest',
+        registry: config.registry || ''
+      }
+    })
+  }
+  
+  const config = {
+    git_url: source?.git_url || '',
+    image_name: imageName,
+    tag: buildConfig.value.tag || 'latest',
+    branch: buildConfig.value.branch || undefined,
+    project_type: buildConfig.value.projectType || 'jar',
+    template: buildConfig.value.template || undefined,
+    template_params: Object.keys(buildConfig.value.templateParams || {}).length > 0 
+      ? buildConfig.value.templateParams 
+      : undefined,
+    should_push: buildConfig.value.push || false,
+    use_project_dockerfile: buildConfig.value.useProjectDockerfile !== false,
+    dockerfile_name: buildConfig.value.dockerfileName || 'Dockerfile',
+    source_id: buildConfig.value.sourceId || undefined,
+    selected_services: buildConfig.value.pushMode === 'single' 
+      ? (buildConfig.value.selectedService ? [buildConfig.value.selectedService] : undefined)
+      : (selectedServices.value.length > 0 ? selectedServices.value : undefined),
+    service_push_config: Object.keys(servicePushConfig).length > 0 ? servicePushConfig : undefined,
+    service_template_params: Object.keys(buildConfig.value.serviceTemplateParams || {}).length > 0
+      ? buildConfig.value.serviceTemplateParams
+      : undefined,
+    push_mode: buildConfig.value.pushMode || 'multi',
+    resource_package_ids: (buildConfig.value.resourcePackages || []).length > 0
+      ? buildConfig.value.resourcePackages.map(pkg => pkg.package_id || pkg)
+      : undefined,
+    trigger_source: 'manual'
+  }
+  
+  // 移除undefined值
+  Object.keys(config).forEach(key => {
+    if (config[key] === undefined) {
+      delete config[key]
+    }
+  })
+  
+  return JSON.stringify(config, null, 2)
+})
+
+// 复制构建配置JSON
+function copyBuildConfigJson() {
+  navigator.clipboard.writeText(buildConfigJson.value).then(() => {
+    alert('构建配置JSON已复制到剪贴板')
+  }).catch(err => {
+    console.error('复制失败:', err)
+    alert('复制失败，请手动选择复制')
+  })
+}
+
 
 async function loadTemplateParams() {
   templateParams.value = [];
@@ -2090,19 +2192,19 @@ async function parseDockerfileServices() {
     if (res.data.services && res.data.services.length > 0) {
       services.value = res.data.services;
       // 项目 Dockerfile 模式总是多服务推送
-        selectedServices.value = services.value.map((s) => s.name);
-        buildConfig.value.selectedService = "";
-        
-        // 如果是多服务模式且镜像前缀为空，自动从 Git URL 或文件名生成
-        if (services.value.length > 1 && (!buildConfig.value.imagePrefix || !buildConfig.value.imagePrefix.trim())) {
-          const projectName = extractProjectName();
-          if (projectName) {
-            buildConfig.value.imagePrefix = projectName;
-          }
+      selectedServices.value = services.value.map((s) => s.name);
+      buildConfig.value.selectedService = "";
+      
+      // 如果是多服务模式且镜像前缀为空，自动从 Git URL 或文件名生成
+      if (services.value.length > 1 && (!buildConfig.value.imagePrefix || !buildConfig.value.imagePrefix.trim())) {
+        const projectName = extractProjectName();
+        if (projectName) {
+          buildConfig.value.imagePrefix = projectName;
         }
+      }
         
-        // 初始化推送配置（默认都不推送）
-        servicePushConfig.value = {};
+      // 初始化推送配置（默认都不推送）
+      servicePushConfig.value = {};
       services.value.forEach((s) => {
         const config = getServiceConfig(s.name);
         config.push = false;
@@ -3104,6 +3206,20 @@ onMounted(() => {
 
 .step-item.completed .step-label {
   color: #198754;
+}
+
+.step-item.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.step-item.clickable:hover {
+  transform: scale(1.05);
+}
+
+.step-item.clickable:hover .step-number {
+  background-color: #0d6efd;
+  color: white;
 }
 
 .step-connector {

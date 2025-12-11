@@ -1313,6 +1313,114 @@ async def stop_build_task(task_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"停止任务失败: {str(e)}")
 
 
+@router.get("/build-tasks/{task_id}/config")
+async def get_build_task_config(task_id: str):
+    """获取构建任务的配置JSON"""
+    try:
+        manager = BuildTaskManager()
+        task = manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        
+        # 优先返回task_config，如果没有则从任务信息构建
+        task_config = task.get("task_config")
+        if not task_config:
+            # 向后兼容：从任务信息构建配置
+            from backend.handlers import build_task_config
+            task_config = build_task_config(
+                git_url=task.get("git_url", ""),
+                image_name=task.get("image", ""),
+                tag=task.get("tag", "latest"),
+                branch=task.get("branch"),
+                project_type=task.get("project_type", "jar"),
+                template=task.get("selected_template", ""),
+                template_params=task.get("template_params", {}),
+                should_push=task.get("should_push", False),
+                sub_path=task.get("sub_path"),
+                use_project_dockerfile=task.get("use_project_dockerfile", True),
+                dockerfile_name=task.get("dockerfile_name", "Dockerfile"),
+                source_id=task.get("source_id"),
+                selected_services=task.get("selected_services"),
+                service_push_config=task.get("service_push_config"),
+                service_template_params=task.get("service_template_params"),
+                push_mode=task.get("push_mode", "multi"),
+                resource_package_ids=task.get("resource_package_ids"),
+                pipeline_id=task.get("pipeline_id"),
+                trigger_source=task.get("trigger_source", "manual"),
+            )
+        
+        return JSONResponse(task_config)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取任务配置失败: {str(e)}")
+
+
+@router.post("/build-tasks/{task_id}/retry")
+async def retry_build_task(task_id: str, request: Request):
+    """重试构建任务（使用任务保存的JSON配置）"""
+    try:
+        username = get_current_username(request)
+        manager = BuildTaskManager()
+        task = manager.get_task(task_id)
+        
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        
+        # 检查任务状态
+        if task.get("status") in ["pending", "running"]:
+            raise HTTPException(status_code=400, detail="任务正在运行中，无法重试")
+        
+        # 获取任务配置
+        task_config = task.get("task_config")
+        if not task_config:
+            # 向后兼容：从任务信息构建配置
+            from backend.handlers import build_task_config
+            task_config = build_task_config(
+                git_url=task.get("git_url", ""),
+                image_name=task.get("image", ""),
+                tag=task.get("tag", "latest"),
+                branch=task.get("branch"),
+                project_type=task.get("project_type", "jar"),
+                template=task.get("selected_template", ""),
+                template_params=task.get("template_params", {}),
+                should_push=task.get("should_push", False),
+                sub_path=task.get("sub_path"),
+                use_project_dockerfile=task.get("use_project_dockerfile", True),
+                dockerfile_name=task.get("dockerfile_name", "Dockerfile"),
+                source_id=task.get("source_id"),
+                selected_services=task.get("selected_services"),
+                service_push_config=task.get("service_push_config"),
+                service_template_params=task.get("service_template_params"),
+                push_mode=task.get("push_mode", "multi"),
+                resource_package_ids=task.get("resource_package_ids"),
+                pipeline_id=task.get("pipeline_id"),
+                trigger_source="retry",  # 标记为重试
+            )
+        
+        # 使用统一触发函数重新触发任务
+        build_manager = BuildManager()
+        new_task_id = build_manager._trigger_task_from_config(task_config)
+        
+        # 记录操作日志
+        OperationLogger.log(username, "retry_build_task", {
+            "original_task_id": task_id,
+            "new_task_id": new_task_id,
+        })
+        
+        return JSONResponse({
+            "message": "任务重试成功",
+            "original_task_id": task_id,
+            "new_task_id": new_task_id,
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"重试任务失败: {str(e)}")
+
+
 @router.delete("/build-tasks/{task_id}")
 async def delete_build_task(task_id: str, request: Request):
     """删除构建任务（只有停止、完成或失败的任务才能删除）"""
@@ -3141,6 +3249,7 @@ class CreatePipelineRequest(BaseModel):
     use_project_dockerfile: bool = True
     dockerfile_name: str = "Dockerfile"  # Dockerfile文件名，默认Dockerfile
     webhook_secret: Optional[str] = None
+    webhook_token: Optional[str] = None  # Webhook token（如果为空则自动生成）
     enabled: bool = True
     description: str = ""
     cron_expression: Optional[str] = None
@@ -3577,26 +3686,9 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             task = build_manager.task_manager.get_task(current_task_id)
             if task and task.get("status") in ["pending", "running"]:
                 # 有任务正在运行，将新任务加入队列
-                task_config = {
-                    "username": username,
-                    "git_url": pipeline["git_url"],
-                    "image_name": pipeline.get("image_name") or "manual-build",
-                    "tag": pipeline.get("tag", "latest"),
-                    "should_push": pipeline.get("push", False),
-                    "selected_template": pipeline.get("template", ""),
-                    "project_type": pipeline.get("project_type", "jar"),
-                    "template_params": pipeline.get("template_params", {}),
-                    "branch": pipeline.get("branch"),
-                    "sub_path": pipeline.get("sub_path"),
-                    "use_project_dockerfile": pipeline.get("use_project_dockerfile", True),
-                    "dockerfile_name": pipeline.get("dockerfile_name", "Dockerfile"),
-                    "source_id": pipeline.get("source_id"),
-                    "selected_services": pipeline.get("selected_services"),
-                    "service_push_config": pipeline.get("service_push_config"),
-                    "service_template_params": pipeline.get("service_template_params"),
-                    "push_mode": pipeline.get("push_mode", "multi"),
-                    "resource_package_ids": pipeline.get("resource_package_configs"),
-                }
+                from backend.handlers import pipeline_to_task_config
+                task_config = pipeline_to_task_config(pipeline, trigger_source="manual")
+                task_config["username"] = username  # 添加用户名信息
                 queue_id = manager.add_task_to_queue(pipeline_id, task_config)
                 queue_length = manager.get_queue_length(pipeline_id)
                 
@@ -3628,33 +3720,13 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                 # 任务已完成或不存在，解绑
                 manager.unbind_task(pipeline_id)
 
-        # 启动构建任务
+        # 从流水线配置生成任务配置JSON
+        from backend.handlers import pipeline_to_task_config
+        task_config = pipeline_to_task_config(pipeline, trigger_source="manual")
+        
+        # 启动构建任务（使用统一触发函数）
         build_manager = BuildManager()
-        task_id = build_manager.start_build_from_source(
-            git_url=pipeline["git_url"],
-            image_name=pipeline.get("image_name") or "manual-build",
-            tag=pipeline.get("tag", "latest"),
-            should_push=pipeline.get("push", False),
-            selected_template=pipeline.get("template", ""),
-            project_type=pipeline.get("project_type", "jar"),
-            template_params=pipeline.get("template_params", {}),
-            push_registry=None,  # 已废弃，统一使用激活的registry
-            branch=pipeline.get("branch"),
-            sub_path=pipeline.get("sub_path"),
-            use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
-            dockerfile_name=pipeline.get("dockerfile_name", "Dockerfile"),
-            source_id=pipeline.get("source_id"),  # 传递数据源ID
-            pipeline_id=pipeline_id,  # 传递流水线ID
-            selected_services=pipeline.get("selected_services"),  # 传递选中的服务列表
-            service_push_config=pipeline.get("service_push_config"),  # 传递服务推送配置
-            service_template_params=pipeline.get(
-                "service_template_params"
-            ),  # 传递服务模板参数
-            push_mode=pipeline.get("push_mode", "multi"),  # 传递推送模式
-            resource_package_ids=pipeline.get(
-                "resource_package_configs"
-            ),  # 传递资源包配置
-        )
+        task_id = build_manager._trigger_task_from_config(task_config)
 
         # 记录触发并绑定任务（手动触发）
         manager.record_trigger(
@@ -3915,29 +3987,29 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务 {current_task_id[:8]}，将本次触发加入队列"
                 )
                 
-                # 准备任务配置（稍后使用）
-                task_config = {
-                    "trigger_source": "webhook",
-                    "git_url": pipeline["git_url"],
-                    "image_name": pipeline.get("image_name") or "webhook-build",
-                    "tag": None,  # 稍后计算
-                    "should_push": pipeline.get("push", False),
-                    "selected_template": pipeline.get("template", ""),
-                    "project_type": pipeline.get("project_type", "jar"),
-                    "template_params": pipeline.get("template_params", {}),
-                    "branch": branch,
-                    "sub_path": pipeline.get("sub_path"),
-                    "use_project_dockerfile": pipeline.get("use_project_dockerfile", True),
-                    "dockerfile_name": pipeline.get("dockerfile_name", "Dockerfile"),
-                    "source_id": pipeline.get("source_id"),
-                    "selected_services": pipeline.get("selected_services"),
-                    "service_push_config": pipeline.get("service_push_config"),
-                    "service_template_params": pipeline.get("service_template_params"),
-                    "push_mode": pipeline.get("push_mode", "multi"),
-                    "resource_package_ids": pipeline.get("resource_package_configs"),
-                    "webhook_branch": webhook_branch,
-                    "branch_tag_mapping": pipeline.get("branch_tag_mapping", {}),
-                }
+                # 准备任务配置（稍后使用）- 使用统一的JSON结构
+                from backend.handlers import pipeline_to_task_config
+                # 先计算标签（基于分支映射）
+                branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
+                tag = pipeline.get("tag", "latest")
+                branch_for_tag_mapping = webhook_branch if webhook_branch else branch
+                if branch_for_tag_mapping and branch_tag_mapping:
+                    if branch_for_tag_mapping in branch_tag_mapping:
+                        tag = branch_tag_mapping[branch_for_tag_mapping]
+                    else:
+                        import fnmatch
+                        for pattern, mapped_tag in branch_tag_mapping.items():
+                            if fnmatch.fnmatch(branch_for_tag_mapping, pattern):
+                                tag = mapped_tag
+                                break
+                task_config = pipeline_to_task_config(
+                    pipeline, 
+                    trigger_source="webhook", 
+                    branch=branch, 
+                    tag=tag,
+                    webhook_branch=webhook_branch,
+                    branch_tag_mapping=branch_tag_mapping
+                )
                 
                 queue_id = manager.add_task_to_queue(pipeline_id, task_config)
                 queue_length = manager.get_queue_length(pipeline_id)
@@ -3990,30 +4062,18 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 f"ℹ️  使用默认标签: {tag} (推送分支: {webhook_branch}, 构建分支: {branch})"
             )
 
-        # 启动构建任务
-        build_manager = BuildManager()
-        task_id = build_manager.start_build_from_source(
-            git_url=pipeline["git_url"],
-            image_name=pipeline.get("image_name") or "webhook-build",
-            tag=tag,  # 使用映射后的标签
-            should_push=pipeline.get("push", False),
-            selected_template=pipeline.get("template", ""),
-            project_type=pipeline.get("project_type", "jar"),
-            template_params=pipeline.get("template_params", {}),
-            push_registry=None,  # 已废弃，统一使用激活的registry
-            branch=branch,
-            sub_path=pipeline.get("sub_path"),
-            use_project_dockerfile=pipeline.get("use_project_dockerfile", True),
-            dockerfile_name=pipeline.get("dockerfile_name", "Dockerfile"),
-            source_id=pipeline.get("source_id"),  # 传递数据源ID
-            pipeline_id=pipeline["pipeline_id"],  # 传递流水线ID
-            selected_services=pipeline.get("selected_services"),  # 传递选中的服务列表
-            service_push_config=pipeline.get("service_push_config"),  # 传递服务推送配置
-            service_template_params=pipeline.get(
-                "service_template_params"
-            ),  # 传递服务模板参数
-            push_mode=pipeline.get("push_mode", "multi"),  # 传递推送模式
+        # 从流水线配置生成任务配置JSON
+        from backend.handlers import pipeline_to_task_config
+        task_config = pipeline_to_task_config(
+            pipeline, 
+            trigger_source="webhook", 
+            branch=branch, 
+            tag=tag
         )
+        
+        # 启动构建任务（使用统一触发函数）
+        build_manager = BuildManager()
+        task_id = build_manager._trigger_task_from_config(task_config)
 
         # 提取 webhook 相关信息
         webhook_info = {

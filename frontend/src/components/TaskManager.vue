@@ -245,6 +245,22 @@
                   <span v-if="rebuilding === task.task_id" class="spinner-border spinner-border-sm ms-1"></span>
                 </button>
                 <button 
+                  v-if="task.task_category === 'build' && task.task_type === 'build_from_source'"
+                  class="btn btn-sm btn-outline-secondary"
+                  @click="viewTaskConfig(task)"
+                  :title="'查看任务配置JSON'"
+                >
+                  <i class="fas fa-code"></i> JSON
+                </button>
+                <button 
+                  v-if="task.task_category === 'build' && task.task_type === 'build_from_source'"
+                  class="btn btn-sm btn-outline-success"
+                  @click="saveAsPipeline(task)"
+                  :title="'另存为流水线'"
+                >
+                  <i class="fas fa-save"></i> 流水线
+                </button>
+                <button 
                   v-if="task.task_category === 'build'"
                   class="btn btn-sm btn-outline-info"
                   @click="viewLogs(task)"
@@ -490,6 +506,67 @@
     </div>
     <div v-if="showPipelineModal" class="modal-backdrop fade show"></div>
   </div>
+
+  <!-- 任务配置JSON模态框 -->
+  <div v-if="showConfigModal" class="modal fade show" style="display: block;" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fas fa-code"></i> 任务配置JSON
+          </h5>
+          <button type="button" class="btn-close" @click="showConfigModal = false"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex justify-content-end mb-2">
+            <button class="btn btn-sm btn-outline-primary" @click="copyTaskConfigJson">
+              <i class="fas fa-copy"></i> 复制JSON
+            </button>
+          </div>
+          <pre class="bg-light p-3 rounded" style="max-height: 500px; overflow: auto; font-size: 0.85rem;"><code>{{ taskConfigJson }}</code></pre>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showConfigModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div v-if="showConfigModal" class="modal-backdrop fade show"></div>
+
+  <!-- 另存为流水线模态框 -->
+  <div v-if="showSaveAsPipelineModal" class="modal fade show" style="display: block;" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fas fa-save"></i> 另存为流水线
+          </h5>
+          <button type="button" class="btn-close" @click="showSaveAsPipelineModal = false"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">流水线名称 <span class="text-danger">*</span></label>
+            <input v-model="pipelineForm.name" type="text" class="form-control" placeholder="请输入流水线名称" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">描述</label>
+            <textarea v-model="pipelineForm.description" class="form-control" rows="2" placeholder="请输入描述（可选）"></textarea>
+          </div>
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 流水线将使用任务的完整配置，包括Git地址、分支、镜像名称、构建参数等。
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="showSaveAsPipelineModal = false">取消</button>
+          <button type="button" class="btn btn-primary" @click="savePipelineFromTask" :disabled="saving">
+            <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
+            {{ saving ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div v-if="showSaveAsPipelineModal" class="modal-backdrop fade show"></div>
 </template>
 
 <script setup>
@@ -521,6 +598,9 @@ const exportDirCount = ref(0)  // 下载目录文件数量
 const showPipelineModal = ref(false)  // 流水线模态框
 const selectedPipelineTask = ref(null)  // 选中的任务
 const saving = ref(false)  // 保存中状态
+const showConfigModal = ref(false)  // 任务配置JSON模态框
+const taskConfigJson = ref('')  // 任务配置JSON
+const showSaveAsPipelineModal = ref(false)  // 另存为流水线模态框
 const pipelineForm = ref({
   name: '',
   description: '',
@@ -791,6 +871,85 @@ async function viewLogs(task) {
   showLogModal.value = true
   
   viewingLogs.value = null
+}
+
+// 查看任务配置JSON
+async function viewTaskConfig(task) {
+  try {
+    const res = await axios.get(`/api/build-tasks/${task.task_id}/config`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    taskConfigJson.value = JSON.stringify(res.data, null, 2)
+    showConfigModal.value = true
+  } catch (err) {
+    console.error('获取任务配置失败:', err)
+    const errorMsg = err.response?.data?.detail || err.message || '获取任务配置失败'
+    alert(`获取任务配置失败: ${errorMsg}`)
+  }
+}
+
+// 复制JSON到剪贴板
+function copyTaskConfigJson() {
+  navigator.clipboard.writeText(taskConfigJson.value).then(() => {
+    alert('JSON配置已复制到剪贴板')
+  }).catch(err => {
+    console.error('复制失败:', err)
+    alert('复制失败，请手动选择复制')
+  })
+}
+
+// 另存为流水线
+async function saveAsPipeline(task) {
+  try {
+    // 获取任务配置
+    const res = await axios.get(`/api/build-tasks/${task.task_id}/config`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    const config = res.data
+    
+    // 填充流水线表单
+    pipelineForm.value = {
+      name: `${task.image || '任务'}_${task.tag || 'latest'}_${new Date().toISOString().slice(0, 10)}`,
+      description: `从任务 ${task.task_id.slice(0, 8)} 创建`,
+      git_url: config.git_url || '',
+      branch: config.branch || '',
+      image_name: config.image_name || task.image || '',
+      tag: config.tag || task.tag || 'latest',
+      project_type: config.project_type || 'jar',
+      template: config.template || '',
+      template_params: config.template_params || {},
+      sub_path: config.sub_path || '',
+      use_project_dockerfile: config.use_project_dockerfile !== false,
+      dockerfile_name: config.dockerfile_name || 'Dockerfile',
+      source_id: config.source_id || null,
+      push: config.should_push || false,
+      selected_services: config.selected_services || null,
+      service_push_config: config.service_push_config || null,
+      service_template_params: config.service_template_params || null,
+      push_mode: config.push_mode || 'multi',
+      resource_package_configs: config.resource_package_ids || null,
+      trigger_webhook: true,
+      trigger_schedule: false,
+      cron_expression: '',
+      webhook_branch_filter: false,
+      webhook_use_push_branch: true,
+      branch_tag_mapping: null,
+      enabled: true
+    }
+    
+    selectedPipelineTask.value = task
+    showSaveAsPipelineModal.value = true
+  } catch (err) {
+    console.error('获取任务配置失败:', err)
+    const errorMsg = err.response?.data?.detail || err.message || '获取任务配置失败'
+    alert(`获取任务配置失败: ${errorMsg}`)
+  }
 }
 
 async function downloadTask(task) {
@@ -1212,6 +1371,70 @@ function closePipelineModal() {
 }
 
 // 保存流水线
+// 从任务保存为流水线
+async function savePipelineFromTask() {
+  if (saving.value) return
+  
+  if (!pipelineForm.value.name) {
+    alert('请输入流水线名称')
+    return
+  }
+  
+  if (!pipelineForm.value.git_url) {
+    alert('Git 仓库地址不能为空')
+    return
+  }
+  
+  saving.value = true
+  error.value = null
+  
+  try {
+    const payload = {
+      name: pipelineForm.value.name,
+      description: pipelineForm.value.description,
+      git_url: pipelineForm.value.git_url,
+      branch: pipelineForm.value.branch,
+      project_type: pipelineForm.value.project_type,
+      template: pipelineForm.value.template,
+      image_name: pipelineForm.value.image_name,
+      tag: pipelineForm.value.tag,
+      push: pipelineForm.value.push,
+      template_params: pipelineForm.value.template_params,
+      sub_path: pipelineForm.value.sub_path,
+      use_project_dockerfile: pipelineForm.value.use_project_dockerfile,
+      dockerfile_name: pipelineForm.value.dockerfile_name || 'Dockerfile',
+      source_id: pipelineForm.value.source_id || null,
+      selected_services: pipelineForm.value.selected_services || null,
+      service_push_config: pipelineForm.value.service_push_config || null,
+      service_template_params: pipelineForm.value.service_template_params || null,
+      push_mode: pipelineForm.value.push_mode || 'multi',
+      resource_package_configs: pipelineForm.value.resource_package_configs || null,
+      enabled: pipelineForm.value.enabled,
+      cron_expression: pipelineForm.value.trigger_schedule ? pipelineForm.value.cron_expression : null,
+      webhook_branch_filter: pipelineForm.value.webhook_branch_filter || false,
+      webhook_use_push_branch: pipelineForm.value.webhook_use_push_branch !== false,
+      branch_tag_mapping: pipelineForm.value.branch_tag_mapping || null
+    }
+    
+    await axios.post('/api/pipelines', payload, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    alert('流水线创建成功！')
+    showSaveAsPipelineModal.value = false
+    // 可以跳转到流水线页面或刷新
+  } catch (err) {
+    console.error('保存流水线失败:', err)
+    const errorMsg = err.response?.data?.detail || err.message || '保存流水线失败'
+    error.value = `保存流水线失败: ${errorMsg}`
+    alert(`保存流水线失败: ${errorMsg}`)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function savePipeline() {
   if (saving.value) return
   
@@ -1295,70 +1518,24 @@ async function rebuildTask(task) {
   error.value = null
   
   try {
-    // 从任务信息中提取构建参数
-    // 优先从 config 字段获取，如果没有则从任务本身获取
-    const taskConfig = task.config || {}
-    
-    // 处理服务模板参数
-    let service_template_params = null
-    if (taskConfig.service_template_params || task.service_template_params) {
-      const params = taskConfig.service_template_params || task.service_template_params
-      if (typeof params === 'string') {
-        try {
-          service_template_params = JSON.parse(params)
-        } catch (e) {
-          service_template_params = params
-        }
-      } else {
-        service_template_params = params
+    // 优先使用后端重试API，它会使用任务保存的完整JSON配置
+    const res = await axios.post(`/api/build-tasks/${task.task_id}/retry`, {}, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
-    }
+    })
     
-    const config = {
-      git_url: taskConfig.git_url || task.git_url,
-      branch: taskConfig.branch || task.branch || 'main',
-      imagename: task.image || taskConfig.image_name,  // API 使用 imagename 而不是 image_name
-      tag: task.tag || taskConfig.tag || 'latest',
-      project_type: taskConfig.project_type || task.project_type || 'jar',
-      template: taskConfig.template || task.selected_template || '',
-      template_params: taskConfig.template_params ? (typeof taskConfig.template_params === 'string' ? taskConfig.template_params : JSON.stringify(taskConfig.template_params)) : (task.template_params ? JSON.stringify(task.template_params) : undefined),
-      sub_path: taskConfig.sub_path || task.sub_path || '',
-      use_project_dockerfile: taskConfig.use_project_dockerfile !== false && task.use_project_dockerfile !== false,
-      dockerfile_name: taskConfig.dockerfile_name || task.dockerfile_name || task.dockerfileName || 'Dockerfile',
-      push: (taskConfig.push || task.should_push) ? 'on' : 'off',  // API 使用 'on'/'off' 字符串
-      source_id: taskConfig.source_id || task.source_id || null,
-      selected_services: taskConfig.selected_services || task.selected_services || null,
-      service_push_config: taskConfig.service_push_config || task.service_push_config || null,
-      service_template_params: service_template_params,
-      push_mode: taskConfig.push_mode || task.push_mode || 'multi',
-      resource_package_configs: taskConfig.resource_package_configs || taskConfig.resource_package_ids || task.resource_package_configs || task.resource_package_ids || null,
-    }
-    
-    // 验证必要参数
-    if (!config.git_url) {
-      throw new Error('任务缺少 Git 仓库地址，无法重新构建')
-    }
-    
-    if (!config.imagename) {
-      throw new Error('任务缺少镜像名称，无法重新构建')
-    }
-    
-    console.log('🔄 重新构建任务:', config)
-    
-    // 调用构建 API
-    const res = await axios.post('/api/build-from-source', config)
-    
-    if (res.data.task_id) {
-      alert(`重新构建任务已创建！\n任务 ID: ${res.data.task_id}`)
-      // 刷新任务列表
-      await loadTasks()
+    if (res.data && res.data.new_task_id) {
+      alert(`任务重试成功！\n新任务 ID: ${res.data.new_task_id}`)
+      await loadTasks()  // 刷新任务列表
     } else {
-      throw new Error('创建任务失败，未返回任务 ID')
+      throw new Error('重试响应格式错误')
     }
   } catch (err) {
     console.error('重新构建失败:', err)
     const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '重新构建失败'
     error.value = `重新构建失败: ${errorMsg}`
+    alert(`重新构建失败: ${errorMsg}`)
     // 5秒后自动清除错误提示
     setTimeout(() => {
       if (error.value && error.value.includes('重新构建失败')) {
