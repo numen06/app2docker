@@ -702,6 +702,8 @@ async function refreshRunningTasks() {
       return
     }
     
+    let hasStatusChanged = false
+    
     // 逐个更新运行中任务的状态
     for (const { id, category } of runningTaskIds) {
       try {
@@ -718,17 +720,33 @@ async function refreshRunningTasks() {
           // 更新对应任务的状态
           const index = tasks.value.findIndex(t => t.task_id === id)
           if (index !== -1) {
+            const oldStatus = tasks.value[index].status
+            const newStatus = updatedTask.status
+            
             // 只更新状态相关字段，保留其他字段
-            tasks.value[index].status = updatedTask.status
+            tasks.value[index].status = newStatus
             tasks.value[index].completed_at = updatedTask.completed_at
             tasks.value[index].error = updatedTask.error
             tasks.value[index].file_size = updatedTask.file_size
+            
+            // 检测状态变化：从运行中变为已完成/失败/停止
+            if ((oldStatus === 'running' || oldStatus === 'pending') && 
+                (newStatus === 'completed' || newStatus === 'failed' || newStatus === 'stopped')) {
+              hasStatusChanged = true
+              console.log(`任务 ${id.substring(0, 8)} 状态变化: ${oldStatus} -> ${newStatus}`)
+            }
           }
         }
       } catch (err) {
         // 单个任务更新失败不影响其他任务
         console.error(`更新任务 ${id} 状态失败:`, err)
       }
+    }
+    
+    // 如果有任务状态变化（完成/失败/停止），刷新整个任务列表以确保数据同步
+    if (hasStatusChanged) {
+      console.log('检测到任务状态变化，刷新整个任务列表')
+      await loadTasks()
     }
   } catch (err) {
     console.error('刷新运行中任务状态失败:', err)
@@ -1458,7 +1476,18 @@ async function retryExportTask(task) {
   }
 }
 
+// 监听任务创建事件
+function handleTaskCreated(event) {
+  console.log('收到任务创建事件，刷新任务列表:', event.detail)
+  // 延迟一下再刷新，确保后端任务已创建完成
+  setTimeout(() => {
+    loadTasks()
+  }, 500)
+}
+
 onMounted(() => {
+  // 监听任务创建事件
+  window.addEventListener('taskCreated', handleTaskCreated)
   // 检查是否有从仪表盘传递过来的筛选条件
   const statusFilterFromStorage = sessionStorage.getItem('taskStatusFilter')
   if (statusFilterFromStorage) {
@@ -1466,13 +1495,16 @@ onMounted(() => {
     sessionStorage.removeItem('taskStatusFilter') // 使用后清除
   }
   loadTasks()
-  // 每5秒自动刷新一次（只刷新运行中任务的状态，不刷新整个列表）
+  // 每3秒自动刷新一次（只刷新运行中任务的状态，检测到完成时刷新整个列表）
   refreshInterval = setInterval(() => {
     refreshRunningTasks()
-  }, 5000)
+  }, 3000)
 })
 
 onUnmounted(() => {
+  // 移除任务创建事件监听器
+  window.removeEventListener('taskCreated', handleTaskCreated)
+  
   if (refreshInterval) {
     clearInterval(refreshInterval)
   }

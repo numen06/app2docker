@@ -3815,9 +3815,15 @@ async function runPipeline(pipeline) {
         // 任务已加入队列
         const queueInfo = res.data.queue_length ? `（队列位置: ${res.data.queue_length}）` : ''
         alert(`流水线已加入队列！${queueInfo}\n分支: ${res.data.branch || '默认'}`)
+        // 发送事件通知任务管理页面刷新（队列中的任务也会创建pending状态的任务）
+        if (res.data.task_id) {
+          window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
+        }
       } else if (res.data.task_id) {
         // 任务立即运行
         alert(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${res.data.branch || '默认'}`)
+        // 发送事件通知任务管理页面刷新
+        window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
       }
       // 刷新流水线列表（更新触发次数和时间）
       loadPipelines()
