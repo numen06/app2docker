@@ -96,6 +96,13 @@
                 <i class="fas fa-edit"></i>
               </button>
               <button 
+                class="btn btn-outline-warning" 
+                @click="showMultiServiceConfig(pipeline)"
+                title="多服务配置"
+              >
+                <i class="fas fa-layer-group"></i>
+              </button>
+              <button 
                 class="btn btn-outline-danger" 
                 @click="deletePipeline(pipeline)"
                 title="删除"
@@ -1434,6 +1441,246 @@
     </div>
     <div v-if="showResourcePackageModal" class="modal-backdrop fade show" style="z-index: 1045;"></div>
 
+    <!-- 多服务配置模态框 -->
+    <div v-if="showMultiServiceConfigModal" class="modal fade show" style="display: block; z-index: 1050;" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-layer-group"></i> 多服务配置 - {{ multiServiceConfigPipeline?.name }}
+            </h5>
+            <button type="button" class="btn-close" @click="closeMultiServiceConfigModal"></button>
+          </div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="alert alert-info mb-3">
+              <i class="fas fa-info-circle"></i> 
+              <strong>说明：</strong>此配置为独立的多服务配置，不需要读取 Dockerfile。可以手动添加和配置服务。
+            </div>
+            
+            <!-- 推送模式选择 -->
+            <div class="mb-3">
+              <label class="form-label"><strong>推送模式</strong></label>
+              <div class="btn-group w-100 d-flex" role="group">
+                <input 
+                  type="radio" 
+                  class="btn-check" 
+                  id="multi-service-mode-single" 
+                  value="single"
+                  v-model="multiServiceFormData.push_mode"
+                >
+                <label class="btn btn-outline-primary flex-fill" for="multi-service-mode-single">
+                  <i class="fas fa-cube d-block mb-1"></i>
+                  <small class="d-block fw-bold">单服务模式</small>
+                </label>
+                
+                <input 
+                  type="radio" 
+                  class="btn-check" 
+                  id="multi-service-mode-multi" 
+                  value="multi"
+                  v-model="multiServiceFormData.push_mode"
+                >
+                <label class="btn btn-outline-primary flex-fill" for="multi-service-mode-multi">
+                  <i class="fas fa-sitemap d-block mb-1"></i>
+                  <small class="d-block fw-bold">多服务模式</small>
+                </label>
+              </div>
+            </div>
+
+            <!-- 全局镜像配置 / 服务配置 -->
+            <div class="mb-3">
+              <label class="form-label">
+                <strong v-if="multiServiceFormData.push_mode === 'single'">服务配置</strong>
+                <strong v-else>全局镜像配置（前缀）</strong>
+              </label>
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label small">
+                    <span v-if="multiServiceFormData.push_mode === 'single'">镜像名称</span>
+                    <span v-else>镜像名称前缀</span>
+                  </label>
+                  <input 
+                    v-model="multiServiceFormData.global_image_name"
+                    type="text" 
+                    class="form-control form-control-sm"
+                    placeholder="myapp/demo"
+                  >
+                  <small class="text-muted d-block mt-1">
+                    <span v-if="multiServiceFormData.push_mode === 'single'">
+                      <i class="fas fa-info-circle"></i> 单服务模式下，此配置将直接用于服务构建
+                    </span>
+                    <span v-else>
+                      <i class="fas fa-info-circle"></i> 多服务模式下，每个启用的服务镜像名称将自动生成为: <code>{{ multiServiceFormData.global_image_name || 'myapp/demo' }}/服务名</code>
+                    </span>
+                  </small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">
+                    <span v-if="multiServiceFormData.push_mode === 'single'">标签</span>
+                    <span v-else>全局标签（快捷设置）</span>
+                  </label>
+                  <input 
+                    v-model="multiServiceFormData.global_tag"
+                    type="text" 
+                    class="form-control form-control-sm"
+                    placeholder="latest"
+                  >
+                  <small class="text-muted d-block mt-1">
+                    <span v-if="multiServiceFormData.push_mode === 'single'">
+                      <i class="fas fa-info-circle"></i> 单服务模式下，此标签将直接用于服务构建
+                    </span>
+                    <span v-else>
+                      <i class="fas fa-info-circle"></i> 多服务模式下，可快速为所有启用的服务设置标签（可在服务级别覆盖）
+                    </span>
+                  </small>
+                </div>
+              </div>
+            </div>
+
+            <!-- 服务列表（仅多服务模式显示） -->
+            <div v-if="multiServiceFormData.push_mode === 'multi'" class="mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <label class="form-label mb-0"><strong>服务列表</strong></label>
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-outline-success" 
+                  @click="addServiceToMultiConfig"
+                  title="添加服务"
+                >
+                  <i class="fas fa-plus"></i> 添加服务
+                </button>
+              </div>
+              
+              <div v-if="multiServiceFormData.selected_services.length === 0" class="text-muted text-center py-5 border rounded bg-light">
+                <i class="fas fa-inbox fa-3x mb-3 text-muted"></i>
+                <p class="mb-1">暂无服务</p>
+                <small>点击"添加服务"按钮添加服务</small>
+              </div>
+              
+              <div v-else class="row g-3">
+                <div 
+                  v-for="(serviceName, index) in multiServiceFormData.selected_services" 
+                  :key="`service-${index}-${serviceName}`"
+                  class="col-12"
+                >
+                  <div 
+                    class="card shadow-sm border"
+                    :class="{ 'border-secondary opacity-75': multiServiceFormData.push_mode === 'multi' && !(multiServiceFormData.service_push_config[serviceName]?.enabled !== false) }"
+                  >
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                      <div class="d-flex align-items-center">
+                        <span class="badge bg-primary me-2">#{{ index + 1 }}</span>
+                        <strong class="text-primary">{{ serviceName || '未命名服务' }}</strong>
+                        <!-- 多服务模式下的启用/禁用开关 -->
+                        <div v-if="multiServiceFormData.push_mode === 'multi'" class="form-check form-switch ms-3">
+                          <input 
+                            :checked="multiServiceFormData.service_push_config[serviceName]?.enabled !== false"
+                            @change="updateServiceEnabled(serviceName, $event.target.checked)"
+                            class="form-check-input" 
+                            type="checkbox" 
+                            :id="`enableCheck-${index}`"
+                            style="width: 2.5em; height: 1.3em;"
+                          >
+                          <label class="form-check-label fw-bold ms-2" :for="`enableCheck-${index}`">
+                            <span :class="multiServiceFormData.service_push_config[serviceName]?.enabled !== false ? 'text-success' : 'text-muted'">
+                              <i :class="multiServiceFormData.service_push_config[serviceName]?.enabled !== false ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+                              {{ multiServiceFormData.service_push_config[serviceName]?.enabled !== false ? '启用' : '禁用' }}
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-danger"
+                        @click="removeServiceFromMultiConfig(index)"
+                        :disabled="multiServiceFormData.push_mode === 'single'"
+                        :title="multiServiceFormData.push_mode === 'single' ? '单服务模式下不能删除服务' : '删除服务'"
+                      >
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                    <div class="card-body" :class="{ 'opacity-50': multiServiceFormData.push_mode === 'multi' && multiServiceFormData.service_push_config[serviceName]?.enabled === false }">
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label class="form-label small fw-bold">
+                            <i class="fas fa-tag text-primary"></i> 服务名称 <span class="text-danger">*</span>
+                          </label>
+                          <input 
+                            :value="serviceName"
+                            @input="updateServiceName(index, $event.target.value)"
+                            type="text" 
+                            class="form-control"
+                            :disabled="multiServiceFormData.push_mode === 'multi' && multiServiceFormData.service_push_config[serviceName]?.enabled === false"
+                            placeholder="例如: api, web, worker"
+                            required
+                          >
+                        </div>
+                        <div class="col-12">
+                          <label class="form-label small fw-bold">
+                            <i class="fas fa-image text-info"></i> 镜像名称
+                          </label>
+                          <input 
+                            :value="multiServiceFormData.service_push_config[serviceName]?.imageName || ''"
+                            @input="updateServiceImageName(serviceName, $event.target.value)"
+                            type="text" 
+                            class="form-control"
+                            :disabled="multiServiceFormData.push_mode === 'multi' && multiServiceFormData.service_push_config[serviceName]?.enabled === false"
+                            :placeholder="getMultiServiceDefaultImageName(serviceName)"
+                          >
+                          <small class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 
+                            <span v-if="multiServiceFormData.push_mode === 'single'">留空使用全局配置</span>
+                            <span v-else>留空使用前缀拼接: {{ getMultiServiceDefaultImageName(serviceName) }}</span>
+                          </small>
+                        </div>
+                        <div class="col-md-4">
+                          <label class="form-label small fw-bold">
+                            <i class="fas fa-tags text-warning"></i> 标签
+                          </label>
+                          <input 
+                            :value="multiServiceFormData.service_push_config[serviceName]?.tag || ''"
+                            @input="updateServiceTag(serviceName, $event.target.value)"
+                            type="text" 
+                            class="form-control"
+                            :disabled="multiServiceFormData.push_mode === 'multi' && multiServiceFormData.service_push_config[serviceName]?.enabled === false"
+                            :placeholder="multiServiceFormData.global_tag || 'latest'"
+                          >
+                        </div>
+                        <div class="col-md-8 d-flex align-items-end">
+                          <div class="form-check form-switch">
+                            <input 
+                              :checked="multiServiceFormData.service_push_config[serviceName]?.push || false"
+                              @change="updateServicePush(serviceName, $event.target.checked)"
+                              class="form-check-input" 
+                              type="checkbox" 
+                              :id="`pushCheck-${index}`"
+                              :disabled="multiServiceFormData.push_mode === 'multi' && multiServiceFormData.service_push_config[serviceName]?.enabled === false"
+                              style="width: 3em; height: 1.5em;"
+                            >
+                            <label class="form-check-label fw-bold ms-2" :for="`pushCheck-${index}`">
+                              <i class="fas fa-cloud-upload-alt text-success"></i> 推送到仓库
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="closeMultiServiceConfigModal" :disabled="savingMultiServiceConfig">取消</button>
+            <button type="button" class="btn btn-primary btn-sm" @click="saveMultiServiceConfig" :disabled="savingMultiServiceConfig">
+              <span v-if="savingMultiServiceConfig" class="spinner-border spinner-border-sm me-1" style="width: 0.8rem; height: 0.8rem;"></span>
+              <i v-else class="fas fa-save"></i> {{ savingMultiServiceConfig ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showMultiServiceConfigModal" class="modal-backdrop fade show" style="z-index: 1045;"></div>
+
     <!-- 构建配置JSON模态框 -->
     <div v-if="showBuildConfigJsonModal" class="modal fade show" style="display: block; z-index: 1055;" tabindex="-1">
       <div class="modal-dialog modal-lg">
@@ -1590,6 +1837,21 @@ const isVerifyingServices = ref(false)  // 是否正在验证服务列表（编�
 const showModal = ref(false)
 const showWebhookModal = ref(false)
 const showHistoryModal = ref(false)
+const showMultiServiceConfigModal = ref(false)
+const multiServiceConfigPipeline = ref(null)
+const savingMultiServiceConfig = ref(false)
+const multiServiceFormData = ref({
+  push_mode: 'multi',
+  selected_services: [],
+  service_push_config: {},
+  global_image_name: '',
+  global_tag: 'latest'
+})
+// 临时存储多服务模式下的服务数据（用于单服务/多服务切换时恢复）
+const multiServiceBackup = ref({
+  selected_services: [],
+  service_push_config: {}
+})
 const webhookUrl = ref('')
 const webhookUrlInput = ref(null)
 const editingPipeline = ref(null)
@@ -4150,6 +4412,340 @@ function viewTaskLogs(taskId, task) {
       viewingLogs.value = null
     }
   }, 100)
+}
+
+// 显示多服务配置模态框
+function showMultiServiceConfig(pipeline) {
+  multiServiceConfigPipeline.value = pipeline
+  
+  // 初始化表单数据
+  multiServiceFormData.value = {
+    push_mode: pipeline.push_mode || 'multi',
+    selected_services: pipeline.selected_services ? [...pipeline.selected_services] : [],
+    service_push_config: pipeline.service_push_config ? JSON.parse(JSON.stringify(pipeline.service_push_config)) : {},
+    global_image_name: pipeline.image_name || '',
+    global_tag: pipeline.tag || 'latest'
+  }
+  
+  // 确保每个服务都有配置对象
+  multiServiceFormData.value.selected_services.forEach(serviceName => {
+    if (!multiServiceFormData.value.service_push_config[serviceName]) {
+      multiServiceFormData.value.service_push_config[serviceName] = {
+        enabled: true,
+        push: false,
+        imageName: '',
+        tag: ''
+      }
+    } else if (typeof multiServiceFormData.value.service_push_config[serviceName] === 'boolean') {
+      // 兼容旧格式
+      const oldValue = multiServiceFormData.value.service_push_config[serviceName]
+      multiServiceFormData.value.service_push_config[serviceName] = {
+        enabled: true,
+        push: oldValue,
+        imageName: '',
+        tag: ''
+      }
+    } else {
+      // 确保enabled字段存在，默认为true
+      if (multiServiceFormData.value.service_push_config[serviceName].enabled === undefined) {
+        multiServiceFormData.value.service_push_config[serviceName].enabled = true
+      }
+    }
+  })
+  
+  showMultiServiceConfigModal.value = true
+}
+
+// 监听推送模式变化
+watch(() => multiServiceFormData.value.push_mode, (newMode, oldMode) => {
+  if (newMode === 'single') {
+    // 单服务模式下，只保留第一个服务用于编译，其他服务备份起来
+    if (multiServiceFormData.value.selected_services.length === 0) {
+      // 如果没有服务，添加一个默认服务
+      const defaultServiceName = 'service1'
+      multiServiceFormData.value.selected_services.push(defaultServiceName)
+      if (!multiServiceFormData.value.service_push_config[defaultServiceName]) {
+        multiServiceFormData.value.service_push_config[defaultServiceName] = {
+          enabled: true,
+          push: false,
+          imageName: '',
+          tag: ''
+        }
+      }
+    } else if (multiServiceFormData.value.selected_services.length > 1) {
+      // 如果有多个服务，备份所有服务数据
+      multiServiceBackup.value = {
+        selected_services: [...multiServiceFormData.value.selected_services],
+        service_push_config: JSON.parse(JSON.stringify(multiServiceFormData.value.service_push_config))
+      }
+      // 只保留第一个服务用于编译
+      const firstService = multiServiceFormData.value.selected_services[0]
+      multiServiceFormData.value.selected_services = [firstService]
+      // 只保留第一个服务的配置
+      const firstServiceConfig = multiServiceFormData.value.service_push_config[firstService]
+      multiServiceFormData.value.service_push_config = firstServiceConfig 
+        ? { [firstService]: JSON.parse(JSON.stringify(firstServiceConfig)) }
+        : { [firstService]: { enabled: true, push: false, imageName: '', tag: '' } }
+    }
+  } else if (newMode === 'multi' && oldMode === 'single') {
+    // 从单服务模式切换到多服务模式，恢复备份的服务数据
+    if (multiServiceBackup.value.selected_services.length > 0) {
+      multiServiceFormData.value.selected_services = [...multiServiceBackup.value.selected_services]
+      multiServiceFormData.value.service_push_config = JSON.parse(JSON.stringify(multiServiceBackup.value.service_push_config))
+      // 确保每个服务都有配置对象
+      multiServiceFormData.value.selected_services.forEach(serviceName => {
+        if (!multiServiceFormData.value.service_push_config[serviceName]) {
+          multiServiceFormData.value.service_push_config[serviceName] = {
+            enabled: true,
+            push: false,
+            imageName: '',
+            tag: ''
+          }
+        } else if (multiServiceFormData.value.service_push_config[serviceName].enabled === undefined) {
+          multiServiceFormData.value.service_push_config[serviceName].enabled = true
+        }
+      })
+    }
+  }
+})
+
+// 关闭多服务配置模态框
+function closeMultiServiceConfigModal() {
+  if (savingMultiServiceConfig.value) {
+    return
+  }
+  showMultiServiceConfigModal.value = false
+  multiServiceConfigPipeline.value = null
+  multiServiceFormData.value = {
+    push_mode: 'multi',
+    selected_services: [],
+    service_push_config: {},
+    global_image_name: '',
+    global_tag: 'latest'
+  }
+  // 清空备份数据
+  multiServiceBackup.value = {
+    selected_services: [],
+    service_push_config: {}
+  }
+}
+
+// 添加服务到多服务配置
+function addServiceToMultiConfig() {
+  const newServiceName = `service${multiServiceFormData.value.selected_services.length + 1}`
+  multiServiceFormData.value.selected_services.push(newServiceName)
+  multiServiceFormData.value.service_push_config[newServiceName] = {
+    enabled: true,
+    push: false,
+    imageName: '',
+    tag: ''
+  }
+}
+
+// 从多服务配置中移除服务
+function removeServiceFromMultiConfig(index) {
+  const serviceName = multiServiceFormData.value.selected_services[index]
+  multiServiceFormData.value.selected_services.splice(index, 1)
+  if (multiServiceFormData.value.service_push_config[serviceName]) {
+    delete multiServiceFormData.value.service_push_config[serviceName]
+  }
+}
+
+// 更新服务名称
+function updateServiceName(index, newName) {
+  const oldName = multiServiceFormData.value.selected_services[index]
+  if (oldName === newName) {
+    return
+  }
+  
+  // 更新服务名称数组
+  multiServiceFormData.value.selected_services[index] = newName
+  
+  // 更新配置对象的key
+  if (multiServiceFormData.value.service_push_config[oldName]) {
+    multiServiceFormData.value.service_push_config[newName] = multiServiceFormData.value.service_push_config[oldName]
+    delete multiServiceFormData.value.service_push_config[oldName]
+  } else {
+    // 如果旧名称没有配置，创建新配置
+    multiServiceFormData.value.service_push_config[newName] = {
+      enabled: true,
+      push: false,
+      imageName: '',
+      tag: ''
+    }
+  }
+}
+
+// 更新服务镜像名称
+function updateServiceImageName(serviceName, imageName) {
+  if (!multiServiceFormData.value.service_push_config[serviceName]) {
+    multiServiceFormData.value.service_push_config[serviceName] = {
+      enabled: true,
+      push: false,
+      imageName: '',
+      tag: ''
+    }
+  }
+  multiServiceFormData.value.service_push_config[serviceName].imageName = imageName
+}
+
+// 更新服务标签
+function updateServiceTag(serviceName, tag) {
+  if (!multiServiceFormData.value.service_push_config[serviceName]) {
+    multiServiceFormData.value.service_push_config[serviceName] = {
+      enabled: true,
+      push: false,
+      imageName: '',
+      tag: ''
+    }
+  }
+  multiServiceFormData.value.service_push_config[serviceName].tag = tag
+}
+
+// 更新服务推送设置
+function updateServicePush(serviceName, push) {
+  if (!multiServiceFormData.value.service_push_config[serviceName]) {
+    multiServiceFormData.value.service_push_config[serviceName] = {
+      enabled: true,
+      push: false,
+      imageName: '',
+      tag: ''
+    }
+  }
+  multiServiceFormData.value.service_push_config[serviceName].push = push
+}
+
+// 更新服务启用状态
+function updateServiceEnabled(serviceName, enabled) {
+  if (!multiServiceFormData.value.service_push_config[serviceName]) {
+    multiServiceFormData.value.service_push_config[serviceName] = {
+      enabled: true,
+      push: false,
+      imageName: '',
+      tag: ''
+    }
+  }
+  multiServiceFormData.value.service_push_config[serviceName].enabled = enabled
+}
+
+// 获取多服务默认镜像名称
+function getMultiServiceDefaultImageName(serviceName) {
+  if (!serviceName) {
+    return multiServiceFormData.value.global_image_name || 'myapp/demo'
+  }
+  
+  let prefix = multiServiceFormData.value.global_image_name || 'myapp/demo'
+  prefix = prefix.replace(/\/+$/, '')
+  
+  const normalizedPrefix = prefix.replace(/\/+$/, '')
+  if (normalizedPrefix.endsWith(`/${serviceName}`) || normalizedPrefix === serviceName) {
+    return normalizedPrefix
+  }
+  
+  if (prefix === serviceName) {
+    return prefix
+  }
+  
+  return `${prefix}/${serviceName}`
+}
+
+// 保存多服务配置
+async function saveMultiServiceConfig() {
+  if (savingMultiServiceConfig.value) {
+    return
+  }
+  
+  // 验证服务名称
+  const serviceNames = multiServiceFormData.value.selected_services.filter(name => name && name.trim())
+  if (serviceNames.length === 0 && multiServiceFormData.value.push_mode === 'multi') {
+    alert('多服务模式下至少需要添加一个服务')
+    return
+  }
+  
+  // 检查是否有重复的服务名称
+  const uniqueNames = new Set(serviceNames)
+  if (uniqueNames.size !== serviceNames.length) {
+    alert('服务名称不能重复')
+    return
+  }
+  
+  savingMultiServiceConfig.value = true
+  
+  try {
+    if (multiServiceFormData.value.push_mode === 'single') {
+      // 单服务模式：使用全局配置
+      const firstService = serviceNames.length > 0 ? serviceNames[0] : null
+      if (!firstService) {
+        alert('单服务模式下至少需要一个服务')
+        savingMultiServiceConfig.value = false
+        return
+      }
+      
+      const payload = {
+        push_mode: 'single',
+        selected_services: [firstService],
+        service_push_config: null, // 单服务模式下不使用service_push_config
+        image_name: multiServiceFormData.value.global_image_name || multiServiceConfigPipeline.value.image_name || '',
+        tag: multiServiceFormData.value.global_tag || multiServiceConfigPipeline.value.tag || 'latest'
+      }
+      
+      await axios.put(`/api/pipelines/${multiServiceConfigPipeline.value.pipeline_id}`, payload)
+    } else {
+      // 多服务模式：只保存启用的服务，使用各服务的独立配置
+      const enabledServices = serviceNames.filter(serviceName => {
+        const config = multiServiceFormData.value.service_push_config[serviceName]
+        return config?.enabled !== false // enabled默认为true，只有显式设置为false才禁用
+      })
+      
+      if (enabledServices.length === 0) {
+        alert('多服务模式下至少需要启用一个服务')
+        savingMultiServiceConfig.value = false
+        return
+      }
+      
+      // 规范化服务推送配置（只包含启用的服务）
+      const normalizedServicePushConfig = {}
+      enabledServices.forEach(serviceName => {
+        const config = multiServiceFormData.value.service_push_config[serviceName]
+        if (config) {
+          const customImageName = config.imageName && config.imageName.trim()
+          const finalImageName = customImageName || getMultiServiceDefaultImageName(serviceName)
+          const finalTag = (config.tag && config.tag.trim()) || multiServiceFormData.value.global_tag || 'latest'
+          
+          normalizedServicePushConfig[serviceName] = {
+            push: config.push !== undefined ? config.push : false,
+            imageName: finalImageName,
+            tag: finalTag
+          }
+        } else {
+          normalizedServicePushConfig[serviceName] = {
+            push: false,
+            imageName: getMultiServiceDefaultImageName(serviceName),
+            tag: multiServiceFormData.value.global_tag || 'latest'
+          }
+        }
+      })
+      
+      const payload = {
+        push_mode: 'multi',
+        selected_services: enabledServices,
+        service_push_config: normalizedServicePushConfig,
+        image_name: multiServiceFormData.value.global_image_name || multiServiceConfigPipeline.value.image_name || '',
+        tag: multiServiceFormData.value.global_tag || multiServiceConfigPipeline.value.tag || 'latest'
+      }
+      
+      await axios.put(`/api/pipelines/${multiServiceConfigPipeline.value.pipeline_id}`, payload)
+    }
+    
+    alert('多服务配置已保存')
+    closeMultiServiceConfigModal()
+    loadPipelines()
+  } catch (error) {
+    console.error('保存多服务配置失败:', error)
+    alert(error.response?.data?.detail || '保存多服务配置失败')
+  } finally {
+    savingMultiServiceConfig.value = false
+  }
 }
 </script>
 
