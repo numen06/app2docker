@@ -1078,7 +1078,7 @@
                   </div>
                   <div class="mb-3">
                     <label class="form-label"><strong>Webhook 分支策略</strong></label>
-                    <div class="btn-group w-100 d-flex" role="group">
+                    <div class="btn-group w-100 d-flex flex-wrap" role="group" style="gap: 0.25rem;">
                       <input 
                         type="radio" 
                         class="btn-check" 
@@ -1117,6 +1117,19 @@
                         <small class="d-block fw-bold">使用配置分支</small>
                         <small class="text-muted d-block" style="font-size: 0.7rem;">所有分支都触发</small>
                       </label>
+                      
+                      <input 
+                        type="radio" 
+                        class="btn-check" 
+                        id="strategy-select-branches" 
+                        value="select_branches"
+                        v-model="formData.webhook_branch_strategy"
+                      >
+                      <label class="btn btn-outline-primary flex-fill" for="strategy-select-branches" style="white-space: normal; padding: 0.5rem;">
+                        <i class="fas fa-check-square d-block mb-1"></i>
+                        <small class="d-block fw-bold">选择分支触发</small>
+                        <small class="text-muted d-block" style="font-size: 0.7rem;">仅选中的分支触发</small>
+                      </label>
                     </div>
                     <small class="text-muted d-block mt-2">
                       <span v-if="formData.webhook_branch_strategy === 'use_push'">
@@ -1125,9 +1138,57 @@
                       <span v-else-if="formData.webhook_branch_strategy === 'filter_match'">
                         <i class="fas fa-info-circle"></i> 只有推送的分支与上方配置的分支一致时才会触发，使用推送的分支构建
                       </span>
+                      <span v-else-if="formData.webhook_branch_strategy === 'select_branches'">
+                        <i class="fas fa-info-circle"></i> 只有选中的分支推送时才会触发，使用推送的分支进行构建
+                      </span>
                       <span v-else>
                         <i class="fas fa-info-circle"></i> 任何分支推送都会触发，但使用配置的分支进行构建
                       </span>
+                    </small>
+                  </div>
+                  
+                  <!-- 选择分支触发配置 -->
+                  <div v-if="formData.webhook_branch_strategy === 'select_branches'" class="mb-3">
+                    <label class="form-label">
+                      <strong>允许触发的分支</strong>
+                      <span class="text-danger">*</span>
+                    </label>
+                    <div v-if="!branchesAndTags.branches || branchesAndTags.branches.length === 0" class="alert alert-warning py-2">
+                      <i class="fas fa-exclamation-triangle"></i> 请先在 Git 配置中选择数据源和分支，以加载可用分支列表
+                    </div>
+                    <div v-else class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                      <div class="form-check mb-2">
+                        <input 
+                          class="form-check-input" 
+                          type="checkbox" 
+                          id="selectAllBranches"
+                          :checked="isAllBranchesSelected"
+                          @change="toggleAllBranches"
+                        >
+                        <label class="form-check-label fw-bold" for="selectAllBranches">
+                          全选
+                        </label>
+                      </div>
+                      <hr class="my-2">
+                      <div 
+                        v-for="branch in branchesAndTags.branches" 
+                        :key="branch"
+                        class="form-check mb-1"
+                      >
+                        <input 
+                          class="form-check-input" 
+                          type="checkbox" 
+                          :id="`branch-${branch}`"
+                          :value="branch"
+                          v-model="formData.webhook_allowed_branches"
+                        >
+                        <label class="form-check-label" :for="`branch-${branch}`">
+                          <i class="fas fa-code-branch text-primary me-1"></i>{{ branch }}
+                        </label>
+                      </div>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                      <i class="fas fa-info-circle"></i> 只有选中的分支推送时才会触发构建。如果未选择任何分支，则不会触发。
                     </small>
                   </div>
                 
@@ -1294,6 +1355,76 @@
     </div>
     <div v-if="showWebhookModal" class="modal-backdrop fade show" style="z-index: 1045;"></div>
 
+    <!-- 手动触发分支选择模态框 -->
+    <div v-if="showManualRunModal" class="modal fade show" style="display: block; z-index: 1050;" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-play text-success"></i> 手动触发流水线 - {{ manualRunPipeline?.name }}
+            </h5>
+            <button type="button" class="btn-close" @click="closeManualRunModal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">
+                <strong>选择分支</strong>
+                <span class="text-danger">*</span>
+              </label>
+              <div v-if="loadingManualRunBranches" class="alert alert-info py-2">
+                <span class="spinner-border spinner-border-sm me-2"></span>
+                <i class="fas fa-sync-alt fa-spin"></i> 正在加载分支列表...
+              </div>
+              <div v-else-if="manualRunBranches.length === 0" class="alert alert-warning py-2">
+                <i class="fas fa-exclamation-triangle"></i> 未找到可用分支，请点击刷新按钮重新加载
+              </div>
+              <div v-else class="input-group">
+                <select 
+                  v-model="manualRunSelectedBranch" 
+                  class="form-select"
+                  required
+                >
+                  <option value="">-- 请选择分支 --</option>
+                  <option 
+                    v-for="branch in manualRunBranches" 
+                    :key="branch"
+                    :value="branch"
+                  >
+                    {{ branch }}
+                  </option>
+                </select>
+                <button 
+                  class="btn btn-outline-secondary" 
+                  type="button"
+                  @click="refreshManualRunBranches"
+                  :disabled="loadingManualRunBranches"
+                  title="刷新分支列表"
+                >
+                  <i v-if="loadingManualRunBranches" class="fas fa-spinner fa-spin"></i>
+                  <i v-else class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+              <small class="text-muted d-block mt-1">
+                <i class="fas fa-info-circle"></i> 选择要用于构建的分支，点击刷新按钮可重新加载分支列表
+              </small>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="closeManualRunModal">取消</button>
+            <button 
+              type="button" 
+              class="btn btn-success btn-sm" 
+              @click="confirmManualRun"
+              :disabled="!manualRunSelectedBranch"
+            >
+              <i class="fas fa-play"></i> 确认触发
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showManualRunModal" class="modal-backdrop fade show" style="z-index: 1045;"></div>
+
     <!-- 日志查看模态框 -->
     <div v-if="showLogModal" class="modal fade show d-block" style="z-index: 1070;" tabindex="-1">
       <div class="modal-dialog modal-xl" style="max-width: 90%;">
@@ -1434,7 +1565,7 @@
                     <th style="width: 13%;">镜像</th>
                     <th style="width: 12%;">触发时间</th>
                     <th style="width: 12%;">完成时间</th>
-                    <th style="width: 18%;">分支/信息</th>
+                    <th style="width: 18%;">分支/Tag</th>
                     <th style="width: 16%;">操作</th>
                   </tr>
                 </thead>
@@ -1490,17 +1621,46 @@
                     </td>
                     <td>
                       <div v-if="task.trigger_info">
-                        <span v-if="task.trigger_info.branch" class="badge bg-secondary mb-1">
-                          {{ task.trigger_info.branch }}
-                        </span>
-                        <div v-if="task.trigger_info.platform" class="text-muted small">
-                          {{ task.trigger_info.platform }}
+                        <!-- 分支显示 -->
+                        <div v-if="task.trigger_info.branch" class="mb-1">
+                          <span class="badge bg-primary">
+                            <i class="fas fa-code-branch"></i> 分支: {{ task.trigger_info.branch }}
+                          </span>
                         </div>
+                        <!-- Tag显示：优先显示任务的tag（每个任务对应一个tag），如果没有则显示trigger_info中的tag -->
+                        <div v-if="task.tag" class="mb-1">
+                          <span class="badge bg-info">
+                            <i class="fas fa-tag"></i> Tag: {{ task.tag }}
+                          </span>
+                        </div>
+                        <div v-else-if="task.trigger_info.tag" class="mb-1">
+                          <span class="badge bg-info">
+                            <i class="fas fa-tag"></i> Tag: {{ task.trigger_info.tag }}
+                          </span>
+                        </div>
+                        <!-- 平台信息 -->
+                        <div v-if="task.trigger_info.platform" class="text-muted small mb-1">
+                          <i class="fas fa-server"></i> {{ task.trigger_info.platform }}
+                        </div>
+                        <!-- 提交信息 -->
                         <div v-if="task.trigger_info.last_commit" class="text-muted small text-truncate" :title="task.trigger_info.last_commit">
-                          {{ task.trigger_info.last_commit.substring(0, 40) }}{{ task.trigger_info.last_commit.length > 40 ? '...' : '' }}
+                          <i class="fas fa-hashtag"></i> {{ task.trigger_info.last_commit.substring(0, 40) }}{{ task.trigger_info.last_commit.length > 40 ? '...' : '' }}
                         </div>
                       </div>
-                      <small v-else class="text-muted">-</small>
+                      <!-- 如果没有trigger_info，尝试显示任务的基本信息 -->
+                      <div v-else>
+                        <div v-if="task.branch" class="mb-1">
+                          <span class="badge bg-primary">
+                            <i class="fas fa-code-branch"></i> 分支: {{ task.branch }}
+                          </span>
+                        </div>
+                        <div v-if="task.tag" class="mb-1">
+                          <span class="badge bg-info">
+                            <i class="fas fa-tag"></i> Tag: {{ task.tag }}
+                          </span>
+                        </div>
+                        <small v-if="!task.branch && !task.tag" class="text-muted">-</small>
+                      </div>
                     </td>
                     <td>
                       <button 
@@ -2024,7 +2184,7 @@ import axios from 'axios'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { getDockerfilesWithCache } from '../utils/dockerfileCache.js'
-import { clearGitCache, getGitCache, getGitInfoWithCache } from '../utils/gitCache.js'
+import { clearGitCache, getGitCache, getGitInfoWithCache, setGitCache } from '../utils/gitCache.js'
 import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js'
 
 const pipelines = ref([])
@@ -2043,6 +2203,11 @@ const showModal = ref(false)
 const showWebhookModal = ref(false)
 const showHistoryModal = ref(false)
 const showMultiServiceConfigModal = ref(false)
+const showManualRunModal = ref(false)  // 手动触发分支选择模态框
+const manualRunPipeline = ref(null)  // 要手动触发的流水线
+const manualRunSelectedBranch = ref('')  // 手动触发选择的分支
+const manualRunBranches = ref([])  // 手动触发可用的分支列表
+const loadingManualRunBranches = ref(false)  // 正在加载分支列表
 const multiServiceConfigPipeline = ref(null)
 const savingMultiServiceConfig = ref(false)
 const multiServiceFormData = ref({
@@ -2142,6 +2307,7 @@ const formData = ref({
   webhook_token: '',  // Webhook Token（用于 URL）
   webhook_secret: '',  // Webhook 密钥
   webhook_branch_strategy: 'use_push',  // Webhook分支策略
+  webhook_allowed_branches: [],  // 允许触发的分支列表（用于选择分支触发策略）
   branch_tag_mapping: [],  // 分支标签映射
   enabled: true,
   trigger_schedule: false,  // 是否启用定时触发
@@ -2588,6 +2754,7 @@ function showCreateModal() {
     push: false,
     webhook_secret: '',
     webhook_branch_strategy: 'use_push',
+    webhook_allowed_branches: [],
     branch_tag_mapping: [],
     enabled: true,
     trigger_schedule: false,
@@ -2655,6 +2822,7 @@ function editPipeline(pipeline) {
     webhook_token: pipeline.webhook_token || '',
     webhook_secret: pipeline.webhook_secret || '',
     webhook_branch_strategy: getWebhookBranchStrategy(pipeline),
+    webhook_allowed_branches: pipeline.webhook_allowed_branches ? [...pipeline.webhook_allowed_branches] : [],
     branch_tag_mapping: pipeline.branch_tag_mapping ? Object.entries(pipeline.branch_tag_mapping).map(([branch, tag]) => ({ 
       branch, 
       tag: Array.isArray(tag) ? tag.join(',') : tag  // 如果是数组，转换为逗号分隔的字符串
@@ -2723,8 +2891,32 @@ function removeBranchTagMapping(index) {
   formData.value.branch_tag_mapping.splice(index, 1)
 }
 
+// 全选/取消全选分支
+function toggleAllBranches(event) {
+  if (event.target.checked) {
+    // 全选：添加所有分支
+    formData.value.webhook_allowed_branches = [...(branchesAndTags.value.branches || [])]
+  } else {
+    // 取消全选：清空选择
+    formData.value.webhook_allowed_branches = []
+  }
+}
+
+// 计算是否全选分支
+const isAllBranchesSelected = computed(() => {
+  const branches = branchesAndTags.value.branches || []
+  if (branches.length === 0) return false
+  const selected = formData.value.webhook_allowed_branches || []
+  return branches.length === selected.length && branches.every(branch => selected.includes(branch))
+})
+
 // 根据旧配置获取新的分支策略
 function getWebhookBranchStrategy(pipeline) {
+  // 如果流水线有webhook_allowed_branches字段且不为空，说明是选择分支触发策略
+  if (pipeline.webhook_allowed_branches && Array.isArray(pipeline.webhook_allowed_branches) && pipeline.webhook_allowed_branches.length > 0) {
+    return 'select_branches'
+  }
+  
   const webhook_branch_filter = pipeline.webhook_branch_filter || false
   const webhook_use_push_branch = pipeline.webhook_use_push_branch !== false  // 默认为true
   
@@ -2773,6 +2965,15 @@ async function savePipeline() {
       webhook_use_push_branch = true
     } else if (formData.value.webhook_branch_strategy === 'use_push') {
       webhook_branch_filter = false
+      webhook_use_push_branch = true
+    } else if (formData.value.webhook_branch_strategy === 'select_branches') {
+      // 选择分支触发策略：验证是否选择了分支
+      if (!formData.value.webhook_allowed_branches || formData.value.webhook_allowed_branches.length === 0) {
+        alert('请至少选择一个允许触发的分支')
+        saving.value = false
+        return
+      }
+      webhook_branch_filter = true
       webhook_use_push_branch = true
     } else {  // use_configured
       webhook_branch_filter = false
@@ -2920,6 +3121,10 @@ async function savePipeline() {
         : null,
       webhook_secret: formData.value.webhook_secret && formData.value.webhook_secret.trim() 
         ? formData.value.webhook_secret.trim() 
+        : null,
+      // 选择分支触发：只在策略为select_branches时传递
+      webhook_allowed_branches: formData.value.webhook_branch_strategy === 'select_branches' 
+        ? (formData.value.webhook_allowed_branches || [])
         : null
     }
     // 移除webhook_branch_strategy，因为后端不需要这个字段
@@ -4200,52 +4405,229 @@ async function runPipeline(pipeline) {
   
   // 设置防抖定时器（500ms）
   debounceTimers.value[pipelineId] = setTimeout(async () => {
-    // 显示确认对话框，提示排队信息
-    const queueInfo = pipeline.queue_length > 0 ? `\n当前已有 ${pipeline.queue_length} 个任务在排队` : ''
-    const runningInfo = (pipeline.current_task_status === 'running' || pipeline.current_task_status === 'pending') ? '\n当前有任务正在运行，新任务将加入队列' : ''
+    // 保存要触发的流水线
+    manualRunPipeline.value = pipeline
+    manualRunSelectedBranch.value = pipeline.branch || ''  // 默认使用配置的分支
     
-    if (!confirm(`确定要运行流水线 "${pipeline.name}" 吗？${queueInfo}${runningInfo}`)) {
-      delete debounceTimers.value[pipelineId]
-      return
+    // 加载可用分支列表
+    await loadBranchesForManualRun(pipeline)
+    
+    // 显示分支选择模态框
+    showManualRunModal.value = true
+    
+    delete debounceTimers.value[pipelineId]
+  }, 500)
+}
+
+// 加载手动触发可用的分支列表
+async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
+  loadingManualRunBranches.value = true
+  
+  try {
+    // 如果不是强制刷新，优先从gitSources中获取分支列表
+    if (!forceRefresh) {
+      if (pipeline.source_id) {
+        const source = gitSources.value.find(s => s.source_id === pipeline.source_id)
+        if (source && source.branches && source.branches.length > 0) {
+          manualRunBranches.value = [...source.branches]
+          loadingManualRunBranches.value = false
+          return
+        }
+      }
+      
+      // 如果没有source_id，尝试通过git_url查找
+      if (pipeline.git_url) {
+        const source = gitSources.value.find(s => s.git_url === pipeline.git_url)
+        if (source && source.branches && source.branches.length > 0) {
+          manualRunBranches.value = [...source.branches]
+          loadingManualRunBranches.value = false
+          return
+        }
+      }
     }
     
-    running.value = pipelineId
-    try {
-      const res = await axios.post(`/api/pipelines/${pipelineId}/run`)
-      
-      // 检查任务状态
-      if (res.data.status === 'queued') {
-        // 任务已加入队列
-        const queueInfo = res.data.queue_length ? `（队列位置: ${res.data.queue_length}）` : ''
-        alert(`流水线已加入队列！${queueInfo}\n分支: ${res.data.branch || '默认'}`)
-        // 发送事件通知任务管理页面刷新（队列中的任务也会创建pending状态的任务）
-        if (res.data.task_id) {
-          window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
+    // 强制刷新或缓存中没有时，从API获取分支列表
+    if (pipeline.source_id) {
+      // 强制刷新时，添加refresh参数从Git仓库拉取最新分支
+      const params = forceRefresh ? { refresh: true } : {}
+      const res = await axios.get(`/api/git-sources/${pipeline.source_id}/branches`, { params })
+      if (res.data && res.data.branches) {
+        manualRunBranches.value = res.data.branches
+        // 更新gitSources中的分支列表
+        const source = gitSources.value.find(s => s.source_id === pipeline.source_id)
+        if (source) {
+          source.branches = res.data.branches
         }
-      } else if (res.data.task_id) {
-        // 任务立即运行
-        alert(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${res.data.branch || '默认'}`)
-        // 发送事件通知任务管理页面刷新
+      }
+    } else if (pipeline.git_url) {
+      // 如果没有source_id但有git_url，尝试通过git_url获取
+      try {
+        const params = forceRefresh ? { git_url: pipeline.git_url, refresh: true } : { git_url: pipeline.git_url }
+        const res = await axios.get('/api/git-sources', { params })
+        if (res.data && res.data.length > 0 && res.data[0].branches) {
+          manualRunBranches.value = res.data[0].branches
+        }
+      } catch (error) {
+        console.error('通过git_url获取分支列表失败:', error)
+      }
+    }
+    
+    // 如果还是没有分支，至少显示配置的分支
+    if (manualRunBranches.value.length === 0 && pipeline.branch) {
+      manualRunBranches.value = [pipeline.branch]
+    }
+  } catch (error) {
+    console.error('加载分支列表失败:', error)
+    // 如果加载失败，至少显示配置的分支
+    if (pipeline.branch) {
+      manualRunBranches.value = [pipeline.branch]
+    }
+  } finally {
+    loadingManualRunBranches.value = false
+  }
+}
+
+// 刷新手动触发的分支列表（从Git仓库拉取最新分支）
+async function refreshManualRunBranches() {
+  if (!manualRunPipeline.value) {
+    return
+  }
+  
+  loadingManualRunBranches.value = true
+  
+  try {
+    const pipeline = manualRunPipeline.value
+    
+    // 使用 verify-git-repo API 获取最新分支列表（强制刷新）
+    const gitUrl = pipeline.git_url
+    const sourceId = pipeline.source_id || null
+    
+    // 清除缓存，强制从Git仓库拉取
+    if (sourceId) {
+      clearGitCache(gitUrl, sourceId)
+    } else {
+      clearGitCache(gitUrl, null)
+    }
+    
+    // 调用 verify-git-repo API 获取最新分支列表
+    const response = await axios.post('/api/verify-git-repo', {
+      git_url: gitUrl,
+      source_id: sourceId
+    })
+    
+    if (response.data && response.data.branches) {
+      manualRunBranches.value = response.data.branches || []
+      
+      // 更新gitSources中的分支列表缓存
+      if (sourceId) {
+        const source = gitSources.value.find(s => s.source_id === sourceId)
+        if (source) {
+          source.branches = response.data.branches
+          source.tags = response.data.tags || []
+          source.default_branch = response.data.default_branch || null
+        }
+      }
+      
+      // 更新本地缓存
+      if (response.data.branches || response.data.tags) {
+        setGitCache(gitUrl, sourceId, {
+          branches: response.data.branches || [],
+          tags: response.data.tags || [],
+          default_branch: response.data.default_branch || null
+        })
+      }
+    } else {
+      // 如果API返回没有分支，至少显示配置的分支
+      if (pipeline.branch) {
+        manualRunBranches.value = [pipeline.branch]
+      } else {
+        manualRunBranches.value = []
+      }
+    }
+  } catch (error) {
+    console.error('刷新分支列表失败:', error)
+    const errorMsg = error.response?.data?.detail || error.message || '刷新分支列表失败，请稍后重试'
+    alert(errorMsg)
+    
+    // 如果刷新失败，至少显示配置的分支
+    if (manualRunPipeline.value && manualRunPipeline.value.branch) {
+      manualRunBranches.value = [manualRunPipeline.value.branch]
+    } else {
+      manualRunBranches.value = []
+    }
+  } finally {
+    loadingManualRunBranches.value = false
+  }
+}
+
+// 确认手动触发
+async function confirmManualRun() {
+  if (!manualRunSelectedBranch.value) {
+    alert('请选择分支')
+    return
+  }
+  
+  const pipeline = manualRunPipeline.value
+  const pipelineId = pipeline.pipeline_id
+  
+  // 显示确认对话框，提示排队信息
+  const queueInfo = pipeline.queue_length > 0 ? `\n当前已有 ${pipeline.queue_length} 个任务在排队` : ''
+  const runningInfo = (pipeline.current_task_status === 'running' || pipeline.current_task_status === 'pending') ? '\n当前有任务正在运行，新任务将加入队列' : ''
+  
+  if (!confirm(`确定要运行流水线 "${pipeline.name}" 吗？\n分支: ${manualRunSelectedBranch.value}${queueInfo}${runningInfo}`)) {
+    return
+  }
+  
+  // 关闭模态框
+  closeManualRunModal()
+  
+  running.value = pipelineId
+  try {
+    // 调用API时传递分支参数
+    const res = await axios.post(`/api/pipelines/${pipelineId}/run`, {
+      branch: manualRunSelectedBranch.value
+    })
+    
+    // 检查任务状态
+    if (res.data.status === 'queued') {
+      // 任务已加入队列
+      const queueInfo = res.data.queue_length ? `（队列位置: ${res.data.queue_length}）` : ''
+      alert(`流水线已加入队列！${queueInfo}\n分支: ${res.data.branch || manualRunSelectedBranch.value}`)
+      // 发送事件通知任务管理页面刷新（队列中的任务也会创建pending状态的任务）
+      if (res.data.task_id) {
         window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
       }
-      // 刷新流水线列表（更新触发次数和时间）
-      loadPipelines()
-    } catch (error) {
-      console.error('运行流水线失败:', error)
-      const errorMsg = error.response?.data?.detail || '运行流水线失败'
-      
-      // 如果是409冲突（已有任务运行），说明任务已加入队列
-      if (error.response?.status === 409) {
-        alert(`流水线已加入队列！\n${errorMsg}`)
-        loadPipelines()
-      } else {
-        alert(errorMsg)
-      }
-    } finally {
-      running.value = null
-      delete debounceTimers.value[pipelineId]
+    } else if (res.data.task_id) {
+      // 任务立即运行
+      alert(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${res.data.branch || manualRunSelectedBranch.value}`)
+      // 发送事件通知任务管理页面刷新
+      window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
     }
-  }, 500)
+    // 刷新流水线列表（更新触发次数和时间）
+    loadPipelines()
+  } catch (error) {
+    console.error('运行流水线失败:', error)
+    const errorMsg = error.response?.data?.detail || '运行流水线失败'
+    
+    // 如果是409冲突（已有任务运行），说明任务已加入队列
+    if (error.response?.status === 409) {
+      alert(`流水线已加入队列！\n${errorMsg}`)
+      loadPipelines()
+    } else {
+      alert(errorMsg)
+    }
+  } finally {
+    running.value = null
+  }
+}
+
+// 关闭手动触发模态框
+function closeManualRunModal() {
+  showManualRunModal.value = false
+  manualRunPipeline.value = null
+  manualRunSelectedBranch.value = ''
+  manualRunBranches.value = []
+  loadingManualRunBranches.value = false
 }
 
 function showWebhookUrl(pipeline) {

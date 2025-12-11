@@ -3891,13 +3891,44 @@ async def get_pipeline_tasks(
         if not pipeline:
             raise HTTPException(status_code=404, detail="流水线不存在")
 
-        # 获取任务历史
-        task_history = pipeline.get("task_history", [])
+        # 从PipelineTaskHistory表获取任务历史
+        from backend.models import PipelineTaskHistory
+        from backend.database import get_db_session
+        from datetime import datetime
+
+        db = get_db_session()
+        try:
+            history_records = (
+                db.query(PipelineTaskHistory)
+                .filter(PipelineTaskHistory.pipeline_id == pipeline_id)
+                .order_by(PipelineTaskHistory.triggered_at.desc())
+                .all()
+            )
+
+            # 转换为字典列表
+            task_history = []
+            for record in history_records:
+                task_history.append(
+                    {
+                        "task_id": record.task_id,
+                        "trigger_source": record.trigger_source,
+                        "triggered_at": (
+                            record.triggered_at.isoformat()
+                            if isinstance(record.triggered_at, datetime)
+                            else record.triggered_at
+                        ),
+                        "trigger_info": record.trigger_info or {},
+                    }
+                )
+        finally:
+            db.close()
 
         # 获取所有任务并补充详细信息
         build_manager = BuildManager()
         tasks_with_details = []
+        task_ids_from_history = set()  # 用于去重
 
+        # 处理历史记录中的任务
         for history_entry in task_history:
             task_id = history_entry.get("task_id")
             if not task_id:
@@ -3906,6 +3937,8 @@ async def get_pipeline_tasks(
             # 应用过滤
             if trigger_source and history_entry.get("trigger_source") != trigger_source:
                 continue
+
+            task_ids_from_history.add(task_id)
 
             # 获取任务详情
             task = build_manager.task_manager.get_task(task_id)
@@ -3943,6 +3976,39 @@ async def get_pipeline_tasks(
             )
 
             tasks_with_details.append(task_info)
+
+        # 从任务表中查询所有关联该流水线的任务（补充历史记录中没有的任务）
+        all_tasks = build_manager.task_manager.list_tasks(task_type="build_from_source")
+        for task in all_tasks:
+            task_pipeline_id = task.get("pipeline_id")
+            if task_pipeline_id == pipeline_id:
+                task_id = task.get("task_id")
+                # 如果任务不在历史记录中，添加到结果中
+                if task_id and task_id not in task_ids_from_history:
+                    # 应用状态过滤
+                    if status and task.get("status") != status:
+                        continue
+
+                    # 应用触发来源过滤（如果没有trigger_source，默认为unknown）
+                    task_trigger_source = task.get("trigger_source", "unknown")
+                    if trigger_source and task_trigger_source != trigger_source:
+                        continue
+
+                    task_info = {
+                        "task_id": task_id,
+                        "status": task.get("status"),
+                        "created_at": task.get("created_at"),
+                        "completed_at": task.get("completed_at"),
+                        "image": task.get("image"),
+                        "tag": task.get("tag"),
+                        "error": task.get("error"),
+                        "trigger_source": task_trigger_source,
+                        "triggered_at": task.get(
+                            "created_at"
+                        ),  # 使用创建时间作为触发时间
+                        "trigger_info": task.get("trigger_info", {}),
+                    }
+                    tasks_with_details.append(task_info)
 
         # 按触发时间倒序排列
         tasks_with_details.sort(key=lambda x: x.get("triggered_at", ""), reverse=True)

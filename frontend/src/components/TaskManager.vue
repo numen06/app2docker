@@ -132,7 +132,7 @@
           <tr>
             <th style="width: 100px;">类型</th>
             <th style="width: 180px;">镜像/任务</th>
-            <th style="width: 80px;">标签</th>
+            <th style="width: 120px;">分支/Tag</th>
             <th style="width: 90px;">来源</th>
             <th style="width: 100px;">状态</th>
             <th style="width: 140px;">创建时间</th>
@@ -184,7 +184,24 @@
                 </span>
               </div>
             </td>
-            <td>{{ task.tag || '-' }}</td>
+            <td>
+              <div>
+                <!-- 分支显示 -->
+                <div v-if="task.branch" class="mb-1">
+                  <span class="badge bg-primary" style="font-size: 0.75rem;">
+                    <i class="fas fa-code-branch"></i> {{ task.branch }}
+                  </span>
+                </div>
+                <!-- Tag显示 -->
+                <div v-if="task.tag">
+                  <span class="badge bg-info" style="font-size: 0.75rem;">
+                    <i class="fas fa-tag"></i> {{ task.tag }}
+                  </span>
+                </div>
+                <!-- 如果都没有，显示占位符 -->
+                <small v-if="!task.branch && !task.tag" class="text-muted">-</small>
+              </div>
+            </td>
             <td>
               <span v-if="task.source === '流水线'" class="badge bg-primary">
                 <i class="fas fa-project-diagram"></i> 流水线
@@ -440,12 +457,12 @@
 </template>
 
 <script setup>
-import axios from 'axios'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Codemirror } from 'vue-codemirror'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { StreamLanguage } from '@codemirror/language'
 import { javascript } from '@codemirror/legacy-modes/mode/javascript'
+import { oneDark } from '@codemirror/theme-one-dark'
+import axios from 'axios'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { Codemirror } from 'vue-codemirror'
 import TaskLogModal from './TaskLogModal.vue'
 
 const tasks = ref([])
