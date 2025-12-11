@@ -272,9 +272,19 @@ function stopLogPolling() {
   }
 }
 
+// 禁用/启用 body 滚动
+function lockBodyScroll() {
+  document.body.style.overflow = 'hidden'
+}
+
+function unlockBodyScroll() {
+  document.body.style.overflow = ''
+}
+
 // 关闭模态框
 function close() {
   stopLogPolling()
+  unlockBodyScroll()
   emit('update:modelValue', false)
 }
 
@@ -366,13 +376,15 @@ function loadLogsIfNeeded() {
 watch(() => props.modelValue, (newValue) => {
   console.log('TaskLogModal modelValue 变化', { modelValue: newValue, task: props.task })
   if (newValue) {
-    // 模态框打开时，加载日志
+    // 模态框打开时，加载日志并锁定 body 滚动
+    lockBodyScroll()
     loadLogsIfNeeded()
   } else {
-    // 模态框关闭时，清理
+    // 模态框关闭时，清理并恢复 body 滚动
     console.log('关闭日志模态框')
     stopLogPolling()
     logs.value = ''
+    unlockBodyScroll()
   }
 })
 
@@ -403,6 +415,8 @@ watch(() => props.task?.status, (newStatus) => {
 // 组件卸载时清理定时器
 onUnmounted(() => {
   stopLogPolling()
+  // 确保恢复 body 滚动
+  unlockBodyScroll()
 })
 </script>
 
@@ -413,6 +427,11 @@ onUnmounted(() => {
 
 .modal-backdrop.show {
   opacity: 0.5;
+}
+
+/* 防止滚动穿透 */
+.modal {
+  overflow: hidden;
 }
 </style>
 

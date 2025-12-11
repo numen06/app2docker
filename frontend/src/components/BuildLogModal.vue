@@ -236,6 +236,7 @@ function scrollToBottom() {
 }
 
 function close() {
+  unlockBodyScroll()
   emit('update:modelValue', false)
 }
 
@@ -250,15 +251,39 @@ const handleAddLog = (e) => {
   addLog(e.detail.text, e.detail.level)
 }
 
+// 禁用/启用 body 滚动
+function lockBodyScroll() {
+  document.body.style.overflow = 'hidden'
+}
+
+function unlockBodyScroll() {
+  document.body.style.overflow = ''
+}
+
+// 监听 modelValue 变化，控制 body 滚动
+watch(() => props.modelValue, (newValue) => {
+  if (newValue) {
+    lockBodyScroll()
+  } else {
+    unlockBodyScroll()
+  }
+})
+
 // 监听全局事件
 onMounted(() => {
   window.addEventListener('show-build-log', handleShowBuildLog)
   window.addEventListener('add-log', handleAddLog)
+  // 如果组件挂载时模态框已经打开，锁定滚动
+  if (props.modelValue) {
+    lockBodyScroll()
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('show-build-log', handleShowBuildLog)
   window.removeEventListener('add-log', handleAddLog)
+  // 组件卸载时确保恢复滚动
+  unlockBodyScroll()
 })
 
 defineExpose({
@@ -274,6 +299,11 @@ defineExpose({
 
 .modal-backdrop.show {
   opacity: 0.5;
+}
+
+/* 防止滚动穿透 */
+.modal {
+  overflow: hidden;
 }
 
 .log-toolbar {
