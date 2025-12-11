@@ -350,9 +350,9 @@
                   <button
                     class="btn btn-outline-secondary"
                     type="button"
-                    @click="scanDockerfiles"
+                    @click="scanDockerfiles(true)"
                     :disabled="scanningDockerfiles || (!buildConfig.branch && !branchesAndTags.default_branch)"
-                    title="刷新 Dockerfile 列表"
+                    title="刷新 Dockerfile 列表（强制刷新）"
                   >
                     <i v-if="scanningDockerfiles" class="fas fa-spinner fa-spin"></i>
                     <i v-else class="fas fa-sync-alt"></i>
@@ -1599,6 +1599,7 @@
 import axios from "axios";
 import { computed, onMounted, ref, watch } from "vue";
 import { getGitInfoWithCache, getGitCache, clearGitCache } from '../utils/gitCache.js';
+import { getDockerfilesWithCache } from '../utils/dockerfileCache.js';
 
 const currentStep = ref(1);
 const building = ref(false);
@@ -2226,16 +2227,26 @@ async function scanDockerfiles() {
       return;
     }
 
-    // 调用 API 扫描 Dockerfile
-    const response = await axios.post('/api/git-sources/scan-dockerfiles', {
-      git_url: gitUrl,
-      branch: branch,
-      source_id: buildConfig.value.sourceId
-    });
+    // 使用缓存机制获取 Dockerfile 列表
+    const dockerfilePaths = await getDockerfilesWithCache(
+      async () => {
+        // 调用 API 扫描 Dockerfile
+        const response = await axios.post('/api/git-sources/scan-dockerfiles', {
+          git_url: gitUrl,
+          branch: branch,
+          source_id: buildConfig.value.sourceId
+        });
+        return response;
+      },
+      gitUrl,
+      branch,
+      buildConfig.value.sourceId,
+      forceRefresh // 根据参数决定是否强制刷新
+    );
 
-    if (response.data && response.data.dockerfiles) {
+    if (dockerfilePaths && dockerfilePaths.length > 0) {
       // 保存完整路径信息（包含路径和文件名）
-      const dockerfileList = response.data.dockerfiles.map(path => {
+      const dockerfileList = dockerfilePaths.map(path => {
         const parts = path.split('/');
         return {
           path: path,  // 完整路径，如 "frontend/Dockerfile"
@@ -2533,21 +2544,39 @@ function getDefaultImagePrefix() {
 
 // 获取服务的完整镜像名（自定义或前缀 + 服务名称）
 function getServiceFullImageName(serviceName) {
+  if (!serviceName) {
+    const config = getServiceConfig(serviceName);
+    return config.customImageName?.trim() || getDefaultImagePrefix();
+  }
+  
   const config = getServiceConfig(serviceName);
   // 如果用户自定义了镜像名，使用自定义的
   if (config.customImageName && config.customImageName.trim()) {
     return config.customImageName.trim();
   }
   // 否则使用前缀+服务名称拼接
-  const prefix = config.imagePrefix.trim() || getDefaultImagePrefix();
+  let prefix = (config.imagePrefix?.trim() || getDefaultImagePrefix()).trim();
+  // 去除前缀末尾的斜杠，避免出现双斜杠
+  prefix = prefix.replace(/\/+$/, '');
+  // 确保拼接时只有一个斜杠
   return `${prefix}/${serviceName}`;
 }
 
 // 获取服务镜像名的默认值（拼接结果，用于占位符）
 function getServiceDefaultImageName(serviceName) {
+  if (!serviceName) {
+    return buildConfig.value.imagePrefix?.trim() || getDefaultImagePrefix();
+  }
+  
   // 使用全局镜像前缀，而不是每个服务的单独前缀
-  const prefix =
-    buildConfig.value.imagePrefix.trim() || getDefaultImagePrefix();
+  let prefix = (buildConfig.value.imagePrefix?.trim() || getDefaultImagePrefix()).trim();
+  // 去除前缀末尾的斜杠，避免出现双斜杠
+  prefix = prefix.replace(/\/+$/, '');
+  // 如果前缀已经以服务名结尾，直接返回前缀（避免重复拼接）
+  if (prefix.endsWith(`/${serviceName}`) || prefix === serviceName) {
+    return prefix;
+  }
+  // 确保拼接时只有一个斜杠
   return `${prefix}/${serviceName}`;
 }
 

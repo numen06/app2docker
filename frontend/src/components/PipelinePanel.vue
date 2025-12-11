@@ -617,9 +617,9 @@
                             <button 
                               class="btn btn-outline-secondary btn-sm" 
                               type="button"
-                              @click="scanDockerfiles"
+                              @click="scanDockerfiles(true, true)"
                               :disabled="scanningDockerfiles || (!formData.branch && !branchesAndTags.default_branch)"
-                              title="刷新 Dockerfile 列表"
+                              title="刷新 Dockerfile 列表（强制刷新）"
                             >
                               <i v-if="scanningDockerfiles" class="fas fa-spinner fa-spin"></i>
                               <i v-else class="fas fa-sync-alt"></i>
@@ -1624,6 +1624,7 @@
 <script setup>
 import axios from 'axios'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { getDockerfilesWithCache } from '../utils/dockerfileCache.js'
 import { clearGitCache, getGitCache, getGitInfoWithCache } from '../utils/gitCache.js'
 
 const pipelines = ref([])
@@ -2466,7 +2467,7 @@ async function refreshBranches(forceRefresh = true) {
 }
 
 // 扫描项目中的 Dockerfile
-async function scanDockerfiles(keepCurrentSelection = true) {
+async function scanDockerfiles(keepCurrentSelection = true, forceRefresh = false) {
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2316',message:'scanDockerfiles started',data:{source_id:formData.value.source_id,git_url:formData.value.git_url,dockerfile_name:formData.value.dockerfile_name,branch:formData.value.branch,keep_current_selection:keepCurrentSelection,editing:!!editingPipeline.value},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
@@ -2510,16 +2511,26 @@ async function scanDockerfiles(keepCurrentSelection = true) {
       return
     }
 
-    // 调用 API 扫描 Dockerfile
-    const response = await axios.post('/api/git-sources/scan-dockerfiles', {
-      git_url: gitUrl,
-      branch: branch,
-      source_id: sourceId || null
-    })
+    // 使用缓存机制获取 Dockerfile 列表
+    const dockerfilePaths = await getDockerfilesWithCache(
+      async () => {
+        // 调用 API 扫描 Dockerfile
+        const response = await axios.post('/api/git-sources/scan-dockerfiles', {
+          git_url: gitUrl,
+          branch: branch,
+          source_id: sourceId || null
+        })
+        return response
+      },
+      gitUrl,
+      branch,
+      sourceId || null,
+      forceRefresh // 根据参数决定是否强制刷新
+    )
 
-    if (response.data && response.data.dockerfiles) {
+    if (dockerfilePaths && dockerfilePaths.length > 0) {
       // 保存完整路径信息（包含路径和文件名）
-      const dockerfileList = response.data.dockerfiles.map(path => {
+      const dockerfileList = dockerfilePaths.map(path => {
         const parts = path.split('/')
         return {
           path: path,  // 完整路径，如 "frontend/Dockerfile"
@@ -2947,12 +2958,28 @@ function getServiceConfig(serviceName) {
 
 // 获取服务的默认镜像名称（基于全局镜像名称前缀 + 服务名）
 function getServiceDefaultImageName(serviceName) {
-  const prefix = formData.value.image_name || 'myapp/demo'
-  // 如果前缀已经包含服务名，直接返回前缀
-  if (prefix.endsWith(`/${serviceName}`) || prefix === serviceName) {
+  if (!serviceName) {
+    return formData.value.image_name || 'myapp/demo'
+  }
+  
+  let prefix = formData.value.image_name || 'myapp/demo'
+  
+  // 去除前缀末尾的斜杠，避免出现双斜杠
+  prefix = prefix.replace(/\/+$/, '')
+  
+  // 如果前缀已经以服务名结尾，直接返回前缀（避免重复拼接）
+  // 检查格式：prefix/serviceName 或 prefix//serviceName 等
+  const normalizedPrefix = prefix.replace(/\/+$/, '')
+  if (normalizedPrefix.endsWith(`/${serviceName}`) || normalizedPrefix === serviceName) {
+    return normalizedPrefix
+  }
+  
+  // 如果前缀就是服务名本身，直接返回
+  if (prefix === serviceName) {
     return prefix
   }
-  // 否则拼接服务名
+  
+  // 否则拼接服务名（确保只有一个斜杠）
   return `${prefix}/${serviceName}`
 }
 
