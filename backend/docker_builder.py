@@ -275,14 +275,13 @@ class DockerBuilder(ABC):
                 dockerfile_rel = os.path.relpath(dockerfile, build_context)
             else:
                 dockerfile_rel = dockerfile
-            
+
             # 验证 Dockerfile 文件是否存在
             dockerfile_full_path = os.path.join(build_context, dockerfile_rel)
             if not os.path.exists(dockerfile_full_path):
                 raise RuntimeError(
                     f"Dockerfile 不存在: {dockerfile_rel} (完整路径: {dockerfile_full_path})"
                 )
-            
             # 如果文件名不是默认的 "Dockerfile"，使用 --file 参数指定
             # 如果文件名是 "Dockerfile"，也可以明确指定，避免 buildx 静默失败
             if dockerfile_rel != "Dockerfile":
@@ -355,8 +354,12 @@ class DockerBuilder(ABC):
 
         # 打印完整的构建命令，方便排查问题
         cmd_str = " ".join(
-            f'"{arg}"' if " " in str(arg) or any(c in str(arg) for c in ["&", "|", ";", "<", ">", "(", ")"]) 
-            else str(arg) 
+            (
+                f'"{arg}"'
+                if " " in str(arg)
+                or any(c in str(arg) for c in ["&", "|", ";", "<", ">", "(", ")"])
+                else str(arg)
+            )
             for arg in cmd
         )
         print(f"🔧 执行 Docker 构建命令:")
