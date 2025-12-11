@@ -1635,6 +1635,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { getDockerfilesWithCache } from '../utils/dockerfileCache.js'
 import { clearGitCache, getGitCache, getGitInfoWithCache } from '../utils/gitCache.js'
+import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js'
 
 const pipelines = ref([])
 const templates = ref([])
@@ -2717,15 +2718,31 @@ async function loadServicesInternal(isDockerfileChanged = false) {
   try {
     if (formData.value.use_project_dockerfile) {
       // 使用项目 Dockerfile
-      const payload = {
-        git_url: formData.value.git_url,
-        branch: formData.value.branch || null,
-        dockerfile_name: formData.value.dockerfile_name || 'Dockerfile',
-        source_id: formData.value.source_id || null
-      }
-      const res = await axios.post('/api/parse-dockerfile-services', payload)
-      if (res.data.services && res.data.services.length > 0) {
-        services.value = res.data.services
+      const gitUrl = formData.value.git_url
+      const branch = formData.value.branch || null
+      const dockerfileName = formData.value.dockerfile_name || 'Dockerfile'
+      const sourceId = formData.value.source_id || null
+      
+      // 使用缓存机制获取服务分析结果
+      const servicesList = await getServiceAnalysisWithCache(
+        async () => {
+          const payload = {
+            git_url: gitUrl,
+            branch: branch,
+            dockerfile_name: dockerfileName,
+            source_id: sourceId
+          }
+          return await axios.post('/api/parse-dockerfile-services', payload)
+        },
+        gitUrl,
+        branch || 'main',
+        dockerfileName,
+        sourceId,
+        false // 不强制刷新，使用缓存
+      )
+      
+      if (servicesList && servicesList.length > 0) {
+        services.value = servicesList
         
         // 编辑模式下：保持原有的服务选择和推送模式，只有在切换 Dockerfile 时才重新识别
         if (isEditing && !isDockerfileChanged) {

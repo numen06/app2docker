@@ -442,6 +442,7 @@ import { Codemirror } from 'vue-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { StreamLanguage } from '@codemirror/language'
 import { javascript } from '@codemirror/legacy-modes/mode/javascript'
+import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js'
 
 const props = defineProps({
   initialConfig: {
@@ -640,13 +641,28 @@ async function analyzeServices() {
       // 解析项目Dockerfile服务
       const source = gitSources.value.find(s => s.source_id === formData.value.source_id)
       if (source) {
-        const res = await axios.post('/api/parse-dockerfile-services', {
-          git_url: source.git_url,
-          branch: formData.value.branch || undefined,
-          dockerfile_name: formData.value.dockerfile_name || 'Dockerfile',
-          source_id: formData.value.source_id
-        })
-        services.value = res.data.services || []
+        const gitUrl = source.git_url
+        const branch = formData.value.branch || undefined
+        const dockerfileName = formData.value.dockerfile_name || 'Dockerfile'
+        const sourceId = formData.value.source_id
+        
+        // 使用缓存机制获取服务分析结果
+        const servicesList = await getServiceAnalysisWithCache(
+          async () => {
+            return await axios.post('/api/parse-dockerfile-services', {
+              git_url: gitUrl,
+              branch: branch,
+              dockerfile_name: dockerfileName,
+              source_id: sourceId
+            })
+          },
+          gitUrl,
+          branch || 'main',
+          dockerfileName,
+          sourceId,
+          false // 不强制刷新，使用缓存
+        )
+        services.value = servicesList || []
       }
     } else {
       // 解析模板服务

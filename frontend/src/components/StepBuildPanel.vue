@@ -1609,6 +1609,7 @@ import { StreamLanguage } from '@codemirror/language'
 import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 import { getGitInfoWithCache, getGitCache, clearGitCache } from '../utils/gitCache.js';
 import { getDockerfilesWithCache } from '../utils/dockerfileCache.js';
+import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js';
 
 const currentStep = ref(1);
 const building = ref(false);
@@ -2397,17 +2398,31 @@ async function parseDockerfileServices() {
     );
     if (!source) return;
 
-    const payload = {
-      git_url: source.git_url,
-      branch: buildConfig.value.branch || undefined,
-      dockerfile_name: buildConfig.value.dockerfileName || "Dockerfile",
-      source_id: buildConfig.value.sourceId,
-    };
+    const gitUrl = source.git_url
+    const branch = buildConfig.value.branch || undefined
+    const dockerfileName = buildConfig.value.dockerfileName || "Dockerfile"
+    const sourceId = buildConfig.value.sourceId
+    
+    // 使用缓存机制获取服务分析结果
+    const servicesList = await getServiceAnalysisWithCache(
+      async () => {
+        const payload = {
+          git_url: gitUrl,
+          branch: branch,
+          dockerfile_name: dockerfileName,
+          source_id: sourceId,
+        };
+        return await axios.post("/api/parse-dockerfile-services", payload);
+      },
+      gitUrl,
+      branch || 'main',
+      dockerfileName,
+      sourceId,
+      false // 不强制刷新，使用缓存
+    );
 
-    const res = await axios.post("/api/parse-dockerfile-services", payload);
-
-    if (res.data.services && res.data.services.length > 0) {
-      services.value = res.data.services;
+    if (servicesList && servicesList.length > 0) {
+      services.value = servicesList;
       // 项目 Dockerfile 模式总是多服务推送
       selectedServices.value = services.value.map((s) => s.name);
       buildConfig.value.selectedService = "";
