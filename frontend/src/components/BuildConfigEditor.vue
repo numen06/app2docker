@@ -50,13 +50,33 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">分支名称</label>
-              <input 
-                v-model="formData.branch" 
-                type="text" 
-                class="form-control form-control-sm"
-                placeholder="main"
-              >
-              <small class="text-muted">留空则使用默认分支</small>
+              <div class="input-group">
+                <select 
+                  v-model="formData.branch" 
+                  class="form-select form-select-sm"
+                  :disabled="loadingBranches"
+                >
+                  <option value="">-- 选择分支（留空使用默认分支） --</option>
+                  <option v-for="branch in branches" :key="branch" :value="branch">
+                    {{ branch }}
+                  </option>
+                </select>
+                <button 
+                  class="btn btn-outline-secondary btn-sm" 
+                  type="button"
+                  @click="loadBranches"
+                  :disabled="loadingBranches || !formData.git_url"
+                  title="自动加载分支列表"
+                >
+                  <i v-if="loadingBranches" class="fas fa-spinner fa-spin"></i>
+                  <i v-else class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+              <small class="text-muted">
+                <span v-if="loadingBranches">正在加载分支列表...</span>
+                <span v-else-if="branches.length > 0">已加载 {{ branches.length }} 个分支</span>
+                <span v-else>留空则使用默认分支，点击刷新按钮加载分支列表</span>
+              </small>
             </div>
             <div class="col-md-6">
               <label class="form-label">Git 数据源</label>

@@ -312,12 +312,34 @@
                 <li class="nav-item" role="presentation">
                   <button 
                     class="nav-link" 
+                    :class="{ active: activeTab === 'git' }"
+                    type="button"
+                    @click="activeTab = 'git'"
+                    id="git-tab"
+                  >
+                    <i class="fas fa-code-branch"></i> Git 配置
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button 
+                    class="nav-link" 
                     :class="{ active: activeTab === 'build' }"
                     type="button"
                     @click="activeTab = 'build'"
                     id="build-tab"
                   >
-                    <i class="fas fa-cogs"></i> 构建配置
+                    <i class="fas fa-cogs"></i> Dockerfile & 镜像配置
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button 
+                    class="nav-link" 
+                    :class="{ active: activeTab === 'resource' }"
+                    type="button"
+                    @click="activeTab = 'resource'"
+                    id="resource-tab"
+                  >
+                    <i class="fas fa-archive"></i> 资源包配置
                   </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -329,17 +351,6 @@
                     id="webhook-tab"
                   >
                     <i class="fas fa-link"></i> Webhook 设置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button 
-                    class="nav-link" 
-                    :class="{ active: activeTab === 'services' }"
-                    type="button"
-                    @click="activeTab = 'services'"
-                    id="services-tab"
-                  >
-                    <i class="fas fa-layer-group"></i> 多服务配置
                   </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -383,36 +394,133 @@
                       placeholder="流水线描述（可选）"
                     >
                   </div>
-                  <div class="mb-3">
-                    <label class="form-label">Git 数据源</label>
-                    <select 
-                      v-model="selectedSourceId" 
-                      class="form-select form-select-sm mb-2"
-                      @change="onSourceSelected"
-                    >
-                      <option value="">-- 选择数据源或手动输入 --</option>
-                      <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
-                        {{ source.name }} ({{ formatGitUrl(source.git_url) }})
-                      </option>
-                    </select>
-                    <div class="form-text small text-muted mb-2">
-                      <i class="fas fa-info-circle"></i> 
-                      可以从已保存的数据源中选择，或手动输入 Git 仓库地址
+                </div>
+
+                <!-- Git 配置 Tab -->
+                <div 
+                  class="tab-pane fade" 
+                  :class="{ 'show active': activeTab === 'git' }"
+                  role="tabpanel"
+                  id="git-pane"
+                >
+                  <div class="card">
+                    <div class="card-header bg-light">
+                      <h6 class="mb-0">
+                        <i class="fas fa-code-branch text-primary"></i> Git 配置
+                      </h6>
                     </div>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Git 仓库地址 <span class="text-danger">*</span></label>
-                    <input 
-                      v-model="formData.git_url" 
-                      type="text" 
-                      class="form-control form-control-sm" 
-                      required
-                      placeholder="https://github.com/user/repo.git"
-                    >
+                    <div class="card-body">
+                      <div class="row g-3">
+                        <div class="col-md-6">
+                          <label class="form-label">Git 数据源</label>
+                          <select v-model="formData.source_id" class="form-select form-select-sm" @change="onSourceSelected">
+                            <option value="">-- 选择数据源或手动输入 --</option>
+                            <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
+                              {{ source.name }} ({{ formatGitUrl(source.git_url) }})
+                            </option>
+                          </select>
+                          <div class="form-text small text-muted mt-1">
+                            <i class="fas fa-info-circle"></i> 
+                            可以从已保存的数据源中选择，或手动输入 Git 仓库地址
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">Git 仓库地址 <span class="text-danger">*</span></label>
+                          <input 
+                            v-model="formData.git_url" 
+                            type="text" 
+                            class="form-control form-control-sm" 
+                            required
+                            placeholder="https://github.com/user/repo.git"
+                          >
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">分支名称</label>
+                          <div class="input-group">
+                            <select 
+                              v-if="repoVerified || formData.source_id || formData.git_url"
+                              v-model="formData.branch" 
+                              class="form-select form-select-sm"
+                              :disabled="refreshingBranches || (!repoVerified && !formData.source_id && !formData.git_url)"
+                              @change="onBranchChanged"
+                            >
+                              <option value="">
+                                使用默认分支 ({{ branchesAndTags.default_branch || "main" }})
+                              </option>
+                              <optgroup v-if="branchesAndTags.branches.length > 0" label="分支">
+                                <option
+                                  v-for="branch in branchesAndTags.branches"
+                                  :key="branch"
+                                  :value="branch"
+                                >
+                                  {{ branch }}
+                                </option>
+                              </optgroup>
+                              <optgroup v-if="branchesAndTags.tags.length > 0" label="标签">
+                                <option
+                                  v-for="tag in branchesAndTags.tags"
+                                  :key="tag"
+                                  :value="tag"
+                                >
+                                  {{ tag }}
+                                </option>
+                              </optgroup>
+                            </select>
+                            <input
+                              v-else
+                              type="text"
+                              class="form-control form-control-sm"
+                              placeholder="请先选择数据源"
+                              disabled
+                            >
+                            <button 
+                              v-if="formData.source_id || formData.git_url"
+                              class="btn btn-outline-secondary btn-sm" 
+                              type="button"
+                              @click="refreshBranches"
+                              :disabled="refreshingBranches"
+                              title="刷新分支列表"
+                            >
+                              <i v-if="refreshingBranches" class="fas fa-spinner fa-spin"></i>
+                              <i v-else class="fas fa-sync-alt"></i>
+                            </button>
+                          </div>
+                          <small class="text-muted">
+                            <span v-if="refreshingBranches">正在刷新分支列表...</span>
+                            <span v-else-if="repoVerified && branchesAndTags.branches.length > 0">
+                              已加载 {{ branchesAndTags.branches.length }} 个分支、{{ branchesAndTags.tags.length }} 个标签
+                            </span>
+                            <span v-else-if="formData.source_id || formData.git_url">
+                              点击刷新按钮加载分支列表，或留空使用推送的分支
+                            </span>
+                            <span v-else>请先选择数据源</span>
+                          </small>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">项目类型 <span class="text-danger">*</span></label>
+                          <select v-model="formData.project_type" class="form-select form-select-sm">
+                            <option value="jar">Java (JAR)</option>
+                            <option value="nodejs">Node.js</option>
+                            <option value="python">Python</option>
+                            <option value="go">Go</option>
+                            <option value="web">静态网站</option>
+                          </select>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">子路径</label>
+                          <input 
+                            v-model="formData.sub_path" 
+                            type="text" 
+                            class="form-control form-control-sm"
+                            placeholder="留空表示根目录"
+                          >
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <!-- 构建配置 Tab（合并了构建、镜像、推送配置） -->
+                <!-- Dockerfile & 镜像配置 Tab -->
                 <div 
                   class="tab-pane fade" 
                   :class="{ 'show active': activeTab === 'build' }"
@@ -422,282 +530,299 @@
                   <!-- 视图切换和查看JSON按钮 -->
                   <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0">
-                      <i class="fas fa-cogs"></i> 构建配置
+                      <i class="fas fa-cogs"></i> Dockerfile & 镜像配置
                     </h6>
                     <div class="btn-group btn-group-sm" role="group">
-                      <button 
-                        type="button"
-                        class="btn btn-outline-success"
-                        @click="editBuildConfigInStepBuild"
-                        title="使用分步构建页面编辑，保持一致性"
-                      >
-                        <i class="fas fa-list-ol"></i> 使用分步构建编辑
-                      </button>
                       <button 
                         type="button"
                         class="btn btn-outline-info"
                         @click="showBuildConfigJsonModal = true"
                       >
-                        <i class="fas fa-code"></i> 查看构建JSON
+                        <i class="fas fa-code"></i> 查看JSON
                       </button>
                     </div>
                   </div>
 
-                  <!-- 构建配置表单 -->
-                  <div class="row g-3">
-                    <!-- Git配置 -->
-                    <div class="col-md-6">
-                      <label class="form-label">分支名称</label>
-                      <input 
-                        v-model="formData.branch" 
-                        type="text" 
-                        class="form-control form-control-sm"
-                        placeholder="main"
-                      >
-                      <small class="text-muted">留空则使用推送的分支</small>
+
+                  <!-- Dockerfile 配置模块 -->
+                  <div class="card mb-4">
+                    <div class="card-header bg-light">
+                      <h6 class="mb-0">
+                        <i class="fas fa-file-code text-primary"></i> Dockerfile 配置
+                      </h6>
                     </div>
-                    <div class="col-md-6">
-                      <label class="form-label">项目类型</label>
-                      <select v-model="formData.project_type" class="form-select form-select-sm">
-                        <option value="jar">Java (JAR)</option>
-                        <option value="nodejs">Node.js</option>
-                        <option value="python">Python</option>
-                        <option value="go">Go</option>
-                        <option value="web">静态网站</option>
-                      </select>
-                    </div>
-                    
-                    <!-- 镜像配置 -->
-                    <div class="col-md-6">
-                      <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
-                      <input 
-                        v-model="formData.image_name" 
-                        type="text" 
-                        class="form-control form-control-sm" 
-                        required
-                        placeholder="myapp/demo"
-                      >
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label">镜像标签</label>
-                      <input 
-                        v-model="formData.tag" 
-                        type="text" 
-                        class="form-control form-control-sm"
-                        placeholder="latest"
-                      >
-                    </div>
-                    
-                    <!-- Dockerfile配置 -->
-                    <div class="col-12">
-                      <label class="form-label">Dockerfile 来源</label>
-                      <div class="btn-group w-100 mb-2" role="group">
-                        <input 
-                          type="radio" 
-                          class="btn-check" 
-                          id="use-project-dockerfile" 
-                          :value="true"
-                          v-model="formData.use_project_dockerfile"
-                        >
-                        <label class="btn btn-outline-primary" for="use-project-dockerfile">
-                          <i class="fas fa-file-code"></i> 项目Dockerfile
-                        </label>
-                        
-                        <input 
-                          type="radio" 
-                          class="btn-check" 
-                          id="use-template" 
-                          :value="false"
-                          v-model="formData.use_project_dockerfile"
-                        >
-                        <label class="btn btn-outline-primary" for="use-template">
-                          <i class="fas fa-layer-group"></i> 模板
-                        </label>
-                      </div>
-                      
-                      <div v-if="formData.use_project_dockerfile" class="mt-2">
-                        <input 
-                          v-model="formData.dockerfile_name" 
-                          type="text" 
-                          class="form-control form-control-sm"
-                          placeholder="Dockerfile"
-                        >
-                      </div>
-                      
-                      <div v-else class="mt-2">
-                        <select 
-                          v-model="formData.template" 
-                          class="form-select form-select-sm" 
-                          required
-                          @change="onTemplateChange"
-                        >
-                          <option value="">-- 请选择模板 --</option>
-                          <option v-for="tpl in templates" :key="tpl.name" :value="tpl.name">
-                            {{ tpl.name }} ({{ tpl.project_type }})
-                          </option>
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <!-- 推送配置 -->
-                    <div class="col-12">
-                      <div class="card border-primary">
-                        <div class="card-header bg-primary bg-opacity-10">
-                          <i class="fas fa-upload"></i> 推送配置
-                        </div>
-                        <div class="card-body">
-                          <div class="form-check mb-3">
+                    <div class="card-body">
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label class="form-label">Dockerfile 来源</label>
+                          <div class="btn-group w-100 mb-2" role="group">
                             <input 
-                              v-model="formData.push" 
-                              class="form-check-input" 
-                              type="checkbox" 
-                              id="pushCheck"
+                              type="radio" 
+                              class="btn-check" 
+                              id="use-project-dockerfile" 
+                              :value="true"
+                              v-model="formData.use_project_dockerfile"
+                              @change="onDockerfileSourceChange"
                             >
-                            <label class="form-check-label" for="pushCheck">
-                              <strong>构建完成后推送镜像到仓库</strong>
+                            <label class="btn btn-outline-primary" for="use-project-dockerfile">
+                              <i class="fas fa-file-code"></i> 项目Dockerfile
+                            </label>
+                            
+                            <input 
+                              type="radio" 
+                              class="btn-check" 
+                              id="use-template" 
+                              :value="false"
+                              v-model="formData.use_project_dockerfile"
+                              @change="onDockerfileSourceChange"
+                            >
+                            <label class="btn btn-outline-primary" for="use-template">
+                              <i class="fas fa-layer-group"></i> 使用模板
                             </label>
                           </div>
                         </div>
+                        <div v-if="formData.use_project_dockerfile" class="col-md-6">
+                          <label class="form-label">Dockerfile 文件名</label>
+                          <div v-if="scanningDockerfiles" class="mb-2">
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <small class="text-muted">正在扫描项目中的 Dockerfile...</small>
+                          </div>
+                          <div class="input-group">
+                            <select
+                              v-model="formData.dockerfile_name" 
+                              class="form-select form-select-sm"
+                              :disabled="scanningDockerfiles || !formData.branch"
+                              required
+                            >
+                              <option value="">-- 请先选择分支 --</option>
+                              <option value="Dockerfile">Dockerfile（默认，根目录）</option>
+                              <!-- 如果当前选择不在扫描列表中，也要显示出来 -->
+                              <option
+                                v-if="formData.dockerfile_name && 
+                                      formData.dockerfile_name !== 'Dockerfile' && 
+                                      !availableDockerfiles.some(df => df.path === formData.dockerfile_name)"
+                                :value="formData.dockerfile_name"
+                                :key="'current-' + formData.dockerfile_name"
+                              >
+                                {{ formData.dockerfile_name }} (当前选择)
+                              </option>
+                              <option
+                                v-for="dockerfile in availableDockerfiles"
+                                :key="dockerfile.path"
+                                :value="dockerfile.path"
+                              >
+                                {{ dockerfile.path }} {{ dockerfile.path !== dockerfile.name ? `(${dockerfile.name})` : '' }}
+                              </option>
+                            </select>
+                            <button 
+                              class="btn btn-outline-secondary btn-sm" 
+                              type="button"
+                              @click="scanDockerfiles"
+                              :disabled="scanningDockerfiles || (!formData.branch && !branchesAndTags.default_branch)"
+                              title="刷新 Dockerfile 列表"
+                            >
+                              <i v-if="scanningDockerfiles" class="fas fa-spinner fa-spin"></i>
+                              <i v-else class="fas fa-sync-alt"></i>
+                            </button>
+                          </div>
+                          <small v-if="dockerfilesError" class="text-danger d-block mt-1">
+                            <i class="fas fa-exclamation-triangle"></i> {{ dockerfilesError }}
+                          </small>
+                          <small v-else-if="availableDockerfiles.length > 0" class="text-muted d-block mt-1">
+                            <i class="fas fa-check-circle"></i> 已扫描到 {{ availableDockerfiles.length }} 个 Dockerfile
+                          </small>
+                          <small v-else-if="formData.branch" class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 请先选择分支，然后点击刷新按钮扫描项目中的 Dockerfile
+                          </small>
+                          <small v-else class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 请先选择分支
+                          </small>
+                        </div>
+                        <div v-else class="col-md-6">
+                          <label class="form-label">模板名称</label>
+                          
+                          <!-- 当前选择提示 -->
+                          <div v-if="formData.template && formData.template !== ''" class="alert alert-success alert-sm py-2 mb-2">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>当前选择：</strong>{{ formData.template }}
+                            <span v-if="filteredTemplates.find(t => t.name === formData.template)">
+                              ({{ filteredTemplates.find(t => t.name === formData.template).project_type }})
+                            </span>
+                          </div>
+                          
+                          <select 
+                            v-model="formData.template" 
+                            class="form-select form-select-sm" 
+                            @change="onTemplateChange"
+                            :disabled="!formData.project_type"
+                          >
+                            <option value="">-- 请先选择项目类型 --</option>
+                            <option v-for="tpl in filteredTemplates" :key="tpl.name" :value="tpl.name">
+                              {{ tpl.name }} ({{ tpl.project_type }})
+                            </option>
+                          </select>
+                          <small v-if="formData.project_type && filteredTemplates.length === 0" class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 当前项目类型没有可用的模板
+                          </small>
+                          <small v-else-if="formData.project_type && filteredTemplates.length > 0" class="text-muted d-block mt-1">
+                            <i class="fas fa-check-circle"></i> 已按项目类型过滤，共 {{ filteredTemplates.length }} 个模板
+                          </small>
+                          <small v-else class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 请先在 Git 配置中选择项目类型
+                          </small>
+                        </div>
                       </div>
                     </div>
-                    
-                    <!-- 其他配置 -->
-                    <div class="col-md-6">
-                      <label class="form-label">子路径</label>
-                      <input 
-                        v-model="formData.sub_path" 
-                        type="text" 
-                        class="form-control form-control-sm"
-                        placeholder="留空表示根目录"
-                      >
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label">数据源</label>
-                      <select v-model="formData.source_id" class="form-select form-select-sm">
-                        <option value="">使用全局配置</option>
-                        <option v-for="source in gitSources" :key="source.source_id" :value="source.source_id">
-                          {{ source.name }}
-                        </option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 多服务配置 Tab -->
-                <div 
-                  class="tab-pane fade" 
-                  :class="{ 'show active': activeTab === 'services' }"
-                  role="tabpanel"
-                  id="services-pane"
-                >
-                  <!-- 推送模式选择 -->
-                  <div class="mb-3" v-if="!formData.use_project_dockerfile && formData.template">
-                    <label class="form-label">推送模式 <span class="text-danger">*</span></label>
-                    <div class="btn-group w-100" role="group">
-                      <input 
-                        type="radio" 
-                        class="btn-check" 
-                        id="push-mode-single" 
-                        value="single"
-                        v-model="formData.push_mode"
-                        @change="onPushModeChange"
-                      >
-                      <label class="btn btn-outline-primary" for="push-mode-single">
-                        <i class="fas fa-box"></i> 单服务推送
-                      </label>
-                      
-                      <input 
-                        type="radio" 
-                        class="btn-check" 
-                        id="push-mode-multi" 
-                        value="multi"
-                        v-model="formData.push_mode"
-                        @change="onPushModeChange"
-                      >
-                      <label class="btn btn-outline-primary" for="push-mode-multi">
-                        <i class="fas fa-boxes"></i> 多服务推送
-                      </label>
-                    </div>
-                    <small class="text-muted d-block mt-2">
-                      <i class="fas fa-info-circle"></i>
-                      <span v-if="formData.push_mode === 'single'">
-                        单服务推送：只能选择一个服务，定义镜像名和标签
-                      </span>
-                      <span v-else>
-                        多服务推送：可以批量设置推送、镜像名和标签
-                      </span>
-                    </small>
                   </div>
 
-                  <!-- 服务列表加载 -->
-                  <div v-if="loadingServices" class="text-center py-3">
-                    <span class="spinner-border spinner-border-sm"></span> 正在加载服务列表...
-                  </div>
-                  <div v-else-if="servicesError" class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> {{ servicesError }}
-                  </div>
-                  
-                  <!-- 单服务推送模式 -->
-                  <div v-else-if="formData.push_mode === 'single' && !formData.use_project_dockerfile && formData.template && services.length > 0" class="mb-3">
-                    <label class="form-label">选择服务 <span class="text-danger">*</span></label>
-                    <div class="list-group">
-                      <label
-                        v-for="service in services"
-                        :key="service.name"
-                        class="list-group-item list-group-item-action"
-                        :class="{ active: formData.selected_service === service.name }"
-                        style="cursor: pointer"
-                      >
-                        <div class="d-flex align-items-center">
-                          <input
-                            type="radio"
-                            :value="service.name"
-                            v-model="formData.selected_service"
-                            class="form-check-input me-3"
-                          />
-                          <div class="flex-grow-1">
-                            <div class="fw-bold">
-                              <code>{{ service.name }}</code>
+                  <!-- 服务配置（包含镜像配置） -->
+                  <div class="card mb-4">
+                    <div class="card-header bg-light">
+                      <h6 class="mb-0">
+                        <i class="fas fa-layer-group text-primary"></i> 服务配置
+                      </h6>
+                    </div>
+                    <div class="card-body">
+                      <!-- 镜像配置部分 -->
+                      <div class="border-bottom pb-3 mb-3">
+                        <h6 class="mb-3">
+                          <i class="fab fa-docker text-primary"></i> 镜像配置
+                        </h6>
+                        <div class="row g-3">
+                          <div class="col-md-6">
+                            <label class="form-label">推送模式</label>
+                            <select v-model="formData.push_mode" class="form-select form-select-sm" @change="onPushModeChange">
+                              <option value="single">单服务推送</option>
+                              <option value="multi">多服务推送</option>
+                            </select>
+                          </div>
+                          <div class="col-md-6">
+                            <div class="form-check mt-4">
+                              <input 
+                                v-model="formData.push" 
+                                class="form-check-input" 
+                                type="checkbox" 
+                                id="pushCheck"
+                              >
+                              <label class="form-check-label" for="pushCheck">
+                                构建完成后推送到仓库
+                              </label>
                             </div>
-                            <small class="text-muted">
-                              <span v-if="service.port">端口: {{ service.port }}</span>
-                              <span v-if="service.port && service.user"> | </span>
-                              <span v-if="service.user">用户: {{ service.user }}</span>
+                          </div>
+                          <div class="col-md-6">
+                            <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+                            <input 
+                              v-model="formData.image_name" 
+                              type="text" 
+                              class="form-control form-control-sm" 
+                              required
+                              placeholder="myapp/demo"
+                            >
+                            <small class="text-muted d-block mt-1">
+                              <span v-if="formData.push_mode === 'single'">
+                                <i class="fas fa-info-circle"></i> 单服务模式：直接使用此镜像名称
+                              </span>
+                              <span v-else>
+                                <i class="fas fa-info-circle"></i> 多服务模式：作为镜像名称前缀，每个服务会自动拼接服务名
+                              </span>
+                            </small>
+                          </div>
+                          <div class="col-md-6">
+                            <label class="form-label">镜像标签</label>
+                            <input 
+                              v-model="formData.tag" 
+                              type="text" 
+                              class="form-control form-control-sm"
+                              placeholder="latest"
+                            >
+                            <small class="text-muted d-block mt-1">
+                              <i class="fas fa-info-circle"></i> 所有服务使用此标签
                             </small>
                           </div>
                         </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  <!-- 多服务推送模式 -->
-                  <div v-else-if="services.length > 0" class="mb-3">
-                    <div class="card border-info">
-                      <div class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
-                        <div>
-                          <i class="fas fa-server"></i> 服务选择
-                          <span class="badge bg-info ms-2">{{ services.length }} 个服务</span>
+                        <div v-if="formData.push_mode === 'single'" class="alert alert-info mt-3 mb-0">
+                          <i class="fas fa-info-circle"></i> 
+                          <strong>单服务模式：</strong>使用上方配置的镜像名称和标签
                         </div>
-                        <div>
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-info me-2"
-                            @click="selectAllServices"
-                          >
-                            <i class="fas fa-check-square"></i> 全选
-                          </button>
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-info"
-                            @click="deselectAllServices"
-                          >
-                            <i class="fas fa-square"></i> 全不选
-                          </button>
+                        <div v-else-if="formData.push_mode === 'multi'" class="alert alert-info mt-3 mb-0">
+                          <i class="fas fa-info-circle"></i> 
+                          <strong>多服务模式：</strong>每个服务的镜像名称将自动生成为 <code>{{ formData.image_name || 'myapp/demo' }}/服务名</code>，标签使用上方配置的全局标签
                         </div>
                       </div>
-                      <div class="card-body">
+
+                      <!-- 服务列表加载 -->
+                      <div v-if="loadingServices" class="text-center py-3">
+                        <span class="spinner-border spinner-border-sm"></span> 正在加载服务列表...
+                      </div>
+                      <div v-else-if="servicesError" class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> {{ servicesError }}
+                      </div>
+                      
+                      <!-- 单服务推送模式 -->
+                      <!-- 编辑模式下，即使服务列表为空，也显示已保存的服务选择 -->
+                      <div v-else-if="formData.push_mode === 'single' && (services.length > 0 || (editingPipeline && formData.selected_service))" class="mb-3">
+                        <label class="form-label">选择服务 <span class="text-danger">*</span></label>
+                        <div class="list-group">
+                          <label
+                            v-for="service in services"
+                            :key="service.name"
+                            class="list-group-item list-group-item-action"
+                            :class="{ active: formData.selected_service === service.name }"
+                            style="cursor: pointer"
+                          >
+                            <div class="d-flex align-items-center">
+                              <input
+                                type="radio"
+                                :value="service.name"
+                                v-model="formData.selected_service"
+                                class="form-check-input me-3"
+                              />
+                              <div class="flex-grow-1">
+                                <div class="fw-bold">
+                                  <code>{{ service.name }}</code>
+                                </div>
+                                <small class="text-muted">
+                                  <span v-if="service.port">端口: {{ service.port }}</span>
+                                  <span v-if="service.port && service.user"> | </span>
+                                  <span v-if="service.user">用户: {{ service.user }}</span>
+                                </small>
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      <!-- 多服务推送模式 -->
+                      <!-- 编辑模式下，即使服务列表为空，也显示已保存的服务选择 -->
+                      <div v-else-if="formData.push_mode === 'multi' && (services.length > 0 || (editingPipeline && formData.selected_services && formData.selected_services.length > 0))" class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                          <div>
+                            <span class="badge bg-info">{{ services.length }} 个服务</span>
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-info me-2"
+                              @click="selectAllServices"
+                            >
+                              <i class="fas fa-check-square"></i> 全选
+                            </button>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-info"
+                              @click="deselectAllServices"
+                            >
+                              <i class="fas fa-square"></i> 全不选
+                            </button>
+                          </div>
+                        </div>
+                        
                         <!-- 服务列表 -->
-                        <div class="row g-2 mb-3">
+                        <!-- 编辑模式下，如果服务列表为空但已保存了服务选择，显示提示信息 -->
+                        <div v-if="services.length === 0 && editingPipeline && formData.selected_services && formData.selected_services.length > 0" class="alert alert-info mb-3">
+                          <i class="fas fa-info-circle"></i> 正在后台验证服务列表，已保存的服务选择将显示在下方
+                        </div>
+                        <div v-if="services.length > 0" class="row g-2 mb-3">
                           <div
                             v-for="service in services"
                             :key="service.name"
@@ -735,28 +860,43 @@
                           </div>
                         </div>
 
-                        <!-- 服务配置 -->
+                        <!-- 服务推送配置 -->
                         <div v-if="formData.selected_services && formData.selected_services.length > 0" class="border-top pt-3">
                           <h6 class="mb-3">
                             <i class="fas fa-cog"></i> 服务推送配置
                             <small class="text-muted">(已选择 {{ formData.selected_services.length }} 个服务)</small>
                           </h6>
+                          <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle"></i> 
+                            <strong>多服务模式：</strong>每个服务的镜像名称将自动生成为 <code>{{ formData.image_name || 'myapp/demo' }}/服务名</code>，标签使用全局标签 <code>{{ formData.tag || 'latest' }}</code>
+                          </div>
                           <div class="table-responsive">
                             <table class="table table-sm table-bordered">
                               <thead>
                                 <tr>
-                                  <th style="width: 30%">服务名</th>
-                                  <th style="width: 20%">推送</th>
-                                  <th style="width: 50%">操作</th>
+                                  <th style="width: 25%">服务名</th>
+                                  <th style="width: 40%">镜像名称（自动生成）</th>
+                                  <th style="width: 15%">标签</th>
+                                  <th style="width: 10%">推送</th>
+                                  <th style="width: 10%">操作</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 <tr v-for="serviceName in formData.selected_services" :key="serviceName">
                                   <td><code>{{ serviceName }}</code></td>
+                                  <td>
+                                    <code class="text-primary">{{ getServiceDefaultImageName(serviceName) }}</code>
+                                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                      <i class="fas fa-info-circle"></i> 基于全局镜像名称自动生成
+                                    </small>
+                                  </td>
+                                  <td>
+                                    <code class="text-secondary">{{ formData.tag || 'latest' }}</code>
+                                  </td>
                                   <td class="text-center">
                                     <input
                                       type="checkbox"
-                                      v-model="formData.service_push_config[serviceName]"
+                                      v-model="getServiceConfig(serviceName).push"
                                       class="form-check-input"
                                     />
                                   </td>
@@ -775,49 +915,61 @@
                           </div>
                         </div>
                       </div>
+
+                      <div v-else-if="!formData.template && !formData.use_project_dockerfile" class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 请先选择 Dockerfile 模板或启用"使用项目中的 Dockerfile"以加载服务列表
+                      </div>
+                      <div v-else-if="services.length === 0" class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 未检测到多服务配置，将使用单服务模式
+                      </div>
                     </div>
                   </div>
-                  <div v-else-if="!formData.template && !formData.use_project_dockerfile" class="alert alert-info">
-                    <i class="fas fa-info-circle"></i> 请先选择 Dockerfile 模板或启用"使用项目中的 Dockerfile"以加载服务列表
-                  </div>
-                  <div v-else-if="services.length === 0" class="alert alert-info">
-                    <i class="fas fa-info-circle"></i> 未检测到多服务配置，将使用单服务模式
-                  </div>
+                </div>
 
-                  <!-- 资源包配置 -->
-                  <div class="mb-3">
-                    <label class="form-label">
-                      <i class="fas fa-archive"></i> 资源包配置
+                <!-- 资源包配置 Tab -->
+                <div 
+                  class="tab-pane fade" 
+                  :class="{ 'show active': activeTab === 'resource' }"
+                  role="tabpanel"
+                  id="resource-pane"
+                >
+                  <div class="card">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                      <h6 class="mb-0">
+                        <i class="fas fa-archive text-primary"></i> 资源包配置
+                      </h6>
                       <button 
                         type="button" 
-                        class="btn btn-sm btn-outline-success ms-2" 
+                        class="btn btn-sm btn-outline-success" 
                         @click="showResourcePackageModal = true"
                         title="添加资源包"
                       >
                         <i class="fas fa-plus"></i> 添加
                       </button>
-                    </label>
-                    <div v-if="formData.resource_package_configs && formData.resource_package_configs.length > 0" class="border rounded p-2">
-                      <div 
-                        v-for="(pkg, index) in formData.resource_package_configs" 
-                        :key="index" 
-                        class="d-flex align-items-center justify-content-between mb-2 p-2 bg-light rounded"
-                      >
-                        <div class="flex-grow-1">
-                          <strong>{{ getResourcePackageName(pkg.package_id) }}</strong>
-                          <small class="text-muted ms-2">→ {{ pkg.target_path || 'resources' }}</small>
-                        </div>
-                        <button 
-                          type="button" 
-                          class="btn btn-sm btn-outline-danger" 
-                          @click="removeResourcePackage(index)"
-                        >
-                          <i class="fas fa-trash"></i>
-                        </button>
-                      </div>
                     </div>
-                    <div v-else class="text-muted small">
-                      暂无资源包，点击"添加"按钮添加资源包
+                    <div class="card-body">
+                      <div v-if="formData.resource_package_configs && formData.resource_package_configs.length > 0" class="border rounded p-2">
+                        <div 
+                          v-for="(pkg, index) in formData.resource_package_configs" 
+                          :key="index" 
+                          class="d-flex align-items-center justify-content-between mb-2 p-2 bg-light rounded"
+                        >
+                          <div class="flex-grow-1">
+                            <strong>{{ getResourcePackageName(pkg.package_id) }}</strong>
+                            <small class="text-muted ms-2">→ {{ pkg.target_path || 'resources' }}</small>
+                          </div>
+                          <button 
+                            type="button" 
+                            class="btn btn-sm btn-outline-danger" 
+                            @click="removeResourcePackage(index)"
+                          >
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else class="text-muted small">
+                        暂无资源包，点击"添加"按钮添加资源包
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1391,10 +1543,15 @@
                       <label class="form-label small">目标路径</label>
                       <input
                         type="text"
-                        v-model="getResourcePackageConfig(pkg.package_id).target_path"
+                        :value="getResourcePackageConfig(pkg.package_id).target_path"
+                        @input="updateResourcePackagePath(pkg.package_id, $event.target.value)"
                         class="form-control form-control-sm"
                         placeholder="resources"
                       />
+                      <small class="text-muted d-block mt-1">
+                        <i class="fas fa-info-circle"></i>
+                        相对路径，如：<code>test/b.txt</code> 或 <code>config/app.conf</code>
+                      </small>
                     </div>
                   </div>
                 </div>
@@ -1449,7 +1606,6 @@ const pipelines = ref([])
 const templates = ref([])
 const registries = ref([])
 const gitSources = ref([])
-const selectedSourceId = ref('')
 const loading = ref(false)
 const saving = ref(false)  // 正在保存流水线
 const running = ref(null)  // 正在运行的流水线ID
@@ -1489,6 +1645,18 @@ const resourcePackages = ref([])  // 资源包列表
 const services = ref([])  // 服务列表
 const loadingServices = ref(false)  // 加载服务中
 const servicesError = ref('')  // 服务加载错误
+
+// 分支和 Dockerfile 相关
+const branchesAndTags = ref({
+  branches: [],
+  tags: [],
+  default_branch: null,
+})
+const refreshingBranches = ref(false)  // 正在刷新分支
+const availableDockerfiles = ref([])  // 可用的 Dockerfile 列表
+const scanningDockerfiles = ref(false)  // 正在扫描 Dockerfile
+const dockerfilesError = ref('')  // Dockerfile 扫描错误
+const repoVerified = ref(false)  // 仓库是否已验证
 
 const activeTab = ref('basic')  // 当前激活的Tab
 const showBuildConfigJsonModal = ref(false)  // 显示构建配置JSON模态框
@@ -1573,15 +1741,43 @@ async function loadGitSources() {
   }
 }
 
-function onSourceSelected() {
-  if (!selectedSourceId.value) {
+async function onSourceSelected() {
+  const sourceId = formData.value.source_id
+  if (!sourceId) {
+    // 如果清空数据源选择，重置分支
+    formData.value.source_id = ''
+    formData.value.branch = ''
+    repoVerified.value = false
+    branchesAndTags.value = { branches: [], tags: [], default_branch: null }
+    availableDockerfiles.value = []
     return
   }
   
-  const source = gitSources.value.find(s => s.source_id === selectedSourceId.value)
+  const source = gitSources.value.find(s => s.source_id === sourceId)
   if (source) {
     formData.value.git_url = source.git_url
-    if (source.default_branch && !formData.value.branch) {
+    formData.value.source_id = source.source_id
+    
+    // 如果数据源有分支信息，使用数据源的分支列表和默认分支
+    if (source.branches && source.branches.length > 0) {
+      branchesAndTags.value = {
+        branches: source.branches || [],
+        tags: source.tags || [],
+        default_branch: source.default_branch || null,
+      }
+      repoVerified.value = true
+      
+      // 设置默认分支（如果当前没有选择分支，或选择的分支不在列表中）
+      if (!formData.value.branch || !source.branches.includes(formData.value.branch)) {
+        formData.value.branch = source.default_branch || source.branches[0] || ''
+      }
+      
+      // 如果使用项目 Dockerfile，自动扫描 Dockerfile
+      if (formData.value.use_project_dockerfile && formData.value.branch) {
+        scanDockerfiles()
+        loadServices()
+      }
+    } else if (source.default_branch && !formData.value.branch) {
       formData.value.branch = source.default_branch
     }
   }
@@ -1589,16 +1785,77 @@ function onSourceSelected() {
 
 // 监听 Git URL 变化，自动匹配数据源
 watch(() => formData.value.git_url, () => {
-  if (!formData.value.git_url || selectedSourceId.value) {
+  if (!formData.value.git_url) {
     return
   }
   
   // 查找匹配的数据源
   const source = gitSources.value.find(s => s.git_url === formData.value.git_url)
   if (source) {
-    selectedSourceId.value = source.source_id
-    if (source.default_branch && !formData.value.branch) {
+    // 如果还没有设置 source_id，自动设置
+    if (!formData.value.source_id) {
+      formData.value.source_id = source.source_id
+    }
+    
+    // 如果数据源有分支信息，加载分支列表
+    if (source.branches && source.branches.length > 0) {
+      branchesAndTags.value = {
+        branches: source.branches || [],
+        tags: source.tags || [],
+        default_branch: source.default_branch || null,
+      }
+      repoVerified.value = true
+      
+      // 如果数据源有默认分支且当前没有选择分支，设置默认分支
+      if (source.default_branch && !formData.value.branch) {
+        formData.value.branch = source.default_branch
+      }
+      
+      // 如果使用项目 Dockerfile 且有分支，自动扫描 Dockerfile
+      if (formData.value.use_project_dockerfile && formData.value.branch) {
+        scanDockerfiles()
+      }
+    } else if (source.default_branch && !formData.value.branch) {
       formData.value.branch = source.default_branch
+    }
+    
+    // 如果使用项目 Dockerfile 且有分支，重新加载服务（数据源变化不是切换 Dockerfile）
+    if (formData.value.use_project_dockerfile && formData.value.branch) {
+      loadServices(false)
+    }
+  }
+})
+
+// 监听分支变化（onBranchChanged 已处理 Dockerfile 扫描）
+
+// 监听 Dockerfile 名称变化，如果使用项目 Dockerfile，重新加载服务
+watch(() => formData.value.dockerfile_name, (newName, oldName) => {
+  // 只有当 Dockerfile 名称真正改变且使用项目 Dockerfile 时才重新加载服务
+  if (newName !== oldName && 
+      formData.value.use_project_dockerfile && 
+      formData.value.git_url && 
+      formData.value.branch &&
+      newName && // 确保新名称不为空
+      oldName) { // 确保是真正的变化（不是初始化）
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:1834',message:'Dockerfile name changed, reloading services',data:{old:oldName,new:newName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    // Dockerfile 名称变化是用户主动切换，需要重新识别服务
+    loadServices(true)
+  }
+})
+
+// 监听项目类型变化，如果当前选择的模板不再匹配新的项目类型，则清除模板选择
+watch(() => formData.value.project_type, (newType, oldType) => {
+  if (newType !== oldType && formData.value.template) {
+    // 检查当前选择的模板是否匹配新的项目类型
+    const currentTemplate = templates.value.find(t => t.name === formData.value.template)
+    if (!currentTemplate || currentTemplate.project_type !== newType) {
+      // 模板不匹配新的项目类型，清除模板选择并重新加载服务（项目类型变化不是切换 Dockerfile）
+      formData.value.template = ''
+      if (formData.value.use_project_dockerfile && formData.value.git_url && formData.value.branch) {
+        loadServices(false)
+      }
     }
   }
 })
@@ -1652,7 +1909,6 @@ async function loadRegistries() {
 
 function showCreateModal() {
   editingPipeline.value = null
-  selectedSourceId.value = ''
   formData.value = {
     name: '',
     description: '',
@@ -1687,11 +1943,24 @@ function showCreateModal() {
 }
 
 function editPipeline(pipeline) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:1918',message:'editPipeline started',data:{pipeline_id:pipeline.id,pipeline_name:pipeline.name,dockerfile_name:pipeline.dockerfile_name,template:pipeline.template,use_project_dockerfile:pipeline.use_project_dockerfile,project_type:pipeline.project_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   editingPipeline.value = pipeline
   activeTab.value = 'basic'  // 重置到第一个Tab
+  
   // 查找对应的数据源
-  const source = gitSources.value.find(s => s.git_url === pipeline.git_url)
-  selectedSourceId.value = source ? source.source_id : ''
+  const source = gitSources.value.find(s => 
+    s.source_id === pipeline.source_id || s.git_url === pipeline.git_url
+  )
+  
+  // 保存原始配置，避免被扫描覆盖
+  const savedDockerfileName = pipeline.dockerfile_name || 'Dockerfile'
+  const savedTemplate = pipeline.template || ''
+  // 优先使用后端返回的 use_project_dockerfile，如果没有则根据 template 推断
+  const savedUseProjectDockerfile = pipeline.use_project_dockerfile !== undefined 
+    ? pipeline.use_project_dockerfile 
+    : !pipeline.template  // 有模板则 false，无模板则 true
   
   formData.value = {
     name: pipeline.name,
@@ -1700,7 +1969,7 @@ function editPipeline(pipeline) {
     branch: pipeline.branch || '',
     sub_path: pipeline.sub_path || '',
     project_type: pipeline.project_type || 'jar',
-    template: pipeline.template || '',
+    template: savedTemplate,
     image_name: pipeline.image_name || '',
     tag: pipeline.tag || 'latest',
     push: pipeline.push || false,
@@ -1711,22 +1980,90 @@ function editPipeline(pipeline) {
     enabled: pipeline.enabled !== false,
     trigger_schedule: !!pipeline.cron_expression,  // 如果有cron表达式则启用
     cron_expression: pipeline.cron_expression || '',
-    dockerfile_name: pipeline.dockerfile_name || 'Dockerfile',
-    // 如果 pipeline 有 template，说明使用的是模板，否则使用项目 Dockerfile
-    use_project_dockerfile: !pipeline.template,  // 有模板则 false，无模板则 true
-    source_id: pipeline.source_id || '',
+    dockerfile_name: savedDockerfileName,
+    use_project_dockerfile: savedUseProjectDockerfile,
+    source_id: pipeline.source_id || (source ? source.source_id : ''),
     push_mode: pipeline.push_mode || 'multi',
     selected_service: pipeline.selected_services && pipeline.selected_services.length === 1 ? pipeline.selected_services[0] : '',
     selected_services: pipeline.selected_services || [],
-    service_push_config: pipeline.service_push_config || {},
+    service_push_config: normalizeServicePushConfig(pipeline.service_push_config || {}),
     service_template_params: pipeline.service_template_params || {},
     resource_package_configs: pipeline.resource_package_configs || []
   }
-  // 加载服务列表
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:1956',message:'formData initialized',data:{dockerfile_name:formData.value.dockerfile_name,template:formData.value.template,use_project_dockerfile:formData.value.use_project_dockerfile,branch:formData.value.branch},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
+  
+  // 如果数据源有分支信息，加载分支列表
+  if (source && source.branches && source.branches.length > 0) {
+    branchesAndTags.value = {
+      branches: source.branches || [],
+      tags: source.tags || [],
+      default_branch: source.default_branch || null,
+    }
+    repoVerified.value = true
+    
+    // 如果当前分支为空或不在分支列表中，使用默认分支
+    if (!formData.value.branch || !source.branches.includes(formData.value.branch)) {
+      formData.value.branch = source.default_branch || source.branches[0] || formData.value.branch || ''
+    }
+    
+    // 如果使用项目 Dockerfile，自动扫描 Dockerfile（编辑模式下不会覆盖已保存的配置）
+    // 注意：scanDockerfiles(true) 会保持已保存的 dockerfile_name
+    if (formData.value.use_project_dockerfile && formData.value.branch) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2015',message:'About to scan Dockerfiles in editPipeline',data:{dockerfile_name:formData.value.dockerfile_name,branch:formData.value.branch,use_project_dockerfile:formData.value.use_project_dockerfile,editing:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      // 编辑模式下传入 true，确保保持已保存的配置
+      scanDockerfiles(true)
+    }
+  }
+  
+  // 编辑模式下：先不加载服务列表，直接显示已保存的配置（秒加载）
+  // 服务列表在后台异步加载，仅用于验证服务是否还存在，不阻塞界面显示
   if (pipeline.template || pipeline.use_project_dockerfile) {
-    loadServices()
+    // 编辑模式下，先设置一个空的服务列表，避免显示加载状态
+    // 已保存的服务选择会直接显示（即使服务列表为空，已选择的也会显示）
+    services.value = []
+    loadingServices.value = false
+    
+    // 在后台异步加载服务列表进行验证（不阻塞界面）
+    // 使用 setTimeout 确保界面先渲染
+    setTimeout(() => {
+      loadServices(false).then(() => {
+        // 加载完成后，验证已保存的服务是否还存在
+        if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
+          // 过滤掉不存在的服务
+          const validServices = formData.value.selected_services.filter(
+            serviceName => services.value.some(s => s.name === serviceName)
+          )
+          if (validServices.length !== formData.value.selected_services.length) {
+            // 有服务不存在，更新选择
+            formData.value.selected_services = validServices
+            // 清理不存在的服务的配置
+            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
+              if (!services.value.some(s => s.name === serviceName)) {
+                delete formData.value.service_push_config[serviceName]
+              }
+            })
+          }
+        } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
+          // 单服务模式：检查选中的服务是否还存在
+          if (!services.value.some(s => s.name === formData.value.selected_service)) {
+            formData.value.selected_service = ''
+          }
+        }
+      }).catch(() => {
+        // 加载失败不影响已保存的配置显示
+        console.warn('后台验证服务列表失败，但已保存的配置仍然有效')
+      })
+    }, 100)
   }
   showModal.value = true
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:1980',message:'editPipeline completed',data:{final_dockerfile_name:formData.value.dockerfile_name,final_template:formData.value.template},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
 }
 
 // 添加分支标签映射
@@ -1819,16 +2156,35 @@ async function savePipeline() {
       // 如果未启用定时触发，则cron_expression为null
       cron_expression: formData.value.trigger_schedule ? formData.value.cron_expression : null,
       // 传递数据源ID
-      source_id: selectedSourceId.value || formData.value.source_id || null,
+      source_id: formData.value.source_id || null,
       // 多服务配置：根据推送模式处理
       selected_services: formData.value.push_mode === 'single' && formData.value.selected_service 
         ? [formData.value.selected_service] 
         : formData.value.selected_services && formData.value.selected_services.length > 0
         ? formData.value.selected_services
         : null,
-      service_push_config: formData.value.service_push_config && Object.keys(formData.value.service_push_config).length > 0
-        ? formData.value.service_push_config
-        : null,
+      // 规范化服务推送配置（确保所有配置都是对象格式，只保留 push 字段）
+      service_push_config: (() => {
+        const config = formData.value.service_push_config
+        if (!config || Object.keys(config).length === 0) {
+          return null
+        }
+        // 确保所有配置都是对象格式，只保留 push 字段（imageName 和 tag 由全局配置自动生成）
+        const normalized = {}
+        Object.keys(config).forEach(serviceName => {
+          const value = config[serviceName]
+          if (typeof value === 'boolean') {
+            normalized[serviceName] = {
+              push: value
+            }
+          } else if (value && typeof value === 'object') {
+            normalized[serviceName] = {
+              push: value.push !== undefined ? value.push : false
+            }
+          }
+        })
+        return Object.keys(normalized).length > 0 ? normalized : null
+      })(),
       service_template_params: formData.value.service_template_params && Object.keys(formData.value.service_template_params).length > 0
         ? formData.value.service_template_params
         : null,
@@ -1899,15 +2255,308 @@ function closeModal() {
   loadingServices.value = false
   servicesError.value = ''
   saving.value = false  // 重置保存状态
+  // 重置分支和 Dockerfile 相关状态
+  branchesAndTags.value = { branches: [], tags: [], default_branch: null }
+  availableDockerfiles.value = []
+  refreshingBranches.value = false
+  scanningDockerfiles.value = false
+  dockerfilesError.value = ''
+  repoVerified.value = false
 }
 
-// 加载服务列表
-async function loadServices() {
-  if (!formData.value.git_url) {
-    services.value = []
+// 刷新分支列表
+async function refreshBranches() {
+  const sourceId = formData.value.source_id
+  if (!sourceId) {
+    if (!formData.value.git_url) {
+      alert('请先选择数据源或填写 Git 仓库地址')
+      return
+    }
+    // 如果没有数据源但有 Git URL，使用 verify-git-repo API
+    try {
+      refreshingBranches.value = true
+      const response = await axios.post('/api/verify-git-repo', {
+        git_url: formData.value.git_url,
+        source_id: null
+      })
+      
+      if (response.data && response.data.branches) {
+        branchesAndTags.value = {
+          branches: response.data.branches || [],
+          tags: response.data.tags || [],
+          default_branch: response.data.default_branch || null,
+        }
+        repoVerified.value = true
+        
+        // 如果当前选择的分支不在新列表中，重置为默认分支
+        const currentBranch = formData.value.branch
+        if (currentBranch && 
+            !branchesAndTags.value.branches.includes(currentBranch) &&
+            !branchesAndTags.value.tags.includes(currentBranch)) {
+          formData.value.branch = branchesAndTags.value.default_branch || ''
+        }
+      }
+    } catch (error) {
+      console.error('刷新分支列表失败:', error)
+      alert(error.response?.data?.detail || error.message || '刷新分支列表失败，请稍后重试')
+    } finally {
+      refreshingBranches.value = false
+    }
     return
   }
 
+  const source = gitSources.value.find(s => s.source_id === sourceId)
+  if (!source) {
+    return
+  }
+
+  refreshingBranches.value = true
+  try {
+    // 调用验证Git仓库的API来刷新分支列表
+    const response = await axios.post('/api/verify-git-repo', {
+      git_url: source.git_url,
+      source_id: sourceId,
+    })
+
+    if (response.data && response.data.branches) {
+      // 更新分支和标签列表
+      branchesAndTags.value = {
+        branches: response.data.branches || [],
+        tags: response.data.tags || [],
+        default_branch: response.data.default_branch || null,
+      }
+      repoVerified.value = true
+
+      // 如果当前选择的分支不在新列表中，重置为默认分支
+      const currentBranch = formData.value.branch
+      if (currentBranch &&
+          !branchesAndTags.value.branches.includes(currentBranch) &&
+          !branchesAndTags.value.tags.includes(currentBranch)) {
+        formData.value.branch = branchesAndTags.value.default_branch || ''
+      }
+      
+      // 如果使用项目 Dockerfile，重新扫描 Dockerfile
+      if (formData.value.use_project_dockerfile && formData.value.branch) {
+        scanDockerfiles()
+      }
+    }
+  } catch (error) {
+    console.error('刷新分支列表失败:', error)
+    alert(error.response?.data?.detail || error.message || '刷新分支列表失败，请稍后重试')
+  } finally {
+    refreshingBranches.value = false
+  }
+}
+
+// 扫描项目中的 Dockerfile
+async function scanDockerfiles(keepCurrentSelection = true) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2316',message:'scanDockerfiles started',data:{source_id:formData.value.source_id,git_url:formData.value.git_url,dockerfile_name:formData.value.dockerfile_name,branch:formData.value.branch,keep_current_selection:keepCurrentSelection,editing:!!editingPipeline.value},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  const sourceId = formData.value.source_id
+  if (!sourceId && !formData.value.git_url) {
+    dockerfilesError.value = '请先选择数据源或填写 Git 仓库地址'
+    return
+  }
+
+  // 保存当前的 dockerfile_name，避免被覆盖（编辑模式下必须保持）
+  const savedDockerfileName = formData.value.dockerfile_name
+  // 判断是否是编辑模式（正在编辑已有流水线）
+  const isEditing = !!editingPipeline.value || keepCurrentSelection
+  // 保存当前已扫描的列表，以便在扫描失败时恢复
+  const previousDockerfiles = [...availableDockerfiles.value]
+
+  scanningDockerfiles.value = true
+  dockerfilesError.value = ''
+  // 注意：不要立即清空 availableDockerfiles，这样下拉框可以继续显示已保存的值
+  // 只有在扫描成功后才更新列表
+
+  try {
+    // 获取 Git URL 和分支
+    let gitUrl = formData.value.git_url
+    if (sourceId) {
+      const source = gitSources.value.find(s => s.source_id === sourceId)
+      if (source) {
+        gitUrl = source.git_url
+      }
+    }
+    
+    if (!gitUrl) {
+      dockerfilesError.value = '无法获取 Git 仓库地址'
+      return
+    }
+
+    const branch = formData.value.branch || branchesAndTags.value.default_branch || 'main'
+
+    if (!branch) {
+      dockerfilesError.value = '请先选择分支'
+      return
+    }
+
+    // 调用 API 扫描 Dockerfile
+    const response = await axios.post('/api/git-sources/scan-dockerfiles', {
+      git_url: gitUrl,
+      branch: branch,
+      source_id: sourceId || null
+    })
+
+    if (response.data && response.data.dockerfiles) {
+      // 保存完整路径信息（包含路径和文件名）
+      const dockerfileList = response.data.dockerfiles.map(path => {
+        const parts = path.split('/')
+        return {
+          path: path,  // 完整路径，如 "frontend/Dockerfile"
+          name: parts[parts.length - 1]  // 文件名，如 "Dockerfile"
+        }
+      })
+      
+      // 按路径排序
+      dockerfileList.sort((a, b) => {
+        // 根目录的 Dockerfile 优先
+        if (a.path === 'Dockerfile') return -1
+        if (b.path === 'Dockerfile') return 1
+        return a.path.localeCompare(b.path)
+      })
+      
+      // 只有在成功扫描到结果时才更新列表
+      availableDockerfiles.value = dockerfileList
+    } else {
+      // 如果 API 返回成功但没有 dockerfiles，保持原列表（如果有）或设为空数组
+      // 这样可以保留之前扫描的结果，或者如果是首次扫描则设为空
+      if (availableDockerfiles.value.length === 0) {
+        // 如果是首次扫描且没有结果，设为空数组
+        availableDockerfiles.value = []
+      }
+      // 否则保持原列表不变
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2402',message:'Dockerfiles scanned',data:{count:availableDockerfiles.value.length,saved_dockerfile_name:savedDockerfileName,available_paths:availableDockerfiles.value.map(df=>df.path),is_editing:isEditing,keep_current_selection:keepCurrentSelection},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // 在编辑模式下，始终保持原有的 dockerfile_name，不进行任何自动选择
+    // 在新建模式下，只有在当前没有选择时才自动设置
+    if (keepCurrentSelection && savedDockerfileName) {
+      // 编辑模式或有已保存的选择：始终保持原选择（即使不在新扫描的列表中，下拉框也会显示它）
+      formData.value.dockerfile_name = savedDockerfileName
+      const currentInList = availableDockerfiles.value.some(df => df.path === savedDockerfileName)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2412',message:'Dockerfile name preserved (editing mode or has saved selection)',data:{dockerfile_name:savedDockerfileName,in_list:currentInList,is_editing:isEditing},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    } else if (availableDockerfiles.value.length > 0) {
+      // 新建模式且没有保存的选择：自动选择第一个
+      if (!savedDockerfileName || savedDockerfileName === '' || savedDockerfileName === 'Dockerfile') {
+        // 当前没有选择或只有默认值，自动选择第一个（优先选择根目录的 Dockerfile）
+        const rootDockerfile = availableDockerfiles.value.find(df => df.path === 'Dockerfile')
+        formData.value.dockerfile_name = rootDockerfile ? 'Dockerfile' : availableDockerfiles.value[0].path
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2420',message:'Dockerfile name auto-selected (new mode, no previous selection)',data:{new:formData.value.dockerfile_name,old:savedDockerfileName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+      } else {
+        // 有保存的选择（非编辑模式），检查是否在新列表中，如果在则保持，否则选择第一个
+        const currentInList = availableDockerfiles.value.some(df => df.path === savedDockerfileName)
+        if (currentInList) {
+          formData.value.dockerfile_name = savedDockerfileName
+        } else {
+          const rootDockerfile = availableDockerfiles.value.find(df => df.path === 'Dockerfile')
+          formData.value.dockerfile_name = rootDockerfile ? 'Dockerfile' : availableDockerfiles.value[0].path
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2430',message:'Dockerfile name handled (new mode with previous selection)',data:{saved:savedDockerfileName,final:formData.value.dockerfile_name,in_list:currentInList},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+      }
+      // 扫描后重新加载服务（如果是用户主动切换 Dockerfile，传入 true）
+      if (formData.value.use_project_dockerfile) {
+        // 这里是在扫描 Dockerfile 后，可能是用户切换了 Dockerfile，传入 true 表示需要重新识别
+        loadServices(true)
+      }
+    } else {
+      // 没有扫描到 Dockerfile，如果当前选择不为空，保持原选择，否则设为默认值
+      if (!savedDockerfileName) {
+        formData.value.dockerfile_name = 'Dockerfile'
+      }
+    }
+  } catch (error) {
+    console.error('扫描 Dockerfile 失败:', error)
+    dockerfilesError.value = error.response?.data?.detail || '扫描 Dockerfile 失败'
+    // 扫描失败时不清空列表，保持之前的列表（如果有），这样已保存的值还能显示
+    // availableDockerfiles.value 保持原值
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2404',message:'scanDockerfiles error',data:{error:error.message,response:error.response?.data,preserved_list_count:availableDockerfiles.value.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+  } finally {
+    scanningDockerfiles.value = false
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2320',message:'scanDockerfiles completed',data:{final_dockerfile_name:formData.value.dockerfile_name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+  }
+}
+
+// 分支变化处理
+function onBranchChanged() {
+  // 如果切换到新分支且使用项目 Dockerfile，重新扫描 Dockerfile
+  if (formData.value.use_project_dockerfile && formData.value.branch && formData.value.git_url) {
+    scanDockerfiles()
+  }
+}
+
+// 加载服务列表
+async function loadServices(isDockerfileChanged = false) {
+  if (!formData.value.git_url) {
+    services.value = []
+    return Promise.resolve()
+  }
+
+  // 判断是否是编辑模式
+  const isEditing = !!editingPipeline.value
+  
+  // 编辑模式下且未切换 Dockerfile：不显示加载状态，直接返回（已保存的配置会直接显示）
+  if (isEditing && !isDockerfileChanged) {
+    // 在后台异步加载服务列表进行验证，但不阻塞界面
+    // 先返回，让界面立即显示已保存的配置
+    setTimeout(async () => {
+      try {
+        await loadServicesInternal(isDockerfileChanged)
+        // 加载完成后验证已保存的服务是否还存在
+        if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
+          const validServices = formData.value.selected_services.filter(
+            serviceName => services.value.some(s => s.name === serviceName)
+          )
+          if (validServices.length !== formData.value.selected_services.length) {
+            formData.value.selected_services = validServices
+            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
+              if (!services.value.some(s => s.name === serviceName)) {
+                delete formData.value.service_push_config[serviceName]
+              }
+            })
+          }
+        } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
+          if (!services.value.some(s => s.name === formData.value.selected_service)) {
+            formData.value.selected_service = ''
+          }
+        }
+      } catch (error) {
+        // 后台验证失败不影响已保存的配置显示
+        console.warn('后台验证服务列表失败，但已保存的配置仍然有效:', error)
+      }
+    }, 100)
+    return Promise.resolve()
+  }
+  
+  // 新建模式或切换 Dockerfile：正常加载
+  return loadServicesInternal(isDockerfileChanged)
+}
+
+// 内部加载服务列表函数
+async function loadServicesInternal(isDockerfileChanged = false) {
+  if (!formData.value.git_url) {
+    services.value = []
+    return Promise.resolve()
+  }
+
+  // 判断是否是编辑模式
+  const isEditing = !!editingPipeline.value
+  
   loadingServices.value = true
   servicesError.value = ''
 
@@ -1918,18 +2567,49 @@ async function loadServices() {
         git_url: formData.value.git_url,
         branch: formData.value.branch || null,
         dockerfile_name: formData.value.dockerfile_name || 'Dockerfile',
-        source_id: selectedSourceId.value || formData.value.source_id || null
+        source_id: formData.value.source_id || null
       }
       const res = await axios.post('/api/parse-dockerfile-services', payload)
       if (res.data.services && res.data.services.length > 0) {
         services.value = res.data.services
-        // 如果之前没有选择服务，默认全选
-        if (!formData.value.selected_services || formData.value.selected_services.length === 0) {
-          formData.value.selected_services = services.value.map(s => s.name)
-          initializeServiceConfigs()
+        
+        // 编辑模式下：保持原有的服务选择和推送模式，只有在切换 Dockerfile 时才重新识别
+        if (isEditing && !isDockerfileChanged) {
+          // 编辑模式且未切换 Dockerfile：保持原有配置，不做任何自动初始化
+          // 只确保已选择的服务在新服务列表中仍然有效
+          if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
+            // 过滤掉不存在的服务
+            formData.value.selected_services = formData.value.selected_services.filter(
+              serviceName => services.value.some(s => s.name === serviceName)
+            )
+            // 清理不存在的服务的配置
+            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
+              if (!services.value.some(s => s.name === serviceName)) {
+                delete formData.value.service_push_config[serviceName]
+              }
+            })
+          } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
+            // 单服务模式：检查选中的服务是否还存在
+            if (!services.value.some(s => s.name === formData.value.selected_service)) {
+              formData.value.selected_service = ''
+            }
+          }
+        } else {
+          // 新建模式或切换 Dockerfile：自动初始化服务选择
+          if (!formData.value.selected_services || formData.value.selected_services.length === 0) {
+            if (formData.value.push_mode === 'multi') {
+              formData.value.selected_services = services.value.map(s => s.name)
+              initializeServiceConfigs()
+            }
+          }
         }
       } else {
         services.value = []
+        // 如果没有服务，清空选择（但编辑模式下保持推送模式）
+        if (!isEditing || isDockerfileChanged) {
+          formData.value.selected_services = []
+          formData.value.selected_service = ''
+        }
       }
     } else if (formData.value.template) {
       // 使用模板
@@ -1942,17 +2622,45 @@ async function loadServices() {
       const templateServices = res.data.services || []
       if (templateServices.length > 0) {
         services.value = templateServices
-        // 如果之前没有选择服务，根据推送模式初始化
-        if (!formData.value.selected_services || formData.value.selected_services.length === 0) {
-          if (formData.value.push_mode === 'single') {
-            formData.value.selected_services = []
-          } else {
-            formData.value.selected_services = services.value.map(s => s.name)
-            initializeServiceConfigs()
+        
+        // 编辑模式下：保持原有的服务选择和推送模式
+        if (isEditing && !isDockerfileChanged) {
+          // 编辑模式且未切换模板：保持原有配置
+          if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
+            // 过滤掉不存在的服务
+            formData.value.selected_services = formData.value.selected_services.filter(
+              serviceName => services.value.some(s => s.name === serviceName)
+            )
+            // 清理不存在的服务的配置
+            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
+              if (!services.value.some(s => s.name === serviceName)) {
+                delete formData.value.service_push_config[serviceName]
+              }
+            })
+          } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
+            // 单服务模式：检查选中的服务是否还存在
+            if (!services.value.some(s => s.name === formData.value.selected_service)) {
+              formData.value.selected_service = ''
+            }
+          }
+        } else {
+          // 新建模式或切换模板：根据推送模式初始化
+          if (!formData.value.selected_services || formData.value.selected_services.length === 0) {
+            if (formData.value.push_mode === 'single') {
+              formData.value.selected_services = []
+            } else {
+              formData.value.selected_services = services.value.map(s => s.name)
+              initializeServiceConfigs()
+            }
           }
         }
       } else {
         services.value = []
+        // 如果没有服务，清空选择（但编辑模式下保持推送模式）
+        if (!isEditing || isDockerfileChanged) {
+          formData.value.selected_services = []
+          formData.value.selected_service = ''
+        }
       }
     } else {
       services.value = []
@@ -1961,9 +2669,12 @@ async function loadServices() {
     console.error('加载服务列表失败:', error)
     servicesError.value = error.response?.data?.detail || '加载服务列表失败'
     services.value = []
+    return Promise.reject(error)
   } finally {
     loadingServices.value = false
   }
+  
+  return Promise.resolve()
 }
 
 // 初始化服务配置
@@ -1972,8 +2683,20 @@ function initializeServiceConfigs() {
     formData.value.service_push_config = {}
   }
   formData.value.selected_services.forEach(serviceName => {
-    if (formData.value.service_push_config[serviceName] === undefined) {
-      formData.value.service_push_config[serviceName] = false
+    if (formData.value.service_push_config[serviceName] === undefined || 
+        typeof formData.value.service_push_config[serviceName] === 'boolean') {
+      // 如果是布尔值（旧格式），转换为对象格式（只保留 push 字段）
+      const oldValue = formData.value.service_push_config[serviceName]
+      formData.value.service_push_config[serviceName] = {
+        push: typeof oldValue === 'boolean' ? oldValue : false
+      }
+    } else if (formData.value.service_push_config[serviceName] && typeof formData.value.service_push_config[serviceName] === 'object') {
+      // 确保对象格式只包含 push 字段，移除 imageName 和 tag（这些由全局配置自动生成）
+      formData.value.service_push_config[serviceName] = {
+        push: formData.value.service_push_config[serviceName].push !== undefined 
+          ? formData.value.service_push_config[serviceName].push 
+          : false
+      }
     }
   })
 }
@@ -2003,8 +2726,19 @@ function toggleService(serviceName) {
     delete formData.value.service_push_config[serviceName]
   } else {
     formData.value.selected_services.push(serviceName)
-    if (formData.value.service_push_config[serviceName] === undefined) {
-      formData.value.service_push_config[serviceName] = false
+    if (formData.value.service_push_config[serviceName] === undefined || 
+        typeof formData.value.service_push_config[serviceName] === 'boolean') {
+      const oldValue = formData.value.service_push_config[serviceName]
+      formData.value.service_push_config[serviceName] = {
+        push: typeof oldValue === 'boolean' ? oldValue : false
+      }
+    } else if (formData.value.service_push_config[serviceName] && typeof formData.value.service_push_config[serviceName] === 'object') {
+      // 确保只保留 push 字段
+      formData.value.service_push_config[serviceName] = {
+        push: formData.value.service_push_config[serviceName].push !== undefined 
+          ? formData.value.service_push_config[serviceName].push 
+          : false
+      }
     }
   }
 }
@@ -2019,8 +2753,19 @@ function onServiceSelectionChange() {
   })
   // 为新选中的服务初始化配置
   formData.value.selected_services.forEach(serviceName => {
-    if (formData.value.service_push_config[serviceName] === undefined) {
-      formData.value.service_push_config[serviceName] = false
+    if (formData.value.service_push_config[serviceName] === undefined || 
+        typeof formData.value.service_push_config[serviceName] === 'boolean') {
+      const oldValue = formData.value.service_push_config[serviceName]
+      formData.value.service_push_config[serviceName] = {
+        push: typeof oldValue === 'boolean' ? oldValue : false
+      }
+    } else if (formData.value.service_push_config[serviceName] && typeof formData.value.service_push_config[serviceName] === 'object') {
+      // 确保只保留 push 字段
+      formData.value.service_push_config[serviceName] = {
+        push: formData.value.service_push_config[serviceName].push !== undefined 
+          ? formData.value.service_push_config[serviceName].push 
+          : false
+      }
     }
   })
 }
@@ -2048,12 +2793,86 @@ function removeService(serviceName) {
   }
 }
 
+// 获取服务配置对象（确保返回对象格式，只包含 push 字段）
+function getServiceConfig(serviceName) {
+  if (!formData.value.service_push_config) {
+    formData.value.service_push_config = {}
+  }
+  // 如果是布尔值（旧格式），转换为对象格式
+  if (formData.value.service_push_config[serviceName] === undefined || 
+      typeof formData.value.service_push_config[serviceName] === 'boolean') {
+    const oldValue = formData.value.service_push_config[serviceName]
+    formData.value.service_push_config[serviceName] = {
+      push: typeof oldValue === 'boolean' ? oldValue : false
+    }
+  } else if (formData.value.service_push_config[serviceName] && typeof formData.value.service_push_config[serviceName] === 'object') {
+    // 确保只包含 push 字段，移除 imageName 和 tag（这些由全局配置自动生成）
+    const config = formData.value.service_push_config[serviceName]
+    if (config.imageName !== undefined || config.tag !== undefined) {
+      formData.value.service_push_config[serviceName] = {
+        push: config.push !== undefined ? config.push : false
+      }
+    }
+  }
+  return formData.value.service_push_config[serviceName]
+}
+
+// 获取服务的默认镜像名称（基于全局镜像名称前缀 + 服务名）
+function getServiceDefaultImageName(serviceName) {
+  const prefix = formData.value.image_name || 'myapp/demo'
+  // 如果前缀已经包含服务名，直接返回前缀
+  if (prefix.endsWith(`/${serviceName}`) || prefix === serviceName) {
+    return prefix
+  }
+  // 否则拼接服务名
+  return `${prefix}/${serviceName}`
+}
+
+// 规范化服务推送配置（将旧格式的布尔值转换为新格式的对象，只保留 push 字段）
+function normalizeServicePushConfig(config) {
+  if (!config || typeof config !== 'object') {
+    return {}
+  }
+  const normalized = {}
+  Object.keys(config).forEach(serviceName => {
+    const value = config[serviceName]
+    // 如果是布尔值（旧格式），转换为对象格式
+    if (typeof value === 'boolean') {
+      normalized[serviceName] = {
+        push: value
+      }
+    } else if (value && typeof value === 'object') {
+      // 已经是对象格式，只保留 push 字段（imageName 和 tag 由全局配置自动生成）
+      normalized[serviceName] = {
+        push: value.push !== undefined ? value.push : false
+      }
+    }
+  })
+  return normalized
+}
+
 
 // 加载资源包列表
 async function loadResourcePackages() {
   try {
     const res = await axios.get('/api/resource-packages')
     resourcePackages.value = res.data.packages || []
+    
+    // 编辑模式下：确保已保存的资源包配置中的 target_path 有默认值
+    // 如果某个已保存的资源包配置没有 target_path 或为空，使用资源包名称作为默认值（与分步构建一致）
+    if (editingPipeline.value && formData.value.resource_package_configs) {
+      formData.value.resource_package_configs.forEach(config => {
+        if (!config.target_path || config.target_path.trim() === '') {
+          const pkg = resourcePackages.value.find(p => p.package_id === config.package_id)
+          if (pkg && pkg.name) {
+            // 如果路径为空，使用资源包名称（与分步构建一致）
+            config.target_path = pkg.name
+          } else {
+            config.target_path = 'resources'
+          }
+        }
+      })
+    }
   } catch (error) {
     console.error('加载资源包列表失败:', error)
   }
@@ -2079,11 +2898,14 @@ function isResourcePackageSelected(packageId) {
 function toggleResourcePackage(pkg) {
   const index = formData.value.resource_package_configs.findIndex(p => p.package_id === pkg.package_id)
   if (index > -1) {
+    // 取消选择：移除配置
     formData.value.resource_package_configs.splice(index, 1)
   } else {
+    // 选择：添加配置，使用默认路径（资源包名称，与分步构建一致）
+    const defaultPath = pkg.name || 'resources'
     formData.value.resource_package_configs.push({
       package_id: pkg.package_id,
-      target_path: 'resources'
+      target_path: defaultPath  // 默认使用资源包名称作为路径，与分步构建一致
     })
   }
 }
@@ -2092,13 +2914,43 @@ function toggleResourcePackage(pkg) {
 function getResourcePackageConfig(packageId) {
   let config = formData.value.resource_package_configs.find(p => p.package_id === packageId)
   if (!config) {
-    config = {
+    // 如果配置不存在，根据资源包信息创建默认配置
+    const pkg = resourcePackages.value.find(p => p.package_id === packageId)
+    // 编辑模式下，如果已有保存的配置，不应该自动创建新配置
+    // 只有在用户主动选择资源包时才创建配置
+    // 这里返回一个临时对象，但不添加到列表中（由 toggleResourcePackage 处理）
+    return {
       package_id: packageId,
-      target_path: 'resources'
+      target_path: pkg ? (pkg.name || 'resources') : 'resources'  // 默认使用资源包名称作为路径
     }
-    formData.value.resource_package_configs.push(config)
   }
   return config
+}
+
+// Dockerfile 来源变化处理
+function onDockerfileSourceChange() {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2744',message:'Dockerfile source changed',data:{use_project_dockerfile:formData.value.use_project_dockerfile,template:formData.value.template,dockerfile_name:formData.value.dockerfile_name,git_url:formData.value.git_url,branch:formData.value.branch},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
+  if (formData.value.use_project_dockerfile) {
+    // 使用项目 Dockerfile 时，清空模板
+    formData.value.template = ''
+    // 如果有分支和 Dockerfile，重新加载服务（服务列表依赖于 Dockerfile）
+    if (formData.value.git_url && formData.value.branch && formData.value.dockerfile_name) {
+      // Dockerfile 来源变化是用户主动切换，需要重新识别服务
+      loadServices(true)
+    } else if (formData.value.git_url && formData.value.branch) {
+      // 如果有分支但没有 Dockerfile，先扫描 Dockerfile（扫描完成后会自动加载服务）
+      scanDockerfiles()
+    }
+  } else {
+    // 使用模板时，清空 Dockerfile 名称
+    formData.value.dockerfile_name = 'Dockerfile'
+    // 如果选择了模板，重新加载服务（切换到模板是用户主动切换）
+    if (formData.value.template) {
+      loadServices(true)
+    }
+  }
 }
 
 // 模板变化处理
@@ -2106,8 +2958,25 @@ function onTemplateChange() {
   // 选择模板时，确保 use_project_dockerfile 为 false
   if (formData.value.template) {
     formData.value.use_project_dockerfile = false
+    // 重新加载服务（模板变化是用户主动切换）
+    loadServices(true)
+  } else {
+    // 清空模板时，如果使用项目 Dockerfile 且有分支，重新加载服务（切换到项目 Dockerfile 是用户主动切换）
+    if (formData.value.use_project_dockerfile && formData.value.git_url && formData.value.branch) {
+      loadServices(true)
+    }
   }
 }
+
+// 根据项目类型过滤模板
+const filteredTemplates = computed(() => {
+  if (!formData.value.project_type) {
+    return []
+  }
+  return templates.value.filter(
+    (t) => t.project_type === formData.value.project_type
+  )
+})
 
 // 构建配置JSON（基于统一的任务配置结构）
 const buildConfigJson = computed(() => {
@@ -2152,42 +3021,6 @@ function copyBuildConfigJson() {
     alert('复制失败，请手动选择复制')
   })
 }
-
-// 跳转到构建配置编辑页面
-function editBuildConfigInStepBuild() {
-  if (!formData.value.git_url) {
-    alert('请先填写Git仓库地址')
-    return
-  }
-  
-  // 将当前构建配置转换为JSON
-  try {
-    const config = JSON.parse(buildConfigJson.value)
-    // 存储到localStorage，供编辑页面使用
-    localStorage.setItem('buildConfigToEdit', JSON.stringify(config))
-    
-    // 触发事件通知App.vue切换到构建配置编辑页面
-    window.dispatchEvent(new CustomEvent('switchToBuildConfigEditor'))
-  } catch (error) {
-    console.error('转换配置失败:', error)
-    alert('配置转换失败')
-  }
-}
-
-// 监听 use_project_dockerfile 变化
-watch(() => formData.value.use_project_dockerfile, (newVal) => {
-  if (newVal) {
-    // 使用项目 Dockerfile 时，清空模板
-    formData.value.template = ''
-  }
-})
-
-// 监听模板和 use_project_dockerfile 变化，自动加载服务
-watch(() => [formData.value.template, formData.value.use_project_dockerfile, formData.value.git_url, formData.value.branch], () => {
-  if (formData.value.git_url && (formData.value.template || formData.value.use_project_dockerfile)) {
-    loadServices()
-  }
-}, { deep: true })
 
 async function deletePipeline(pipeline) {
   if (!confirm(`确定要删除流水线"${pipeline.name}"吗？`)) {

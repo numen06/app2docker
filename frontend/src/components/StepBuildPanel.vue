@@ -7,7 +7,8 @@
         class="step-item"
         :class="{ 
           active: currentStep === 1, 
-          completed: currentStep > 1
+          completed: currentStep > 1,
+          disabled: currentStep < 1
         }"
         @click="goToStep(1)"
       >
@@ -19,59 +20,51 @@
         class="step-item"
         :class="{ 
           active: currentStep === 2, 
-          completed: currentStep > 2
+          completed: currentStep > 2,
+          disabled: currentStep < 2
         }"
         @click="goToStep(2)"
       >
         <div class="step-number">2</div>
-        <div class="step-label">确认分支</div>
+        <div class="step-label">Dockerfile配置</div>
       </div>
       <div class="step-connector" :class="{ completed: currentStep > 2 }"></div>
       <div
         class="step-item"
         :class="{ 
           active: currentStep === 3, 
-          completed: currentStep > 3
+          completed: currentStep > 3,
+          disabled: currentStep < 3
         }"
         @click="goToStep(3)"
       >
         <div class="step-number">3</div>
-        <div class="step-label">选择模板</div>
+        <div class="step-label">选择服务</div>
       </div>
       <div class="step-connector" :class="{ completed: currentStep > 3 }"></div>
       <div
         class="step-item"
         :class="{ 
           active: currentStep === 4, 
-          completed: currentStep > 4
+          completed: currentStep > 4,
+          disabled: currentStep < 4
         }"
         @click="goToStep(4)"
       >
         <div class="step-number">4</div>
-        <div class="step-label">选择服务</div>
+        <div class="step-label">选择资源包</div>
       </div>
       <div class="step-connector" :class="{ completed: currentStep > 4 }"></div>
       <div
         class="step-item"
         :class="{ 
           active: currentStep === 5, 
-          completed: currentStep > 5
+          completed: currentStep > 5,
+          disabled: currentStep < 5
         }"
         @click="goToStep(5)"
       >
         <div class="step-number">5</div>
-        <div class="step-label">选择资源包</div>
-      </div>
-      <div class="step-connector" :class="{ completed: currentStep > 5 }"></div>
-      <div
-        class="step-item"
-        :class="{ 
-          active: currentStep === 6, 
-          completed: currentStep > 6
-        }"
-        @click="goToStep(6)"
-      >
-        <div class="step-number">6</div>
         <div class="step-label">开始构建</div>
       </div>
     </div>
@@ -175,6 +168,66 @@
           </div>
         </div>
 
+        <!-- 分支选择（仅Git数据源） -->
+        <div v-if="buildConfig.sourceType === 'git' && buildConfig.sourceId" class="mb-3">
+          <label class="form-label">
+            分支/标签 <span class="text-danger">*</span>
+          </label>
+          <div class="input-group">
+            <select
+              v-if="repoVerified"
+              v-model="buildConfig.branch"
+              class="form-select"
+              @change="onBranchChanged"
+              required
+              :disabled="refreshingBranches"
+            >
+              <option value="">
+                使用默认分支 ({{ branchesAndTags.default_branch || "main" }})
+              </option>
+              <optgroup v-if="branchesAndTags.branches.length > 0" label="分支">
+                <option
+                  v-for="branch in branchesAndTags.branches"
+                  :key="branch"
+                  :value="branch"
+                >
+                  {{ branch }}
+                </option>
+              </optgroup>
+              <optgroup v-if="branchesAndTags.tags.length > 0" label="标签">
+                <option
+                  v-for="tag in branchesAndTags.tags"
+                  :key="tag"
+                  :value="tag"
+                >
+                  {{ tag }}
+                </option>
+              </optgroup>
+            </select>
+            <input
+              v-else
+              type="text"
+              class="form-control"
+              placeholder="请先选择数据源"
+              disabled
+            />
+            <button
+              v-if="repoVerified"
+              class="btn btn-outline-secondary"
+              type="button"
+              @click="refreshBranches"
+              :disabled="refreshingBranches"
+              title="刷新分支列表"
+            >
+              <i v-if="refreshingBranches" class="fas fa-spinner fa-spin"></i>
+              <i v-else class="fas fa-sync-alt"></i>
+            </button>
+          </div>
+          <div class="form-text small text-muted">
+            <i class="fas fa-info-circle"></i> 选择要构建的分支或标签
+          </div>
+        </div>
+
         <div class="d-flex justify-content-end mt-4">
           <button
             class="btn btn-primary"
@@ -186,84 +239,10 @@
         </div>
       </div>
 
-      <!-- 步骤2: 确认分支（仅Git数据源） -->
+      <!-- 步骤2: Dockerfile配置 -->
       <div v-if="currentStep === 2" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-code-branch text-primary"></i> 步骤 2：确认分支
-        </h5>
-
-        <div v-if="buildConfig.sourceType === 'file'" class="alert alert-info">
-          <i class="fas fa-info-circle"></i>
-          文件上传模式无需选择分支，将直接进入下一步。
-        </div>
-
-        <div v-else class="mb-3">
-          <label class="form-label"
-            >分支/标签 <span class="text-danger">*</span></label
-          >
-          <select
-            v-if="repoVerified"
-            v-model="buildConfig.branch"
-            class="form-select"
-            @change="onBranchChanged"
-            required
-          >
-            <option value="">
-              使用默认分支 ({{ branchesAndTags.default_branch || "main" }})
-            </option>
-            <optgroup v-if="branchesAndTags.branches.length > 0" label="分支">
-              <option
-                v-for="branch in branchesAndTags.branches"
-                :key="branch"
-                :value="branch"
-              >
-                {{ branch }}
-              </option>
-            </optgroup>
-            <optgroup v-if="branchesAndTags.tags.length > 0" label="标签">
-              <option
-                v-for="tag in branchesAndTags.tags"
-                :key="tag"
-                :value="tag"
-              >
-                {{ tag }}
-              </option>
-            </optgroup>
-          </select>
-          <input
-            v-else
-            type="text"
-            class="form-control"
-            placeholder="请先选择数据源"
-            disabled
-          />
-          <div class="form-text small text-muted">
-            <i class="fas fa-info-circle"></i> 选择要构建的分支或标签
-          </div>
-        </div>
-
-        <div class="d-flex justify-content-between mt-4">
-          <button class="btn btn-outline-secondary" @click="prevStep">
-            <i class="fas fa-arrow-left me-1"></i> 上一步
-          </button>
-          <button
-            class="btn btn-primary"
-            @click="nextStep"
-            :disabled="
-              buildConfig.sourceType === 'git' &&
-              !buildConfig.branch &&
-              !branchesAndTags.default_branch
-            "
-          >
-            下一步 <i class="fas fa-arrow-right ms-1"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- 步骤3: 选择模板 -->
-      <div v-if="currentStep === 3" class="step-panel">
-        <h5 class="mb-3">
-          <i class="fas fa-layer-group text-primary"></i> 步骤 3：选择模板
+          <i class="fas fa-layer-group text-primary"></i> 步骤 2：Dockerfile 配置
         </h5>
 
         <div class="mb-3">
@@ -289,83 +268,161 @@
           </div>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label">模板</label>
-          <div class="input-group input-group-sm mb-1">
-            <span class="input-group-text"><i class="fas fa-search"></i></span>
+        <!-- Dockerfile 来源选择（仅Git数据源） -->
+        <div v-if="buildConfig.sourceType === 'git'" class="mb-4">
+          <label class="form-label">
+            Dockerfile 来源 <span class="text-danger">*</span>
+          </label>
+          <div class="btn-group w-100" role="group">
             <input
-              v-model="templateSearch"
-              type="text"
-              class="form-control"
-              placeholder="搜索模板..."
-              :disabled="buildConfig.useProjectDockerfile"
+              type="radio"
+              class="btn-check"
+              id="dockerfile-from-project"
+              :value="true"
+              v-model="buildConfig.useProjectDockerfile"
+              @change="onUseProjectDockerfileChange"
             />
+            <label class="btn btn-outline-primary" for="dockerfile-from-project">
+              <i class="fas fa-file-code"></i> 从项目中选择
+            </label>
+            
+            <input
+              type="radio"
+              class="btn-check"
+              id="dockerfile-from-template"
+              :value="false"
+              v-model="buildConfig.useProjectDockerfile"
+              @change="onUseProjectDockerfileChange"
+            />
+            <label class="btn btn-outline-primary" for="dockerfile-from-template">
+              <i class="fas fa-layer-group"></i> 从模板库中选择
+            </label>
           </div>
-          <select
-            v-model="buildConfig.template"
-            class="form-select"
-            @change="loadTemplateParams"
-            :disabled="buildConfig.useProjectDockerfile"
-          >
-            <option value="">-- 请选择模板 --</option>
-            <option
-              v-for="tpl in filteredTemplates"
-              :key="tpl.name"
-              :value="tpl.name"
-            >
-              {{ tpl.name }} ({{ getProjectTypeLabel(tpl.project_type)
-              }}{{ tpl.type === "builtin" ? " · 内置" : "" }})
-            </option>
-          </select>
-          <div class="form-text small text-muted">
-            <i class="fas fa-info-circle"></i>
-            <span v-if="buildConfig.useProjectDockerfile">
-              将使用项目中的 Dockerfile，模板选项已禁用
-            </span>
-            <span v-else> 已按项目类型过滤，可在模板管理中维护 </span>
+          <div class="form-text small text-muted mt-1">
+            <i class="fas fa-info-circle"></i> 选择 Dockerfile 的来源方式
+          </div>
+        </div>
+        
+        <!-- 文件上传模式提示 -->
+        <div v-if="buildConfig.sourceType === 'file'" class="alert alert-info mb-3">
+          <i class="fas fa-info-circle"></i> 文件上传模式将使用模板库中的 Dockerfile 模板
+        </div>
+
+        <!-- 模式1: 从项目中选择 Dockerfile（仅Git数据源） -->
+        <div v-if="buildConfig.sourceType === 'git' && buildConfig.useProjectDockerfile" class="mb-3">
+          <div class="card border-primary">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">
+                <i class="fas fa-file-code text-primary"></i> 从项目中选择 Dockerfile
+              </h6>
+            </div>
+            <div class="card-body">
+              <div class="mb-2">
+                <label class="form-label">Dockerfile 文件 <span class="text-danger">*</span></label>
+                
+                <!-- 当前选择提示 -->
+                <div v-if="buildConfig.dockerfileName && buildConfig.dockerfileName !== ''" class="alert alert-success alert-sm py-2 mb-2">
+                  <i class="fas fa-check-circle me-2"></i>
+                  <strong>当前选择：</strong>{{ buildConfig.dockerfileName }}
+                </div>
+                
+                <div v-if="scanningDockerfiles" class="mb-2">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  <small class="text-muted">正在扫描项目中的 Dockerfile...</small>
+                </div>
+                <div class="input-group input-group-sm">
+                  <select
+                    v-model="buildConfig.dockerfileName"
+                    class="form-select form-select-sm"
+                    :disabled="scanningDockerfiles || !buildConfig.branch"
+                    required
+                  >
+                    <option value="">-- 请先选择分支 --</option>
+                    <option value="Dockerfile">Dockerfile（默认，根目录）</option>
+                    <option
+                      v-for="dockerfile in availableDockerfiles"
+                      :key="dockerfile.path"
+                      :value="dockerfile.path"
+                    >
+                      {{ dockerfile.path }} {{ dockerfile.path !== dockerfile.name ? `(${dockerfile.name})` : '' }}
+                    </option>
+                  </select>
+                  <button
+                    class="btn btn-outline-secondary"
+                    type="button"
+                    @click="scanDockerfiles"
+                    :disabled="scanningDockerfiles || (!buildConfig.branch && !branchesAndTags.default_branch)"
+                    title="刷新 Dockerfile 列表"
+                  >
+                    <i v-if="scanningDockerfiles" class="fas fa-spinner fa-spin"></i>
+                    <i v-else class="fas fa-sync-alt"></i>
+                  </button>
+                </div>
+                <small v-if="dockerfilesError" class="text-danger d-block mt-1">
+                  <i class="fas fa-exclamation-triangle"></i> {{ dockerfilesError }}
+                </small>
+                <small v-else-if="availableDockerfiles.length > 0" class="text-muted d-block mt-1">
+                  <i class="fas fa-check-circle"></i> 已扫描到 {{ availableDockerfiles.length }} 个 Dockerfile
+                </small>
+                <small v-else-if="buildConfig.branch" class="text-muted d-block mt-1">
+                  <i class="fas fa-info-circle"></i> 请先选择分支，然后点击刷新按钮扫描项目中的 Dockerfile
+                </small>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Dockerfile 选择选项（仅Git数据源且非文件上传） -->
-        <div v-if="buildConfig.sourceType === 'git'" class="mb-3">
-          <div class="form-check">
-            <input
-              v-model="buildConfig.useProjectDockerfile"
-              type="checkbox"
-              class="form-check-input"
-              id="useProjectDockerfile"
-              @change="onUseProjectDockerfileChange"
-            />
-            <label class="form-check-label" for="useProjectDockerfile">
-              <i class="fas fa-file-code"></i> 优先使用项目中的 Dockerfile
-            </label>
-          </div>
-          <div v-if="buildConfig.useProjectDockerfile" class="mt-2">
-            <label class="form-label">Dockerfile 文件</label>
-            <div v-if="scanningDockerfiles" class="mb-2">
-              <span class="spinner-border spinner-border-sm me-2"></span>
-              <small class="text-muted">正在扫描项目中的 Dockerfile...</small>
+        <!-- 模式2: 从模板库中选择 -->
+        <div v-if="!buildConfig.useProjectDockerfile" class="mb-3">
+          <div class="card border-primary">
+            <div class="card-header bg-light">
+              <h6 class="mb-0">
+                <i class="fas fa-layer-group text-primary"></i> 从模板库中选择
+              </h6>
             </div>
-            <select
-              v-model="buildConfig.dockerfileName"
-              class="form-select form-select-sm"
-              :disabled="scanningDockerfiles"
-            >
-              <option value="Dockerfile">Dockerfile（默认，根目录）</option>
-              <option
-                v-for="dockerfile in availableDockerfiles"
-                :key="dockerfile.path"
-                :value="dockerfile.path"
-              >
-                {{ dockerfile.path }} {{ dockerfile.path !== dockerfile.name ? `(${dockerfile.name})` : '' }}
-              </option>
-            </select>
-            <small v-if="dockerfilesError" class="text-danger d-block mt-1">
-              <i class="fas fa-exclamation-triangle"></i> {{ dockerfilesError }}
-            </small>
-            <small v-else-if="availableDockerfiles.length > 0" class="text-muted d-block mt-1">
-              <i class="fas fa-check-circle"></i> 已扫描到 {{ availableDockerfiles.length }} 个 Dockerfile
-            </small>
+            <div class="card-body">
+              <div class="mb-2">
+                <label class="form-label">模板 <span class="text-danger">*</span></label>
+                
+                <!-- 当前选择提示 -->
+                <div v-if="buildConfig.template && buildConfig.template !== ''" class="alert alert-success alert-sm py-2 mb-2">
+                  <i class="fas fa-check-circle me-2"></i>
+                  <strong>当前选择：</strong>{{ buildConfig.template }}
+                  <span v-if="filteredTemplates.find(t => t.name === buildConfig.template)">
+                    ({{ getProjectTypeLabel(filteredTemplates.find(t => t.name === buildConfig.template).project_type) }})
+                  </span>
+                </div>
+                
+                <div class="input-group input-group-sm mb-1">
+                  <span class="input-group-text"><i class="fas fa-search"></i></span>
+                  <input
+                    v-model="templateSearch"
+                    type="text"
+                    class="form-control"
+                    placeholder="搜索模板..."
+                  />
+                </div>
+                <select
+                  v-model="buildConfig.template"
+                  class="form-select"
+                  @change="loadTemplateParams"
+                  required
+                >
+                  <option value="">-- 请选择模板 --</option>
+                  <option
+                    v-for="tpl in filteredTemplates"
+                    :key="tpl.name"
+                    :value="tpl.name"
+                  >
+                    {{ tpl.name }} ({{ getProjectTypeLabel(tpl.project_type)
+                    }}{{ tpl.type === "builtin" ? " · 内置" : "" }})
+                  </option>
+                </select>
+                <div class="form-text small text-muted mt-1">
+                  <i class="fas fa-info-circle"></i> 已按项目类型过滤，可在模板管理中维护
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -387,9 +444,9 @@
       </div>
 
       <!-- 步骤4: 选择服务（单应用/多服务） -->
-      <div v-if="currentStep === 4" class="step-panel">
+      <div v-if="currentStep === 3" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-server text-primary"></i> 步骤 4：选择服务
+          <i class="fas fa-server text-primary"></i> 步骤 3：选择服务
         </h5>
 
         <div v-if="parsingServices" class="text-center py-4">
@@ -1042,10 +1099,10 @@
         </div>
       </div>
 
-      <!-- 步骤5: 选择资源包 -->
-      <div v-if="currentStep === 5" class="step-panel">
+      <!-- 步骤4: 选择资源包 -->
+      <div v-if="currentStep === 4" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-archive text-primary"></i> 步骤 5：选择资源包
+          <i class="fas fa-archive text-primary"></i> 步骤 4：选择资源包
         </h5>
 
         <div class="mb-3">
@@ -1172,10 +1229,10 @@
       </div>
 
       <!-- 步骤6: 开始构建 -->
-      <div v-if="currentStep === 6" class="step-panel">
+      <div v-if="currentStep === 5" class="step-panel">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h5 class="mb-0">
-            <i class="fas fa-play-circle text-primary"></i> 步骤 6：开始构建
+            <i class="fas fa-play-circle text-primary"></i> 步骤 5：开始构建
           </h5>
           <button
             type="button"
@@ -1579,6 +1636,7 @@ const branchesAndTags = ref({
 const availableDockerfiles = ref([]);
 const scanningDockerfiles = ref(false);
 const dockerfilesError = ref("");
+const refreshingBranches = ref(false);
 
 // 模板相关
 const templates = ref([]);
@@ -1671,33 +1729,30 @@ const canProceedStep1 = computed(() => {
   if (buildConfig.value.sourceType === "file") {
     return buildConfig.value.file !== null;
   } else {
-    return buildConfig.value.sourceId !== "" && repoVerified.value;
+    // Git数据源需要选择数据源和分支
+    return buildConfig.value.sourceId !== "" && repoVerified.value && 
+           (buildConfig.value.branch || branchesAndTags.value.default_branch);
   }
 });
 
 
 // 步骤导航
 function nextStep() {
-  if (currentStep.value < 6) {
+  if (currentStep.value < 5) {
     currentStep.value++;
 
-    // 如果是文件上传模式，跳过步骤2（分支确认）
-    if (currentStep.value === 2 && buildConfig.value.sourceType === "file") {
-      currentStep.value = 3;
-    }
-
-    // 步骤3完成后，自动分析模板
-    if (currentStep.value === 4) {
+    // 步骤2完成后，自动分析模板
+    if (currentStep.value === 3) {
       analyzeTemplate();
     }
 
-    // 步骤4完成后，进入步骤5（选择资源包）
-    if (currentStep.value === 5) {
+    // 步骤3完成后，进入步骤4（选择资源包）
+    if (currentStep.value === 4) {
       loadResourcePackages();
     }
 
-    // 步骤5完成后，进入步骤6（开始构建）
-    if (currentStep.value === 6) {
+    // 步骤4完成后，进入步骤5（开始构建）
+    if (currentStep.value === 5) {
       // 保存资源包配置
       buildConfig.value.resourcePackages = selectedResourcePackages.value.map(
         (packageId) => {
@@ -1722,9 +1777,9 @@ function prevStep() {
   }
 }
 
-// 直接跳转到指定步骤
+// 直接跳转到指定步骤（不允许跳变，只能跳转到当前步骤或之前的步骤）
 function goToStep(step) {
-  if (step >= 1 && step <= 6) {
+  if (step >= 1 && step <= 5 && step <= currentStep.value) {
     currentStep.value = step;
   }
 }
@@ -1783,8 +1838,67 @@ async function onSourceSelected() {
   }
 }
 
+// 刷新分支列表
+async function refreshBranches() {
+  if (!buildConfig.value.sourceId) {
+    return;
+  }
+
+  const source = gitSources.value.find(
+    (s) => s.source_id === buildConfig.value.sourceId
+  );
+  if (!source) {
+    return;
+  }
+
+  refreshingBranches.value = true;
+  try {
+    // 调用验证Git仓库的API来刷新分支列表
+    const response = await axios.post("/api/verify-git-repo", {
+      git_url: source.git_url,
+      source_id: buildConfig.value.sourceId,
+    });
+
+    if (response.data && response.data.branches) {
+      // 更新分支和标签列表
+      branchesAndTags.value = {
+        branches: response.data.branches || [],
+        tags: response.data.tags || [],
+        default_branch: response.data.default_branch || null,
+      };
+
+      // 如果当前选择的分支不在新列表中，重置为默认分支
+      const currentBranch = buildConfig.value.branch;
+      if (
+        currentBranch &&
+        !branchesAndTags.value.branches.includes(currentBranch) &&
+        !branchesAndTags.value.tags.includes(currentBranch)
+      ) {
+        buildConfig.value.branch = branchesAndTags.value.default_branch || "";
+      }
+    }
+  } catch (error) {
+    console.error("刷新分支列表失败:", error);
+    alert(
+      error.response?.data?.detail ||
+        error.message ||
+        "刷新分支列表失败，请稍后重试"
+    );
+  } finally {
+    refreshingBranches.value = false;
+  }
+}
+
 function onBranchChanged() {
   // 分支变化时的处理
+  // 如果切换到新分支且使用项目Dockerfile，重新扫描Dockerfile
+  if (
+    buildConfig.value.useProjectDockerfile &&
+    buildConfig.value.branch &&
+    buildConfig.value.sourceType === "git"
+  ) {
+    scanDockerfiles();
+  }
 }
 
 function formatGitUrl(url) {
@@ -2052,19 +2166,23 @@ async function onUseProjectDockerfileChange() {
     templateParams.value = [];
     buildConfig.value.templateParams = {};
     // 扫描项目中的 Dockerfile
-    await scanProjectDockerfiles();
+    await scanDockerfiles();
   }
 }
 
 // 扫描项目中的 Dockerfile
-async function scanProjectDockerfiles() {
+async function scanDockerfiles() {
   if (buildConfig.value.sourceType !== 'git' || !buildConfig.value.sourceId) {
     return;
   }
 
+  // 保存当前选择的 Dockerfile，避免刷新时丢失
+  const currentSelection = buildConfig.value.dockerfileName;
+
   scanningDockerfiles.value = true;
   dockerfilesError.value = "";
-  availableDockerfiles.value = [];
+  // 不清空已有列表，避免界面闪烁
+  // availableDockerfiles.value = [];
 
   try {
     // 获取数据源信息
@@ -2111,18 +2229,26 @@ async function scanProjectDockerfiles() {
       
       availableDockerfiles.value = dockerfileList;
       
-      // 如果扫描到 Dockerfile，默认选择第一个（优先选择根目录的 Dockerfile）
+      // 智能恢复选择：优先保持原有选择，如果不存在则选择默认
       if (availableDockerfiles.value.length > 0) {
-        const rootDockerfile = availableDockerfiles.value.find(df => df.path === 'Dockerfile');
-        buildConfig.value.dockerfileName = rootDockerfile ? 'Dockerfile' : availableDockerfiles.value[0].path;
+        // 如果之前有选择且在新列表中存在，保持选择
+        if (currentSelection && availableDockerfiles.value.some(df => df.path === currentSelection)) {
+          buildConfig.value.dockerfileName = currentSelection;
+        } else {
+          // 否则选择根目录的 Dockerfile 或第一个
+          const rootDockerfile = availableDockerfiles.value.find(df => df.path === 'Dockerfile');
+          buildConfig.value.dockerfileName = rootDockerfile ? 'Dockerfile' : availableDockerfiles.value[0].path;
+        }
       } else {
-        buildConfig.value.dockerfileName = 'Dockerfile';
+        // 如果没有扫描到，保持原有选择或使用默认值
+        buildConfig.value.dockerfileName = currentSelection || 'Dockerfile';
       }
     }
   } catch (error) {
     console.error('扫描 Dockerfile 失败:', error);
     dockerfilesError.value = error.response?.data?.detail || '扫描 Dockerfile 失败';
-    availableDockerfiles.value = [];
+    // 出错时不清空列表，保持原有显示
+    // availableDockerfiles.value = [];
   } finally {
     scanningDockerfiles.value = false;
   }
@@ -3126,7 +3252,7 @@ watch(
       newBranch !== oldBranch &&
       buildConfig.value.sourceType === 'git'
     ) {
-      scanProjectDockerfiles();
+      scanDockerfiles();
     }
   }
 );
@@ -3208,16 +3334,30 @@ onMounted(() => {
   color: #198754;
 }
 
-.step-item.clickable {
+.step-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.step-item.disabled .step-number {
+  background-color: #e9ecef;
+  color: #adb5bd;
+}
+
+.step-item.disabled .step-label {
+  color: #adb5bd;
+}
+
+.step-item:not(.disabled) {
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.step-item.clickable:hover {
+.step-item:not(.disabled):hover {
   transform: scale(1.05);
 }
 
-.step-item.clickable:hover .step-number {
+.step-item:not(.disabled):hover .step-number {
   background-color: #0d6efd;
   color: white;
 }
