@@ -1721,6 +1721,7 @@ class BuildManager:
                 # 检查是否请求停止（通过任务状态判断）
                 from backend.database import get_db_session
                 from backend.models import Task
+
                 db = get_db_session()
                 try:
                     task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -1984,12 +1985,17 @@ class BuildManager:
                 # 验证状态是否真的更新了
                 updated_task = self.task_manager.get_task(task_id)
                 if updated_task and updated_task.get("status") == "completed":
-                    print(f"✅ 任务 {task_id[:8]} 状态验证成功: {updated_task.get('status')}")
+                    print(
+                        f"✅ 任务 {task_id[:8]} 状态验证成功: {updated_task.get('status')}"
+                    )
                 else:
-                    print(f"⚠️ 任务 {task_id[:8]} 状态验证失败，当前状态: {updated_task.get('status') if updated_task else 'None'}")
+                    print(
+                        f"⚠️ 任务 {task_id[:8]} 状态验证失败，当前状态: {updated_task.get('status') if updated_task else 'None'}"
+                    )
             except Exception as status_error:
                 print(f"❌ 更新任务状态失败: {status_error}")
                 import traceback
+
                 traceback.print_exc()
             # 从任务字典中移除已完成的线程
             with self.lock:
@@ -2024,10 +2030,10 @@ class BuildManager:
     def _trigger_task_from_config(self, task_config: dict) -> str:
         """
         统一的任务触发函数，从任务配置JSON触发任务
-        
+
         Args:
             task_config: 标准化的任务配置字典
-        
+
         Returns:
             task_id: 任务ID
         """
@@ -2036,6 +2042,12 @@ class BuildManager:
         image_name = task_config.get("image_name")
         tag = task_config.get("tag", "latest")
         branch = task_config.get("branch")
+        
+        # 调试日志：检查任务配置中的分支
+        import json
+        print(f"🔍 _trigger_task_from_config:")
+        print(f"   - task_config中的branch: {repr(branch)}")
+        print(f"   - task_config完整内容: {json.dumps({k: v for k, v in task_config.items() if k != 'template_params'}, indent=2, ensure_ascii=False, default=str)}")
         project_type = task_config.get("project_type", "jar")
         template = task_config.get("template", "")
         template_params = task_config.get("template_params", {})
@@ -2051,7 +2063,7 @@ class BuildManager:
         resource_package_ids = task_config.get("resource_package_ids", [])
         pipeline_id = task_config.get("pipeline_id")
         trigger_source = task_config.get("trigger_source", "manual")
-        
+
         # 调用原有的start_build_from_source方法
         return self.start_build_from_source(
             git_url=git_url,
@@ -2283,6 +2295,11 @@ class BuildManager:
                 log(f"🔐 使用全局 Git 配置的认证信息\n")
 
             # Git clone 会在目标目录下创建仓库目录，所以目标目录应该是父目录
+            # 调试日志：检查构建时使用的分支
+            print(f"🔍 _build_from_source_task:")
+            print(f"   - 参数branch: {branch}")
+            print(f"   - git_url: {git_url}")
+            log(f"📌 准备克隆分支: {branch or '默认分支'}\n")
             clone_success, clone_error = self._clone_git_repo(
                 git_url, temp_clone_dir, branch, git_config, log
             )
@@ -2377,14 +2394,20 @@ class BuildManager:
 
             # 检查项目中是否存在 Dockerfile（使用自定义文件名或路径）
             # 规范化路径分隔符（Git 路径使用 /，但 Windows 使用 \）
-            normalized_dockerfile_name = dockerfile_name.replace('/', os.sep).replace('\\', os.sep)
-            project_dockerfile_path = os.path.join(source_dir, normalized_dockerfile_name)
+            normalized_dockerfile_name = dockerfile_name.replace("/", os.sep).replace(
+                "\\", os.sep
+            )
+            project_dockerfile_path = os.path.join(
+                source_dir, normalized_dockerfile_name
+            )
             has_project_dockerfile = os.path.exists(project_dockerfile_path)
 
             # 决定使用项目中的 Dockerfile 还是模板
             if has_project_dockerfile and use_project_dockerfile:
                 # 计算相对路径，用于日志显示
-                dockerfile_relative_path = os.path.relpath(project_dockerfile_path, source_dir)
+                dockerfile_relative_path = os.path.relpath(
+                    project_dockerfile_path, source_dir
+                )
                 log(
                     f"📄 检测到项目中的 Dockerfile: {dockerfile_relative_path}，使用项目中的 Dockerfile\n"
                 )
@@ -2393,7 +2416,9 @@ class BuildManager:
                 # 这样可以避免 buildx 的文件名识别问题，确保构建时使用默认文件名
                 dockerfile_path = os.path.join(build_context, "Dockerfile")
                 shutil.copy2(project_dockerfile_path, dockerfile_path)
-                log(f"✅ 已从 {dockerfile_relative_path} 复制到构建上下文的 Dockerfile\n")
+                log(
+                    f"✅ 已从 {dockerfile_relative_path} 复制到构建上下文的 Dockerfile\n"
+                )
             else:
                 if has_project_dockerfile and not use_project_dockerfile:
                     log(f"📋 项目中有 Dockerfile，但用户选择使用模板\n")
@@ -2710,7 +2735,7 @@ logs/
                             try:
                                 # 初始化 registry_config
                                 registry_config = None
-                                
+
                                 # 根据镜像名找到对应的registry配置（与单服务构建逻辑一致）
                                 def find_matching_registry_for_push(img_name):
                                     """根据镜像名找到匹配的registry配置，扫描所有仓库配置"""
@@ -2726,17 +2751,20 @@ logs/
                                         log(
                                             f"🔍 扫描所有 {len(all_registries)} 个registry配置...\n"
                                         )
-                                        
+
                                         # 优先匹配：完全匹配
                                         for reg in all_registries:
                                             reg_address = reg.get("registry", "")
                                             reg_name = reg.get("name", "Unknown")
-                                            if reg_address and img_registry == reg_address:
+                                            if (
+                                                reg_address
+                                                and img_registry == reg_address
+                                            ):
                                                 log(
                                                     f"✅ 找到完全匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
                                                 return reg
-                                        
+
                                         # 次优匹配：包含关系
                                         for reg in all_registries:
                                             reg_address = reg.get("registry", "")
@@ -2751,10 +2779,8 @@ logs/
                                                     f"✅ 找到部分匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
                                                 return reg
-                                        
-                                        log(
-                                            f"⚠️  未找到匹配的registry配置\n"
-                                        )
+
+                                        log(f"⚠️  未找到匹配的registry配置\n")
                                     return None
 
                                 # 如果服务配置中指定了 registry，优先使用指定的 registry
@@ -3098,12 +3124,17 @@ logs/
                 # 验证状态是否真的更新了
                 updated_task = self.task_manager.get_task(task_id)
                 if updated_task and updated_task.get("status") == "completed":
-                    print(f"✅ 任务 {task_id[:8]} 状态验证成功: {updated_task.get('status')}")
+                    print(
+                        f"✅ 任务 {task_id[:8]} 状态验证成功: {updated_task.get('status')}"
+                    )
                 else:
-                    print(f"⚠️ 任务 {task_id[:8]} 状态验证失败，当前状态: {updated_task.get('status') if updated_task else 'None'}")
+                    print(
+                        f"⚠️ 任务 {task_id[:8]} 状态验证失败，当前状态: {updated_task.get('status') if updated_task else 'None'}"
+                    )
             except Exception as status_error:
                 print(f"❌ 更新任务状态失败: {status_error}")
                 import traceback
+
                 traceback.print_exc()
             # 从任务字典中移除已完成的线程
             with self.lock:
@@ -3139,7 +3170,7 @@ logs/
             except Exception as status_error:
                 print(f"⚠️ 更新任务状态失败: {status_error}")
                 print(f"任务ID: {task_id}, 错误: {error_msg}")
-            
+
             # 从任务字典中移除失败的线程
             with self.lock:
                 if task_id in self.tasks:
@@ -3206,9 +3237,17 @@ logs/
                     log(f"🔑 使用 SSH key: {ssh_key_path}\n")
 
             # 如果指定了分支，需要在 URL 之前添加 -b 参数
+            # 调试日志
+            print(f"🔍 _clone_git_repo:")
+            print(f"   - branch参数: {repr(branch)}")
+            print(f"   - branch类型: {type(branch)}")
+            print(f"   - branch是否为真值: {bool(branch)}")
+            
             if branch:
                 cmd.extend(["-b", branch])
                 log(f"📌 检出分支: {branch}\n")
+            else:
+                log(f"📌 使用默认分支（未指定分支）\n")
 
             # Git clone 会在目标目录下创建仓库目录
             # 确定仓库名称（从 URL 提取）
@@ -3274,7 +3313,7 @@ logs/
 # ============ 队列处理函数 ============
 def _process_next_queued_task(pipeline_manager, pipeline_id: str):
     """处理队列中的下一个任务（相同流水线）- 从实际任务列表中获取
-    
+
     Args:
         pipeline_manager: PipelineManager 实例
         pipeline_id: 流水线 ID
@@ -3292,11 +3331,11 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
             else:
                 # 任务已完成或不存在，解绑
                 pipeline_manager.unbind_task(pipeline_id)
-        
+
         # 从实际任务列表中获取下一个 pending 任务
         build_manager = BuildManager()
         pending_tasks = build_manager.task_manager.list_tasks(status="pending")
-        
+
         # 找到属于该流水线的最早创建的 pending 任务
         next_task = None
         for task in pending_tasks:
@@ -3304,9 +3343,11 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
             task_pipeline_id = task_config.get("pipeline_id")
             if task_pipeline_id == pipeline_id:
                 # 按创建时间排序，找到最早的任务
-                if next_task is None or task.get("created_at", "") < next_task.get("created_at", ""):
+                if next_task is None or task.get("created_at", "") < next_task.get(
+                    "created_at", ""
+                ):
                     next_task = task
-        
+
         if not next_task:
             # 没有 pending 任务，检查是否还有 task_queue 中的任务（向后兼容）
             queued_task = pipeline_manager.get_next_queued_task(pipeline_id)
@@ -3315,7 +3356,9 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
                 task_config = queued_task.get("task_config", {})
                 task_config["pipeline_id"] = pipeline_id
                 task_id = build_manager._trigger_task_from_config(task_config)
-                pipeline_manager.remove_queued_task(pipeline_id, queued_task.get("queue_id"))
+                pipeline_manager.remove_queued_task(
+                    pipeline_id, queued_task.get("queue_id")
+                )
                 pipeline_manager.record_trigger(
                     pipeline_id,
                     task_id,
@@ -3326,13 +3369,15 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
                         "from_queue": True,
                     },
                 )
-                print(f"✅ 队列任务已启动（从task_queue）: 流水线 {pipeline_id[:8]}, 任务 {task_id[:8]}")
+                print(
+                    f"✅ 队列任务已启动（从task_queue）: 流水线 {pipeline_id[:8]}, 任务 {task_id[:8]}"
+                )
             return
-        
+
         # 找到下一个 pending 任务，开始执行
         task_id = next_task.get("task_id")
         task_config = next_task.get("task_config", {})
-        
+
         # 绑定任务到流水线
         pipeline_manager.record_trigger(
             pipeline_id,
@@ -3344,7 +3389,7 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
                 "from_queue": True,  # 标记来自队列
             },
         )
-        
+
         # 重新调用构建逻辑来开始执行任务
         # 从任务配置中提取参数
         git_url = task_config.get("git_url")
@@ -3365,9 +3410,10 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
         push_mode = task_config.get("push_mode", "multi")
         resource_package_ids = task_config.get("resource_package_ids", [])
         trigger_source = task_config.get("trigger_source", "manual")
-        
+
         # 启动构建线程（使用已有的任务ID）
         import threading
+
         thread = threading.Thread(
             target=build_manager._build_from_source_task,
             args=(
@@ -3396,12 +3442,13 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
         thread.start()
         with build_manager.lock:
             build_manager.tasks[task_id] = thread
-        
+
         print(f"✅ 队列任务已启动: 流水线 {pipeline_id[:8]}, 任务 {task_id[:8]}")
-        
+
     except Exception as e:
         print(f"⚠️ 处理队列任务失败: {e}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -3427,11 +3474,11 @@ def build_task_config(
     resource_package_ids: list = None,
     pipeline_id: str = None,
     trigger_source: str = "manual",
-    **kwargs
+    **kwargs,
 ) -> dict:
     """
     构建统一的任务配置JSON结构
-    
+
     Args:
         git_url: Git仓库地址
         image_name: 镜像名称
@@ -3454,7 +3501,7 @@ def build_task_config(
         pipeline_id: 流水线ID
         trigger_source: 触发来源
         **kwargs: 其他参数
-    
+
     Returns:
         标准化的任务配置字典
     """
@@ -3479,10 +3526,10 @@ def build_task_config(
         "pipeline_id": pipeline_id,
         "trigger_source": trigger_source,
     }
-    
+
     # 添加其他参数
     config.update(kwargs)
-    
+
     # 移除None值（保留空列表和空字典）
     return {k: v for k, v in config.items() if v is not None}
 
@@ -3490,51 +3537,65 @@ def build_task_config(
 def replace_tag_date_placeholders(tag: str) -> str:
     """
     替换标签中的动态日期占位符
-    
+
     支持的格式：
     - ${DATE} -> YYYYMMDD (例如: 20241225)
     - ${DATE:FORMAT} -> 自定义格式 (例如: ${DATE:YYYY-MM-DD} -> 2024-12-25)
     - ${TIMESTAMP} -> 时间戳 (例如: 1703520000)
-    
+
     Args:
         tag: 原始标签字符串
-        
+
     Returns:
         替换后的标签字符串
     """
     if not tag:
         return tag
-    
+
     now = datetime.now()
-    
+
     # 替换 ${DATE:FORMAT} 格式（自定义格式）
     import re
-    date_format_pattern = r'\$\{DATE:([^}]+)\}'
+
+    date_format_pattern = r"\$\{DATE:([^}]+)\}"
+
     def replace_date_format(match):
         format_str = match.group(1)
         try:
             # 将 YYYY-MM-DD 格式转换为 Python 的 strftime 格式
-            format_str = format_str.replace('YYYY', '%Y').replace('MM', '%m').replace('DD', '%d')
-            format_str = format_str.replace('HH', '%H').replace('mm', '%M').replace('ss', '%S')
+            format_str = (
+                format_str.replace("YYYY", "%Y").replace("MM", "%m").replace("DD", "%d")
+            )
+            format_str = (
+                format_str.replace("HH", "%H").replace("mm", "%M").replace("ss", "%S")
+            )
             return now.strftime(format_str)
         except:
             return match.group(0)  # 如果格式错误，返回原字符串
-    
+
     tag = re.sub(date_format_pattern, replace_date_format, tag)
-    
+
     # 替换 ${DATE} -> YYYYMMDD
-    tag = tag.replace('${DATE}', now.strftime('%Y%m%d'))
-    
+    tag = tag.replace("${DATE}", now.strftime("%Y%m%d"))
+
     # 替换 ${TIMESTAMP} -> 时间戳
-    tag = tag.replace('${TIMESTAMP}', str(int(now.timestamp())))
-    
+    tag = tag.replace("${TIMESTAMP}", str(int(now.timestamp())))
+
     return tag
 
 
-def pipeline_to_task_config(pipeline: dict, trigger_source: str = "manual", branch: str = None, tag: str = None, webhook_branch: str = None, branch_tag_mapping: dict = None, **kwargs) -> dict:
+def pipeline_to_task_config(
+    pipeline: dict,
+    trigger_source: str = "manual",
+    branch: str = None,
+    tag: str = None,
+    webhook_branch: str = None,
+    branch_tag_mapping: dict = None,
+    **kwargs,
+) -> dict:
     """
     将流水线配置转换为任务配置JSON
-    
+
     Args:
         pipeline: 流水线配置字典
         trigger_source: 触发来源
@@ -3543,17 +3604,28 @@ def pipeline_to_task_config(pipeline: dict, trigger_source: str = "manual", bran
         webhook_branch: Webhook推送的分支（用于标签映射）
         branch_tag_mapping: 分支标签映射（如果提供则使用，否则从pipeline获取）
         **kwargs: 其他覆盖参数
-    
+
     Returns:
         标准化的任务配置字典
     """
     # 确定使用的分支和标签
-    final_branch = branch or pipeline.get("branch")
+    # 如果明确提供了branch参数（不为None），使用它；否则使用流水线配置的分支
+    # 注意：空字符串也是有效的分支名（表示默认分支），所以只检查 None
+    if branch is not None:
+        final_branch = branch
+    else:
+        final_branch = pipeline.get("branch")
     final_tag = tag or pipeline.get("tag", "latest")
-    
+
+    # 调试日志
+    print(f"🔍 pipeline_to_task_config:")
+    print(f"   - 传入branch参数: {branch}")
+    print(f"   - 流水线配置branch: {pipeline.get('branch')}")
+    print(f"   - 最终使用branch: {final_branch}")
+
     # 替换标签中的动态日期占位符
     final_tag = replace_tag_date_placeholders(final_tag)
-    
+
     # 处理分支标签映射（仅在webhook触发时）
     if trigger_source == "webhook":
         mapping = branch_tag_mapping or pipeline.get("branch_tag_mapping", {})
@@ -3565,11 +3637,12 @@ def pipeline_to_task_config(pipeline: dict, trigger_source: str = "manual", bran
             else:
                 # 尝试通配符匹配
                 import fnmatch
+
                 for pattern, mapped_tag in mapping.items():
                     if fnmatch.fnmatch(branch_for_mapping, pattern):
                         mapped_tag_value = mapped_tag
                         break
-            
+
             if mapped_tag_value:
                 # 处理标签值（支持字符串、数组或逗号分隔的字符串）
                 if isinstance(mapped_tag_value, list):
@@ -3583,11 +3656,15 @@ def pipeline_to_task_config(pipeline: dict, trigger_source: str = "manual", bran
                     else:
                         # 单个标签
                         final_tag = mapped_tag_value
-            
+
             # 替换映射标签中的动态日期占位符
             final_tag = replace_tag_date_placeholders(final_tag)
+
+    # 调试日志：确认传递给 build_task_config 的分支
+    print(f"🔍 pipeline_to_task_config 准备调用 build_task_config:")
+    print(f"   - final_branch: {repr(final_branch)}")
     
-    return build_task_config(
+    task_config_result = build_task_config(
         git_url=pipeline.get("git_url"),
         image_name=pipeline.get("image_name") or "pipeline-build",
         tag=final_tag,
@@ -3607,8 +3684,14 @@ def pipeline_to_task_config(pipeline: dict, trigger_source: str = "manual", bran
         resource_package_ids=pipeline.get("resource_package_configs", []),
         pipeline_id=pipeline.get("pipeline_id"),
         trigger_source=trigger_source,
-        **kwargs
+        **kwargs,
     )
+    
+    # 调试日志：确认返回的任务配置中的分支
+    print(f"🔍 build_task_config 返回的配置:")
+    print(f"   - branch字段: {repr(task_config_result.get('branch'))}")
+    
+    return task_config_result
 
 
 # ============ 构建任务管理器 ============
@@ -3628,6 +3711,7 @@ class BuildTaskManager:
 
     def _init(self):
         from backend.database import init_db
+
         try:
             init_db()
         except:
@@ -3635,21 +3719,23 @@ class BuildTaskManager:
         self.lock = threading.Lock()
         self.tasks_dir = os.path.join(BUILD_DIR, "tasks")
         os.makedirs(self.tasks_dir, exist_ok=True)
-        
+
         # 启动时，将 running/pending 状态的任务标记为失败
         self._mark_lost_tasks_as_failed()
-        
+
         # 启动自动清理任务
         self._start_cleanup_task()
-    
+
     def _mark_lost_tasks_as_failed(self):
         """将服务重启时丢失的任务标记为失败"""
         from backend.database import get_db_session
         from backend.models import Task
-        
+
         db = get_db_session()
         try:
-            lost_tasks = db.query(Task).filter(Task.status.in_(["running", "pending"])).all()
+            lost_tasks = (
+                db.query(Task).filter(Task.status.in_(["running", "pending"])).all()
+            )
             if lost_tasks:
                 for task in lost_tasks:
                     task.status = "failed"
@@ -3729,16 +3815,28 @@ class BuildTaskManager:
                         template_params=serializable_kwargs.get("template_params", {}),
                         should_push=serializable_kwargs.get("should_push", False),
                         sub_path=serializable_kwargs.get("sub_path"),
-                        use_project_dockerfile=serializable_kwargs.get("use_project_dockerfile", True),
-                        dockerfile_name=serializable_kwargs.get("dockerfile_name", "Dockerfile"),
+                        use_project_dockerfile=serializable_kwargs.get(
+                            "use_project_dockerfile", True
+                        ),
+                        dockerfile_name=serializable_kwargs.get(
+                            "dockerfile_name", "Dockerfile"
+                        ),
                         source_id=serializable_kwargs.get("source_id"),
                         selected_services=serializable_kwargs.get("selected_services"),
-                        service_push_config=serializable_kwargs.get("service_push_config"),
-                        service_template_params=serializable_kwargs.get("service_template_params"),
+                        service_push_config=serializable_kwargs.get(
+                            "service_push_config"
+                        ),
+                        service_template_params=serializable_kwargs.get(
+                            "service_template_params"
+                        ),
                         push_mode=serializable_kwargs.get("push_mode", "multi"),
-                        resource_package_ids=serializable_kwargs.get("resource_package_ids"),
+                        resource_package_ids=serializable_kwargs.get(
+                            "resource_package_ids"
+                        ),
                         pipeline_id=serializable_kwargs.get("pipeline_id"),
-                        trigger_source=serializable_kwargs.get("trigger_source", "manual"),
+                        trigger_source=serializable_kwargs.get(
+                            "trigger_source", "manual"
+                        ),
                     )
                 elif task_type == "build":
                     # 文件上传构建（文件上传没有git_url，但可以保存其他配置）
@@ -3759,19 +3857,24 @@ class BuildTaskManager:
                         service_push_config=None,
                         service_template_params=None,
                         push_mode="single",  # 文件上传默认单服务模式
-                        resource_package_ids=serializable_kwargs.get("resource_package_ids"),
+                        resource_package_ids=serializable_kwargs.get(
+                            "resource_package_ids"
+                        ),
                         pipeline_id=serializable_kwargs.get("pipeline_id"),
-                        trigger_source=serializable_kwargs.get("trigger_source", "manual"),
+                        trigger_source=serializable_kwargs.get(
+                            "trigger_source", "manual"
+                        ),
                     )
             except Exception as e:
                 print(f"⚠️ 构建任务配置JSON失败: {e}")
                 import traceback
+
                 traceback.print_exc()
 
             # 保存任务到数据库
             from backend.database import get_db_session
             from backend.models import Task
-            
+
             db = get_db_session()
             try:
                 task_obj = Task(
@@ -3790,11 +3893,15 @@ class BuildTaskManager:
                     template=serializable_kwargs.get("selected_template"),
                     should_push=serializable_kwargs.get("should_push", False),
                     sub_path=serializable_kwargs.get("sub_path"),
-                    use_project_dockerfile=serializable_kwargs.get("use_project_dockerfile", True),
-                    dockerfile_name=serializable_kwargs.get("dockerfile_name", "Dockerfile"),
+                    use_project_dockerfile=serializable_kwargs.get(
+                        "use_project_dockerfile", True
+                    ),
+                    dockerfile_name=serializable_kwargs.get(
+                        "dockerfile_name", "Dockerfile"
+                    ),
                     trigger_source=serializable_kwargs.get("trigger_source", "manual"),
                 )
-                
+
                 db.add(task_obj)
                 db.commit()
                 print(f"✅ 任务创建成功: task_id={task_id}, type={task_type}")
@@ -3814,22 +3921,25 @@ class BuildTaskManager:
             print(f"错误堆栈:\n{error_trace}")
             raise
 
-    def _to_dict(self, task: 'Task', include_logs: bool = False) -> dict:
+    def _to_dict(self, task: "Task", include_logs: bool = False) -> dict:
         """将数据库模型转换为字典"""
         if not task:
             return {}
-        
+
         # 获取日志（只在明确需要时加载，列表查询时不加载以提高性能）
         logs = []
         if include_logs:
             try:
                 # 尝试访问关系，如果已加载则使用，否则查询
-                if hasattr(task, 'logs') and task.logs:
-                    logs = [log.log_message for log in sorted(task.logs, key=lambda x: x.log_time)]
+                if hasattr(task, "logs") and task.logs:
+                    logs = [
+                        log.log_message
+                        for log in sorted(task.logs, key=lambda x: x.log_time)
+                    ]
             except Exception:
                 # 如果关系未加载或访问失败，返回空列表
                 logs = []
-        
+
         return {
             "task_id": task.task_id,
             "task_type": task.task_type,
@@ -3837,7 +3947,9 @@ class BuildTaskManager:
             "tag": task.tag,
             "status": task.status,
             "created_at": task.created_at.isoformat() if task.created_at else None,
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "completed_at": (
+                task.completed_at.isoformat() if task.completed_at else None
+            ),
             "error": task.error,
             "logs": logs,
             "source": task.source,
@@ -3859,17 +3971,22 @@ class BuildTaskManager:
         """获取任务信息"""
         from backend.database import get_db_session
         from backend.models import Task, TaskLog
-        
+
         db = get_db_session()
         try:
             task = db.query(Task).filter(Task.task_id == task_id).first()
             if not task:
                 return {}
-            
+
             # 获取日志（单个任务查询时加载日志）
-            logs = db.query(TaskLog).filter(TaskLog.task_id == task_id).order_by(TaskLog.log_time.asc()).all()
+            logs = (
+                db.query(TaskLog)
+                .filter(TaskLog.task_id == task_id)
+                .order_by(TaskLog.log_time.asc())
+                .all()
+            )
             log_messages = [log.log_message for log in logs]
-            
+
             result = self._to_dict(task)
             result["logs"] = log_messages  # 覆盖 _to_dict 中的空日志列表
             return result
@@ -3880,7 +3997,7 @@ class BuildTaskManager:
         """列出所有任务"""
         from backend.database import get_db_session
         from backend.models import Task
-        
+
         db = get_db_session()
         try:
             query = db.query(Task)
@@ -3897,7 +4014,7 @@ class BuildTaskManager:
         """更新任务状态"""
         from backend.database import get_db_session
         from backend.models import Task
-        
+
         print(f"🔍 [update_task_status] 开始更新任务 {task_id[:8]} 状态为 {status}")
         db = get_db_session()
         try:
@@ -3905,46 +4022,56 @@ class BuildTaskManager:
             if not task:
                 print(f"⚠️ [update_task_status] 任务 {task_id[:8]} 不存在，无法更新状态")
                 return
-            
+
             old_status = task.status
-            print(f"🔍 [update_task_status] 任务 {task_id[:8]} 当前状态: {old_status}, 目标状态: {status}")
+            print(
+                f"🔍 [update_task_status] 任务 {task_id[:8]} 当前状态: {old_status}, 目标状态: {status}"
+            )
             task.status = status
             if error:
                 task.error = error
             if status in ("completed", "failed", "stopped"):
                 task.completed_at = datetime.now()
                 print(f"🔍 [update_task_status] 设置完成时间: {task.completed_at}")
-            
+
             # 提交事务
             print(f"🔍 [update_task_status] 准备提交事务...")
             db.commit()
-            print(f"✅ [update_task_status] 事务已提交，任务 {task_id[:8]} 状态已更新: {old_status} -> {status}")
-            
+            print(
+                f"✅ [update_task_status] 事务已提交，任务 {task_id[:8]} 状态已更新: {old_status} -> {status}"
+            )
+
             # 验证更新是否成功
             db.refresh(task)
-            print(f"🔍 [update_task_status] 验证更新后状态: {task.status}, 完成时间: {task.completed_at}")
-            
+            print(
+                f"🔍 [update_task_status] 验证更新后状态: {task.status}, 完成时间: {task.completed_at}"
+            )
+
             # 任务完成、失败或停止时，解绑流水线并处理队列
             if status in ("completed", "failed", "stopped"):
                 try:
                     from backend.pipeline_manager import PipelineManager
-                    
+
                     pipeline_manager = PipelineManager()
                     pipeline_id = pipeline_manager.find_pipeline_by_task(task_id)
                     if pipeline_id:
                         pipeline_manager.unbind_task(pipeline_id)
-                        print(f"✅ 任务 {task_id[:8]} 已结束，解绑流水线 {pipeline_id[:8]}")
-                        
+                        print(
+                            f"✅ 任务 {task_id[:8]} 已结束，解绑流水线 {pipeline_id[:8]}"
+                        )
+
                         # 处理队列中的下一个任务（相同流水线）
                         _process_next_queued_task(pipeline_manager, pipeline_id)
                 except Exception as e:
                     print(f"⚠️ 解绑流水线失败: {e}")
                     import traceback
+
                     traceback.print_exc()
         except Exception as e:
             db.rollback()
             print(f"❌ 更新任务状态失败 (task_id={task_id[:8]}, status={status}): {e}")
             import traceback
+
             traceback.print_exc()
             raise
         finally:
@@ -3954,22 +4081,22 @@ class BuildTaskManager:
         """停止任务"""
         from backend.database import get_db_session
         from backend.models import Task, TaskLog
-        
+
         db = get_db_session()
         try:
             task = db.query(Task).filter(Task.task_id == task_id).first()
             if not task:
                 return False
-            
+
             # 只有运行中或等待中的任务才能停止
             if task.status not in ("running", "pending"):
                 return False
-            
+
             # 设置停止标志
             task.status = "stopped"
             task.completed_at = datetime.now()
             task.error = "任务已停止"
-            
+
             # 添加停止日志
             stop_log = TaskLog(
                 task_id=task_id,
@@ -3977,7 +4104,7 @@ class BuildTaskManager:
                 log_time=datetime.now(),
             )
             db.add(stop_log)
-            
+
             db.commit()
             print(f"✅ 任务 {task_id[:8]} 已停止")
             return True
@@ -3991,7 +4118,7 @@ class BuildTaskManager:
         """添加任务日志（基于数据库）"""
         from backend.database import get_db_session
         from backend.models import Task, TaskLog
-        
+
         db = get_db_session()
         try:
             task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -3999,7 +4126,7 @@ class BuildTaskManager:
                 print(f"⚠️ 任务不存在 (task_id={task_id})，无法记录日志")
                 print(f"日志内容: {log_message}")
                 return
-            
+
             # 添加日志到 TaskLog 表
             task_log = TaskLog(
                 task_id=task_id,
@@ -4007,17 +4134,21 @@ class BuildTaskManager:
                 log_time=datetime.now(),
             )
             db.add(task_log)
-            
+
             # 限制日志数量（保留最近10000条）
             log_count = db.query(TaskLog).filter(TaskLog.task_id == task_id).count()
             if log_count > 10000:
                 # 删除最旧的日志
-                oldest_logs = db.query(TaskLog).filter(
-                    TaskLog.task_id == task_id
-                ).order_by(TaskLog.log_time.asc()).limit(log_count - 10000).all()
+                oldest_logs = (
+                    db.query(TaskLog)
+                    .filter(TaskLog.task_id == task_id)
+                    .order_by(TaskLog.log_time.asc())
+                    .limit(log_count - 10000)
+                    .all()
+                )
                 for log in oldest_logs:
                     db.delete(log)
-            
+
             db.commit()
         except Exception as e:
             db.rollback()
@@ -4030,12 +4161,15 @@ class BuildTaskManager:
         """获取任务日志"""
         from backend.database import get_db_session
         from backend.models import TaskLog
-        
+
         db = get_db_session()
         try:
-            logs = db.query(TaskLog).filter(
-                TaskLog.task_id == task_id
-            ).order_by(TaskLog.log_time.asc()).all()
+            logs = (
+                db.query(TaskLog)
+                .filter(TaskLog.task_id == task_id)
+                .order_by(TaskLog.log_time.asc())
+                .all()
+            )
             return "".join([log.log_message for log in logs])
         finally:
             db.close()
@@ -4044,17 +4178,17 @@ class BuildTaskManager:
         """删除任务（只有停止、完成或失败的任务才能删除）"""
         from backend.database import get_db_session
         from backend.models import Task, TaskLog
-        
+
         db = get_db_session()
         try:
             task = db.query(Task).filter(Task.task_id == task_id).first()
             if not task:
                 return False
-            
+
             # 只有停止、完成或失败的任务才能删除
             if task.status not in ("stopped", "completed", "failed"):
                 return False
-            
+
             # 获取构建上下文路径
             build_context = None
             image_name = task.image
@@ -4062,23 +4196,24 @@ class BuildTaskManager:
                 build_context = os.path.join(
                     BUILD_DIR, f"{image_name.replace('/', '_')}_{task_id[:8]}"
                 )
-            
+
             # 删除任务日志
             db.query(TaskLog).filter(TaskLog.task_id == task_id).delete()
-            
+
             # 删除任务
             db.delete(task)
             db.commit()
-            
+
             # 清理构建上下文目录
             if build_context and os.path.exists(build_context):
                 try:
                     import shutil
+
                     shutil.rmtree(build_context, ignore_errors=True)
                     print(f"🧹 已清理构建上下文: {build_context}")
                 except Exception as e:
                     print(f"⚠️ 清理构建上下文失败 ({build_context}): {e}")
-            
+
             return True
         except Exception as e:
             db.rollback()
@@ -4090,13 +4225,13 @@ class BuildTaskManager:
         """清理过期任务（超过1天）"""
         from backend.database import get_db_session
         from backend.models import Task, TaskLog
-        
+
         cutoff_time = datetime.now() - timedelta(days=1)
-        
+
         db = get_db_session()
         try:
             expired_tasks = db.query(Task).filter(Task.created_at < cutoff_time).all()
-            
+
             expired_tasks_info = []
             cleaned_count = 0
             for task in expired_tasks:
@@ -4108,25 +4243,26 @@ class BuildTaskManager:
                         BUILD_DIR, f"{image_name.replace('/', '_')}_{task.task_id[:8]}"
                     )
                 expired_tasks_info.append((task.task_id, build_context))
-                
+
                 # 删除任务日志
                 db.query(TaskLog).filter(TaskLog.task_id == task.task_id).delete()
-                
+
                 # 删除任务
                 db.delete(task)
-            
+
             db.commit()
-            
+
             # 清理构建上下文目录
             for task_id, build_context in expired_tasks_info:
                 if build_context and os.path.exists(build_context):
                     try:
                         import shutil
+
                         shutil.rmtree(build_context, ignore_errors=True)
                         cleaned_count += 1
                     except Exception as e:
                         print(f"⚠️ 清理构建上下文失败 ({build_context}): {e}")
-            
+
             if expired_tasks_info:
                 print(
                     f"🧹 已清理 {len(expired_tasks_info)} 个过期构建任务，清理了 {cleaned_count} 个构建上下文目录"
@@ -4155,6 +4291,7 @@ class ExportTaskManager:
 
     def _init(self):
         from backend.database import init_db
+
         try:
             init_db()
         except:
@@ -4162,21 +4299,25 @@ class ExportTaskManager:
         self.lock = threading.Lock()
         self.tasks_dir = os.path.join(EXPORT_DIR, "tasks")
         os.makedirs(self.tasks_dir, exist_ok=True)
-        
+
         # 启动时，将 running/pending 状态的任务标记为失败
         self._mark_lost_tasks_as_failed()
-        
+
         # 启动自动清理任务
         self._start_cleanup_task()
-    
+
     def _mark_lost_tasks_as_failed(self):
         """将服务重启时丢失的任务标记为失败"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
-            lost_tasks = db.query(ExportTask).filter(ExportTask.status.in_(["running", "pending"])).all()
+            lost_tasks = (
+                db.query(ExportTask)
+                .filter(ExportTask.status.in_(["running", "pending"]))
+                .all()
+            )
             if lost_tasks:
                 for task in lost_tasks:
                     task.status = "failed"
@@ -4217,10 +4358,10 @@ class ExportTaskManager:
         """创建导出任务"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         task_id = str(uuid.uuid4())
         created_at = datetime.now()
-        
+
         db = get_db_session()
         try:
             task_obj = ExportTask(
@@ -4235,10 +4376,10 @@ class ExportTaskManager:
                 source="手动导出",
                 created_at=created_at,
             )
-            
+
             db.add(task_obj)
             db.commit()
-            
+
             # 启动导出任务
             thread = threading.Thread(
                 target=self._export_task,
@@ -4246,7 +4387,7 @@ class ExportTaskManager:
                 daemon=True,
             )
             thread.start()
-            
+
             return task_id
         except Exception as e:
             db.rollback()
@@ -4254,17 +4395,24 @@ class ExportTaskManager:
         finally:
             db.close()
 
-    def _update_task_status(self, task_id: str, status: str, error: str = None, file_path: str = None, file_size: int = None):
+    def _update_task_status(
+        self,
+        task_id: str,
+        status: str,
+        error: str = None,
+        file_path: str = None,
+        file_size: int = None,
+    ):
         """更新任务状态（辅助方法）"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
             if not task:
                 return False
-            
+
             task.status = status
             if error is not None:
                 task.error = error
@@ -4274,7 +4422,7 @@ class ExportTaskManager:
                 task.file_size = file_size
             if status in ("completed", "failed", "stopped"):
                 task.completed_at = datetime.now()
-            
+
             db.commit()
             return True
         except Exception as e:
@@ -4283,12 +4431,12 @@ class ExportTaskManager:
             return False
         finally:
             db.close()
-    
+
     def _get_task_from_db(self, task_id: str):
         """从数据库获取任务对象"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             return db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
@@ -4299,22 +4447,22 @@ class ExportTaskManager:
         """执行导出任务"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         # 检查任务是否存在
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
             if not task:
                 return
-            
+
             # 检查是否已请求停止（通过状态判断）
             if task.status == "stopped":
                 return
-            
+
             # 更新状态为 running
             task.status = "running"
             db.commit()
-            
+
             image = task.image
             tag = task.tag
             compress = task.compress
@@ -4332,7 +4480,7 @@ class ExportTaskManager:
             task = self._get_task_from_db(task_id)
             if not task or task.status == "stopped":
                 return
-            
+
             if not DOCKER_AVAILABLE:
                 raise RuntimeError("Docker 服务不可用，无法导出镜像")
 
@@ -4437,7 +4585,9 @@ class ExportTaskManager:
                 file_size = os.path.getsize(final_path)
 
             # 更新任务状态
-            self._update_task_status(task_id, "completed", file_path=final_path, file_size=file_size)
+            self._update_task_status(
+                task_id, "completed", file_path=final_path, file_size=file_size
+            )
 
         except Exception as e:
             import traceback
@@ -4446,11 +4596,11 @@ class ExportTaskManager:
             traceback.print_exc()
             self._update_task_status(task_id, "failed", error=error_msg)
 
-    def _to_dict(self, task: 'ExportTask') -> dict:
+    def _to_dict(self, task: "ExportTask") -> dict:
         """将数据库模型转换为字典"""
         if not task:
             return {}
-        
+
         return {
             "task_id": task.task_id,
             "task_type": task.task_type,
@@ -4464,7 +4614,9 @@ class ExportTaskManager:
             "file_size": task.file_size,
             "source": task.source,
             "created_at": task.created_at.isoformat() if task.created_at else None,
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "completed_at": (
+                task.completed_at.isoformat() if task.completed_at else None
+            ),
             "error": task.error,
         }
 
@@ -4472,7 +4624,7 @@ class ExportTaskManager:
         """获取任务信息"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
@@ -4484,7 +4636,7 @@ class ExportTaskManager:
         """列出所有任务"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             query = db.query(ExportTask)
@@ -4499,7 +4651,7 @@ class ExportTaskManager:
         """获取任务文件路径"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
@@ -4518,22 +4670,22 @@ class ExportTaskManager:
         """停止任务"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
             if not task:
                 return False
-            
+
             # 只有运行中或等待中的任务才能停止
             if task.status not in ("running", "pending"):
                 return False
-            
+
             # 设置停止状态
             task.status = "stopped"
             task.completed_at = datetime.now()
             task.error = "任务已停止"
-            
+
             db.commit()
             print(f"✅ 导出任务 {task_id[:8]} 已停止")
             return True
@@ -4547,34 +4699,34 @@ class ExportTaskManager:
         """删除任务及其文件（只有停止、完成或失败的任务才能删除）"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        
+
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
             if not task:
                 return False
-            
+
             # 只有停止、完成或失败的任务才能删除
             if task.status not in ("stopped", "completed", "failed"):
                 return False
-            
+
             file_path = task.file_path
             task_dir = os.path.join(self.tasks_dir, task_id)
-            
+
             # 删除文件
             if file_path and os.path.exists(file_path):
                 try:
                     os.remove(file_path)
                 except Exception as e:
                     print(f"⚠️ 删除文件失败: {e}")
-            
+
             # 删除任务目录
             if os.path.exists(task_dir):
                 try:
                     shutil.rmtree(task_dir, ignore_errors=True)
                 except Exception as e:
                     print(f"⚠️ 删除目录失败: {e}")
-            
+
             # 删除任务记录
             db.delete(task)
             db.commit()
@@ -4590,13 +4742,15 @@ class ExportTaskManager:
         from backend.database import get_db_session
         from backend.models import ExportTask
         from datetime import timedelta
-        
+
         cutoff_time = datetime.now() - timedelta(days=days)
-        
+
         db = get_db_session()
         try:
-            expired_tasks = db.query(ExportTask).filter(ExportTask.created_at < cutoff_time).all()
-            
+            expired_tasks = (
+                db.query(ExportTask).filter(ExportTask.created_at < cutoff_time).all()
+            )
+
             for task in expired_tasks:
                 try:
                     self.delete_task(task.task_id)
@@ -4624,6 +4778,7 @@ class OperationLogger:
 
     def _init(self):
         from backend.database import init_db
+
         try:
             init_db()
         except:
@@ -4635,7 +4790,7 @@ class OperationLogger:
         """记录操作日志"""
         from backend.database import get_db_session
         from backend.models import OperationLog
-        
+
         db = get_db_session()
         try:
             log_entry = OperationLog(
@@ -4656,24 +4811,27 @@ class OperationLogger:
         """获取操作日志"""
         from backend.database import get_db_session
         from backend.models import OperationLog
-        
+
         db = get_db_session()
         try:
             query = db.query(OperationLog)
-            
+
             if username:
                 query = query.filter(OperationLog.username == username)
             if operation:
                 query = query.filter(OperationLog.action == operation)
-            
+
             logs = query.order_by(OperationLog.timestamp.desc()).limit(limit).all()
-            
-            return [{
-                "timestamp": log.timestamp.isoformat() if log.timestamp else None,
-                "username": log.username,
-                "operation": log.action,
-                "details": log.details or {},
-            } for log in logs]
+
+            return [
+                {
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                    "username": log.username,
+                    "operation": log.action,
+                    "details": log.details or {},
+                }
+                for log in logs
+            ]
         except Exception as e:
             print(f"⚠️ 读取操作日志失败: {e}")
             return []
@@ -4691,7 +4849,7 @@ class OperationLogger:
         """
         from backend.database import get_db_session
         from backend.models import OperationLog
-        
+
         db = get_db_session()
         try:
             if days is None:
@@ -4703,7 +4861,11 @@ class OperationLogger:
             else:
                 # 保留最近 N 天的日志
                 cutoff_time = datetime.now() - timedelta(days=days)
-                deleted = db.query(OperationLog).filter(OperationLog.timestamp < cutoff_time).delete()
+                deleted = (
+                    db.query(OperationLog)
+                    .filter(OperationLog.timestamp < cutoff_time)
+                    .delete()
+                )
                 db.commit()
                 return deleted
         except Exception as e:

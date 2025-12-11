@@ -3504,6 +3504,12 @@ class CreatePipelineRequest(BaseModel):
     resource_package_configs: Optional[list] = None  # 资源包配置列表
 
 
+class RunPipelineRequest(BaseModel):
+    """手动触发流水线请求"""
+
+    branch: Optional[str] = None  # 指定构建分支（如果提供则覆盖流水线配置）
+
+
 class UpdatePipelineRequest(BaseModel):
     name: Optional[str] = None
     git_url: Optional[str] = None
@@ -4121,7 +4127,11 @@ async def delete_pipeline(pipeline_id: str, http_request: Request):
 
 
 @router.post("/pipelines/{pipeline_id}/run")
-async def run_pipeline(pipeline_id: str, http_request: Request):
+async def run_pipeline(
+    pipeline_id: str,
+    request: Optional[RunPipelineRequest] = Body(None),
+    http_request: Request = None,
+):
     """手动触发流水线执行"""
     try:
         username = get_current_username(http_request)
@@ -4132,11 +4142,47 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
         if not pipeline:
             raise HTTPException(status_code=404, detail="流水线不存在")
 
+        # 获取请求中的分支参数（如果提供则覆盖流水线配置）
+        # 如果请求体存在且有branch字段，使用请求的分支；否则使用流水线配置的分支
+        selected_branch = None
+        if request:
+            # 检查请求对象是否有branch属性
+            if hasattr(request, "branch"):
+                selected_branch = request.branch
+                # 如果branch是空字符串，也视为有效（表示使用默认分支）
+                if selected_branch == "":
+                    selected_branch = None
+        final_branch = (
+            selected_branch if selected_branch is not None else pipeline.get("branch")
+        )
+
+        # 调试日志 - 详细输出
+        print(f"🔍 手动触发流水线 {pipeline_id}:")
+        print(f"   - 请求对象类型: {type(request)}")
+        print(f"   - 请求对象: {request}")
+        if request:
+            print(f"   - 请求对象属性: {dir(request)}")
+            if hasattr(request, "branch"):
+                print(f"   - request.branch值: {repr(request.branch)}")
+                print(f"   - request.branch类型: {type(request.branch)}")
+        print(f"   - selected_branch: {repr(selected_branch)}")
+        print(f"   - selected_branch类型: {type(selected_branch)}")
+        print(f"   - 配置分支: {repr(pipeline.get('branch'))}")
+        print(f"   - 配置分支类型: {type(pipeline.get('branch'))}")
+        print(f"   - 最终分支: {repr(final_branch)}")
+        print(f"   - 最终分支类型: {type(final_branch)}")
+        print(
+            f"   - selected_branch == pipeline.get('branch'): {selected_branch == pipeline.get('branch')}"
+        )
+        print(f"   - selected_branch is not None: {selected_branch is not None}")
+
         # 检查防抖（5秒内重复触发直接加入队列）
         if manager.check_debounce(pipeline_id, debounce_seconds=5):
             from backend.handlers import pipeline_to_task_config
 
-            task_config = pipeline_to_task_config(pipeline, trigger_source="manual")
+            task_config = pipeline_to_task_config(
+                pipeline, trigger_source="manual", branch=final_branch
+            )
             task_config["username"] = username
             queue_id = manager.add_task_to_queue(pipeline_id, task_config)
             queue_length = manager.get_queue_length(pipeline_id)
@@ -4149,7 +4195,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                     "pipeline_name": pipeline.get("name"),
                     "queue_id": queue_id,
                     "queue_length": queue_length,
-                    "branch": pipeline.get("branch"),
+                    "branch": final_branch,
                     "trigger_source": "manual",
                     "reason": "debounce",
                 },
@@ -4162,14 +4208,20 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                     "queue_id": queue_id,
                     "queue_length": queue_length,
                     "pipeline": pipeline.get("name"),
-                    "branch": pipeline.get("branch"),
+                    "branch": final_branch,
                 }
             )
 
         # 从流水线配置生成任务配置JSON
         from backend.handlers import pipeline_to_task_config
 
-        task_config = pipeline_to_task_config(pipeline, trigger_source="manual")
+        print(f"🔍 准备调用 pipeline_to_task_config:")
+        print(f"   - 传递的branch参数: {repr(final_branch)}")
+        task_config = pipeline_to_task_config(
+            pipeline, trigger_source="manual", branch=final_branch
+        )
+        print(f"🔍 pipeline_to_task_config 返回的task_config:")
+        print(f"   - task_config中的branch: {repr(task_config.get('branch'))}")
         task_config["username"] = username
 
         # 检查是否有正在运行的任务
@@ -4192,7 +4244,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                         "pipeline_name": pipeline.get("name"),
                         "task_id": task_id,
                         "queue_length": queue_length,
-                        "branch": pipeline.get("branch"),
+                        "branch": final_branch,
                         "trigger_source": "manual",
                     },
                 )
@@ -4204,7 +4256,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                         "task_id": task_id,
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
-                        "branch": pipeline.get("branch"),
+                        "branch": final_branch,
                     }
                 )
             else:
@@ -4222,7 +4274,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
             trigger_source="manual",
             trigger_info={
                 "username": username,
-                "branch": pipeline.get("branch"),
+                "branch": final_branch,
             },
         )
 
@@ -4234,7 +4286,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                 "pipeline_id": pipeline_id,
                 "pipeline_name": pipeline.get("name"),
                 "task_id": task_id,
-                "branch": pipeline.get("branch"),
+                "branch": final_branch,
                 "trigger_source": "manual",
             },
         )
@@ -4245,7 +4297,7 @@ async def run_pipeline(pipeline_id: str, http_request: Request):
                 "status": "running",
                 "task_id": task_id,
                 "pipeline": pipeline.get("name"),
-                "branch": pipeline.get("branch"),
+                "branch": final_branch,
             }
         )
     except HTTPException:

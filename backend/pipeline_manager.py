@@ -672,28 +672,51 @@ class PipelineManager:
                     trigger_info=trigger_info or {},
                 )
                 db.add(history)
+                # 立即刷新，确保对象已持久化
+                db.flush()
 
-                # 限制历史记录数量（保留最近100条）
-                history_count = (
-                    db.query(PipelineTaskHistory)
-                    .filter(PipelineTaskHistory.pipeline_id == pipeline_id)
-                    .count()
-                )
-                if history_count > 100:
-                    # 删除最旧的记录
-                    oldest = (
-                        db.query(PipelineTaskHistory)
-                        .filter(PipelineTaskHistory.pipeline_id == pipeline_id)
-                        .order_by(PipelineTaskHistory.triggered_at.asc())
-                        .first()
-                    )
-                    if oldest:
-                        db.delete(oldest)
-
+            # 提交主操作
             db.commit()
+
         except Exception as e:
             db.rollback()
             raise
+        finally:
+            db.close()
+
+        # 限制历史记录数量（保留最近100条）- 使用单独的数据库会话
+        if task_id:
+            self._cleanup_old_history(pipeline_id)
+
+    def _cleanup_old_history(self, pipeline_id: str):
+        """清理旧的历史记录（保留最近100条）"""
+        db = get_db_session()
+        try:
+            history_count = (
+                db.query(PipelineTaskHistory)
+                .filter(PipelineTaskHistory.pipeline_id == pipeline_id)
+                .count()
+            )
+            if history_count > 100:
+                # 查询需要删除的最旧记录
+                oldest_records = (
+                    db.query(PipelineTaskHistory)
+                    .filter(PipelineTaskHistory.pipeline_id == pipeline_id)
+                    .order_by(PipelineTaskHistory.triggered_at.asc())
+                    .limit(history_count - 100)
+                    .all()
+                )
+                # 删除最旧的记录
+                for record in oldest_records:
+                    db.delete(record)
+                db.commit()
+        except Exception as cleanup_error:
+            # 清理失败不影响主流程
+            print(f"⚠️ 清理历史记录失败: {cleanup_error}")
+            try:
+                db.rollback()
+            except:
+                pass
         finally:
             db.close()
 

@@ -1383,6 +1383,7 @@
                   v-model="manualRunSelectedBranch" 
                   class="form-select"
                   required
+                  @change="handleBranchChange"
                 >
                   <option value="">-- 请选择分支 --</option>
                   <option 
@@ -4409,8 +4410,18 @@ async function runPipeline(pipeline) {
     manualRunPipeline.value = pipeline
     manualRunSelectedBranch.value = pipeline.branch || ''  // 默认使用配置的分支
     
+    // 调试日志：初始化时的值
+    console.log('🔍 runPipeline 初始化:')
+    console.log('   - pipeline.branch:', pipeline.branch)
+    console.log('   - manualRunSelectedBranch.value:', manualRunSelectedBranch.value)
+    
     // 加载可用分支列表
     await loadBranchesForManualRun(pipeline)
+    
+    // 调试日志：加载分支列表后的值
+    console.log('🔍 加载分支列表后:')
+    console.log('   - manualRunSelectedBranch.value:', manualRunSelectedBranch.value)
+    console.log('   - manualRunBranches.value:', manualRunBranches.value)
     
     // 显示分支选择模态框
     showManualRunModal.value = true
@@ -4562,6 +4573,14 @@ async function refreshManualRunBranches() {
 
 // 确认手动触发
 async function confirmManualRun() {
+  // 调试日志：检查选择的分支
+  console.log('🔍 confirmManualRun 开始:')
+  console.log('   - manualRunSelectedBranch.value:', manualRunSelectedBranch.value)
+  console.log('   - manualRunSelectedBranch.value类型:', typeof manualRunSelectedBranch.value)
+  console.log('   - manualRunSelectedBranch.value长度:', manualRunSelectedBranch.value?.length)
+  console.log('   - manualRunPipeline.value:', manualRunPipeline.value)
+  console.log('   - manualRunPipeline.value.branch:', manualRunPipeline.value?.branch)
+  
   if (!manualRunSelectedBranch.value) {
     alert('请选择分支')
     return
@@ -4570,36 +4589,57 @@ async function confirmManualRun() {
   const pipeline = manualRunPipeline.value
   const pipelineId = pipeline.pipeline_id
   
+  // 重要：在关闭模态框之前，先保存选择的分支值
+  const selectedBranch = manualRunSelectedBranch.value
+  
+  // 调试日志：确认要发送的分支
+  console.log('🔍 准备发送请求:')
+  console.log('   - 选择的分支:', selectedBranch)
+  console.log('   - 流水线默认分支:', pipeline.branch)
+  console.log('   - 是否相同:', selectedBranch === pipeline.branch)
+  
   // 显示确认对话框，提示排队信息
   const queueInfo = pipeline.queue_length > 0 ? `\n当前已有 ${pipeline.queue_length} 个任务在排队` : ''
   const runningInfo = (pipeline.current_task_status === 'running' || pipeline.current_task_status === 'pending') ? '\n当前有任务正在运行，新任务将加入队列' : ''
   
-  if (!confirm(`确定要运行流水线 "${pipeline.name}" 吗？\n分支: ${manualRunSelectedBranch.value}${queueInfo}${runningInfo}`)) {
+  if (!confirm(`确定要运行流水线 "${pipeline.name}" 吗？\n分支: ${selectedBranch}${queueInfo}${runningInfo}`)) {
     return
   }
   
-  // 关闭模态框
+  // 关闭模态框（会清空 manualRunSelectedBranch.value，所以要先保存）
   closeManualRunModal()
   
   running.value = pipelineId
   try {
-    // 调用API时传递分支参数
+    // 调试日志：检查前端发送的分支参数
+    console.log('🔍 前端发送请求:')
+    console.log('   - 保存的分支值:', selectedBranch)
+    console.log('   - manualRunSelectedBranch.value (已清空):', manualRunSelectedBranch.value)
+    console.log('   - pipelineId:', pipelineId)
+    console.log('   - 请求体:', { branch: selectedBranch })
+    
+    // 调用API时传递分支参数（使用保存的值，而不是 manualRunSelectedBranch.value）
     const res = await axios.post(`/api/pipelines/${pipelineId}/run`, {
-      branch: manualRunSelectedBranch.value
+      branch: selectedBranch
     })
+    
+    // 调试日志：检查后端返回的分支
+    console.log('🔍 后端返回响应:')
+    console.log('   - res.data.branch:', res.data.branch)
+    console.log('   - res.data:', res.data)
     
     // 检查任务状态
     if (res.data.status === 'queued') {
       // 任务已加入队列
       const queueInfo = res.data.queue_length ? `（队列位置: ${res.data.queue_length}）` : ''
-      alert(`流水线已加入队列！${queueInfo}\n分支: ${res.data.branch || manualRunSelectedBranch.value}`)
+      alert(`流水线已加入队列！${queueInfo}\n分支: ${res.data.branch || selectedBranch}`)
       // 发送事件通知任务管理页面刷新（队列中的任务也会创建pending状态的任务）
       if (res.data.task_id) {
         window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
       }
     } else if (res.data.task_id) {
       // 任务立即运行
-      alert(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${res.data.branch || manualRunSelectedBranch.value}`)
+      alert(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${res.data.branch || selectedBranch}`)
       // 发送事件通知任务管理页面刷新
       window.dispatchEvent(new CustomEvent('taskCreated', { detail: { task_id: res.data.task_id } }))
     }
@@ -4619,6 +4659,19 @@ async function confirmManualRun() {
   } finally {
     running.value = null
   }
+}
+
+// 处理分支选择变化
+function handleBranchChange(e) {
+  const newValue = e.target.value
+  console.log('🔍 选择框change事件:')
+  console.log('   - 新值:', newValue)
+  console.log('   - manualRunSelectedBranch (ref对象):', manualRunSelectedBranch)
+  // v-model 已经自动更新了 manualRunSelectedBranch.value，这里只记录日志
+  // 使用 nextTick 确保 v-model 已经更新
+  setTimeout(() => {
+    console.log('   - manualRunSelectedBranch.value (更新后):', manualRunSelectedBranch.value)
+  }, 0)
 }
 
 // 关闭手动触发模态框
