@@ -1646,6 +1646,8 @@ const saving = ref(false)  // 正在保存流水线
 const running = ref(null)  // 正在运行的流水线ID
 const debounceTimers = ref({})  // 防抖定时器
 const queuedPipelines = ref(new Set())  // 排队中的流水线ID集合
+const loadingServicesTimer = ref(null)  // 加载服务的防抖定时器
+const loadingServicesKey = ref('')  // 当前加载服务的唯一标识（用于去重）
 const showModal = ref(false)
 const showWebhookModal = ref(false)
 const showHistoryModal = ref(false)
@@ -1902,9 +1904,8 @@ watch(() => formData.value.git_url, () => {
     }
     
     // 如果使用项目 Dockerfile 且有分支，重新加载服务（数据源变化不是切换 Dockerfile）
-    if (formData.value.use_project_dockerfile && formData.value.branch) {
-      loadServices(false)
-    }
+    // 注意：这里不立即调用 loadServices，因为 scanDockerfiles 完成后会自动调用
+    // 避免重复触发
   }
 })
 
@@ -2655,11 +2656,26 @@ function onBranchChanged() {
   }
 }
 
-// 加载服务列表
+// 加载服务列表（带防抖和去重）
 async function loadServices(isDockerfileChanged = false) {
   if (!formData.value.git_url) {
     services.value = []
     return Promise.resolve()
+  }
+
+  // 生成唯一标识，用于去重
+  const currentKey = `${formData.value.git_url}_${formData.value.branch}_${formData.value.dockerfile_name}_${formData.value.source_id || ''}`
+  
+  // 如果正在加载相同的服务配置，直接返回
+  if (loadingServices.value && loadingServicesKey.value === currentKey) {
+    console.log('服务正在加载中，跳过重复请求:', currentKey)
+    return Promise.resolve()
+  }
+
+  // 清除之前的防抖定时器
+  if (loadingServicesTimer.value) {
+    clearTimeout(loadingServicesTimer.value)
+    loadingServicesTimer.value = null
   }
 
   // 判断是否是编辑模式
@@ -2671,7 +2687,7 @@ async function loadServices(isDockerfileChanged = false) {
     // 先返回，让界面立即显示已保存的配置
     setTimeout(async () => {
       try {
-        await loadServicesInternal(isDockerfileChanged)
+        await loadServicesInternal(isDockerfileChanged, currentKey)
         // 加载完成后验证已保存的服务是否还存在
         if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
           const validServices = formData.value.selected_services.filter(
@@ -2698,14 +2714,33 @@ async function loadServices(isDockerfileChanged = false) {
     return Promise.resolve()
   }
   
-  // 新建模式或切换 Dockerfile：正常加载
-  return loadServicesInternal(isDockerfileChanged)
+  // 新建模式或切换 Dockerfile：使用防抖延迟加载，避免重复触发
+  return new Promise((resolve) => {
+    loadingServicesTimer.value = setTimeout(async () => {
+      loadingServicesTimer.value = null
+      try {
+        await loadServicesInternal(isDockerfileChanged, currentKey)
+        resolve()
+      } catch (error) {
+        resolve() // 即使出错也 resolve，避免阻塞
+      }
+    }, 300) // 300ms 防抖延迟
+  })
 }
 
 // 内部加载服务列表函数
-async function loadServicesInternal(isDockerfileChanged = false) {
+async function loadServicesInternal(isDockerfileChanged = false, currentKey = '') {
   if (!formData.value.git_url) {
     services.value = []
+    return Promise.resolve()
+  }
+
+  // 生成唯一标识
+  const key = currentKey || `${formData.value.git_url}_${formData.value.branch}_${formData.value.dockerfile_name}_${formData.value.source_id || ''}`
+  
+  // 如果正在加载相同的服务配置，直接返回
+  if (loadingServices.value && loadingServicesKey.value === key) {
+    console.log('服务正在加载中，跳过重复请求:', key)
     return Promise.resolve()
   }
 
@@ -2713,6 +2748,7 @@ async function loadServicesInternal(isDockerfileChanged = false) {
   const isEditing = !!editingPipeline.value
   
   loadingServices.value = true
+  loadingServicesKey.value = key
   servicesError.value = ''
 
   try {
@@ -2843,6 +2879,7 @@ async function loadServicesInternal(isDockerfileChanged = false) {
     return Promise.reject(error)
   } finally {
     loadingServices.value = false
+    loadingServicesKey.value = '' // 清除加载标识
   }
   
   return Promise.resolve()
