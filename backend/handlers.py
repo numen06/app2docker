@@ -1976,8 +1976,14 @@ class BuildManager:
                         )
 
             log("\n🎉🎉🎉 所有操作已完成！🎉🎉🎉\n")
-            # 更新任务状态为完成
-            self.task_manager.update_task_status(task_id, "completed")
+            # 更新任务状态为完成（确保状态更新）
+            try:
+                self.task_manager.update_task_status(task_id, "completed")
+                print(f"✅ 任务 {task_id[:8]} 状态已更新为 completed")
+            except Exception as status_error:
+                print(f"❌ 更新任务状态失败: {status_error}")
+                import traceback
+                traceback.print_exc()
             # 从任务字典中移除已完成的线程
             with self.lock:
                 if task_id in self.tasks:
@@ -3056,11 +3062,18 @@ logs/
                             f"   4. 如果手动命令成功，说明配置有问题；如果也失败，说明认证信息不正确\n"
                         )
 
-                    raise
+                    # 推送失败不影响构建成功，记录错误但继续完成任务
+                    log(f"⚠️ 推送失败，但构建已完成，任务将继续完成\n")
 
             log(f"✅ 所有操作已完成\n")
-            # 更新任务状态为完成
-            self.task_manager.update_task_status(task_id, "completed")
+            # 更新任务状态为完成（确保状态更新）
+            try:
+                self.task_manager.update_task_status(task_id, "completed")
+                print(f"✅ 任务 {task_id[:8]} 状态已更新为 completed")
+            except Exception as status_error:
+                print(f"❌ 更新任务状态失败: {status_error}")
+                import traceback
+                traceback.print_exc()
             # 从任务字典中移除已完成的线程
             with self.lock:
                 if task_id in self.tasks:
