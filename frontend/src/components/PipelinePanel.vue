@@ -1166,7 +1166,7 @@
                     </button>
                   </label>
                   <small class="text-muted d-block mb-2">
-                    为不同分支设置不同的镜像标签，支持通配符（如 feature/*）。一个分支可以设置多个标签，用逗号分隔（如：latest,v1.0.0）。标签支持动态日期占位符（${DATE}、${DATE:YYYY-MM-DD}、${TIMESTAMP}）
+                    为不同分支设置不同的镜像标签，支持通配符（如 feature/*）。一个分支可以设置多个标签，用逗号分隔（如：latest,v1.0.0）。标签支持动态日期占位符（${DATE}、${DATE:YYYY-MM-DD}、${TIMESTAMP}）.
                   </small>
                   <div v-if="formData.branch_tag_mapping && formData.branch_tag_mapping.length > 0" class="border rounded p-2">
                     <div 
