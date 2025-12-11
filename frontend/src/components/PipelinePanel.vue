@@ -341,6 +341,17 @@
                 <li class="nav-item" role="presentation">
                   <button 
                     class="nav-link" 
+                    :class="{ active: activeTab === 'service' }"
+                    type="button"
+                    @click="activeTab = 'service'"
+                    id="service-tab"
+                  >
+                    <i class="fas fa-layer-group"></i> 服务配置
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button 
+                    class="nav-link" 
                     :class="{ active: activeTab === 'resource' }"
                     type="button"
                     @click="activeTab = 'resource'"
@@ -727,7 +738,211 @@
                     </div>
                   </div>
 
-                  <!-- 服务配置（包含镜像配置） -->
+                  <!-- 镜像配置 -->
+                  <div class="card mb-4">
+                    <div class="card-header bg-light">
+                      <h6 class="mb-0">
+                        <i class="fab fa-docker text-primary"></i> 镜像配置
+                      </h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="row g-3">
+                        <div class="col-md-6">
+                          <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+                          <input 
+                            v-model="formData.image_name" 
+                            type="text" 
+                            class="form-control form-control-sm" 
+                            required
+                            placeholder="myapp/demo"
+                          >
+                          <small class="text-muted d-block mt-1">
+                            <span v-if="formData.push_mode === 'single'">
+                              <i class="fas fa-info-circle"></i> 单服务模式：直接使用此镜像名称
+                            </span>
+                            <span v-else>
+                              <i class="fas fa-info-circle"></i> 多服务模式：作为镜像名称前缀，每个服务会自动拼接服务名
+                            </span>
+                          </small>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">镜像标签</label>
+                          <input 
+                            v-model="formData.tag" 
+                            type="text" 
+                            class="form-control form-control-sm"
+                            placeholder="latest"
+                          >
+                          <small class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 所有服务使用此标签，支持动态日期占位符
+                          </small>
+                        </div>
+                        <div class="col-md-6">
+                          <div class="form-check mt-4">
+                            <input 
+                              v-model="formData.push" 
+                              class="form-check-input" 
+                              type="checkbox" 
+                              id="pushCheckBuild"
+                            >
+                            <label class="form-check-label" for="pushCheckBuild">
+                              构建完成后推送到仓库
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="formData.push_mode === 'single'" class="alert alert-info mt-3 mb-0">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>单服务模式：</strong>使用上方配置的镜像名称和标签
+                      </div>
+                      <div v-else-if="formData.push_mode === 'multi'" class="alert alert-info mt-3 mb-0">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>多服务模式：</strong>每个服务的镜像名称将自动生成为 <code>{{ formData.image_name || 'myapp/demo' }}-服务名</code>，标签使用上方配置的全局标签
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                </div>
+
+                <!-- 服务配置 Tab -->
+                <div 
+                  class="tab-pane fade" 
+                  :class="{ 'show active': activeTab === 'service' }"
+                  role="tabpanel"
+                  id="service-pane"
+                >
+                  <!-- Dockerfile 配置 -->
+                  <div class="card mb-4">
+                    <div class="card-header bg-light">
+                      <h6 class="mb-0">
+                        <i class="fas fa-file-code text-primary"></i> Dockerfile 配置
+                      </h6>
+                    </div>
+                    <div class="card-body">
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label class="form-label">Dockerfile 来源</label>
+                          <div class="btn-group w-100 mb-2" role="group">
+                            <input 
+                              type="radio" 
+                              class="btn-check" 
+                              id="use-project-dockerfile-service" 
+                              :value="true"
+                              v-model="formData.use_project_dockerfile"
+                              @change="onDockerfileSourceChange"
+                            >
+                            <label class="btn btn-outline-primary" for="use-project-dockerfile-service">
+                              <i class="fas fa-file-code"></i> 项目Dockerfile
+                            </label>
+                            
+                            <input 
+                              type="radio" 
+                              class="btn-check" 
+                              id="use-template-service" 
+                              :value="false"
+                              v-model="formData.use_project_dockerfile"
+                              @change="onDockerfileSourceChange"
+                            >
+                            <label class="btn btn-outline-primary" for="use-template-service">
+                              <i class="fas fa-layer-group"></i> 使用模板
+                            </label>
+                          </div>
+                        </div>
+                        <div v-if="formData.use_project_dockerfile" class="col-md-6">
+                          <label class="form-label">Dockerfile 文件名</label>
+                          <div v-if="scanningDockerfiles" class="mb-2">
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <small class="text-muted">正在扫描项目中的 Dockerfile...</small>
+                          </div>
+                          <div class="input-group">
+                            <select
+                              v-model="formData.dockerfile_name" 
+                              class="form-select form-select-sm"
+                              :disabled="scanningDockerfiles || !formData.branch"
+                              required
+                            >
+                              <option value="">-- 请先选择分支 --</option>
+                              <option value="Dockerfile">Dockerfile（默认，根目录）</option>
+                              <!-- 如果当前选择不在扫描列表中，也要显示出来 -->
+                              <option
+                                v-if="formData.dockerfile_name && 
+                                      formData.dockerfile_name !== 'Dockerfile' && 
+                                      !availableDockerfiles.some(df => df.path === formData.dockerfile_name)"
+                                :value="formData.dockerfile_name"
+                                :key="'current-service-' + formData.dockerfile_name"
+                              >
+                                {{ formData.dockerfile_name }} (当前选择)
+                              </option>
+                              <option
+                                v-for="dockerfile in availableDockerfiles"
+                                :key="dockerfile.path"
+                                :value="dockerfile.path"
+                              >
+                                {{ dockerfile.path }} {{ dockerfile.path !== dockerfile.name ? `(${dockerfile.name})` : '' }}
+                              </option>
+                            </select>
+                            <button 
+                              class="btn btn-outline-secondary btn-sm" 
+                              type="button"
+                              @click="scanDockerfiles(true, true)"
+                              :disabled="scanningDockerfiles || (!formData.branch && !branchesAndTags.default_branch)"
+                              title="刷新 Dockerfile 列表（强制刷新）"
+                            >
+                              <i v-if="scanningDockerfiles" class="fas fa-spinner fa-spin"></i>
+                              <i v-else class="fas fa-sync-alt"></i>
+                            </button>
+                          </div>
+                          <small v-if="dockerfilesError" class="text-danger d-block mt-1">
+                            <i class="fas fa-exclamation-triangle"></i> {{ dockerfilesError }}
+                          </small>
+                          <small v-else-if="availableDockerfiles.length > 0" class="text-muted d-block mt-1">
+                            <i class="fas fa-check-circle"></i> 已扫描到 {{ availableDockerfiles.length }} 个 Dockerfile
+                          </small>
+                          <small v-else-if="formData.branch" class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 请先选择分支，然后点击刷新按钮扫描项目中的 Dockerfile
+                          </small>
+                          <small v-else class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 请先在 Git 配置中选择分支
+                          </small>
+                        </div>
+                        <div v-else class="col-md-6">
+                          <label class="form-label">模板名称</label>
+                          
+                          <!-- 当前选择提示 -->
+                          <div v-if="formData.template && formData.template !== ''" class="alert alert-success alert-sm py-2 mb-2">
+                            <i class="fas fa-check-circle me-2"></i>
+                            <strong>当前选择：</strong>{{ formData.template }}
+                            <span v-if="filteredTemplates.find(t => t.name === formData.template)">
+                              ({{ filteredTemplates.find(t => t.name === formData.template).project_type }})
+                            </span>
+                          </div>
+                          
+                          <select 
+                            v-model="formData.template" 
+                            class="form-select form-select-sm" 
+                            @change="onTemplateChange"
+                            :disabled="!formData.project_type"
+                          >
+                            <option value="">-- 请先选择项目类型 --</option>
+                            <option v-for="tpl in filteredTemplates" :key="tpl.name" :value="tpl.name">
+                              {{ tpl.name }} ({{ tpl.project_type }})
+                            </option>
+                          </select>
+                          <small v-if="formData.project_type && filteredTemplates.length === 0" class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 当前项目类型没有可用的模板
+                          </small>
+                          <small v-else-if="formData.project_type && filteredTemplates.length > 0" class="text-muted d-block mt-1">
+                            <i class="fas fa-check-circle"></i> 已按项目类型过滤，共 {{ filteredTemplates.length }} 个模板
+                          </small>
+                          <small v-else class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 请先在 Git 配置中选择项目类型
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 服务配置 -->
                   <div class="card mb-4">
                     <div class="card-header bg-light">
                       <h6 class="mb-0">
@@ -735,10 +950,10 @@
                       </h6>
                     </div>
                     <div class="card-body">
-                      <!-- 镜像配置部分 -->
-                      <div class="border-bottom pb-3 mb-3">
+                      <!-- 推送模式配置 -->
+                      <div class="mb-4">
                         <h6 class="mb-3">
-                          <i class="fab fa-docker text-primary"></i> 镜像配置
+                          <i class="fab fa-docker text-primary"></i> 推送模式
                         </h6>
                         <div class="row g-3">
                           <div class="col-md-6">
@@ -747,6 +962,14 @@
                               <option value="single">单服务推送</option>
                               <option value="multi">多服务推送</option>
                             </select>
+                            <small class="text-muted d-block mt-1">
+                              <span v-if="formData.push_mode === 'single'">
+                                <i class="fas fa-info-circle"></i> 单服务模式：构建并推送单个服务
+                              </span>
+                              <span v-else>
+                                <i class="fas fa-info-circle"></i> 多服务模式：构建并推送多个服务，每个服务独立镜像
+                              </span>
+                            </small>
                           </div>
                           <div class="col-md-6">
                             <div class="form-check mt-4">
@@ -754,51 +977,21 @@
                                 v-model="formData.push" 
                                 class="form-check-input" 
                                 type="checkbox" 
-                                id="pushCheck"
+                                id="pushCheckService"
                               >
-                              <label class="form-check-label" for="pushCheck">
+                              <label class="form-check-label" for="pushCheckService">
                                 构建完成后推送到仓库
                               </label>
                             </div>
                           </div>
-                          <div class="col-md-6">
-                            <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
-                            <input 
-                              v-model="formData.image_name" 
-                              type="text" 
-                              class="form-control form-control-sm" 
-                              required
-                              placeholder="myapp/demo"
-                            >
-                            <small class="text-muted d-block mt-1">
-                              <span v-if="formData.push_mode === 'single'">
-                                <i class="fas fa-info-circle"></i> 单服务模式：直接使用此镜像名称
-                              </span>
-                              <span v-else>
-                                <i class="fas fa-info-circle"></i> 多服务模式：作为镜像名称前缀，每个服务会自动拼接服务名
-                              </span>
-                            </small>
-                          </div>
-                          <div class="col-md-6">
-                            <label class="form-label">镜像标签</label>
-                            <input 
-                              v-model="formData.tag" 
-                              type="text" 
-                              class="form-control form-control-sm"
-                              placeholder="latest"
-                            >
-                            <small class="text-muted d-block mt-1">
-                              <i class="fas fa-info-circle"></i> 所有服务使用此标签，支持动态日期占位符
-                            </small>
-                          </div>
                         </div>
                         <div v-if="formData.push_mode === 'single'" class="alert alert-info mt-3 mb-0">
                           <i class="fas fa-info-circle"></i> 
-                          <strong>单服务模式：</strong>使用上方配置的镜像名称和标签
+                          <strong>单服务模式：</strong>选择一个服务进行构建和推送，使用镜像配置中的镜像名称和标签
                         </div>
                         <div v-else-if="formData.push_mode === 'multi'" class="alert alert-info mt-3 mb-0">
                           <i class="fas fa-info-circle"></i> 
-                          <strong>多服务模式：</strong>每个服务的镜像名称将自动生成为 <code>{{ formData.image_name || 'myapp/demo' }}/服务名</code>，标签使用上方配置的全局标签
+                          <strong>多服务模式：</strong>可以选择多个服务进行构建和推送，每个服务可以设置独立的镜像名称和标签
                         </div>
                       </div>
 
@@ -811,42 +1004,102 @@
                       </div>
                       
                       <!-- 单服务推送模式 -->
-                      <!-- 编辑模式下，即使服务列表为空，也显示已保存的服务选择 -->
-                      <div v-else-if="formData.push_mode === 'single' && (services.length > 0 || (editingPipeline && formData.selected_service))" class="mb-3">
-                        <label class="form-label">选择服务 <span class="text-danger">*</span></label>
-                        <div class="list-group">
-                          <label
-                            v-for="service in services"
-                            :key="service.name"
-                            class="list-group-item list-group-item-action"
-                            :class="{ active: formData.selected_service === service.name }"
-                            style="cursor: pointer"
-                          >
-                            <div class="d-flex align-items-center">
-                              <input
-                                type="radio"
-                                :value="service.name"
-                                v-model="formData.selected_service"
-                                class="form-check-input me-3"
-                              />
-                              <div class="flex-grow-1">
-                                <div class="fw-bold">
-                                  <code>{{ service.name }}</code>
+                      <div v-else-if="formData.push_mode === 'single'" class="mb-3">
+                        <h6 class="mb-3">
+                          <i class="fas fa-cube text-primary"></i> 服务配置
+                        </h6>
+                        <label class="form-label">服务名称</label>
+                        
+                        <!-- 如果有扫描到的服务列表，显示选择列表 -->
+                        <div v-if="services.length > 0" class="mb-3">
+                          <div class="list-group mb-3">
+                            <label
+                              v-for="service in services"
+                              :key="service.name"
+                              class="list-group-item list-group-item-action"
+                              :class="{ active: formData.selected_service === service.name }"
+                              style="cursor: pointer"
+                            >
+                              <div class="d-flex align-items-center">
+                                <input
+                                  type="radio"
+                                  :value="service.name"
+                                  v-model="formData.selected_service"
+                                  class="form-check-input me-3"
+                                />
+                                <div class="flex-grow-1">
+                                  <div class="fw-bold">
+                                    <code>{{ service.name }}</code>
+                                  </div>
+                                  <small class="text-muted">
+                                    <span v-if="service.port">端口: {{ service.port }}</span>
+                                    <span v-if="service.port && service.user"> | </span>
+                                    <span v-if="service.user">用户: {{ service.user }}</span>
+                                  </small>
                                 </div>
-                                <small class="text-muted">
-                                  <span v-if="service.port">端口: {{ service.port }}</span>
-                                  <span v-if="service.port && service.user"> | </span>
-                                  <span v-if="service.user">用户: {{ service.user }}</span>
-                                </small>
                               </div>
+                            </label>
+                          </div>
+                          <div class="text-center mb-3">
+                            <small class="text-muted">或</small>
+                          </div>
+                        </div>
+                        
+                        <!-- 手动输入服务名称 -->
+                        <div class="mb-3">
+                          <input 
+                            v-model="formData.selected_service" 
+                            type="text" 
+                            class="form-control form-control-sm" 
+                            placeholder="手动输入服务名称，例如：app、web、api（可选）"
+                          >
+                          <small class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle"></i> 
+                            <span v-if="services.length > 0">可以从上方列表选择，也可以手动输入服务名称（可选）</span>
+                            <span v-else>手动输入服务名称（可选），如果Dockerfile中定义了服务，建议先扫描服务列表</span>
+                          </small>
+                        </div>
+                        
+                        <!-- 单服务镜像配置 -->
+                        <div class="border-top pt-3">
+                          <h6 class="mb-3">
+                            <i class="fab fa-docker text-primary"></i> 镜像配置
+                          </h6>
+                          <div class="row g-3">
+                            <div class="col-md-6">
+                              <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+                              <input 
+                                v-model="formData.image_name" 
+                                type="text" 
+                                class="form-control form-control-sm" 
+                                required
+                                placeholder="myapp/demo"
+                              >
+                              <small class="text-muted d-block mt-1">
+                                <i class="fas fa-info-circle"></i> 单服务模式：直接使用此镜像名称
+                              </small>
                             </div>
-                          </label>
+                            <div class="col-md-6">
+                              <label class="form-label">镜像标签</label>
+                              <input 
+                                v-model="formData.tag" 
+                                type="text" 
+                                class="form-control form-control-sm"
+                                placeholder="latest"
+                              >
+                              <small class="text-muted d-block mt-1">
+                                <i class="fas fa-info-circle"></i> 支持动态日期占位符（${DATE}、${DATE:YYYY-MM-DD}、${TIMESTAMP}）
+                              </small>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
                       <!-- 多服务推送模式 -->
-                      <!-- 编辑模式下，即使服务列表为空，也显示已保存的服务选择 -->
                       <div v-else-if="formData.push_mode === 'multi' && (services.length > 0 || (editingPipeline && formData.selected_services && formData.selected_services.length > 0))" class="mb-3">
+                        <h6 class="mb-3">
+                          <i class="fas fa-sitemap text-primary"></i> 选择服务
+                        </h6>
                         <div class="d-flex justify-content-between align-items-center mb-3">
                           <div>
                             <span class="badge bg-info">{{ services.length }} 个服务</span>
@@ -870,7 +1123,6 @@
                         </div>
                         
                         <!-- 服务列表 -->
-                        <!-- 编辑模式下，如果服务列表为空但已保存了服务选择，显示提示信息 -->
                         <div v-if="services.length === 0 && editingPipeline && formData.selected_services && formData.selected_services.length > 0" class="alert alert-info mb-3">
                           <i class="fas fa-info-circle"></i> 正在后台验证服务列表，已保存的服务选择将显示在下方
                         </div>
@@ -913,14 +1165,14 @@
                         </div>
 
                         <!-- 服务推送配置 -->
-                        <div v-if="formData.selected_services && formData.selected_services.length > 0" class="border-top pt-3">
+                        <div v-if="formData.selected_services && formData.selected_services.length > 0" class="border-top pt-3 mt-3">
                           <h6 class="mb-3">
                             <i class="fas fa-cog"></i> 服务推送配置
                             <small class="text-muted">(已选择 {{ formData.selected_services.length }} 个服务)</small>
                           </h6>
                           <div class="alert alert-info mb-3">
                             <i class="fas fa-info-circle"></i> 
-                            <strong>多服务模式：</strong>可以为每个服务设置独立的镜像名称和标签。留空时，镜像名称将自动生成为 <code>{{ formData.image_name || 'myapp/demo' }}/服务名</code>，标签使用全局标签 <code>{{ formData.tag || 'latest' }}</code>
+                            <strong>多服务模式：</strong>可以为每个服务设置独立的镜像名称和标签。留空时，镜像名称将自动生成为 <code>{{ formData.image_name || 'myapp/demo' }}-服务名</code>，标签使用全局标签 <code>{{ formData.tag || 'latest' }}</code>
                           </div>
                           <div class="table-responsive">
                             <table class="table table-sm table-bordered">
@@ -992,13 +1244,15 @@
                       </div>
 
                       <div v-else-if="!formData.template && !formData.use_project_dockerfile" class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> 请先选择 Dockerfile 模板或启用"使用项目中的 Dockerfile"以加载服务列表
+                        <i class="fas fa-info-circle"></i> 请先在上方选择 Dockerfile 模板或启用"使用项目中的 Dockerfile"以加载服务列表
+                      </div>
+                      <div v-else-if="formData.use_project_dockerfile && !formData.dockerfile_name" class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 请先选择 Dockerfile 文件名以加载服务列表
                       </div>
                       <div v-else-if="services.length === 0" class="alert alert-info">
                         <i class="fas fa-info-circle"></i> 未检测到多服务配置，将使用单服务模式
                       </div>
                     </div>
-                  </div>
                   </div>
                 </div>
 
@@ -2096,12 +2350,22 @@ watch(showBuildConfigJsonModal, (isVisible) => {
 })
 
 // 监听activeTab变化，当切换到build Tab时（新建或编辑模式），更新JSON内容
+// 当切换到service Tab时，自动加载服务列表（如果还没有加载）
 watch(activeTab, (newTab) => {
   if (newTab === 'build') {
     nextTick(() => {
       buildConfigJsonText.value = buildConfigJson.value
       buildConfigJsonError.value = ''
     })
+  } else if (newTab === 'service') {
+    // 切换到服务配置tab时，如果满足条件且服务列表为空，自动加载服务列表
+    if ((formData.value.template || formData.value.use_project_dockerfile) && 
+        formData.value.git_url && 
+        formData.value.branch && 
+        services.value.length === 0 && 
+        !loadingServices.value) {
+      loadServices()
+    }
   }
 })
 
