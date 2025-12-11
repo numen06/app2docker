@@ -2049,6 +2049,7 @@ const debounceTimers = ref({})  // 防抖定时器
 const queuedPipelines = ref(new Set())  // 排队中的流水线ID集合
 const loadingServicesTimer = ref(null)  // 加载服务的防抖定时器
 const loadingServicesKey = ref('')  // 当前加载服务的唯一标识（用于去重）
+const isVerifyingServices = ref(false)  // 是否正在验证服务列表（编辑模式下防止重复验证）
 const showModal = ref(false)
 const showWebhookModal = ref(false)
 const showHistoryModal = ref(false)
@@ -2647,33 +2648,14 @@ function editPipeline(pipeline) {
     services.value = []
     loadingServices.value = false
     
+    // 重置验证标志
+    isVerifyingServices.value = false
+    
     // 在后台异步加载服务列表进行验证（不阻塞界面）
     // 使用 setTimeout 确保界面先渲染
+    // 注意：服务验证逻辑已经在 loadServices 函数中完成，这里不需要重复验证
     setTimeout(() => {
-      loadServices(false).then(() => {
-        // 加载完成后，验证已保存的服务是否还存在
-        if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
-          // 过滤掉不存在的服务
-          const validServices = formData.value.selected_services.filter(
-            serviceName => services.value.some(s => s.name === serviceName)
-          )
-          if (validServices.length !== formData.value.selected_services.length) {
-            // 有服务不存在，更新选择
-            formData.value.selected_services = validServices
-            // 清理不存在的服务的配置
-            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
-              if (!services.value.some(s => s.name === serviceName)) {
-                delete formData.value.service_push_config[serviceName]
-              }
-            })
-          }
-        } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
-          // 单服务模式：检查选中的服务是否还存在
-          if (!services.value.some(s => s.name === formData.value.selected_service)) {
-            formData.value.selected_service = ''
-          }
-        }
-      }).catch(() => {
+      loadServices(false).catch(() => {
         // 加载失败不影响已保存的配置显示
         console.warn('后台验证服务列表失败，但已保存的配置仍然有效')
       })
@@ -3419,12 +3401,23 @@ async function loadServices(isDockerfileChanged = false) {
   
   // 编辑模式下且未切换 Dockerfile：不显示加载状态，直接返回（已保存的配置会直接显示）
   if (isEditing && !isDockerfileChanged) {
+    // 如果正在验证，直接返回，避免重复验证
+    if (isVerifyingServices.value) {
+      return Promise.resolve()
+    }
+    
     // 在后台异步加载服务列表进行验证，但不阻塞界面
     // 先返回，让界面立即显示已保存的配置
     setTimeout(async () => {
+      // 防止重复验证
+      if (isVerifyingServices.value) {
+        return
+      }
+      isVerifyingServices.value = true
+      
       try {
         await loadServicesInternal(isDockerfileChanged, currentKey)
-        // 加载完成后验证已保存的服务是否还存在
+        // 加载完成后验证已保存的服务是否还存在（只验证一次）
         if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
           const validServices = formData.value.selected_services.filter(
             serviceName => services.value.some(s => s.name === serviceName)
@@ -3445,6 +3438,8 @@ async function loadServices(isDockerfileChanged = false) {
       } catch (error) {
         // 后台验证失败不影响已保存的配置显示
         console.warn('后台验证服务列表失败，但已保存的配置仍然有效:', error)
+      } finally {
+        isVerifyingServices.value = false
       }
     }, 100)
     return Promise.resolve()
@@ -3519,24 +3514,8 @@ async function loadServicesInternal(isDockerfileChanged = false, currentKey = ''
         // 编辑模式下：保持原有的服务选择和推送模式，只有在切换 Dockerfile 时才重新识别
         if (isEditing && !isDockerfileChanged) {
           // 编辑模式且未切换 Dockerfile：保持原有配置，不做任何自动初始化
-          // 只确保已选择的服务在新服务列表中仍然有效
-          if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
-            // 过滤掉不存在的服务
-            formData.value.selected_services = formData.value.selected_services.filter(
-              serviceName => services.value.some(s => s.name === serviceName)
-            )
-            // 清理不存在的服务的配置
-            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
-              if (!services.value.some(s => s.name === serviceName)) {
-                delete formData.value.service_push_config[serviceName]
-              }
-            })
-          } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
-            // 单服务模式：检查选中的服务是否还存在
-            if (!services.value.some(s => s.name === formData.value.selected_service)) {
-              formData.value.selected_service = ''
-            }
-          }
+          // 注意：服务验证已经在 loadServices 函数中完成，这里不再重复验证
+          // 避免重复更新导致卡死
         } else {
           // 新建模式或切换 Dockerfile：自动初始化服务选择
           if (!formData.value.selected_services || formData.value.selected_services.length === 0) {
@@ -3569,23 +3548,8 @@ async function loadServicesInternal(isDockerfileChanged = false, currentKey = ''
         // 编辑模式下：保持原有的服务选择和推送模式
         if (isEditing && !isDockerfileChanged) {
           // 编辑模式且未切换模板：保持原有配置
-          if (formData.value.push_mode === 'multi' && formData.value.selected_services) {
-            // 过滤掉不存在的服务
-            formData.value.selected_services = formData.value.selected_services.filter(
-              serviceName => services.value.some(s => s.name === serviceName)
-            )
-            // 清理不存在的服务的配置
-            Object.keys(formData.value.service_push_config || {}).forEach(serviceName => {
-              if (!services.value.some(s => s.name === serviceName)) {
-                delete formData.value.service_push_config[serviceName]
-              }
-            })
-          } else if (formData.value.push_mode === 'single' && formData.value.selected_service) {
-            // 单服务模式：检查选中的服务是否还存在
-            if (!services.value.some(s => s.name === formData.value.selected_service)) {
-              formData.value.selected_service = ''
-            }
-          }
+          // 注意：服务验证已经在 loadServices 函数中完成，这里不再重复验证
+          // 避免重复更新导致卡死
         } else {
           // 新建模式或切换模板：根据推送模式初始化
           if (!formData.value.selected_services || formData.value.selected_services.length === 0) {
