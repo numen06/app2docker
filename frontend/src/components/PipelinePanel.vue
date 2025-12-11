@@ -2668,6 +2668,32 @@ async function savePipeline() {
       return
     }
     
+    // 验证流水线名字不能重复
+    const pipelineName = payload.name && payload.name.trim()
+    if (!pipelineName) {
+      alert('请输入流水线名称')
+      saving.value = false
+      return
+    }
+    
+    // 检查名字是否重复
+    const duplicatePipeline = pipelines.value.find(p => {
+      const nameMatch = p.name && p.name.trim() === pipelineName
+      if (editingPipeline.value) {
+        // 编辑模式：排除当前流水线
+        return nameMatch && p.pipeline_id !== editingPipeline.value.pipeline_id
+      } else {
+        // 创建模式：检查所有流水线
+        return nameMatch
+      }
+    })
+    
+    if (duplicatePipeline) {
+      alert('流水线名称已存在，请使用其他名称')
+      saving.value = false
+      return
+    }
+    
     // 调试信息
     console.log('保存流水线参数:', {
       use_project_dockerfile: payload.use_project_dockerfile,
@@ -2849,6 +2875,19 @@ async function createPipelineFromJson() {
 
     if (!pipelineData.git_url && !pipelineData.source_id) {
       jsonError.value = '必须提供 git_url 或 source_id'
+      savingJson.value = false
+      return
+    }
+
+    // 检查流水线名字是否重复
+    const pipelineName = pipelineData.name && pipelineData.name.trim()
+    const duplicatePipeline = pipelines.value.find(p => {
+      const nameMatch = p.name && p.name.trim() === pipelineName
+      return nameMatch
+    })
+    
+    if (duplicatePipeline) {
+      jsonError.value = '流水线名称已存在，请使用其他名称'
       savingJson.value = false
       return
     }
