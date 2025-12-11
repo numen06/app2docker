@@ -1977,9 +1977,16 @@ class BuildManager:
 
             log("\n🎉🎉🎉 所有操作已完成！🎉🎉🎉\n")
             # 更新任务状态为完成（确保状态更新）
+            print(f"🔍 准备更新任务 {task_id[:8]} 状态为 completed")
             try:
                 self.task_manager.update_task_status(task_id, "completed")
                 print(f"✅ 任务 {task_id[:8]} 状态已更新为 completed")
+                # 验证状态是否真的更新了
+                updated_task = self.task_manager.get_task(task_id)
+                if updated_task and updated_task.get("status") == "completed":
+                    print(f"✅ 任务 {task_id[:8]} 状态验证成功: {updated_task.get('status')}")
+                else:
+                    print(f"⚠️ 任务 {task_id[:8]} 状态验证失败，当前状态: {updated_task.get('status') if updated_task else 'None'}")
             except Exception as status_error:
                 print(f"❌ 更新任务状态失败: {status_error}")
                 import traceback
@@ -3067,9 +3074,16 @@ logs/
 
             log(f"✅ 所有操作已完成\n")
             # 更新任务状态为完成（确保状态更新）
+            print(f"🔍 准备更新任务 {task_id[:8]} 状态为 completed")
             try:
                 self.task_manager.update_task_status(task_id, "completed")
                 print(f"✅ 任务 {task_id[:8]} 状态已更新为 completed")
+                # 验证状态是否真的更新了
+                updated_task = self.task_manager.get_task(task_id)
+                if updated_task and updated_task.get("status") == "completed":
+                    print(f"✅ 任务 {task_id[:8]} 状态验证成功: {updated_task.get('status')}")
+                else:
+                    print(f"⚠️ 任务 {task_id[:8]} 状态验证失败，当前状态: {updated_task.get('status') if updated_task else 'None'}")
             except Exception as status_error:
                 print(f"❌ 更新任务状态失败: {status_error}")
                 import traceback
@@ -3867,19 +3881,34 @@ class BuildTaskManager:
         from backend.database import get_db_session
         from backend.models import Task
         
+        print(f"🔍 [update_task_status] 开始更新任务 {task_id[:8]} 状态为 {status}")
         db = get_db_session()
         try:
             task = db.query(Task).filter(Task.task_id == task_id).first()
             if not task:
+                print(f"⚠️ [update_task_status] 任务 {task_id[:8]} 不存在，无法更新状态")
                 return
             
+            old_status = task.status
+            print(f"🔍 [update_task_status] 任务 {task_id[:8]} 当前状态: {old_status}, 目标状态: {status}")
             task.status = status
             if error:
                 task.error = error
             if status in ("completed", "failed", "stopped"):
                 task.completed_at = datetime.now()
-                
-                # 任务完成、失败或停止时，解绑流水线并处理队列
+                print(f"🔍 [update_task_status] 设置完成时间: {task.completed_at}")
+            
+            # 提交事务
+            print(f"🔍 [update_task_status] 准备提交事务...")
+            db.commit()
+            print(f"✅ [update_task_status] 事务已提交，任务 {task_id[:8]} 状态已更新: {old_status} -> {status}")
+            
+            # 验证更新是否成功
+            db.refresh(task)
+            print(f"🔍 [update_task_status] 验证更新后状态: {task.status}, 完成时间: {task.completed_at}")
+            
+            # 任务完成、失败或停止时，解绑流水线并处理队列
+            if status in ("completed", "failed", "stopped"):
                 try:
                     from backend.pipeline_manager import PipelineManager
                     
@@ -3895,10 +3924,11 @@ class BuildTaskManager:
                     print(f"⚠️ 解绑流水线失败: {e}")
                     import traceback
                     traceback.print_exc()
-            
-            db.commit()
         except Exception as e:
             db.rollback()
+            print(f"❌ 更新任务状态失败 (task_id={task_id[:8]}, status={status}): {e}")
+            import traceback
+            traceback.print_exc()
             raise
         finally:
             db.close()
