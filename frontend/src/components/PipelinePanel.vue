@@ -2524,11 +2524,26 @@ async function savePipeline() {
       // 传递数据源ID
       source_id: formData.value.source_id || null,
       // 多服务配置：根据推送模式处理
-      selected_services: formData.value.push_mode === 'single' && formData.value.selected_service 
-        ? [formData.value.selected_service] 
-        : formData.value.selected_services && formData.value.selected_services.length > 0
-        ? formData.value.selected_services
-        : null,
+      // 编辑模式下，如果formData中没有多阶段配置，从原始流水线数据中保留
+      selected_services: (() => {
+        const fromForm = formData.value.push_mode === 'single' && formData.value.selected_service 
+          ? [formData.value.selected_service] 
+          : formData.value.selected_services && formData.value.selected_services.length > 0
+          ? formData.value.selected_services
+          : null
+        
+        // 如果formData中有配置，使用formData的配置
+        if (fromForm && fromForm.length > 0) {
+          return fromForm
+        }
+        
+        // 编辑模式下，如果formData中没有配置，从原始流水线数据中保留
+        if (editingPipeline.value && editingPipeline.value.selected_services && editingPipeline.value.selected_services.length > 0) {
+          return editingPipeline.value.selected_services
+        }
+        
+        return null
+      })(),
       // 规范化服务推送配置（确保所有配置都是对象格式，包含 push、imageName 和 tag 字段）
       service_push_config: (() => {
         // 只处理已选择的服务
@@ -2536,11 +2551,25 @@ async function savePipeline() {
           ? [formData.value.selected_service] 
           : (formData.value.selected_services || [])
         
+        // 如果formData中没有服务，但编辑模式下原始流水线有服务，使用原始流水线的服务
+        if (selectedServices.length === 0 && editingPipeline.value && editingPipeline.value.selected_services && editingPipeline.value.selected_services.length > 0) {
+          selectedServices.push(...editingPipeline.value.selected_services)
+        }
+        
         if (selectedServices.length === 0) {
+          // 编辑模式下，如果formData中没有配置，从原始流水线数据中保留
+          if (editingPipeline.value && editingPipeline.value.service_push_config && Object.keys(editingPipeline.value.service_push_config).length > 0) {
+            return editingPipeline.value.service_push_config
+          }
           return null
         }
         
         const config = formData.value.service_push_config || {}
+        // 编辑模式下，如果formData中没有配置，尝试从原始流水线数据中获取
+        if (Object.keys(config).length === 0 && editingPipeline.value && editingPipeline.value.service_push_config) {
+          Object.assign(config, editingPipeline.value.service_push_config)
+        }
+        
         const normalized = {}
         
         selectedServices.forEach(serviceName => {
@@ -2576,9 +2605,25 @@ async function savePipeline() {
         
         return Object.keys(normalized).length > 0 ? normalized : null
       })(),
-      service_template_params: formData.value.service_template_params && Object.keys(formData.value.service_template_params).length > 0
-        ? formData.value.service_template_params
-        : null,
+      service_template_params: (() => {
+        const fromForm = formData.value.service_template_params && Object.keys(formData.value.service_template_params).length > 0
+          ? formData.value.service_template_params
+          : null
+        
+        // 如果formData中有配置，使用formData的配置
+        if (fromForm) {
+          return fromForm
+        }
+        
+        // 编辑模式下，如果formData中没有配置，从原始流水线数据中保留
+        if (editingPipeline.value && editingPipeline.value.service_template_params && Object.keys(editingPipeline.value.service_template_params).length > 0) {
+          return editingPipeline.value.service_template_params
+        }
+        
+        return null
+      })(),
+      // 确保push_mode被保留（编辑模式下，如果formData中没有，从原始流水线数据中保留）
+      push_mode: formData.value.push_mode || (editingPipeline.value && editingPipeline.value.push_mode) || 'multi',
       resource_package_configs: formData.value.resource_package_configs && formData.value.resource_package_configs.length > 0
         ? formData.value.resource_package_configs
         : null,
@@ -3713,7 +3758,14 @@ const buildConfigJson = computed(() => {
   }
   
   // 移除null值和空值（保留false和0）
+  // 注意：多阶段相关配置（push_mode、selected_services、service_push_config、service_template_params）需要保留
+  const multiStageKeys = ['push_mode', 'selected_services', 'service_push_config', 'service_template_params']
   Object.keys(config).forEach(key => {
+    // 多阶段相关配置始终保留
+    if (multiStageKeys.includes(key)) {
+      return
+    }
+    
     if (config[key] === null || config[key] === '' || 
         (Array.isArray(config[key]) && config[key].length === 0) ||
         (typeof config[key] === 'object' && !Array.isArray(config[key]) && Object.keys(config[key]).length === 0)) {
