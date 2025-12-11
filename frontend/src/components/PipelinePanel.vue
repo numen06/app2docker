@@ -1722,14 +1722,34 @@
             <div v-if="multiServiceFormData.push_mode === 'multi'" class="mb-3">
               <div class="d-flex justify-content-between align-items-center mb-3">
                 <label class="form-label mb-0"><strong>服务列表</strong></label>
-                <button 
-                  type="button" 
-                  class="btn btn-sm btn-outline-success" 
-                  @click="addServiceToMultiConfig"
-                  title="添加服务"
-                >
-                  <i class="fas fa-plus"></i> 添加服务
-                </button>
+                <div class="btn-group" role="group">
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-outline-primary" 
+                    @click="enableAllServices"
+                    title="全部启用"
+                    :disabled="multiServiceFormData.selected_services.length === 0"
+                  >
+                    <i class="fas fa-check-circle"></i> 全部启用
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-outline-secondary" 
+                    @click="disableAllServices"
+                    title="全部禁用"
+                    :disabled="multiServiceFormData.selected_services.length === 0"
+                  >
+                    <i class="fas fa-times-circle"></i> 全部禁用
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-outline-success" 
+                    @click="addServiceToMultiConfig"
+                    title="添加服务"
+                  >
+                    <i class="fas fa-plus"></i> 添加服务
+                  </button>
+                </div>
               </div>
               
               <div v-if="multiServiceFormData.selected_services.length === 0" class="text-muted text-center py-5 border rounded bg-light">
@@ -1795,6 +1815,10 @@
                             placeholder="例如: api, web, worker"
                             required
                           >
+                          <small class="text-muted d-block mt-1">
+                            <i class="fas fa-info-circle text-warning"></i> 
+                            <strong>注意：</strong>服务名称必须与 Dockerfile 中的阶段名（stage name）匹配才会生效。例如 Dockerfile 中有 <code>FROM node:18 AS api</code>，则服务名称应填写 <code>api</code>。
+                          </small>
                         </div>
                         <div class="col-12">
                           <label class="form-label small fw-bold">
@@ -4748,10 +4772,11 @@ function showMultiServiceConfig(pipeline) {
   }
   
   // 确保每个服务都有配置对象
+  const isSingleMode = multiServiceFormData.value.push_mode === 'single'
   multiServiceFormData.value.selected_services.forEach(serviceName => {
     if (!multiServiceFormData.value.service_push_config[serviceName]) {
       multiServiceFormData.value.service_push_config[serviceName] = {
-        enabled: true,
+        enabled: isSingleMode ? false : true, // 单服务模式下默认禁用
         push: false,
         imageName: '',
         tag: ''
@@ -4760,15 +4785,18 @@ function showMultiServiceConfig(pipeline) {
       // 兼容旧格式
       const oldValue = multiServiceFormData.value.service_push_config[serviceName]
       multiServiceFormData.value.service_push_config[serviceName] = {
-        enabled: true,
+        enabled: isSingleMode ? false : true, // 单服务模式下默认禁用
         push: oldValue,
         imageName: '',
         tag: ''
       }
     } else {
-      // 确保enabled字段存在，默认为true
+      // 确保enabled字段存在
       if (multiServiceFormData.value.service_push_config[serviceName].enabled === undefined) {
-        multiServiceFormData.value.service_push_config[serviceName].enabled = true
+        multiServiceFormData.value.service_push_config[serviceName].enabled = isSingleMode ? false : true
+      } else if (isSingleMode) {
+        // 单服务模式下，强制设置为禁用状态
+        multiServiceFormData.value.service_push_config[serviceName].enabled = false
       }
     }
   })
@@ -4779,53 +4807,57 @@ function showMultiServiceConfig(pipeline) {
 // 监听推送模式变化
 watch(() => multiServiceFormData.value.push_mode, (newMode, oldMode) => {
   if (newMode === 'single') {
-    // 单服务模式下，只保留第一个服务用于编译，其他服务备份起来
+    // 单服务模式下，保留所有服务但将所有服务设置为禁用状态
     if (multiServiceFormData.value.selected_services.length === 0) {
       // 如果没有服务，添加一个默认服务
       const defaultServiceName = 'service1'
       multiServiceFormData.value.selected_services.push(defaultServiceName)
       if (!multiServiceFormData.value.service_push_config[defaultServiceName]) {
         multiServiceFormData.value.service_push_config[defaultServiceName] = {
-          enabled: true,
+          enabled: false, // 单服务模式下默认禁用
           push: false,
           imageName: '',
           tag: ''
         }
+      } else {
+        // 确保设置为禁用状态
+        multiServiceFormData.value.service_push_config[defaultServiceName].enabled = false
       }
-    } else if (multiServiceFormData.value.selected_services.length > 1) {
-      // 如果有多个服务，备份所有服务数据
-      multiServiceBackup.value = {
-        selected_services: [...multiServiceFormData.value.selected_services],
-        service_push_config: JSON.parse(JSON.stringify(multiServiceFormData.value.service_push_config))
-      }
-      // 只保留第一个服务用于编译
-      const firstService = multiServiceFormData.value.selected_services[0]
-      multiServiceFormData.value.selected_services = [firstService]
-      // 只保留第一个服务的配置
-      const firstServiceConfig = multiServiceFormData.value.service_push_config[firstService]
-      multiServiceFormData.value.service_push_config = firstServiceConfig 
-        ? { [firstService]: JSON.parse(JSON.stringify(firstServiceConfig)) }
-        : { [firstService]: { enabled: true, push: false, imageName: '', tag: '' } }
-    }
-  } else if (newMode === 'multi' && oldMode === 'single') {
-    // 从单服务模式切换到多服务模式，恢复备份的服务数据
-    if (multiServiceBackup.value.selected_services.length > 0) {
-      multiServiceFormData.value.selected_services = [...multiServiceBackup.value.selected_services]
-      multiServiceFormData.value.service_push_config = JSON.parse(JSON.stringify(multiServiceBackup.value.service_push_config))
-      // 确保每个服务都有配置对象
+    } else {
+      // 保留所有服务，但将所有服务设置为禁用状态
       multiServiceFormData.value.selected_services.forEach(serviceName => {
         if (!multiServiceFormData.value.service_push_config[serviceName]) {
           multiServiceFormData.value.service_push_config[serviceName] = {
-            enabled: true,
+            enabled: false, // 单服务模式下禁用
             push: false,
             imageName: '',
             tag: ''
           }
-        } else if (multiServiceFormData.value.service_push_config[serviceName].enabled === undefined) {
-          multiServiceFormData.value.service_push_config[serviceName].enabled = true
+        } else {
+          // 设置为禁用状态，保留其他配置
+          multiServiceFormData.value.service_push_config[serviceName].enabled = false
         }
       })
     }
+  } else if (newMode === 'multi' && oldMode === 'single') {
+    // 从单服务模式切换到多服务模式，保留所有服务，但保持禁用状态（用户可以手动启用）
+    // 确保每个服务都有配置对象，enabled字段保持当前状态（禁用）
+    multiServiceFormData.value.selected_services.forEach(serviceName => {
+      if (!multiServiceFormData.value.service_push_config[serviceName]) {
+        multiServiceFormData.value.service_push_config[serviceName] = {
+          enabled: false, // 从单服务切换过来时保持禁用，用户需要手动启用
+          push: false,
+          imageName: '',
+          tag: ''
+        }
+      } else {
+        // 确保enabled字段存在，如果不存在则设置为false（保持禁用状态）
+        if (multiServiceFormData.value.service_push_config[serviceName].enabled === undefined) {
+          multiServiceFormData.value.service_push_config[serviceName].enabled = false
+        }
+        // 保持当前的enabled状态（可能是false，用户需要手动启用）
+      }
+    })
   }
 })
 
@@ -4948,6 +4980,20 @@ function updateServiceEnabled(serviceName, enabled) {
   multiServiceFormData.value.service_push_config[serviceName].enabled = enabled
 }
 
+// 全部启用服务
+function enableAllServices() {
+  multiServiceFormData.value.selected_services.forEach(serviceName => {
+    updateServiceEnabled(serviceName, true)
+  })
+}
+
+// 全部禁用服务
+function disableAllServices() {
+  multiServiceFormData.value.selected_services.forEach(serviceName => {
+    updateServiceEnabled(serviceName, false)
+  })
+}
+
 // 获取多服务默认镜像名称
 function getMultiServiceDefaultImageName(serviceName) {
   if (!serviceName) {
@@ -4993,18 +5039,39 @@ async function saveMultiServiceConfig() {
   
   try {
     if (multiServiceFormData.value.push_mode === 'single') {
-      // 单服务模式：使用全局配置
-      const firstService = serviceNames.length > 0 ? serviceNames[0] : null
-      if (!firstService) {
+      // 单服务模式：使用全局配置，但保留所有服务配置（设置为禁用状态）
+      if (serviceNames.length === 0) {
         alert('单服务模式下至少需要一个服务')
         savingMultiServiceConfig.value = false
         return
       }
       
+      // 保留所有服务，但将所有服务的配置设置为禁用状态
+      const normalizedServicePushConfig = {}
+      serviceNames.forEach(serviceName => {
+        const config = multiServiceFormData.value.service_push_config[serviceName]
+        if (config) {
+          // 保留配置，但确保enabled为false
+          normalizedServicePushConfig[serviceName] = {
+            enabled: false, // 单服务模式下所有服务都禁用
+            push: config.push !== undefined ? config.push : false,
+            imageName: config.imageName || '',
+            tag: config.tag || ''
+          }
+        } else {
+          normalizedServicePushConfig[serviceName] = {
+            enabled: false, // 单服务模式下所有服务都禁用
+            push: false,
+            imageName: '',
+            tag: ''
+          }
+        }
+      })
+      
       const payload = {
         push_mode: 'single',
-        selected_services: [firstService],
-        service_push_config: null, // 单服务模式下不使用service_push_config
+        selected_services: serviceNames, // 保留所有服务
+        service_push_config: normalizedServicePushConfig, // 保留所有服务配置，但enabled都是false
         image_name: multiServiceFormData.value.global_image_name || multiServiceConfigPipeline.value.image_name || '',
         tag: multiServiceFormData.value.global_tag || multiServiceConfigPipeline.value.tag || 'latest'
       }
