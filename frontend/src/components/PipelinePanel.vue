@@ -944,10 +944,22 @@
 
                   <!-- 服务配置 -->
                   <div class="card mb-4">
-                    <div class="card-header bg-light">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
                       <h6 class="mb-0">
                         <i class="fas fa-layer-group text-primary"></i> 服务配置
                       </h6>
+                      <button 
+                        v-if="(formData.template || formData.use_project_dockerfile) && formData.git_url && (formData.branch || !formData.use_project_dockerfile)"
+                        type="button"
+                        class="btn btn-sm btn-outline-primary"
+                        @click="loadServicesManually"
+                        :disabled="loadingServices"
+                        title="手动加载服务列表"
+                      >
+                        <i v-if="loadingServices" class="fas fa-spinner fa-spin"></i>
+                        <i v-else class="fas fa-sync-alt"></i>
+                        加载服务列表
+                      </button>
                     </div>
                     <div class="card-body">
                       <!-- 推送模式配置 -->
@@ -2358,16 +2370,10 @@ watch(activeTab, (newTab) => {
       buildConfigJsonText.value = buildConfigJson.value
       buildConfigJsonError.value = ''
     })
-  } else if (newTab === 'service') {
-    // 切换到服务配置tab时，如果满足条件且服务列表为空，自动加载服务列表
-    if ((formData.value.template || formData.value.use_project_dockerfile) && 
-        formData.value.git_url && 
-        formData.value.branch && 
-        services.value.length === 0 && 
-        !loadingServices.value) {
-      loadServices()
-    }
   }
+  // 编辑模式下不自动加载服务列表，需要用户手动点击加载按钮
+  // 这样可以避免编辑时卡死的问题
+  // 移除了切换到 service tab 时的自动加载逻辑
 })
 
 // 监听JSON文本变化，实时验证（新建和编辑模式下）
@@ -2629,21 +2635,14 @@ function editPipeline(pipeline) {
       formData.value.branch = source.default_branch || source.branches[0] || formData.value.branch || ''
     }
     
-    // 如果使用项目 Dockerfile，自动扫描 Dockerfile（编辑模式下不会覆盖已保存的配置）
-    // 注意：scanDockerfiles(true) 会保持已保存的 dockerfile_name
-    if (formData.value.use_project_dockerfile && formData.value.branch) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PipelinePanel.vue:2015',message:'About to scan Dockerfiles in editPipeline',data:{dockerfile_name:formData.value.dockerfile_name,branch:formData.value.branch,use_project_dockerfile:formData.value.use_project_dockerfile,editing:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-      // 编辑模式下传入 true，确保保持已保存的配置
-      scanDockerfiles(true)
-    }
+    // 编辑模式下：不自动扫描 Dockerfile 和加载服务列表
+    // 用户需要手动在服务配置 tab 中点击加载按钮
+    // 这样可以避免编辑时卡死的问题
   }
   
-  // 编辑模式下：先不加载服务列表，直接显示已保存的配置（秒加载）
-  // 服务列表在后台异步加载，仅用于验证服务是否还存在，不阻塞界面显示
+  // 编辑模式下：不自动加载服务列表，清空服务列表，让用户手动加载
   if (pipeline.template || pipeline.use_project_dockerfile) {
-    // 编辑模式下，先设置一个空的服务列表，避免显示加载状态
+    // 编辑模式下，清空服务列表，不显示加载状态
     // 已保存的服务选择会直接显示（即使服务列表为空，已选择的也会显示）
     services.value = []
     loadingServices.value = false
@@ -2651,15 +2650,7 @@ function editPipeline(pipeline) {
     // 重置验证标志
     isVerifyingServices.value = false
     
-    // 在后台异步加载服务列表进行验证（不阻塞界面）
-    // 使用 setTimeout 确保界面先渲染
-    // 注意：服务验证逻辑已经在 loadServices 函数中完成，这里不需要重复验证
-    setTimeout(() => {
-      loadServices(false).catch(() => {
-        // 加载失败不影响已保存的配置显示
-        console.warn('后台验证服务列表失败，但已保存的配置仍然有效')
-      })
-    }, 100)
+    // 不自动加载，等待用户手动在服务配置 tab 中加载
   }
   
   showModal.value = true
@@ -3922,15 +3913,52 @@ function onDockerfileSourceChange() {
 }
 
 // 模板变化处理
+// 手动加载服务列表（用于编辑模式）
+async function loadServicesManually() {
+  if (!formData.value.git_url) {
+    alert('请先配置 Git 仓库地址')
+    return
+  }
+  
+  if (formData.value.use_project_dockerfile && !formData.value.dockerfile_name) {
+    alert('请先选择 Dockerfile 文件名')
+    return
+  }
+  
+  if (formData.value.use_project_dockerfile && !formData.value.branch) {
+    alert('请先选择分支')
+    return
+  }
+  
+  if (!formData.value.use_project_dockerfile && !formData.value.template) {
+    alert('请先选择 Dockerfile 模板')
+    return
+  }
+  
+  // 重置验证标志，允许手动加载
+  isVerifyingServices.value = false
+  
+  try {
+    await loadServices(true) // 传入 true 表示手动触发
+  } catch (error) {
+    console.error('加载服务列表失败:', error)
+    alert('加载服务列表失败，请稍后重试')
+  }
+}
+
 function onTemplateChange() {
   // 选择模板时，确保 use_project_dockerfile 为 false
   if (formData.value.template) {
     formData.value.use_project_dockerfile = false
-    // 重新加载服务（模板变化是用户主动切换）
-    loadServices(true)
+    // 编辑模式下不自动加载，需要用户手动点击加载按钮
+    // 新建模式下可以自动加载（通过判断 editingPipeline）
+    if (!editingPipeline.value) {
+      loadServices(true)
+    }
   } else {
     // 清空模板时，如果使用项目 Dockerfile 且有分支，重新加载服务（切换到项目 Dockerfile 是用户主动切换）
-    if (formData.value.use_project_dockerfile && formData.value.git_url && formData.value.branch) {
+    // 编辑模式下不自动加载，需要用户手动点击加载按钮
+    if (formData.value.use_project_dockerfile && formData.value.git_url && formData.value.branch && !editingPipeline.value) {
       loadServices(true)
     }
   }
