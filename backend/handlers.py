@@ -2708,9 +2708,12 @@ logs/
                         if should_push_service:
                             log(f"📡 开始推送服务镜像: {service_tag}\n")
                             try:
+                                # 初始化 registry_config
+                                registry_config = None
+                                
                                 # 根据镜像名找到对应的registry配置（与单服务构建逻辑一致）
                                 def find_matching_registry_for_push(img_name):
-                                    """根据镜像名找到匹配的registry配置"""
+                                    """根据镜像名找到匹配的registry配置，扫描所有仓库配置"""
                                     # 如果镜像名包含斜杠，提取registry部分
                                     parts = img_name.split("/")
                                     if len(parts) >= 2 and "." in parts[0]:
@@ -2721,23 +2724,37 @@ logs/
                                         )
                                         all_registries = get_all_registries()
                                         log(
-                                            f"🔍 共有 {len(all_registries)} 个registry配置\n"
+                                            f"🔍 扫描所有 {len(all_registries)} 个registry配置...\n"
                                         )
+                                        
+                                        # 优先匹配：完全匹配
                                         for reg in all_registries:
                                             reg_address = reg.get("registry", "")
                                             reg_name = reg.get("name", "Unknown")
-                                            log(
-                                                f"🔍 检查registry: {reg_name}, 地址: {reg_address}\n"
-                                            )
-                                            if reg_address and (
-                                                img_registry == reg_address
-                                                or img_registry.startswith(reg_address)
-                                                or reg_address.startswith(img_registry)
-                                            ):
+                                            if reg_address and img_registry == reg_address:
                                                 log(
-                                                    f"✅ 找到匹配的registry: {reg_name}\n"
+                                                    f"✅ 找到完全匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
                                                 return reg
+                                        
+                                        # 次优匹配：包含关系
+                                        for reg in all_registries:
+                                            reg_address = reg.get("registry", "")
+                                            reg_name = reg.get("name", "Unknown")
+                                            if reg_address and (
+                                                img_registry.startswith(reg_address)
+                                                or reg_address.startswith(img_registry)
+                                                or img_registry in reg_address
+                                                or reg_address in img_registry
+                                            ):
+                                                log(
+                                                    f"✅ 找到部分匹配的registry: {reg_name} (地址: {reg_address})\n"
+                                                )
+                                                return reg
+                                        
+                                        log(
+                                            f"⚠️  未找到匹配的registry配置\n"
+                                        )
                                     return None
 
                                 # 如果服务配置中指定了 registry，优先使用指定的 registry
@@ -2767,14 +2784,14 @@ logs/
                                     )
 
                                 if not registry_config:
-                                    # 如果找不到匹配的，使用激活的registry
+                                    # 如果仍然找不到匹配的，使用激活的registry作为后备
                                     registry_config = get_active_registry()
                                     log(
-                                        f"⚠️  未找到匹配的registry配置，使用激活仓库: {registry_config.get('name', 'Unknown')}\n"
+                                        f"⚠️  未找到匹配的registry配置，使用激活仓库作为后备: {registry_config.get('name', 'Unknown')}\n"
                                     )
                                 else:
                                     log(
-                                        f"🎯 找到匹配的registry配置: {registry_config.get('name', 'Unknown')}\n"
+                                        f"🎯 使用registry配置: {registry_config.get('name', 'Unknown')} (地址: {registry_config.get('registry', 'Unknown')})\n"
                                     )
 
                                 username = registry_config.get("username")
