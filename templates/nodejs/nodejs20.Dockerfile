@@ -1,7 +1,7 @@
 # Node.js 20 前端应用 Dockerfile (多阶段构建)
 # 第一阶段：使用 Node.js 20 构建应用
 # 使用阿里云镜像源加速下载
-FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node1:20 AS frontend-builder
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/node:20 AS frontend-builder
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
@@ -25,7 +25,7 @@ RUN npm run build
 
 # 第二阶段：使用 Nginx 部署
 # 使用阿里云镜像源加速下载
-FROM registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
+FROM registry.cn-shanghai.aliyuncs.com/numen/nginx:latest
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
