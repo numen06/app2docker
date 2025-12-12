@@ -1877,6 +1877,22 @@
                   </small>
                 </div>
               </div>
+              <!-- 单服务模式下的推送开关 -->
+              <div v-if="multiServiceFormData.push_mode === 'single'" class="mt-3">
+                <div class="form-check form-switch">
+                  <input 
+                    :checked="getSingleServicePush()"
+                    @change="updateSingleServicePush($event.target.checked)"
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="singleServicePushCheck"
+                    style="width: 3em; height: 1.5em;"
+                  >
+                  <label class="form-check-label fw-bold ms-2" for="singleServicePushCheck">
+                    <i class="fas fa-cloud-upload-alt text-success"></i> 构建完成后推送到仓库
+                  </label>
+                </div>
+              </div>
             </div>
 
             <!-- 服务列表（仅多服务模式显示） -->
@@ -5400,6 +5416,35 @@ function updateServicePush(serviceName, push) {
     }
   }
   multiServiceFormData.value.service_push_config[serviceName].push = push
+}
+
+// 获取单服务模式下的推送状态
+function getSingleServicePush() {
+  if (multiServiceFormData.value.push_mode !== 'single') {
+    return false
+  }
+  const firstService = multiServiceFormData.value.selected_services && multiServiceFormData.value.selected_services.length > 0
+    ? multiServiceFormData.value.selected_services[0]
+    : null
+  if (!firstService) {
+    return false
+  }
+  const config = multiServiceFormData.value.service_push_config[firstService]
+  return config && config.push !== undefined ? config.push : false
+}
+
+// 更新单服务模式下的推送状态
+function updateSingleServicePush(push) {
+  if (multiServiceFormData.value.push_mode !== 'single') {
+    return
+  }
+  const firstService = multiServiceFormData.value.selected_services && multiServiceFormData.value.selected_services.length > 0
+    ? multiServiceFormData.value.selected_services[0]
+    : null
+  if (!firstService) {
+    return
+  }
+  updateServicePush(firstService, push)
 }
 
 // 更新服务启用状态
