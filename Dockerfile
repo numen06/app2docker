@@ -59,7 +59,12 @@ RUN ln -sf python3 /usr/bin/python && \
 
 # ✅ 【关键修复】用户级升级 pip + 当前 shell 立即生效
 # （注意：用 `sh -c` 显式执行，避免 shell 解析歧义）
-RUN python -m pip install --upgrade --break-system-packages pip
+# 使用国内镜像源并增加超时时间，避免网络超时
+RUN python -m pip install --upgrade --break-system-packages \
+    --index-url https://mirrors.aliyun.com/pypi/simple/ \
+    --timeout 300 \
+    --retries 5 \
+    pip
 
 # ✅ 验证 Python 环境
 RUN echo "✅ Python version:" && python --version && \
@@ -93,6 +98,8 @@ RUN ln -sf python3 /usr/bin/python && \
 # ✅ 创建虚拟环境并激活安装
 RUN python -m venv .venv && \
     .venv/bin/pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    .venv/bin/pip config set global.timeout 300 && \
+    .venv/bin/pip config set global.retries 5 && \
     .venv/bin/pip install --upgrade pip && \
     .venv/bin/pip install --no-cache-dir -r requirements.txt
 
