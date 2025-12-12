@@ -1615,6 +1615,46 @@
     </div>
     <div v-if="showBuildConfigJsonModal" class="modal-backdrop fade show" style="z-index: 1050;"></div>
 
+    <!-- 上传进度对话框 -->
+    <div v-if="showUploadProgressModal" class="modal fade show" style="display: block; z-index: 1060;" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-upload"></i> 正在上传文件
+            </h5>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-2">
+                <span>上传进度</span>
+                <span class="fw-bold">{{ uploadProgress.toFixed(1) }}%</span>
+              </div>
+              <div class="progress" style="height: 25px;">
+                <div 
+                  class="progress-bar progress-bar-striped progress-bar-animated" 
+                  role="progressbar" 
+                  :style="{ width: uploadProgress + '%' }"
+                  :aria-valuenow="uploadProgress" 
+                  aria-valuemin="0" 
+                  aria-valuemax="100"
+                >
+                  {{ uploadProgress.toFixed(1) }}%
+                </div>
+              </div>
+            </div>
+            <div class="text-muted small text-center">
+              <div>已上传: {{ formatFileSize(uploadLoaded) }} / {{ formatFileSize(uploadTotal) }}</div>
+              <div v-if="uploadProgress > 0 && uploadProgress < 100" class="mt-2">
+                <i class="fas fa-spinner fa-spin"></i> 请稍候，文件较大时可能需要较长时间...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="showUploadProgressModal" class="modal-backdrop fade show" style="z-index: 1055;"></div>
+
   </div>
 </template>
 
@@ -1694,6 +1734,12 @@ const resourcePackagePaths = ref({}); // 资源包路径映射 {package_id: targ
 const dockerInfo = ref(null);
 const showBuildConfigJsonModal = ref(false);  // 显示构建配置JSON模态框
 const buildConfigJsonText = ref('')  // JSON文本内容（用于CodeMirror）
+
+// 上传进度相关
+const showUploadProgressModal = ref(false);  // 显示上传进度对话框
+const uploadProgress = ref(0);  // 上传进度百分比 (0-100)
+const uploadLoaded = ref(0);  // 已上传字节数
+const uploadTotal = ref(0);  // 总字节数
 
 // CodeMirror 扩展配置（JSON模式，使用JavaScript模式）
 const jsonEditorExtensions = [
@@ -2991,10 +3037,30 @@ async function startBuild() {
       }
       formData.append("build_steps", JSON.stringify(buildSteps)); // 添加步骤信息
 
+      // 初始化上传进度
+      uploadProgress.value = 0;
+      uploadLoaded.value = 0;
+      uploadTotal.value = buildConfig.value.file?.size || 0;
+      showUploadProgressModal.value = true;  // 显示上传进度对话框
+
       const res = await axios.post("/api/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (progressEvent) => {
+          uploadLoaded.value = progressEvent.loaded;
+          if (progressEvent.total) {
+            uploadTotal.value = progressEvent.total;
+            uploadProgress.value = (progressEvent.loaded / progressEvent.total) * 100;
+          } else if (buildConfig.value.file?.size) {
+            // 如果没有 total，使用文件大小作为后备值
+            uploadTotal.value = buildConfig.value.file.size;
+            uploadProgress.value = (progressEvent.loaded / buildConfig.value.file.size) * 100;
+          }
+        },
       });
       taskId = res.data.build_id || res.data.task_id;
+      
+      // 上传完成，关闭进度对话框
+      showUploadProgressModal.value = false;
     } else {
       // Git 源码构建
       const source = gitSources.value.find(
@@ -3165,6 +3231,8 @@ async function startBuild() {
     }
   } catch (error) {
     console.error("❌ 构建请求失败:", error);
+    // 关闭上传进度对话框
+    showUploadProgressModal.value = false;
     alert(
       error.response?.data?.error || error.response?.data?.detail || "构建失败"
     );
