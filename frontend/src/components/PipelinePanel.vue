@@ -3827,7 +3827,7 @@ watch(
       //     body: JSON.stringify({
       //       location: "PipelinePanel.vue:1834",
       //       message: "Dockerfile name changed, reloading services",
-      //       data: { old: oldName, new: newName },
+      //       data: { old: oldName, newValue: newName },
       //       timestamp: Date.now(),
       //       sessionId: "debug-session",
       //       runId: "run1",

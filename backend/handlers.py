@@ -2561,8 +2561,8 @@ logs/
                     )
                 log(f"✅ .dockerignore 已创建\n")
 
-            # 多服务构建逻辑
-            if selected_services and len(selected_services) > 0:
+            # 多服务构建逻辑（只有当服务数量大于1时才进入多服务构建）
+            if selected_services and len(selected_services) > 1:
                 log(f"🔨 开始多服务构建，共 {len(selected_services)} 个服务\n")
                 log(f"📋 选中的服务: {', '.join(selected_services)}\n")
                 log(f"📦 推送模式: {push_mode}\n")
@@ -3592,24 +3592,37 @@ def build_task_config(
     Returns:
         标准化的任务配置字典
     """
-    # 确保字段对齐：在单服务模式下，should_push 应该与 service_push_config 中第一个服务的 push 字段一致
+    # 区分单服务和多服务模式
+    # 单服务模式：selected_services 为空或长度为 1，不使用多服务相关配置
+    # 多服务模式：selected_services 长度大于 1，使用多服务相关配置
+    is_multi_service = selected_services and len(selected_services) > 1
+    
     normalized_service_push_config = service_push_config or {}
-    if push_mode == "single" and selected_services and len(selected_services) > 0:
-        first_service = selected_services[0]
-        service_config = normalized_service_push_config.get(first_service, {})
-        if isinstance(service_config, dict):
-            # 确保 should_push 与 service_push_config 中的 push 字段对齐
-            service_push = service_config.get("push", False)
-            if should_push != service_push:
-                print(
-                    f"⚠️ 字段对齐：should_push ({should_push}) 与 service_push_config[{first_service}].push ({service_push}) 不一致，使用 service_push_config 的值"
-                )
-                should_push = service_push
-            # 确保 service_push_config 中的 push 字段与 should_push 一致
-            if service_config.get("push") != should_push:
-                normalized_service_push_config = normalized_service_push_config.copy()
-                normalized_service_push_config[first_service] = service_config.copy()
-                normalized_service_push_config[first_service]["push"] = should_push
+    
+    # 只在多服务模式下处理 service_push_config
+    if is_multi_service:
+        # 多服务单一推送模式：确保字段对齐
+        if push_mode == "single" and selected_services and len(selected_services) > 0:
+            first_service = selected_services[0]
+            service_config = normalized_service_push_config.get(first_service, {})
+            if isinstance(service_config, dict):
+                # 确保 should_push 与 service_push_config 中的 push 字段对齐
+                service_push = service_config.get("push", False)
+                if should_push != service_push:
+                    print(
+                        f"⚠️ 字段对齐：should_push ({should_push}) 与 service_push_config[{first_service}].push ({service_push}) 不一致，使用 service_push_config 的值"
+                    )
+                    should_push = service_push
+                # 确保 service_push_config 中的 push 字段与 should_push 一致
+                if service_config.get("push") != should_push:
+                    normalized_service_push_config = normalized_service_push_config.copy()
+                    normalized_service_push_config[first_service] = service_config.copy()
+                    normalized_service_push_config[first_service]["push"] = should_push
+    else:
+        # 单服务模式：清除多服务相关配置，避免混淆
+        selected_services = None
+        normalized_service_push_config = {}
+        service_template_params = {}
 
     config = {
         "git_url": git_url,
@@ -3624,10 +3637,10 @@ def build_task_config(
         "use_project_dockerfile": use_project_dockerfile,
         "dockerfile_name": dockerfile_name,
         "source_id": source_id,
-        "selected_services": selected_services or [],
-        "service_push_config": normalized_service_push_config,
-        "service_template_params": service_template_params or {},
-        "push_mode": push_mode,
+        "selected_services": selected_services or [] if is_multi_service else None,
+        "service_push_config": normalized_service_push_config if is_multi_service else None,
+        "service_template_params": service_template_params or {} if is_multi_service else None,
+        "push_mode": push_mode if is_multi_service else None,
         "resource_package_ids": resource_package_ids or [],
         "pipeline_id": pipeline_id,
         "trigger_source": trigger_source,
@@ -3786,9 +3799,12 @@ def pipeline_to_task_config(
     service_push_config = pipeline.get("service_push_config", {})
     selected_services = pipeline.get("selected_services", [])
 
+    # 区分单服务和多服务模式
+    is_multi_service = selected_services and len(selected_services) > 1
+
     should_push = False
-    if push_mode == "single":
-        # 单服务模式：从第一个服务的 service_push_config 中获取 push 配置
+    if is_multi_service and push_mode == "single":
+        # 多服务单一推送模式：从第一个服务的 service_push_config 中获取 push 配置
         if selected_services and len(selected_services) > 0:
             first_service = selected_services[0]
             service_config = service_push_config.get(first_service, {})
@@ -3797,7 +3813,7 @@ def pipeline_to_task_config(
             else:
                 should_push = bool(service_config)
     else:
-        # 多服务模式：使用旧的 push 字段（向后兼容）
+        # 单服务模式或多服务多推送模式：使用旧的 push 字段（向后兼容）
         should_push = pipeline.get("push", False)
 
     print(f"🔍 should_push 计算:")
