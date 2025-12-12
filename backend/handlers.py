@@ -2668,6 +2668,38 @@ logs/
 
                 # 多阶段推送模式：每个服务独立构建和推送
                 else:
+                    # 从 Dockerfile 中解析实际的阶段名称映射
+                    dockerfile_path = os.path.join(build_context, dockerfile_relative)
+                    service_to_stage_map = {}  # 服务名称到 Dockerfile 阶段的映射
+
+                    if os.path.exists(dockerfile_path):
+                        try:
+                            with open(dockerfile_path, "r", encoding="utf-8") as f:
+                                dockerfile_content = f.read()
+                            services, _ = parse_dockerfile_services(dockerfile_content)
+                            if services and len(services) > 0:
+                                # 构建服务名称到阶段的映射
+                                for idx, service in enumerate(services):
+                                    stage_name = service.get("name")
+                                    # 如果服务列表中有对应的服务名称，使用它；否则使用索引
+                                    if idx < len(selected_services):
+                                        service_to_stage_map[selected_services[idx]] = (
+                                            stage_name
+                                        )
+                                    else:
+                                        # 如果服务数量不匹配，使用阶段名称本身
+                                        service_to_stage_map[stage_name] = stage_name
+                                log(
+                                    f"🔍 从 Dockerfile 解析到阶段映射: {service_to_stage_map}\n"
+                                )
+                            else:
+                                log(f"⚠️ Dockerfile 中没有找到多阶段\n")
+                        except Exception as e:
+                            log(f"⚠️ 解析 Dockerfile 阶段失败: {e}\n")
+                            import traceback
+
+                            log(f"详细错误:\n{traceback.format_exc()}\n")
+
                     for service_name in selected_services:
                         log(f"\n{'='*60}\n")
                         log(f"🚀 开始构建服务: {service_name}\n")
@@ -2691,14 +2723,27 @@ logs/
                         log(f"📦 镜像标签: {service_tag}\n")
                         log(f"📂 构建上下文: {build_context}\n")
 
-                        try:
-                            # 使用 target 参数构建特定阶段
-                            build_stream = docker_builder.build_image(
-                                path=build_context,
-                                tag=service_tag,
-                                dockerfile=dockerfile_relative,
-                                target=service_name,  # 关键：指定构建阶段
+                        # 确定要构建的 target stage
+                        target_stage = service_to_stage_map.get(service_name)
+                        if not target_stage:
+                            log(
+                                f"⚠️ 服务 '{service_name}' 没有对应的 Dockerfile 阶段，将构建默认阶段（不指定 target）\n"
                             )
+
+                        try:
+                            build_kwargs = {
+                                "path": build_context,
+                                "tag": service_tag,
+                                "dockerfile": dockerfile_relative,
+                            }
+                            # 只有在有明确的 target stage 时才添加 target 参数
+                            if target_stage:
+                                build_kwargs["target"] = target_stage
+                                log(f"🚀 构建目标阶段: {target_stage}\n")
+                            else:
+                                log(f"🚀 构建默认阶段（不指定 target）\n")
+
+                            build_stream = docker_builder.build_image(**build_kwargs)
                             log(f"✅ Docker 构建流已启动\n")
                         except Exception as e:
                             log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
