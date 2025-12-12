@@ -104,7 +104,7 @@ def replace_template_variables(content: str, variables: Dict[str, str]) -> str:
         default_value = match.group(2) or ""
         return default_value
     
-    result = re.sub(r'\{\{[A-Z_][A-Z0-9_]*?:([^}]+)\}\}', replace_with_default, result)
+    result = re.sub(r'\{\{([A-Z_][A-Z0-9_]*?):([^}]+)\}\}', replace_with_default, result)
     
     return result
 
