@@ -2842,19 +2842,55 @@ async def update_template(request: TemplateRequest, http_request: Request):
         name = request.name
         content = request.content
         original_name = request.original_name or name  # 支持重命名
+        old_project_type = request.old_project_type or request.project_type  # 使用旧的项目类型或当前项目类型
 
         templates = get_all_templates()
 
-        # 如果是重命名，检查原始模板是否存在
-        if original_name not in templates:
-            raise HTTPException(status_code=404, detail="模板不存在")
+        # 查找原始模板：优先使用 old_project_type 来匹配
+        template_info = None
+        
+        # 方法1: 如果提供了 old_project_type，直接通过路径查找
+        if old_project_type:
+            expected_path = os.path.join(USER_TEMPLATES_DIR, old_project_type, f"{original_name}.Dockerfile")
+            if os.path.exists(expected_path):
+                template_info = {
+                    "name": original_name,
+                    "path": expected_path,
+                    "type": "user",
+                    "project_type": old_project_type,
+                }
+        
+        # 方法2: 在 templates 字典中查找匹配的模板（名称和项目类型都匹配）
+        if not template_info:
+            for tpl_name, tpl_info in templates.items():
+                if tpl_name == original_name:
+                    # 如果提供了 old_project_type，必须匹配
+                    if old_project_type:
+                        if tpl_info.get("project_type") == old_project_type:
+                            template_info = tpl_info
+                            break
+                    else:
+                        # 如果没有提供 old_project_type，使用第一个匹配的
+                        template_info = tpl_info
+                        break
 
-        template_info = templates[original_name]
+        if not template_info:
+            error_msg = f"模板不存在: {original_name}"
+            if old_project_type:
+                error_msg += f" (项目类型: {old_project_type})"
+            raise HTTPException(status_code=404, detail=error_msg)
 
-        if template_info["type"] == "builtin":
+        if template_info.get("type") == "builtin":
             raise HTTPException(status_code=403, detail="不能修改内置模板")
 
-        old_path = template_info["path"]
+        old_path = template_info.get("path")
+        if not old_path:
+            # 如果路径不存在，根据项目类型和名称构建路径
+            old_path = os.path.join(USER_TEMPLATES_DIR, old_project_type, f"{original_name}.Dockerfile")
+        
+        # 确保旧文件存在
+        if not os.path.exists(old_path):
+            raise HTTPException(status_code=404, detail=f"模板文件不存在: {old_path}")
 
         # 如果项目类型改变或名称改变，需要移动/重命名文件
         if (
@@ -4860,6 +4896,7 @@ async def create_git_source(request: CreateGitSourceRequest, http_request: Reque
             default_branch=request.default_branch,
             username=request.username,
             password=request.password,
+            dockerfiles=request.dockerfiles or {},
         )
 
         # 记录操作日志

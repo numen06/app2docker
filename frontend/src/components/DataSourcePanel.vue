@@ -288,9 +288,12 @@
             <button type="button" class="btn-close" @click="closeDockerfileModal"></button>
           </div>
           <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-            <div class="row g-3 mb-3">
-              <div class="col-md-6">
-                <label class="form-label">分支</label>
+            <!-- 操作栏 -->
+            <div class="row g-3 mb-4">
+              <div class="col-md-5">
+                <label class="form-label fw-semibold">
+                  <i class="fas fa-code-branch text-muted me-1"></i> 分支选择
+                </label>
                 <select 
                   v-model="selectedBranch" 
                   class="form-select form-select-sm"
@@ -301,62 +304,105 @@
                     {{ branch }}
                   </option>
                 </select>
-                <small class="text-muted">选择分支以查看该分支的 Dockerfile</small>
+                <small class="text-muted d-block mt-1">
+                  <i class="fas fa-info-circle"></i> 选择分支以查看该分支的 Dockerfile
+                </small>
               </div>
-              <div class="col-md-6 d-flex align-items-end">
-                <div class="text-muted small">共 {{ dockerfileList.length }} 个 Dockerfile</div>
+              <div class="col-md-4 d-flex align-items-end">
+                <div class="text-muted small">
+                  <i class="fab fa-docker text-info me-1"></i>
+                  <strong>{{ dockerfileList.length }}</strong> 个 Dockerfile
+                </div>
               </div>
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <span class="text-muted"></span>
-              <div class="btn-group btn-group-sm">
+              <div class="col-md-3 d-flex align-items-end gap-2">
                 <button 
-                  class="btn btn-outline-info" 
+                  class="btn btn-outline-info btn-sm flex-fill" 
                   @click="scanDockerfiles"
                   :disabled="scanningDockerfiles"
                   title="扫描 Dockerfile"
                 >
-                  <i class="fas fa-search" :class="{ 'fa-spin': scanningDockerfiles }"></i> 扫描
+                  <i class="fas fa-search" :class="{ 'fa-spin': scanningDockerfiles }"></i>
+                  <span class="d-none d-sm-inline ms-1">扫描</span>
                 </button>
-                <button class="btn btn-primary" @click="showCreateDockerfile">
-                  <i class="fas fa-plus"></i> 新建
+                <button class="btn btn-primary btn-sm flex-fill" @click="showCreateDockerfile">
+                  <i class="fas fa-plus"></i>
+                  <span class="d-none d-sm-inline ms-1">新建</span>
                 </button>
               </div>
             </div>
 
             <!-- Dockerfile 列表 -->
-            <div v-if="loadingDockerfiles" class="text-center py-3">
-              <span class="spinner-border spinner-border-sm"></span> 加载中...
+            <div v-if="loadingDockerfiles" class="text-center py-5">
+              <span class="spinner-border spinner-border-sm text-primary"></span>
+              <p class="text-muted mt-2 mb-0">加载中...</p>
             </div>
-            <div v-else-if="dockerfileList.length === 0" class="text-center py-4 text-muted">
-              <i class="fab fa-docker fa-3x mb-3"></i>
-              <p>暂无 Dockerfile</p>
-              <p class="small">验证 Git 仓库时会自动扫描 Dockerfile，您也可以手动添加</p>
+            <div v-else-if="dockerfileList.length === 0" class="text-center py-5 text-muted">
+              <i class="fab fa-docker fa-4x mb-3 opacity-50"></i>
+              <p class="mb-2 fw-semibold">暂无 Dockerfile</p>
+              <p class="small mb-0">验证 Git 仓库时会自动扫描 Dockerfile，您也可以手动添加</p>
             </div>
-            <div v-else class="list-group">
-              <div v-for="item in dockerfileList" :key="item.path" class="list-group-item">
-                <div class="d-flex justify-content-between align-items-start">
-                  <div class="flex-grow-1">
-                    <h6 class="mb-1">
-                      <i class="fab fa-docker text-info"></i> {{ item.path }}
-                    </h6>
-                    <small class="text-muted">共 {{ item.lineCount }} 行</small>
-                  </div>
-                  <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary" @click="editDockerfile(item.path, item.content)" title="编辑">
-                      <i class="fas fa-edit"></i>
-                    </button>
-                    <button 
-                      v-if="item.hasChanges || item.originalContent === ''"
-                      class="btn btn-outline-success" 
-                      @click="openCommitModal(item.path)"
-                      title="提交到 Git 仓库"
-                    >
-                      <i class="fas fa-code-branch"></i>
-                    </button>
-                    <button class="btn btn-outline-danger" @click="deleteDockerfile(item.path)" title="删除">
-                      <i class="fas fa-trash"></i>
-                    </button>
+            <div v-else class="row g-3">
+              <div v-for="item in dockerfileList" :key="item.path" class="col-12">
+                <div class="card border shadow-sm">
+                  <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                          <i class="fab fa-docker text-info me-2 fs-5"></i>
+                          <h6 class="mb-0 fw-semibold font-monospace">{{ item.path }}</h6>
+                          <span v-if="item.hasChanges || item.originalContent === ''" 
+                                class="badge bg-warning text-dark ms-2" 
+                                title="有未提交的更改">
+                            <i class="fas fa-exclamation-circle"></i> 未提交
+                          </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-3 text-muted small">
+                          <span>
+                            <i class="fas fa-file-lines me-1"></i>
+                            {{ item.lineCount }} 行
+                          </span>
+                          <span v-if="item.originalContent === ''" class="text-success">
+                            <i class="fas fa-plus-circle me-1"></i>
+                            新建文件
+                          </span>
+                          <span v-else-if="item.hasChanges" class="text-warning">
+                            <i class="fas fa-edit me-1"></i>
+                            已修改
+                          </span>
+                          <span v-else class="text-success">
+                            <i class="fas fa-check-circle me-1"></i>
+                            已同步
+                          </span>
+                        </div>
+                      </div>
+                      <div class="btn-group btn-group-sm ms-3">
+                        <button 
+                          class="btn btn-outline-primary" 
+                          @click="editDockerfile(item.path, item.content)" 
+                          title="编辑 Dockerfile"
+                        >
+                          <i class="fas fa-edit"></i>
+                          <span class="d-none d-md-inline ms-1">编辑</span>
+                        </button>
+                        <button 
+                          v-if="item.hasChanges || item.originalContent === ''"
+                          class="btn btn-outline-success" 
+                          @click="openCommitModal(item.path)"
+                          title="提交到 Git 仓库"
+                        >
+                          <i class="fas fa-code-branch"></i>
+                          <span class="d-none d-md-inline ms-1">提交</span>
+                        </button>
+                        <button 
+                          class="btn btn-outline-danger" 
+                          @click="deleteDockerfile(item.path)" 
+                          title="删除 Dockerfile"
+                        >
+                          <i class="fas fa-trash"></i>
+                          <span class="d-none d-md-inline ms-1">删除</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1211,6 +1257,46 @@ async function commitDockerfile() {
 .font-monospace {
   font-family: 'Courier New', monospace;
   font-size: 0.85em;
+}
+
+/* Dockerfile 管理模态框样式优化 */
+.modal-xl {
+  max-width: 1200px;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+/* Dockerfile 列表卡片样式 */
+.dockerfile-card {
+  transition: all 0.2s ease;
+}
+
+.dockerfile-card:hover {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0.25rem 0.75rem rgba(13, 110, 253, 0.15) !important;
+}
+
+/* 按钮组响应式优化 */
+@media (max-width: 768px) {
+  .btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* 徽章样式 */
+.badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* 表单标签样式 */
+.form-label.fw-semibold {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
 }
 </style>
 

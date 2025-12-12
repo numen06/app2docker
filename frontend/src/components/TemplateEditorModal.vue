@@ -253,10 +253,8 @@ async function save() {
     
     if (!props.isNew) {
       payload.original_name = originalName.value
-      // 如果修改了项目类型，需要传递旧的项目类型以便后端正确删除旧文件
-      if (projectTypeChanged.value) {
-        payload.old_project_type = props.template.project_type
-      }
+      // 始终传递旧的项目类型，以便后端能够准确找到模板
+      payload.old_project_type = props.template.project_type || form.value.projectType
     }
     
     const method = props.isNew ? 'post' : 'put'
@@ -269,7 +267,9 @@ async function save() {
     emit('saved')
     close()
   } catch (error) {
-    alert(error.response?.data?.error || '保存失败')
+    const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message || '保存失败'
+    alert(`保存失败: ${errorMsg}`)
+    console.error('保存模板失败:', error)
   } finally {
     saving.value = false
   }

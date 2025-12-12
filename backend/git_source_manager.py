@@ -57,6 +57,7 @@ class GitSourceManager:
         default_branch: str = None,
         username: str = None,
         password: str = None,
+        dockerfiles: Dict[str, str] = None,
     ) -> str:
         """创建 Git 数据源"""
         source_id = str(uuid.uuid4())
@@ -78,7 +79,7 @@ class GitSourceManager:
                 default_branch=default_branch,
                 username=username or "",
                 password=encrypted_password,
-                dockerfiles={},
+                dockerfiles=dockerfiles or {},
             )
             
             db.add(source)
@@ -147,7 +148,7 @@ class GitSourceManager:
                 else:
                     source.password = None
             
-            if "dockerfiles" not in source.dockerfiles:
+            if source.dockerfiles is None:
                 source.dockerfiles = {}
             
             source.updated_at = datetime.now()
