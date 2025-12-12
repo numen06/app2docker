@@ -2593,25 +2593,24 @@ logs/
                                 )
                                 log(f"🚀 使用最后阶段: {target_stage}\n")
                             else:
-                                log(f"⚠️ Dockerfile 中没有找到多阶段，将构建默认阶段\n")
+                                log(
+                                    f"⚠️ Dockerfile 中没有找到多阶段，将构建默认阶段（不指定 target）\n"
+                                )
                         except Exception as e:
                             log(
-                                f"⚠️ 解析 Dockerfile 阶段失败: {e}，将尝试使用服务名称\n"
+                                f"⚠️ 解析 Dockerfile 阶段失败: {e}，将构建默认阶段（不指定 target）\n"
                             )
                             import traceback
 
                             log(f"详细错误:\n{traceback.format_exc()}\n")
-                            # 如果解析失败，尝试使用服务名称
-                            if selected_services and len(selected_services) > 0:
-                                target_stage = selected_services[-1]
-                                log(f"⚠️ 回退使用服务名称作为阶段: {target_stage}\n")
+                            # 解析失败时，不指定 target，构建默认阶段
+                            target_stage = None
                     else:
                         log(
-                            f"⚠️ Dockerfile 不存在: {dockerfile_path}，将尝试使用服务名称\n"
+                            f"⚠️ Dockerfile 不存在: {dockerfile_path}，将构建默认阶段（不指定 target）\n"
                         )
-                        if selected_services and len(selected_services) > 0:
-                            target_stage = selected_services[-1]
-                            log(f"⚠️ 使用服务名称作为阶段: {target_stage}\n")
+                        # Dockerfile 不存在时，不指定 target，构建默认阶段
+                        target_stage = None
 
                     try:
                         build_kwargs = {
