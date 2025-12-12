@@ -2576,17 +2576,57 @@ logs/
                     log(f"📦 镜像标签: {full_tag}\n")
                     log(f"📂 构建上下文: {build_context}\n")
 
-                    # 构建最后一个服务阶段（包含所有之前的阶段）
-                    last_service = selected_services[-1]
-                    log(f"🚀 构建最终服务阶段: {last_service}\n")
+                    # 从 Dockerfile 中解析实际的阶段名称
+                    dockerfile_path = os.path.join(build_context, dockerfile_relative)
+                    target_stage = None
+
+                    if os.path.exists(dockerfile_path):
+                        try:
+                            with open(dockerfile_path, "r", encoding="utf-8") as f:
+                                dockerfile_content = f.read()
+                            services, _ = parse_dockerfile_services(dockerfile_content)
+                            if services and len(services) > 0:
+                                # 使用 Dockerfile 中最后一个阶段
+                                target_stage = services[-1].get("name")
+                                log(
+                                    f"🔍 从 Dockerfile 解析到阶段: {[s.get('name') for s in services]}\n"
+                                )
+                                log(f"🚀 使用最后阶段: {target_stage}\n")
+                            else:
+                                log(f"⚠️ Dockerfile 中没有找到多阶段，将构建默认阶段\n")
+                        except Exception as e:
+                            log(
+                                f"⚠️ 解析 Dockerfile 阶段失败: {e}，将尝试使用服务名称\n"
+                            )
+                            import traceback
+
+                            log(f"详细错误:\n{traceback.format_exc()}\n")
+                            # 如果解析失败，尝试使用服务名称
+                            if selected_services and len(selected_services) > 0:
+                                target_stage = selected_services[-1]
+                                log(f"⚠️ 回退使用服务名称作为阶段: {target_stage}\n")
+                    else:
+                        log(
+                            f"⚠️ Dockerfile 不存在: {dockerfile_path}，将尝试使用服务名称\n"
+                        )
+                        if selected_services and len(selected_services) > 0:
+                            target_stage = selected_services[-1]
+                            log(f"⚠️ 使用服务名称作为阶段: {target_stage}\n")
 
                     try:
-                        build_stream = docker_builder.build_image(
-                            path=build_context,
-                            tag=full_tag,
-                            dockerfile=dockerfile_relative,
-                            target=last_service,  # 构建最后一个阶段，包含所有依赖
-                        )
+                        build_kwargs = {
+                            "path": build_context,
+                            "tag": full_tag,
+                            "dockerfile": dockerfile_relative,
+                        }
+                        # 只有在有明确的 target stage 时才添加 target 参数
+                        if target_stage:
+                            build_kwargs["target"] = target_stage
+                            log(f"🚀 构建目标阶段: {target_stage}\n")
+                        else:
+                            log(f"🚀 构建默认阶段（无 target）\n")
+
+                        build_stream = docker_builder.build_image(**build_kwargs)
                         log(f"✅ Docker 构建流已启动\n")
                     except Exception as e:
                         log(f"❌ 启动 Docker 构建失败: {str(e)}\n")
