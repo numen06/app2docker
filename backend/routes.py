@@ -4424,14 +4424,21 @@ async def webhook_trigger(webhook_token: str, request: Request):
         # GitHub: ref = refs/heads/main
         if "ref" in payload:
             ref = payload["ref"]
+            print(f"🔍 Webhook ref 字段: {ref}")
             if ref.startswith("refs/heads/"):
                 webhook_branch = ref.replace("refs/heads/", "")
+                print(f"✅ 从 refs/heads/ 提取分支: {webhook_branch}")
         # GitLab: ref = main (可能已经是分支名)
         if not webhook_branch and "ref" in payload:
             ref = payload["ref"]
             if not ref.startswith("refs/"):
                 webhook_branch = ref
+                print(f"✅ 从 ref 直接提取分支: {webhook_branch}")
         # Gitee: ref = refs/heads/main (已在上面处理)
+        if webhook_branch:
+            print(f"📌 提取的 webhook_branch: {webhook_branch}")
+        else:
+            print(f"⚠️ 未能从 payload 中提取分支信息")
 
         # 检查是否启用分支过滤和使用推送分支
         webhook_branch_filter = pipeline.get("webhook_branch_filter", False)
@@ -4439,6 +4446,13 @@ async def webhook_trigger(webhook_token: str, request: Request):
             "webhook_use_push_branch", True
         )  # 默认为True
         configured_branch = pipeline.get("branch")
+
+        # 调试信息：输出配置值
+        print(f"🔍 Webhook 分支配置:")
+        print(f"   - webhook_branch_filter: {webhook_branch_filter}")
+        print(f"   - webhook_use_push_branch: {webhook_use_push_branch}")
+        print(f"   - configured_branch: {configured_branch}")
+        print(f"   - webhook_branch: {webhook_branch}")
 
         # 分支触发逻辑：优先使用推送的分支进行构建
         if webhook_branch_filter and configured_branch:
@@ -4517,6 +4531,12 @@ async def webhook_trigger(webhook_token: str, request: Request):
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         default_tag = pipeline.get("tag", "latest")  # 默认标签
 
+        # 调试信息：输出最终确定的分支
+        print(f"🔍 最终确定的分支: {branch}")
+        print(f"   - webhook_branch: {webhook_branch}")
+        print(f"   - configured_branch: {configured_branch}")
+        print(f"   - 最终使用的 branch: {branch}")
+
         # 使用webhook推送的分支来查找标签映射（如果有的话）
         branch_for_tag_mapping = webhook_branch if webhook_branch else branch
 
@@ -4564,6 +4584,10 @@ async def webhook_trigger(webhook_token: str, request: Request):
         is_debounced = manager.check_debounce(pipeline_id, debounce_seconds=5)
 
         for tag in tags:
+            print(f"🔍 调用 pipeline_to_task_config:")
+            print(f"   - branch 参数: {branch}")
+            print(f"   - webhook_branch 参数: {webhook_branch}")
+            print(f"   - tag 参数: {tag}")
             task_config = pipeline_to_task_config(
                 pipeline,
                 trigger_source="webhook",
@@ -4571,6 +4595,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 tag=tag,
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
+            )
+            print(
+                f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
             )
 
             if is_debounced:
