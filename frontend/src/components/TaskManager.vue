@@ -707,7 +707,7 @@ async function loadTasks() {
   }
 }
 
-// 只刷新运行中任务的状态
+// 只刷新运行中任务的状态（不刷新整个页面）
 async function refreshRunningTasks() {
   try {
     // 获取所有运行中的任务ID
@@ -718,8 +718,6 @@ async function refreshRunningTasks() {
     if (runningTaskIds.length === 0) {
       return
     }
-    
-    let hasStatusChanged = false
     
     // 逐个更新运行中任务的状态
     for (const { id, category } of runningTaskIds) {
@@ -740,17 +738,21 @@ async function refreshRunningTasks() {
             const oldStatus = tasks.value[index].status
             const newStatus = updatedTask.status
             
-            // 只更新状态相关字段，保留其他字段
+            // 只更新状态相关字段，保留其他字段（不刷新整个列表）
             tasks.value[index].status = newStatus
             tasks.value[index].completed_at = updatedTask.completed_at
             tasks.value[index].error = updatedTask.error
             tasks.value[index].file_size = updatedTask.file_size
             
-            // 检测状态变化：从运行中变为已完成/失败/停止
-            if ((oldStatus === 'running' || oldStatus === 'pending') && 
-                (newStatus === 'completed' || newStatus === 'failed' || newStatus === 'stopped')) {
-              hasStatusChanged = true
-              console.log(`任务 ${id.substring(0, 8)} 状态变化: ${oldStatus} -> ${newStatus}`)
+            // 如果任务完成，更新其他可能变化的字段
+            if (newStatus === 'completed' || newStatus === 'failed' || newStatus === 'stopped') {
+              // 更新所有可能变化的字段，确保数据完整
+              Object.assign(tasks.value[index], {
+                status: newStatus,
+                completed_at: updatedTask.completed_at,
+                error: updatedTask.error,
+                file_size: updatedTask.file_size
+              })
             }
           }
         }
@@ -759,23 +761,21 @@ async function refreshRunningTasks() {
         console.error(`更新任务 ${id} 状态失败:`, err)
       }
     }
-    
-    // 如果有任务状态变化（完成/失败/停止），刷新整个任务列表以确保数据同步
-    if (hasStatusChanged) {
-      console.log('检测到任务状态变化，刷新整个任务列表')
-      await loadTasks()
-    }
+    // 不再调用 loadTasks()，避免刷新整个页面
   } catch (err) {
     console.error('刷新运行中任务状态失败:', err)
   }
 }
 
-// 任务状态更新处理
+// 任务状态更新处理（不刷新整个页面，只更新当前任务状态）
 function onTaskStatusUpdated(newStatus) {
   if (selectedTask.value) {
     selectedTask.value.status = newStatus
-    // 刷新任务列表
-    loadTasks()
+    // 更新任务列表中的对应任务状态，不刷新整个列表
+    const index = tasks.value.findIndex(t => t.task_id === selectedTask.value.task_id)
+    if (index !== -1) {
+      tasks.value[index].status = newStatus
+    }
   }
 }
 
@@ -1516,7 +1516,7 @@ onMounted(() => {
     sessionStorage.removeItem('taskStatusFilter') // 使用后清除
   }
   loadTasks()
-  // 每3秒自动刷新一次（只刷新运行中任务的状态，检测到完成时刷新整个列表）
+  // 每3秒自动刷新一次（只更新运行中任务的状态，不刷新整个页面）
   refreshInterval = setInterval(() => {
     refreshRunningTasks()
   }, 3000)
