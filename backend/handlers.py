@@ -2266,6 +2266,67 @@ class BuildManager:
 
         try:
             log(f"🚀 开始从 Git 源码构建: {git_url}\n")
+            
+            # 打印构建配置信息（过滤敏感信息）
+            def sanitize_config(config_dict):
+                """过滤敏感信息"""
+                if not isinstance(config_dict, dict):
+                    return config_dict
+                
+                sensitive_patterns = ['password', 'token', 'secret', 'credential', 'auth', 
+                                      'access_token', 'api_key', 'apikey', 'private_key', 
+                                      'privatekey', 'pwd', 'passwd']
+                sanitized = {}
+                for k, v in config_dict.items():
+                    key_lower = k.lower()
+                    # 检查键名是否包含敏感词（但排除一些安全的键，如 image_name, tag_name 等）
+                    is_sensitive = any(pattern in key_lower for pattern in sensitive_patterns)
+                    # 排除一些安全的键名（即使包含敏感词）
+                    safe_keys = ['image_name', 'tag', 'tag_name', 'dockerfile_name', 'template_name']
+                    if k in safe_keys:
+                        is_sensitive = False
+                    
+                    if is_sensitive:
+                        sanitized[k] = "***已隐藏***"
+                    elif isinstance(v, dict):
+                        sanitized[k] = sanitize_config(v)
+                    elif isinstance(v, list):
+                        sanitized[k] = [sanitize_config(item) if isinstance(item, dict) else item for item in v]
+                    else:
+                        sanitized[k] = v
+                return sanitized
+            
+            build_config = {
+                "git_url": git_url,
+                "image_name": image_name,
+                "tag": tag,
+                "should_push": should_push,
+                "selected_template": selected_template,
+                "project_type": project_type,
+                "template_params": template_params or {},
+                "branch": branch,
+                "sub_path": sub_path,
+                "use_project_dockerfile": use_project_dockerfile,
+                "dockerfile_name": dockerfile_name,
+                "source_id": source_id,
+                "selected_services": selected_services,
+                "service_push_config": service_push_config,
+                "push_mode": push_mode,
+                "service_template_params": service_template_params or {},
+                "resource_package_ids": resource_package_ids or [],
+            }
+            
+            sanitized_config = sanitize_config(build_config)
+            
+            # 判断构建模式
+            is_multi_service = selected_services and len(selected_services) > 1
+            build_mode = "多服务构建" if is_multi_service else "单服务构建"
+            if is_multi_service:
+                build_mode += f" (共 {len(selected_services)} 个服务)"
+            
+            log(f"📋 构建配置解析结果:\n")
+            log(f"   构建模式: {build_mode}\n")
+            log(f"   配置详情:\n{json.dumps(sanitized_config, indent=4, ensure_ascii=False)}\n")
 
             # 清理旧的构建上下文
             if os.path.exists(build_context):
