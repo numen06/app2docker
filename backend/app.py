@@ -113,6 +113,10 @@ async def startup_event():
     # 确保必要的目录存在
     ensure_dirs()
     
+    # 初始化数据库（包括迁移）
+    from backend.database import init_db
+    init_db()
+    
     # 启动流水线调度器
     start_scheduler()
     

@@ -43,6 +43,8 @@ class PipelineScheduler:
         """调度器主循环"""
         last_agent_check = 0
         agent_check_interval = 60  # 每60秒检查一次Agent主机
+        last_portainer_check = 0
+        portainer_check_interval = 120  # 每120秒检查一次Portainer主机（使用较长的间隔，避免频繁检测）
         last_docker_refresh = 0
         docker_refresh_interval = 1800  # 每30分钟刷新一次Docker信息缓存
         
@@ -56,6 +58,11 @@ class PipelineScheduler:
                 if current_time - last_agent_check >= agent_check_interval:
                     self._check_agent_hosts()
                     last_agent_check = current_time
+                
+                # 定期检查Portainer主机状态
+                if current_time - last_portainer_check >= portainer_check_interval:
+                    self._check_portainer_hosts()
+                    last_portainer_check = current_time
                 
                 # 定期刷新Docker信息缓存
                 if current_time - last_docker_refresh >= docker_refresh_interval:
@@ -201,6 +208,15 @@ class PipelineScheduler:
             manager.check_offline_hosts(timeout_seconds=60)
         except Exception as e:
             print(f"⚠️ 检查Agent主机状态失败: {e}")
+    
+    def _check_portainer_hosts(self):
+        """检查Portainer主机状态"""
+        try:
+            from backend.agent_host_manager import AgentHostManager
+            manager = AgentHostManager()
+            manager.check_portainer_hosts_status()
+        except Exception as e:
+            print(f"⚠️ 检查Portainer主机失败: {e}")
     
     def _refresh_docker_info(self):
         """刷新Docker信息缓存"""

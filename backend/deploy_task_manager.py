@@ -7,6 +7,7 @@ import os
 import uuid
 import yaml
 import json
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,12 @@ from pathlib import Path
 from backend.deploy_config_parser import DeployConfigParser
 from backend.websocket_handler import connection_manager
 from backend.agent_host_manager import AgentHostManager
+from backend.host_manager import HostManager
+from backend.ssh_deploy_executor import SSHDeployExecutor
+from backend.database import get_db_session
+from backend.models import AgentHost, Host
+
+logger = logging.getLogger(__name__)
 
 
 class DeployTaskManager:
@@ -31,6 +38,8 @@ class DeployTaskManager:
         
         self.parser = DeployConfigParser()
         self.agent_manager = AgentHostManager()
+        self.host_manager = HostManager()
+        self.ssh_executor = SSHDeployExecutor()
     
     def _get_task_file(self, task_id: str) -> str:
         """获取任务文件路径"""
@@ -184,7 +193,8 @@ class DeployTaskManager:
         task_id: str,
         target_name: Optional[str] = None,
         status: Optional[str] = None,
-        result: Optional[Dict[str, Any]] = None
+        result: Optional[Dict[str, Any]] = None,
+        message: Optional[str] = None
     ):
         """
         更新任务状态
@@ -213,6 +223,13 @@ class DeployTaskManager:
                         target["status"] = status
                     if result:
                         target["result"] = result
+                    if message:
+                        if "messages" not in target:
+                            target["messages"] = []
+                        target["messages"].append({
+                            "time": datetime.now().isoformat(),
+                            "message": message
+                        })
                     target["updated_at"] = datetime.now().isoformat()
                     break
             
@@ -292,25 +309,13 @@ class DeployTaskManager:
             self.update_task_status(task_id, target_name=target_name, status="running")
             
             try:
-                if mode == "agent":
-                    # Agent 模式：通过 WebSocket 发送任务
-                    result = await self._execute_agent_target(
-                        task_id,
-                        target,
-                        config,
-                        context
-                    )
-                elif mode == "ssh":
-                    # SSH 模式：暂不支持，返回错误
-                    result = {
-                        "success": False,
-                        "message": "SSH 模式暂未实现"
-                    }
-                else:
-                    result = {
-                        "success": False,
-                        "message": f"未知的模式: {mode}"
-                    }
+                # 统一执行接口：根据模式自动路由到对应的执行方法
+                result = await self._execute_target_unified(
+                    task_id,
+                    target,
+                    config,
+                    context
+                )
                 
                 results[target_name] = result
                 
@@ -357,6 +362,52 @@ class DeployTaskManager:
             "results": results
         }
     
+    async def _execute_target_unified(
+        self,
+        task_id: str,
+        target: Dict[str, Any],
+        config: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        统一的目标执行接口
+        根据目标模式自动路由到对应的执行方法
+        
+        Args:
+            task_id: 任务ID
+            target: 目标配置
+            config: 部署配置
+            context: 模板变量上下文
+        
+        Returns:
+            执行结果字典（统一格式）
+        """
+        mode = target.get("mode", "agent")
+        
+        if mode == "agent":
+            # Agent 模式：可能是 Agent 主机或 Portainer 主机
+            return await self._execute_agent_target(
+                task_id,
+                target,
+                config,
+                context
+            )
+        elif mode == "ssh":
+            # SSH 模式：通过 SSH 连接执行
+            return await self._execute_ssh_target(
+                task_id,
+                target,
+                config,
+                context
+            )
+        else:
+            return {
+                "success": False,
+                "message": f"未知的部署模式: {mode}",
+                "host_type": "unknown",
+                "deploy_mode": mode
+            }
+    
     async def _execute_agent_target(
         self,
         task_id: str,
@@ -395,38 +446,608 @@ class DeployTaskManager:
         
         host_id = agent_host.get("host_id")
         
-        # 检查 Agent 是否在线
+        # 检查主机是否在线
         if agent_host.get("status") != "online":
             return {
                 "success": False,
-                "message": f"Agent 主机离线: {agent_name}"
+                "message": f"主机离线: {agent_name}"
             }
+        
+        host_type = agent_host.get("host_type", "agent")
         
         # 渲染目标配置（统一处理：无论来源是表单还是YAML，都转换为统一的配置格式）
         rendered_target = self.parser.render_target_config(target, context)
+        docker_config = rendered_target.get("docker", {})
         
-        # 构建部署消息（推送给Agent的统一格式）
-        # deploy_config 包含完整的docker配置，Agent会根据此配置执行部署
-        deploy_message = {
-            "type": "deploy",
-            "task_id": task_id,
-            "deploy_config": rendered_target.get("docker", {}),  # 统一的docker配置格式
-            "context": context,  # 模板变量上下文
-            "target_name": target.get("name")
-        }
+        # 根据主机类型选择部署方式（统一接口，不同实现）
+        if host_type == "portainer":
+            # Portainer 类型：使用 Portainer API 部署
+            logger.info(f"[Portainer] 开始部署: task_id={task_id}, host={agent_name}")
+            result = await self._execute_portainer_target(
+                agent_host,
+                task_id,
+                docker_config,
+                context,
+                target.get("name")
+            )
+            result["host_type"] = "portainer"
+            result["deploy_method"] = "portainer_api"
+            return result
+        else:
+            # Agent 类型：通过 WebSocket 发送任务
+            logger.info(f"[Agent] 开始部署: task_id={task_id}, host={agent_name}")
+            
+            # 构建部署消息（推送给Agent的统一格式）
+            # deploy_config 包含完整的docker配置，Agent会根据此配置执行部署
+            deploy_message = {
+                "type": "deploy",
+                "task_id": task_id,
+                "deploy_config": docker_config,  # 统一的docker配置格式
+                "context": context,  # 模板变量上下文
+                "target_name": target.get("name")
+            }
+            
+            # 发送部署任务到 Agent
+            success = await connection_manager.send_message(host_id, deploy_message)
+            
+            if not success:
+                return {
+                    "success": False,
+                    "message": f"无法发送任务到 Agent: {agent_name}",
+                    "host_type": "agent",
+                    "deploy_method": "websocket",
+                    "host_id": host_id
+                }
+            
+            return {
+                "success": True,
+                "message": f"任务已发送到 Agent: {agent_name}",
+                "host_type": "agent",
+                "deploy_method": "websocket",
+                "host_id": host_id
+            }
+    
+    async def _execute_ssh_target(
+        self,
+        task_id: str,
+        target: Dict[str, Any],
+        config: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        执行 SSH 目标部署
         
-        # 发送部署任务到 Agent
-        success = await connection_manager.send_message(host_id, deploy_message)
+        Args:
+            task_id: 任务ID
+            target: 目标配置
+            config: 部署配置
+            context: 模板变量上下文
         
-        if not success:
+        Returns:
+            执行结果字典
+        """
+        logger.info(f"[SSH] 开始执行 SSH 部署任务: task_id={task_id}, target={target.get('name')}")
+        
+        try:
+            # 更新任务状态为运行中（明确标识主机类型）
+            self.update_task_status(
+                task_id, 
+                target_name=target.get("name"), 
+                status="running", 
+                message="[SSH] 正在连接 SSH 主机..."
+            )
+            
+            # 获取 SSH 主机配置
+            host_name = target.get("host")
+            if not host_name:
+                return {
+                    "success": False,
+                    "message": "SSH 主机名称未指定"
+                }
+            
+            # 从数据库获取 SSH 主机信息
+            db = get_db_session()
+            try:
+                host_obj = db.query(Host).filter(Host.name == host_name).first()
+                if not host_obj:
+                    return {
+                        "success": False,
+                        "message": f"SSH 主机不存在: {host_name}"
+                    }
+                
+                # 构建 SSH 主机配置
+                host_config = {
+                    "host": host_obj.host,
+                    "port": host_obj.port or 22,
+                    "username": host_obj.username,
+                    "password": host_obj.password,  # 已加密
+                    "private_key": host_obj.private_key,  # 已加密
+                    "key_password": host_obj.key_password  # 已加密
+                }
+            finally:
+                db.close()
+            
+            # 渲染目标配置
+            rendered_target = self.parser.render_target_config(target, context)
+            docker_config = rendered_target.get("docker", {})
+            
+            logger.info(f"[SSH] 主机配置: {host_name} ({host_config['host']}:{host_config['port']})")
+            self.update_task_status(
+                task_id, 
+                target_name=target.get("name"), 
+                status="running", 
+                message=f"[SSH] 正在执行部署到 {host_name}..."
+            )
+            
+            # 获取部署模式
+            deploy_mode = docker_config.get("deploy_mode", "docker_run")
+            
+            # 使用 SSH 部署执行器执行部署
+            result = self.ssh_executor.execute_deploy(
+                host_config=host_config,
+                docker_config=docker_config,
+                deploy_mode=deploy_mode
+            )
+            
+            # 统一结果格式：添加主机类型和部署方法标识
+            result["host_type"] = "ssh"
+            result["deploy_method"] = "ssh_direct"
+            result["host_name"] = host_name
+            
+            logger.info(f"[SSH] 部署结果: {result}")
+            
+            # 更新任务状态（统一格式）
+            status_msg = result.get("message", "部署成功" if result.get("success") else "部署失败")
+            
+            # 构建详细的状态消息（包含错误详情）
+            if not result.get("success"):
+                error_detail = result.get("error", "")
+                output_detail = result.get("output", "")
+                if error_detail:
+                    status_msg = f"{status_msg}\n错误详情: {error_detail[:500]}"
+                elif output_detail:
+                    status_msg = f"{status_msg}\n输出: {output_detail[:500]}"
+            
+            if result.get("success"):
+                logger.info(f"[SSH] 部署成功: task_id={task_id}, target={target.get('name')}, host={host_name}")
+                self.update_task_status(
+                    task_id, 
+                    target_name=target.get("name"), 
+                    status="completed", 
+                    result=result,
+                    message=f"[SSH] {status_msg}"
+                )
+            else:
+                # 记录完整的错误信息
+                error_info = {
+                    "message": result.get("message", "部署失败"),
+                    "error": result.get("error", ""),
+                    "output": result.get("output", ""),
+                    "exit_status": result.get("exit_status", ""),
+                    "command": result.get("command", "")
+                }
+                logger.error(f"[SSH] 部署失败: task_id={task_id}, target={target.get('name')}, host={host_name}, details={error_info}")
+                self.update_task_status(
+                    task_id, 
+                    target_name=target.get("name"), 
+                    status="failed", 
+                    result=result,
+                    message=f"[SSH] {status_msg}"
+                )
+            
+            return result
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"SSH 部署失败: {str(e)}"
+            logger.exception(f"[SSH] 部署异常: task_id={task_id}, target={target.get('name')}")
+            traceback.print_exc()
+            
+            # 更新任务状态为失败（统一格式）
+            error_result = {
+                "success": False,
+                "message": error_msg,
+                "host_type": "ssh",
+                "deploy_method": "ssh_direct",
+                "error": str(e)
+            }
+            self.update_task_status(
+                task_id, 
+                target_name=target.get("name"), 
+                status="failed", 
+                result=error_result,
+                message=f"[SSH] {error_msg}"
+            )
+            
+            return error_result
+    
+    async def _execute_portainer_target(
+        self,
+        agent_host: Dict[str, Any],
+        task_id: str,
+        docker_config: Dict[str, Any],
+        context: Dict[str, Any],
+        target_name: str
+    ) -> Dict[str, Any]:
+        """
+        执行 Portainer 目标部署
+        
+        Args:
+            agent_host: Portainer 主机信息
+            task_id: 任务ID
+            docker_config: Docker 配置
+            context: 模板变量上下文
+            target_name: 目标名称
+        
+        Returns:
+            执行结果字典
+        """
+        from backend.portainer_client import PortainerClient
+        
+        logger.info(f"[Portainer] 开始执行 Portainer 部署任务: task_id={task_id}, target={target_name}, host={agent_host.get('name')}")
+        
+        try:
+            # 更新任务状态为运行中（明确标识主机类型）
+            self.update_task_status(task_id, target_name=target_name, status="running", message="[Portainer] 正在连接 Portainer...")
+            # 从数据库获取完整的 Portainer 信息（包括 API Key）
+            db = get_db_session()
+            try:
+                host_obj = db.query(AgentHost).filter(AgentHost.host_id == agent_host.get("host_id")).first()
+                if not host_obj or not host_obj.portainer_api_key:
+                    return {
+                        "success": False,
+                        "message": "Portainer API Key 未配置",
+                        "host_type": "portainer",
+                        "deploy_method": "portainer_api",
+                        "host_name": agent_host.get("name")
+                    }
+                portainer_api_key = host_obj.portainer_api_key
+            finally:
+                db.close()
+            
+            # 创建 Portainer 客户端
+            logger.info(f"[Portainer] 创建 Portainer 客户端: URL={agent_host.get('portainer_url')}, EndpointID={agent_host.get('portainer_endpoint_id')}")
+            self.update_task_status(task_id, target_name=target_name, status="running", message="[Portainer] 正在创建 Portainer 客户端...")
+            
+            client = PortainerClient(
+                agent_host.get("portainer_url"),
+                portainer_api_key,
+                agent_host.get("portainer_endpoint_id")
+            )
+            
+            deploy_mode = docker_config.get("deploy_mode", "docker_run")
+            redeploy = docker_config.get("redeploy", False)
+            
+            logger.info(f"部署模式: {deploy_mode}, 重新发布: {redeploy}")
+            
+            # 如果需要重新发布，先清理
+            if redeploy:
+                logger.info(f"开始清理已有部署...")
+                self.update_task_status(task_id, target_name=target_name, status="running", message="正在清理已有部署...")
+                if deploy_mode == "docker_compose":
+                    # 尝试删除 Stack
+                    stack_name = f"{context.get('app', {}).get('name', 'app')}-{target_name}"
+                    try:
+                        client._request('DELETE', f'/stacks', params={"endpointId": agent_host.get("portainer_endpoint_id"), "name": stack_name})
+                    except:
+                        pass
+                else:
+                    # 尝试删除容器
+                    container_name = docker_config.get("container_name", "")
+                    if container_name:
+                        # 从命令中提取容器名
+                        command = docker_config.get("command", "")
+                        if command and "--name" in command:
+                            import shlex
+                            cmd_parts = shlex.split(command)
+                            name_idx = cmd_parts.index("--name")
+                            if name_idx + 1 < len(cmd_parts):
+                                container_name = cmd_parts[name_idx + 1]
+                        
+                        try:
+                            client.remove_container(container_name, force=True)
+                            logger.info(f"已删除容器: {container_name}")
+                        except Exception as e:
+                            logger.warning(f"删除容器失败（可能不存在）: {e}")
+            
+            # 执行部署
+            logger.info(f"开始执行部署: mode={deploy_mode}")
+            self.update_task_status(task_id, target_name=target_name, status="running", message=f"正在执行 {deploy_mode} 部署...")
+            
+            if deploy_mode == "docker_compose":
+                # Docker Compose 部署
+                stack_name = f"{context.get('app', {}).get('name', 'app')}-{target_name}"
+                compose_content = docker_config.get("compose_content", "")
+                
+                if not compose_content:
+                    return {
+                        "success": False,
+                        "message": "Docker Compose 模式需要提供 compose_content"
+                    }
+                
+                logger.info(f"部署 Docker Compose Stack: {stack_name}")
+                
+                # 使用重试机制执行部署（Portainer 可能不稳定）
+                result = None
+                max_retries = 3
+                last_error = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        if attempt > 0:
+                            wait_time = attempt * 2  # 2秒, 4秒
+                            logger.info(f"第 {attempt + 1} 次尝试部署 Stack（等待 {wait_time} 秒后重试）...")
+                            self.update_task_status(
+                                task_id, 
+                                target_name=target_name, 
+                                status="running", 
+                                message=f"Stack 部署失败，{wait_time}秒后重试（{attempt + 1}/{max_retries}）..."
+                            )
+                            import asyncio
+                            await asyncio.sleep(wait_time)
+                        
+                        result = client.deploy_stack(stack_name, compose_content)
+                        logger.info(f"Docker Compose 部署结果: {result}")
+                        break  # 成功，退出重试循环
+                        
+                    except Exception as e:
+                        last_error = str(e)
+                        error_msg = last_error.lower()
+                        
+                        # 如果是连接重置错误，可以重试
+                        if "connection reset" in error_msg or "connection aborted" in error_msg:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"Stack 部署时连接被重置（尝试 {attempt + 1}/{max_retries}）: {e}")
+                                continue  # 继续重试
+                            else:
+                                # 最后一次重试也失败
+                                logger.error(f"Stack 部署失败（{max_retries}次重试后）: {e}")
+                                result = {
+                                    "success": False,
+                                    "message": f"Stack 部署失败：连接被重置（已重试 {max_retries} 次），可能是 Portainer 服务器不稳定或网络问题"
+                                }
+                        else:
+                            # 其他错误，不重试
+                            logger.error(f"[Portainer] Stack 部署失败（不可重试的错误）: {e}")
+                            result = {
+                                "success": False,
+                                "message": f"Stack 部署失败: {last_error}",
+                                "host_type": "portainer",
+                                "deploy_method": "portainer_api",
+                                "host_name": target_name
+                            }
+                            break
+                
+                if result is None:
+                    result = {
+                        "success": False,
+                        "message": f"Stack 部署失败: {last_error or '未知错误'}",
+                        "host_type": "portainer",
+                        "deploy_method": "portainer_api",
+                        "host_name": target_name
+                    }
+                
+                # 统一结果格式
+                if result:
+                    result.setdefault("host_type", "portainer")
+                    result.setdefault("deploy_method", "portainer_api")
+                    result.setdefault("host_name", target_name)
+                
+                # 更新任务状态（统一格式）
+                if result.get("success"):
+                    logger.info(f"[Portainer] Stack 部署成功: task_id={task_id}, target={target_name}")
+                    status_msg = result.get("message", "Stack 部署成功")
+                    self.update_task_status(
+                        task_id, 
+                        target_name=target_name, 
+                        status="completed", 
+                        result=result,
+                        message=f"[Portainer] {status_msg}"
+                    )
+                else:
+                    logger.error(f"[Portainer] Stack 部署失败: task_id={task_id}, target={target_name}, error={result.get('message')}")
+                    status_msg = result.get("message", "Stack 部署失败")
+                    self.update_task_status(
+                        task_id, 
+                        target_name=target_name, 
+                        status="failed", 
+                        result=result,
+                        message=f"[Portainer] {status_msg}"
+                    )
+                
+                return result
+            else:
+                # Docker Run 部署
+                container_name = docker_config.get("container_name", f"{context.get('app', {}).get('name', 'app')}-{target_name}")
+                image_template = docker_config.get("image_template", "")
+                
+                # 渲染镜像名称
+                if image_template:
+                    image = image_template
+                    for key, value in context.items():
+                        placeholder = f"{{{{ {key} }}}}"
+                        image = image.replace(placeholder, str(value))
+                else:
+                    image = ""
+                
+                if not image:
+                    # 尝试从命令中提取镜像
+                    command = docker_config.get("command", "")
+                    if command:
+                        import shlex
+                        import re
+                        # 处理多行命令和反斜杠续行符
+                        command = re.sub(r'\\\s*\n\s*', ' ', command)
+                        command = re.sub(r'\\\\\s*\n\s*', ' ', command)
+                        command = re.sub(r'\s+', ' ', command).strip()
+                        cmd_parts = shlex.split(command)
+                        # 镜像通常是最后一个参数
+                        image = cmd_parts[-1] if cmd_parts else ""
+                
+                if not image:
+                    error_msg = "无法确定镜像名称"
+                    logger.error(error_msg)
+                    self.update_task_status(
+                        task_id, 
+                        target_name=target_name, 
+                        status="failed", 
+                        result={"success": False, "message": error_msg},
+                        message=error_msg
+                    )
+                    error_result = {
+                        "success": False,
+                        "message": error_msg,
+                        "host_type": "portainer",
+                        "deploy_method": "portainer_api",
+                        "host_name": target_name
+                    }
+                    self.update_task_status(
+                        task_id, 
+                        target_name=target_name, 
+                        status="failed", 
+                        result=error_result,
+                        message=f"[Portainer] {error_msg}"
+                    )
+                    return error_result
+                
+                logger.info(f"[Portainer] 部署 Docker 容器: name={container_name}, image={image}")
+                
+                # 解析命令参数
+                command = docker_config.get("command", "")
+                # 如果提供了 command，优先使用 command 中的参数
+                # 否则使用单独的配置项
+                if command:
+                    # command 中已经包含了所有参数（-e, -v, -p 等），不需要额外传递
+                    ports = None
+                    env = None
+                    volumes = None
+                    restart_policy = None  # 会从 command 中解析
+                else:
+                    # 没有 command，使用配置项
+                    ports = docker_config.get("ports", [])
+                    env = docker_config.get("env", [])
+                    volumes = docker_config.get("volumes", [])
+                    restart_policy = docker_config.get("restart_policy", "always")
+                
+                # 使用重试机制执行部署（Portainer 可能不稳定）
+                result = None
+                max_retries = 3
+                last_error = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        if attempt > 0:
+                            wait_time = attempt * 2  # 2秒, 4秒
+                            logger.info(f"第 {attempt + 1} 次尝试部署（等待 {wait_time} 秒后重试）...")
+                            self.update_task_status(
+                                task_id, 
+                                target_name=target_name, 
+                                status="running", 
+                                message=f"部署失败，{wait_time}秒后重试（{attempt + 1}/{max_retries}）..."
+                            )
+                            import asyncio
+                            await asyncio.sleep(wait_time)
+                        
+                        result = client.deploy_container(
+                            container_name,
+                            image,
+                            command=command if command else None,
+                            ports=ports,
+                            env=env,
+                            volumes=volumes,
+                            restart_policy=restart_policy
+                        )
+                        
+                        logger.info(f"Docker Run 部署结果: {result}")
+                        break  # 成功，退出重试循环
+                        
+                    except Exception as e:
+                        last_error = str(e)
+                        error_msg = last_error.lower()
+                        
+                        # 如果是连接重置错误，可以重试
+                        if "connection reset" in error_msg or "connection aborted" in error_msg:
+                            if attempt < max_retries - 1:
+                                logger.warning(f"[Portainer] 部署时连接被重置（尝试 {attempt + 1}/{max_retries}）: {e}")
+                                continue  # 继续重试
+                            else:
+                                # 最后一次重试也失败
+                                logger.error(f"[Portainer] 部署失败（{max_retries}次重试后）: {e}")
+                                result = {
+                                    "success": False,
+                                    "message": f"部署失败：连接被重置（已重试 {max_retries} 次），可能是 Portainer 服务器不稳定或网络问题",
+                                    "host_type": "portainer",
+                                    "deploy_method": "portainer_api",
+                                    "host_name": target_name
+                                }
+                        else:
+                            # 其他错误，不重试
+                            logger.error(f"[Portainer] 部署失败（不可重试的错误）: {e}")
+                            result = {
+                                "success": False,
+                                "message": f"部署失败: {last_error}",
+                                "host_type": "portainer",
+                                "deploy_method": "portainer_api",
+                                "host_name": target_name
+                            }
+                            break
+                
+                if result is None:
+                    result = {
+                        "success": False,
+                        "message": f"部署失败: {last_error or '未知错误'}",
+                        "host_type": "portainer",
+                        "deploy_method": "portainer_api",
+                        "host_name": target_name
+                    }
+            
+            # 统一结果格式：添加主机类型和部署方法标识
+            if result:
+                result.setdefault("host_type", "portainer")
+                result.setdefault("deploy_method", "portainer_api")
+                result.setdefault("host_name", target_name)
+            
+            # 更新任务状态（统一格式）
+            if result.get("success"):
+                logger.info(f"[Portainer] 部署成功: task_id={task_id}, target={target_name}")
+                status_msg = result.get("message", "部署成功")
+                self.update_task_status(
+                    task_id, 
+                    target_name=target_name, 
+                    status="completed", 
+                    result=result,
+                    message=f"[Portainer] {status_msg}"
+                )
+            else:
+                logger.error(f"[Portainer] 部署失败: task_id={task_id}, target={target_name}, error={result.get('message')}")
+                status_msg = result.get("message", "部署失败")
+                self.update_task_status(
+                    task_id, 
+                    target_name=target_name, 
+                    status="failed", 
+                    result=result,
+                    message=f"[Portainer] {status_msg}"
+                )
+            
+            return result
+        
+        except Exception as e:
+            import traceback
+            error_msg = f"Portainer 部署失败: {str(e)}"
+            logger.exception(f"Portainer 部署失败: task_id={task_id}, target={target_name}")
+            traceback.print_exc()
+            
+            # 更新任务状态为失败
+            self.update_task_status(
+                task_id, 
+                target_name=target_name, 
+                status="failed", 
+                result={"success": False, "message": error_msg},
+                message=error_msg
+            )
+            
             return {
                 "success": False,
-                "message": f"无法发送任务到 Agent: {agent_name}"
+                "message": error_msg
             }
-        
-        return {
-            "success": True,
-            "message": f"任务已发送到 Agent: {agent_name}",
-            "host_id": host_id
-        }
 

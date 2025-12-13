@@ -118,27 +118,130 @@
             
             <div class="mb-3">
               <label class="form-label">选择目标主机 <span class="text-danger">*</span></label>
-              <div v-if="loadingHosts" class="text-muted small">加载中...</div>
-              <div v-else class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
-                <div v-for="host in agentHosts" :key="host.host_id" class="form-check">
-                  <input 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    :value="host.host_id"
-                    :id="'host-' + host.host_id"
-                    v-model="simpleForm.selectedHosts"
-                    :disabled="host.status !== 'online'"
-                  >
-                  <label class="form-check-label" :for="'host-' + host.host_id">
-                    {{ host.name }}
-                    <span :class="getStatusBadgeClass(host.status)" class="badge ms-2">
-                      {{ getStatusText(host.status) }}
-                    </span>
+              
+              <!-- 主机类型筛选和搜索 -->
+              <div class="mb-2">
+                <div class="btn-group btn-group-sm mb-2" role="group">
+                  <input type="radio" class="btn-check" id="filter-all" v-model="hostFilter" value="all">
+                  <label class="btn btn-outline-secondary" for="filter-all">全部</label>
+                  
+                  <input type="radio" class="btn-check" id="filter-agent" v-model="hostFilter" value="agent">
+                  <label class="btn btn-outline-secondary" for="filter-agent">
+                    <i class="fas fa-network-wired me-1"></i> Agent
+                  </label>
+                  
+                  <input type="radio" class="btn-check" id="filter-portainer" v-model="hostFilter" value="portainer">
+                  <label class="btn btn-outline-secondary" for="filter-portainer">
+                    <i class="fas fa-server me-1"></i> Portainer
+                  </label>
+                  
+                  <input type="radio" class="btn-check" id="filter-ssh" v-model="hostFilter" value="ssh">
+                  <label class="btn btn-outline-secondary" for="filter-ssh">
+                    <i class="fas fa-terminal me-1"></i> SSH
                   </label>
                 </div>
-                <div v-if="agentHosts.length === 0" class="text-muted small">
-                  暂无可用主机，请先在"主机管理"中添加Agent主机
+                <div class="d-flex align-items-center gap-2">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="filter-online" v-model="filterOnlineOnly">
+                    <label class="form-check-label" for="filter-online">仅在线</label>
+                  </div>
+                  <input 
+                    type="text" 
+                    class="form-control form-control-sm flex-grow-1" 
+                    v-model="hostSearchKeyword"
+                    placeholder="搜索主机名称..."
+                  >
                 </div>
+              </div>
+              
+              <!-- 主机列表（按类型分组） -->
+              <div v-if="loadingHosts" class="text-muted small text-center py-3">
+                <span class="spinner-border spinner-border-sm me-2"></span>加载中...
+              </div>
+              <div v-else class="border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+                <!-- Agent 主机 -->
+                <div v-if="filteredHostsByType.agent.length > 0" class="mb-3">
+                  <div class="fw-bold text-primary mb-2">
+                    <i class="fas fa-network-wired me-1"></i> Agent 主机 ({{ filteredHostsByType.agent.length }})
+                  </div>
+                  <div v-for="host in filteredHostsByType.agent" :key="host.host_id" class="form-check ms-3">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      :id="`host-${host.host_id}`"
+                      :value="host.host_id"
+                      v-model="simpleForm.selectedHosts"
+                    >
+                    <label class="form-check-label" :for="`host-${host.host_id}`">
+                      {{ host.name }}
+                      <span :class="getStatusBadgeClass(host.status)" class="badge ms-1">
+                        {{ getStatusText(host.status) }}
+                      </span>
+                      <span v-if="host.description" class="text-muted small ms-1">({{ host.description }})</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <!-- Portainer 主机 -->
+                <div v-if="filteredHostsByType.portainer.length > 0" class="mb-3">
+                  <div class="fw-bold text-info mb-2">
+                    <i class="fas fa-server me-1"></i> Portainer 主机 ({{ filteredHostsByType.portainer.length }})
+                  </div>
+                  <div v-for="host in filteredHostsByType.portainer" :key="host.host_id" class="form-check ms-3">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      :id="`host-${host.host_id}`"
+                      :value="host.host_id"
+                      v-model="simpleForm.selectedHosts"
+                    >
+                    <label class="form-check-label" :for="`host-${host.host_id}`">
+                      {{ host.name }}
+                      <span :class="getStatusBadgeClass(host.status)" class="badge ms-1">
+                        {{ getStatusText(host.status) }}
+                      </span>
+                      <span v-if="host.portainer_url" class="text-muted small ms-1">({{ host.portainer_url }})</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <!-- SSH 主机 -->
+                <div v-if="filteredHostsByType.ssh.length > 0" class="mb-3">
+                  <div class="fw-bold text-warning mb-2">
+                    <i class="fas fa-terminal me-1"></i> SSH 主机 ({{ filteredHostsByType.ssh.length }})
+                  </div>
+                  <div v-for="host in filteredHostsByType.ssh" :key="host.host_id" class="form-check ms-3">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      :id="`host-${host.host_id}`"
+                      :value="host.host_id"
+                      v-model="simpleForm.selectedHosts"
+                    >
+                    <label class="form-check-label" :for="`host-${host.host_id}`">
+                      {{ host.name }}
+                      <span v-if="host.docker_enabled" class="badge bg-info ms-1">Docker</span>
+                      <span v-if="host.docker_version" class="text-muted small ms-1">({{ host.docker_version }})</span>
+                      <span v-if="host.host" class="text-muted small ms-1">@{{ host.host }}:{{ host.port || 22 }}</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div v-if="filteredHosts.length === 0" class="text-muted small text-center py-3">
+                  <i class="fas fa-inbox me-1"></i>
+                  <span v-if="hostSearchKeyword">未找到匹配的主机</span>
+                  <span v-else>暂无可用主机，请先在"主机管理"中添加主机</span>
+                </div>
+              </div>
+              
+              <!-- 已选择的主机统计 -->
+              <div v-if="simpleForm.selectedHosts.length > 0" class="mt-2">
+                <small class="text-muted">
+                  已选择 <strong>{{ simpleForm.selectedHosts.length }}</strong> 个主机
+                  <button type="button" class="btn btn-link btn-sm p-0 ms-2" @click="simpleForm.selectedHosts = []">
+                    清空
+                  </button>
+                </small>
               </div>
             </div>
 
@@ -337,9 +440,20 @@
                         </span>
                       </td>
                       <td>
-                        <span v-if="target.result" class="text-muted small">
-                          {{ target.result.message || '-' }}
-                        </span>
+                        <div v-if="target.result" class="small">
+                          <div class="text-muted">
+                            {{ target.result.message || '-' }}
+                          </div>
+                          <div v-if="target.result.error" class="text-danger mt-1">
+                            <strong>错误:</strong> {{ target.result.error }}
+                          </div>
+                        </div>
+                        <div v-else-if="target.messages && target.messages.length > 0" class="small">
+                          <div v-for="(msg, idx) in target.messages" :key="idx" class="text-info">
+                            [{{ formatTime(msg.time) }}] {{ msg.message }}
+                          </div>
+                        </div>
+                        <span v-else class="text-muted">-</span>
                       </td>
                     </tr>
                   </tbody>
@@ -447,7 +561,11 @@ export default {
       taskTag: '',
       creating: false,
       agentHosts: [],
+      sshHosts: [],
       loadingHosts: false,
+      hostFilter: 'all', // all, agent, portainer, ssh
+      filterOnlineOnly: true,
+      hostSearchKeyword: '',
       simpleForm: {
         appName: '',
         selectedHosts: [],
@@ -461,9 +579,83 @@ export default {
       }
     }
   },
+  computed: {
+    // 过滤后的主机列表
+    filteredHosts() {
+      let hosts = []
+      
+      // 合并所有类型的主机
+      if (this.hostFilter === 'all' || this.hostFilter === 'agent' || this.hostFilter === 'portainer') {
+        hosts = hosts.concat(this.agentHosts || [])
+      }
+      if (this.hostFilter === 'all' || this.hostFilter === 'ssh') {
+        hosts = hosts.concat(this.sshHosts || [])
+      }
+      
+      // 按类型过滤
+      if (this.hostFilter === 'agent') {
+        hosts = hosts.filter(h => h.host_type === 'agent')
+      } else if (this.hostFilter === 'portainer') {
+        hosts = hosts.filter(h => h.host_type === 'portainer')
+      } else if (this.hostFilter === 'ssh') {
+        // SSH 主机没有 host_type，通过其他方式识别
+        hosts = hosts.filter(h => !h.host_type)
+      }
+      
+      // 仅在线过滤
+      if (this.filterOnlineOnly) {
+        hosts = hosts.filter(h => {
+          if (h.host_type) {
+            // Agent 或 Portainer 主机
+            return h.status === 'online'
+          } else {
+            // SSH 主机（总是显示，因为没有状态）
+            return true
+          }
+        })
+      }
+      
+      // 搜索过滤
+      if (this.hostSearchKeyword) {
+        const keyword = this.hostSearchKeyword.toLowerCase()
+        hosts = hosts.filter(h => 
+          h.name.toLowerCase().includes(keyword) ||
+          (h.description && h.description.toLowerCase().includes(keyword)) ||
+          (h.portainer_url && h.portainer_url.toLowerCase().includes(keyword)) ||
+          (h.host && h.host.toLowerCase().includes(keyword))
+        )
+      }
+      
+      return hosts
+    },
+    // 按类型分组的主机
+    filteredHostsByType() {
+      const result = {
+        agent: [],
+        portainer: [],
+        ssh: []
+      }
+      
+      this.filteredHosts.forEach(host => {
+        if (host.host_type === 'agent') {
+          result.agent.push(host)
+        } else if (host.host_type === 'portainer') {
+          result.portainer.push(host)
+        } else {
+          result.ssh.push(host)
+        }
+      })
+      
+      return result
+    }
+  },
   mounted() {
     this.loadTasks()
     this.loadAgentHosts()
+    this.loadSSHHosts()
+  },
+  beforeUnmount() {
+    this.stopAutoRefresh()
   },
   methods: {
     async loadTasks() {
@@ -623,6 +815,15 @@ export default {
         this.loadingHosts = false
       }
     },
+    async loadSSHHosts() {
+      try {
+        const res = await axios.get('/api/hosts')
+        this.sshHosts = res.data.hosts || []
+      } catch (error) {
+        console.error('加载 SSH 主机列表失败:', error)
+        // SSH 主机加载失败不影响使用
+      }
+    },
     async createSimpleTask() {
       // 验证必填字段
       if (!this.simpleForm.appName.trim()) {
@@ -653,8 +854,37 @@ export default {
       // 后端会解析YAML并推送给Agent执行部署
       const targets = []
       for (const hostId of this.simpleForm.selectedHosts) {
-        const host = this.agentHosts.find(h => h.host_id === hostId)
+        // 在所有主机列表中查找（包括 Agent、Portainer 和 SSH）
+        const host = [...this.agentHosts, ...this.sshHosts].find(h => h.host_id === hostId)
         if (!host) continue
+        
+        // 确定主机类型和模式
+        let mode = 'agent'
+        let targetConfig = {}
+        
+        if (host.host_type === 'portainer') {
+          // Portainer 主机：使用 agent 模式，但会通过 host_type 识别
+          mode = 'agent'
+          targetConfig = {
+            agent: {
+              name: host.name
+            }
+          }
+        } else if (host.host_type === 'agent') {
+          // Agent 主机
+          mode = 'agent'
+          targetConfig = {
+            agent: {
+              name: host.name
+            }
+          }
+        } else {
+          // SSH 主机
+          mode = 'ssh'
+          targetConfig = {
+            host: host.name
+          }
+        }
 
         const dockerConfig = {
           deploy_mode: this.simpleForm.deployMode,
@@ -679,10 +909,8 @@ export default {
 
         targets.push({
           name: `${host.name}-deploy`,
-          mode: 'agent',
-          agent: {
-            name: host.name
-          },
+          mode: mode,
+          ...targetConfig,
           docker: dockerConfig
         })
       }

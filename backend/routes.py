@@ -6065,12 +6065,31 @@ async def delete_host(request: Request, host_id: str):
 
 class AgentHostRequest(BaseModel):
     name: str
+    host_type: str = "agent"  # agent 或 portainer
     description: str = ""
+    portainer_url: Optional[str] = None
+    portainer_api_key: Optional[str] = None
+    portainer_endpoint_id: Optional[int] = None
 
 
 class AgentHostUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    portainer_url: Optional[str] = None
+    portainer_api_key: Optional[str] = None
+    portainer_endpoint_id: Optional[int] = None
+
+
+class PortainerTestRequest(BaseModel):
+    portainer_url: str
+    api_key: str
+    endpoint_id: int
+
+
+class PortainerListEndpointsRequest(BaseModel):
+    portainer_url: str
+    api_key: str
+    endpoint_id: int = 0  # 获取列表时不需要真实的 endpoint_id
 
 
 class DeployTaskCreateRequest(BaseModel):
@@ -6083,17 +6102,74 @@ class DeployTaskExecuteRequest(BaseModel):
     target_names: Optional[List[str]] = None
 
 
+@router.post("/agent-hosts/test-portainer")
+async def test_portainer_connection(request: Request, test_req: PortainerTestRequest):
+    """测试 Portainer 连接"""
+    try:
+        manager = AgentHostManager()
+        result = manager.test_portainer_connection(
+            test_req.portainer_url,
+            test_req.api_key,
+            test_req.endpoint_id
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试连接失败: {str(e)}")
+
+
+@router.post("/agent-hosts/list-portainer-endpoints")
+async def list_portainer_endpoints(request: Request, test_req: PortainerListEndpointsRequest):
+    """获取 Portainer Endpoints 列表"""
+    try:
+        from backend.portainer_client import PortainerClient
+        client = PortainerClient(test_req.portainer_url, test_req.api_key, 0)  # endpoint_id 暂时不需要
+        
+        # 获取所有 endpoints
+        endpoints = client._request('GET', '/endpoints', timeout=5)
+        
+        return JSONResponse({
+            "success": True,
+            "endpoints": [
+                {"id": ep.get('Id'), "name": ep.get('Name'), "type": ep.get('Type')}
+                for ep in endpoints
+            ]
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "message": f"获取 Endpoints 列表失败: {str(e)}",
+            "endpoints": []
+        })
+
+
 @router.post("/agent-hosts")
 async def add_agent_host(request: Request, host_req: AgentHostRequest):
-    """创建Agent主机"""
+    """创建主机（支持 Agent 和 Portainer 类型）"""
     try:
         username = get_current_username(request)
         manager = AgentHostManager()
 
         host_info = manager.add_agent_host(
             name=host_req.name,
+            host_type=host_req.host_type,
             description=host_req.description,
+            portainer_url=host_req.portainer_url,
+            portainer_api_key=host_req.portainer_api_key,
+            portainer_endpoint_id=host_req.portainer_endpoint_id,
         )
+
+        # 如果是 Portainer 类型，创建后立即更新状态
+        if host_req.host_type == "portainer" and host_info:
+            try:
+                updated_info = manager.update_portainer_host_status(host_info["host_id"])
+                if updated_info:
+                    host_info = updated_info
+            except Exception as e:
+                # 状态更新失败不影响创建，记录日志即可
+                import logging
+                logging.warning(f"创建 Portainer 主机后更新状态失败: {e}")
 
         # 记录操作日志
         OperationLogger.log(
@@ -6153,10 +6229,24 @@ async def update_agent_host(request: Request, host_id: str, host_req: AgentHostU
             host_id=host_id,
             name=host_req.name,
             description=host_req.description,
+            portainer_url=host_req.portainer_url,
+            portainer_api_key=host_req.portainer_api_key,
+            portainer_endpoint_id=host_req.portainer_endpoint_id,
         )
 
         if not host_info:
             raise HTTPException(status_code=404, detail="Agent主机不存在")
+
+        # 如果是 Portainer 类型，更新后立即刷新状态
+        if host_info.get("host_type") == "portainer":
+            try:
+                updated_info = manager.update_portainer_host_status(host_id)
+                if updated_info:
+                    host_info = updated_info
+            except Exception as e:
+                # 状态更新失败不影响更新，记录日志即可
+                import logging
+                logging.warning(f"更新 Portainer 主机后刷新状态失败: {e}")
 
         # 记录操作日志
         OperationLogger.log(
@@ -6174,6 +6264,29 @@ async def update_agent_host(request: Request, host_id: str, host_req: AgentHostU
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"更新Agent主机失败: {str(e)}")
+
+
+@router.post("/agent-hosts/{host_id}/refresh-status")
+async def refresh_agent_host_status(request: Request, host_id: str):
+    """刷新Agent主机状态"""
+    try:
+        manager = AgentHostManager()
+        host = manager.get_agent_host(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="Agent主机不存在")
+        
+        # 根据主机类型刷新状态
+        if host.get("host_type") == "portainer":
+            updated_info = manager.update_portainer_host_status(host_id)
+            if updated_info:
+                return JSONResponse({"success": True, "host": updated_info})
+            else:
+                return JSONResponse({"success": False, "message": "状态更新失败"})
+        else:
+            # Agent 类型的主机状态通过 WebSocket 心跳更新
+            return JSONResponse({"success": True, "host": host, "message": "Agent 类型主机状态通过 WebSocket 心跳更新"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"刷新状态失败: {str(e)}")
 
 
 @router.delete("/agent-hosts/{host_id}")

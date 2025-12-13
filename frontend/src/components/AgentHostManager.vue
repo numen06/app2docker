@@ -40,6 +40,7 @@
           <tr v-for="host in hosts" :key="host.host_id">
             <td>
               <strong>{{ host.name }}</strong>
+              <span class="badge bg-secondary ms-2">{{ host.host_type === 'portainer' ? 'Portainer' : 'Agent' }}</span>
             </td>
             <td>
               <span :class="getStatusBadgeClass(host.status)" class="badge">
@@ -108,6 +109,13 @@
                   <i class="fas fa-code"></i>
                 </button>
                 <button 
+                  class="btn btn-outline-success" 
+                  @click="refreshHostStatus(host)"
+                  title="刷新状态"
+                >
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+                <button 
                   class="btn btn-outline-primary" 
                   @click="editHost(host)"
                   title="编辑"
@@ -139,7 +147,23 @@
             <button type="button" class="btn-close" @click="closeModal"></button>
           </div>
           <div class="modal-body">
-            <form @submit.prevent="saveHost">
+            <form @submit.prevent="saveHost" novalidate>
+              <div class="mb-3">
+                <label class="form-label">
+                  主机类型 <span class="text-danger">*</span>
+                </label>
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" id="host-type-agent" v-model="hostForm.host_type" value="agent" :disabled="!!editingHost">
+                  <label class="btn btn-outline-primary" for="host-type-agent">
+                    <i class="fas fa-network-wired me-1"></i> Agent
+                  </label>
+                  
+                  <input type="radio" class="btn-check" id="host-type-portainer" v-model="hostForm.host_type" value="portainer" :disabled="!!editingHost">
+                  <label class="btn btn-outline-primary" for="host-type-portainer">
+                    <i class="fab fa-docker me-1"></i> Portainer
+                  </label>
+                </div>
+              </div>
               <div class="mb-3">
                 <label class="form-label">
                   主机名称 <span class="text-danger">*</span>
@@ -161,9 +185,93 @@
                   placeholder="请输入主机描述信息..."
                 />
               </div>
-              <div v-if="!editingHost" class="alert alert-info py-2 mb-0">
+              
+              <!-- Portainer 配置 -->
+              <div v-if="hostForm.host_type === 'portainer'">
+                <div class="mb-3">
+                  <label class="form-label">
+                    Portainer API URL <span class="text-danger">*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    class="form-control form-control-sm" 
+                    v-model="hostForm.portainer_url"
+                    placeholder="http://portainer.example.com:9000"
+                    required
+                  />
+                  <small class="text-muted">Portainer 服务器的 API 地址</small>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">
+                    Portainer API Key <span class="text-danger">*</span>
+                  </label>
+                  <input 
+                    type="password" 
+                    class="form-control form-control-sm" 
+                    v-model="hostForm.portainer_api_key"
+                    placeholder="ptc_xxxxxxxxxxxxx"
+                    @blur="autoLoadEndpoints"
+                    required
+                  />
+                  <small class="text-muted">在 Portainer 设置中生成的 API Key</small>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">
+                    Endpoint <span class="text-danger">*</span>
+                  </label>
+                  <div class="input-group">
+                    <select 
+                      class="form-select form-control-sm" 
+                      v-model.number="hostForm.portainer_endpoint_id"
+                      :disabled="loadingEndpoints"
+                      required
+                    >
+                      <option value="" disabled>请选择 Endpoint</option>
+                      <option v-for="ep in availableEndpoints" :key="ep.id" :value="ep.id">
+                        {{ ep.name }} (ID: {{ ep.id }})
+                      </option>
+                    </select>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary" 
+                      @click="loadEndpoints"
+                      :disabled="loadingEndpoints || !hostForm.portainer_url || !hostForm.portainer_api_key"
+                      title="刷新 Endpoints 列表"
+                    >
+                      <span v-if="loadingEndpoints" class="spinner-border spinner-border-sm"></span>
+                      <i v-else class="fas fa-sync-alt"></i>
+                    </button>
+                  </div>
+                  <small class="text-muted">
+                    <span v-if="availableEndpoints.length > 0">
+                      已加载 {{ availableEndpoints.length }} 个 Endpoint
+                    </span>
+                    <span v-else>
+                      点击刷新按钮加载 Endpoints 列表
+                    </span>
+                  </small>
+                </div>
+                <div class="mb-3">
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-outline-info" 
+                    @click="testPortainerConnection"
+                    :disabled="testingConnection"
+                  >
+                    <span v-if="testingConnection" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fas fa-plug me-1"></i>
+                    {{ testingConnection ? '测试中...' : '测试连接' }}
+                  </button>
+                </div>
+              </div>
+              
+              <div v-if="!editingHost && hostForm.host_type === 'agent'" class="alert alert-info py-2 mb-0">
                 <i class="fas fa-info-circle me-2"></i>
                 创建后将自动生成Token和部署命令，请按照部署命令在目标主机上部署Agent。
+              </div>
+              <div v-if="hostForm.host_type === 'portainer'" class="alert alert-info py-2 mb-0">
+                <i class="fas fa-info-circle me-2"></i>
+                Portainer 主机通过 Portainer API 进行连接和部署，无需在目标主机上部署 Agent。
               </div>
             </form>
           </div>
@@ -445,9 +553,16 @@ export default {
       deployComposeContent: null,
       loadingDeployCommand: false,
       hostForm: {
+        host_type: 'agent',
         name: '',
-        description: ''
+        description: '',
+        portainer_url: '',
+        portainer_api_key: '',
+        portainer_endpoint_id: null
       },
+      testingConnection: false,
+      loadingEndpoints: false,
+      availableEndpoints: [],
       wsConnections: {}, // WebSocket连接管理
       refreshInterval: null // 定期刷新定时器
     }
@@ -497,22 +612,147 @@ export default {
       this.showEditModal = false
       this.editingHost = null
       this.hostForm = {
+        host_type: 'agent',
         name: '',
-        description: ''
+        description: '',
+        portainer_url: '',
+        portainer_api_key: '',
+        portainer_endpoint_id: null
       }
+      this.availableEndpoints = []
     },
     editHost(host) {
       this.editingHost = host
       this.showEditModal = true
       this.hostForm = {
+        host_type: host.host_type || 'agent',
         name: host.name,
-        description: host.description || ''
+        description: host.description || '',
+        portainer_url: host.portainer_url || '',
+        portainer_api_key: '', // 不显示 API Key
+        portainer_endpoint_id: host.portainer_endpoint_id || null
+      }
+      this.availableEndpoints = []
+      // 如果是 Portainer 类型，尝试加载 endpoints
+      if (host.host_type === 'portainer' && host.portainer_url) {
+        // 不自动加载，因为需要 API Key
+      }
+    },
+    async autoLoadEndpoints() {
+      // 当 API Key 输入完成后，自动加载 endpoints
+      if (this.hostForm.host_type === 'portainer' && 
+          this.hostForm.portainer_url && 
+          this.hostForm.portainer_api_key &&
+          this.availableEndpoints.length === 0) {
+        await this.loadEndpoints()
+      }
+    },
+    async loadEndpoints() {
+      if (!this.hostForm.portainer_url || !this.hostForm.portainer_api_key) {
+        alert('请先填写 Portainer URL 和 API Key')
+        return
+      }
+      
+      this.loadingEndpoints = true
+      try {
+        const res = await axios.post('/api/agent-hosts/list-portainer-endpoints', {
+          portainer_url: this.hostForm.portainer_url,
+          api_key: this.hostForm.portainer_api_key,
+          endpoint_id: 0 // 不需要真实的 endpoint_id
+        }, {
+          timeout: 10000
+        })
+        
+        if (res.data.success) {
+          this.availableEndpoints = res.data.endpoints || []
+          if (this.availableEndpoints.length === 0) {
+            alert('未找到可用的 Endpoints')
+          } else {
+            // 如果只有一个 endpoint，自动选择
+            if (this.availableEndpoints.length === 1) {
+              this.hostForm.portainer_endpoint_id = this.availableEndpoints[0].id
+            }
+          }
+        } else {
+          alert('加载 Endpoints 失败：' + (res.data.message || '未知错误'))
+        }
+      } catch (error) {
+        console.error('加载 Endpoints 失败:', error)
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          alert('加载超时，请检查 Portainer URL 是否正确且可访问')
+        } else {
+          alert('加载 Endpoints 失败: ' + (error.response?.data?.detail || error.message))
+        }
+      } finally {
+        this.loadingEndpoints = false
+      }
+    },
+    async testPortainerConnection() {
+      if (!this.hostForm.portainer_url || !this.hostForm.portainer_api_key || 
+          this.hostForm.portainer_endpoint_id === null || this.hostForm.portainer_endpoint_id === undefined) {
+        alert('请填写完整的 Portainer 配置信息')
+        return
+      }
+      
+      this.testingConnection = true
+      try {
+        // 设置15秒超时
+        const res = await axios.post('/api/agent-hosts/test-portainer', {
+          portainer_url: this.hostForm.portainer_url,
+          api_key: this.hostForm.portainer_api_key,
+          endpoint_id: this.hostForm.portainer_endpoint_id
+        }, {
+          timeout: 15000 // 15秒超时
+        })
+        
+        if (res.data.success) {
+          alert('连接测试成功！')
+        } else {
+          let errorMsg = res.data.message || '未知错误'
+          // 如果有可用的 endpoints，显示它们
+          if (res.data.available_endpoints && res.data.available_endpoints.length > 0) {
+            const endpointsList = res.data.available_endpoints.map(ep => `ID: ${ep.id} (${ep.name})`).join('\n')
+            errorMsg += '\n\n可用的 Endpoints:\n' + endpointsList
+          }
+          alert('连接测试失败：' + errorMsg)
+        }
+      } catch (error) {
+        console.error('测试连接失败:', error)
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          alert('连接测试超时，请检查 Portainer URL 是否正确且可访问')
+        } else {
+          alert('测试连接失败: ' + (error.response?.data?.detail || error.message))
+        }
+      } finally {
+        this.testingConnection = false
+      }
+    },
+    async refreshHostStatus(host) {
+      try {
+        const res = await axios.post(`/api/agent-hosts/${host.host_id}/refresh-status`)
+        if (res.data.success) {
+          alert('状态刷新成功！')
+          this.loadHosts()
+        } else {
+          alert('状态刷新失败：' + (res.data.message || '未知错误'))
+        }
+      } catch (error) {
+        console.error('刷新状态失败:', error)
+        alert('刷新状态失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     async saveHost() {
       if (!this.hostForm.name) {
         alert('请填写主机名称')
         return
+      }
+      
+      if (this.hostForm.host_type === 'portainer') {
+        if (!this.hostForm.portainer_url || !this.hostForm.portainer_api_key || 
+            this.hostForm.portainer_endpoint_id === null || this.hostForm.portainer_endpoint_id === undefined) {
+          alert('请填写完整的 Portainer 配置信息')
+          return
+        }
       }
 
       this.saving = true
@@ -525,15 +765,23 @@ export default {
         }
 
         if (res.data.success) {
-          alert(this.editingHost ? 'Agent主机更新成功' : 'Agent主机创建成功')
+          alert(this.editingHost ? '主机更新成功' : '主机创建成功')
           this.closeModal()
           this.loadHosts()
           
-          // 如果是新建，显示部署命令
-          if (!this.editingHost && res.data.host) {
+          // 如果是新建 Agent 类型主机，显示部署命令
+          if (!this.editingHost && res.data.host && res.data.host.host_type === 'agent') {
             this.selectedHost = res.data.host
             this.showDeployModal = true
             this.loadDeployCommand()
+          }
+          
+          // 如果是新建 Portainer 类型主机，更新状态
+          if (!this.editingHost && res.data.host && res.data.host.host_type === 'portainer') {
+            // Portainer 主机创建后，可以尝试更新状态
+            setTimeout(() => {
+              this.loadHosts()
+            }, 1000)
           }
         }
       } catch (error) {

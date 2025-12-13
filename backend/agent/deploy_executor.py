@@ -383,9 +383,24 @@ class DeployExecutor:
                         raise ValueError("Docker Compose 模式需要提供 compose_content")
                 else:
                     # Docker Run 模式：直接执行命令
+                    # 处理多行命令和反斜杠续行符
+                    # 将反斜杠+换行符替换为空格，然后合并所有行
+                    # 先统一处理：将反斜杠+换行符替换为空格
+                    import re
+                    # 处理单个反斜杠续行符
+                    command_str = re.sub(r'\\\s*\n\s*', ' ', command_str)
+                    # 处理双反斜杠续行符（YAML 转义）
+                    command_str = re.sub(r'\\\\\s*\n\s*', ' ', command_str)
+                    # 清理多余的空格
+                    command_str = re.sub(r'\s+', ' ', command_str).strip()
+                    
                     import shlex
                     cmd_parts = shlex.split(command_str)
-                    cmd = ["docker"] + cmd_parts
+                    # 确保命令以 docker run 开头
+                    if cmd_parts and cmd_parts[0] != "run":
+                        cmd = ["docker", "run"] + cmd_parts
+                    else:
+                        cmd = ["docker"] + cmd_parts
                 
                 logger.info(f"执行命令: {' '.join(cmd)}")
                 result = subprocess.run(
