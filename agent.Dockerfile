@@ -78,14 +78,14 @@ COPY backend/ ./backend/
 # 
 # 运行容器：
 # docker run -d \
-#   --name jar2docker-agent \
+#   --name app2docker-agent \
 #   --restart=always \
 #   -e AGENT_TOKEN=<token> \
 #   -e SERVER_URL=http://<server_host>:<port> \
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -v /proc:/host/proc:ro \
 #   -v /sys:/host/sys:ro \
-#   jar2docker-agent:latest
+#   app2docker-agent:latest
 
 # 启动 Agent 程序
 CMD ["python", "backend/agent/main.py"]

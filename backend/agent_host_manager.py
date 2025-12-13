@@ -279,7 +279,7 @@ class AgentHostManager:
         if deploy_type == "run":
             # Docker Run方式
             command = f"""docker run -d \\
-  --name jar2docker-agent \\
+  --name app2docker-agent \\
   --restart=always \\
   -e AGENT_TOKEN={token} \\
   -e SERVER_URL={server_url} \\
@@ -301,7 +301,7 @@ class AgentHostManager:
 services:
   agent:
     image: {agent_image}
-    container_name: jar2docker-agent
+    container_name: app2docker-agent
     restart: always
     environment:
       - AGENT_TOKEN={token}
@@ -323,7 +323,7 @@ cat > docker-compose.yml << 'EOF'
 EOF
 
 # 2. 部署stack
-docker stack deploy -c docker-compose.yml jar2docker-agent
+docker stack deploy -c docker-compose.yml app2docker-agent
 
 # 或者使用docker-compose（如果使用docker-compose而不是swarm）
 # docker-compose up -d"""

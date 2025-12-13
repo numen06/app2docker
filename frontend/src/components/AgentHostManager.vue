@@ -380,7 +380,7 @@
                 class="form-control form-control-sm" 
                 v-model="agentImage"
                 @change="loadDeployCommand"
-                placeholder="jar2docker/agent:latest"
+                placeholder="registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest"
               />
             </div>
             <div v-if="deployCommand" class="mb-3">
@@ -434,7 +434,7 @@ export default {
       selectedHost: null,
       saving: false,
       deployType: 'run',
-      agentImage: 'jar2docker/agent:latest',
+      agentImage: 'registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest',
       deployCommand: null,
       deployComposeContent: null,
       loadingDeployCommand: false,

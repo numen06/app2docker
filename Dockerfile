@@ -122,18 +122,18 @@ FROM backend-base AS app2docker-agent
 # - Agent 需要访问主机信息（通过 /proc 和 /sys 卷映射）
 # 
 # 构建 Agent 镜像：
-# docker build --target app2docker-agent -t jar2docker-agent:latest .
+# docker build --target app2docker-agent -t app2docker-agent:latest .
 #
 # 运行 Agent 容器：
 # docker run -d \
-#   --name jar2docker-agent \
+#   --name app2docker-agent \
 #   --restart=always \
 #   -e AGENT_TOKEN=<token> \
 #   -e SERVER_URL=http://<server_host>:<port> \
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -v /proc:/host/proc:ro \
 #   -v /sys:/host/sys:ro \
-#   jar2docker-agent:latest
+#   app2docker-agent:latest
 
 # 启动 Agent 程序
 CMD ["python", "backend/agent/main.py"]
@@ -153,17 +153,17 @@ COPY templates/ ./templates/
 # - favicon.ico 已包含在前端构建产物（dist/）中
 # 
 # 构建主程序镜像（默认，不指定 --target 时构建此镜像）：
-# docker build -t jar2docker:latest .
+# docker build -t app2docker:latest .
 #
 # 或显式指定：
-# docker build --target app2docker -t jar2docker:latest .
+# docker build --target app2docker -t app2docker:latest .
 #
 # 运行容器：
 # docker run -d \
 #   -v $(pwd)/data:/app/data \
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -p 8000:8000 \
-#   jar2docker:latest
+#   app2docker:latest
 #
 # 自定义端口：
 # docker run -d \
@@ -171,7 +171,7 @@ COPY templates/ ./templates/
 #   -v $(pwd)/data:/app/data \
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -p 9000:9000 \
-#   jar2docker:latest
+#   app2docker:latest
 
 # 设置默认服务端口（可通过环境变量覆盖）
 ENV APP_PORT=8000

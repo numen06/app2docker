@@ -9,7 +9,7 @@ import sqlite3
 
 # 数据库文件路径
 DB_DIR = "data"
-DB_FILE = os.path.join(DB_DIR, "jar2docker.db")
+DB_FILE = os.path.join(DB_DIR, "app2docker.db")
 DB_URL = f"sqlite:///{DB_FILE}"
 
 # SQLite连接参数，优化并发性能

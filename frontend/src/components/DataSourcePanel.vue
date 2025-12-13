@@ -1145,7 +1145,7 @@ function openCommitModal(dockerfilePath) {
   committingDockerfilePath.value = dockerfilePath
   commitForm.value = {
     branch: currentSource.value.default_branch || (currentSource.value.branches && currentSource.value.branches[0]) || '',
-    commitMessage: `Update ${dockerfilePath} via jar2docker`
+    commitMessage: `Update ${dockerfilePath} via app2docker`
   }
   showCommitModal.value = true
 }

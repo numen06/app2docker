@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DeployExecutor:
     """部署执行器"""
     
-    def __init__(self, work_dir: str = "/tmp/jar2docker-deploy"):
+    def __init__(self, work_dir: str = "/tmp/app2docker-deploy"):
         """
         初始化部署执行器
         

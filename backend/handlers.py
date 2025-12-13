@@ -371,8 +371,8 @@ def parse_dockerfile_services(dockerfile_content: str) -> tuple:
     return services, global_params
 
 
-class Jar2DockerHandler(BaseHTTPRequestHandler):
-    server_version = "Jar2Docker/1.0"
+class App2DockerHandler(BaseHTTPRequestHandler):
+    server_version = "App2Docker/1.0"
 
     def _send_json(self, code, data):
         try:
@@ -3179,7 +3179,7 @@ logs/
                 log(f"📡 开始推送镜像...\n")
                 # 直接使用构建时的镜像名和标签进行推送
                 # full_tag 格式: image_name:tag，可能包含registry路径
-                # 例如: registry.cn-shanghai.aliyuncs.com/51jbm/jar2docker:dev
+                # 例如: registry.cn-shanghai.aliyuncs.com/51jbm/app2docker:dev
                 push_repository = image_name  # 直接使用构建时的镜像名
 
                 # 根据镜像名找到对应的registry配置

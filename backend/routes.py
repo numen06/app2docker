@@ -5362,14 +5362,14 @@ async def commit_dockerfile(
             )
             if config_result.returncode != 0 or not config_result.stdout.strip():
                 subprocess.run(
-                    ["git", "config", "user.name", "jar2docker"],
+                    ["git", "config", "user.name", "app2docker"],
                     cwd=temp_dir,
                     capture_output=True,
                     text=True,
                     timeout=10,
                 )
                 subprocess.run(
-                    ["git", "config", "user.email", "jar2docker@localhost"],
+                    ["git", "config", "user.email", "app2docker@localhost"],
                     cwd=temp_dir,
                     capture_output=True,
                     text=True,
@@ -5389,7 +5389,7 @@ async def commit_dockerfile(
                 )
 
             # 提交
-            commit_msg = commit_message or f"Update {dockerfile_path} via jar2docker"
+            commit_msg = commit_message or f"Update {dockerfile_path} via app2docker"
             commit_cmd = ["git", "commit", "-m", commit_msg]
             commit_result = subprocess.run(
                 commit_cmd, cwd=temp_dir, capture_output=True, text=True, timeout=30

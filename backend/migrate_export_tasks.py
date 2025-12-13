@@ -4,7 +4,7 @@ import sqlite3
 import os
 
 DB_DIR = "data"
-DB_FILE = os.path.join(DB_DIR, "jar2docker.db")
+DB_FILE = os.path.join(DB_DIR, "app2docker.db")
 
 def migrate_export_tasks():
     """迁移 export_tasks 表结构"""
