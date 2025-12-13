@@ -590,7 +590,6 @@ export default {
       // 无论前端是表单输入还是直接输入YAML，最终都统一为YAML格式保存
       // 后端会解析YAML并推送给Agent执行部署
       const targets = []
-      const targets = []
       for (const hostId of this.simpleForm.selectedHosts) {
         const host = this.agentHosts.find(h => h.host_id === hostId)
         if (!host) continue
