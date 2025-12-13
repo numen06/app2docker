@@ -61,22 +61,39 @@
             <td>{{ formatTime(task.status?.created_at) }}</td>
             <td>{{ formatTime(task.status?.completed_at) || '-' }}</td>
             <td>
-              <button class="btn btn-sm btn-outline-primary me-1" @click="viewTask(task)">
-                <i class="fas fa-eye"></i> 查看
-              </button>
-              <button 
-                v-if="task.status?.status === 'pending' || task.status?.status === 'failed'"
-                class="btn btn-sm btn-outline-success me-1" 
-                @click="executeTask(task)"
-              >
-                <i class="fas fa-play"></i> 执行
-              </button>
-              <button class="btn btn-sm btn-outline-info me-1" @click="exportTask(task)">
-                <i class="fas fa-download"></i> 导出
-              </button>
-              <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)">
-                <i class="fas fa-trash"></i> 删除
-              </button>
+              <div class="btn-group" role="group">
+                <button class="btn btn-sm btn-outline-primary" @click="viewTask(task)" title="查看详情">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button 
+                  v-if="task.status?.status === 'pending' || task.status?.status === 'failed'"
+                  class="btn btn-sm btn-outline-success" 
+                  @click="executeTask(task)"
+                  title="执行任务"
+                >
+                  <i class="fas fa-play"></i>
+                </button>
+                <button 
+                  v-if="task.status?.status === 'running'"
+                  class="btn btn-sm btn-outline-warning" 
+                  @click="refreshTask(task)"
+                  title="刷新状态"
+                >
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @click="editTask(task)" title="编辑配置">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-info" @click="copyTask(task)" title="复制任务">
+                  <i class="fas fa-copy"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-info" @click="exportTask(task)" title="导出配置">
+                  <i class="fas fa-download"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)" title="删除任务">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -343,11 +360,72 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="showDetailModal = false">关闭</button>
             <button 
+              class="btn btn-outline-secondary" 
+              @click="editTask(selectedTask)"
+            >
+              <i class="fas fa-edit me-1"></i> 编辑
+            </button>
+            <button 
+              class="btn btn-outline-info" 
+              @click="copyTask(selectedTask)"
+            >
+              <i class="fas fa-copy me-1"></i> 复制
+            </button>
+            <button 
               v-if="selectedTask.status?.status === 'pending' || selectedTask.status?.status === 'failed'"
               class="btn btn-success" 
               @click="executeTask(selectedTask)"
             >
               <i class="fas fa-play me-1"></i> 执行任务
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑任务模态框 -->
+    <div v-if="showEditModal && editingTask" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-edit me-2"></i> 编辑部署任务 - {{ editingTask.task_id.substring(0, 8) }}
+            </h5>
+            <button type="button" class="btn-close" @click="showEditModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">YAML 配置内容</label>
+              <textarea 
+                v-model="editingTask.config_content" 
+                class="form-control font-monospace" 
+                rows="20"
+              ></textarea>
+            </div>
+            <div class="row">
+              <div class="col-md-6">
+                <label class="form-label">镜像仓库（可选）</label>
+                <input v-model="editingTask.registry" type="text" class="form-control" placeholder="docker.io">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">镜像标签（可选）</label>
+                <input v-model="editingTask.tag" type="text" class="form-control" placeholder="latest">
+              </div>
+            </div>
+            <div class="alert alert-warning mt-3">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              注意：编辑任务会删除原任务并创建新任务，任务ID会发生变化。
+            </div>
+            <div class="alert alert-warning mt-3">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              注意：编辑任务会删除原任务并创建新任务，任务ID会发生变化。
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showEditModal = false">取消</button>
+            <button type="button" class="btn btn-primary" @click="saveEditTask" :disabled="creating">
+              <span v-if="creating" class="spinner-border spinner-border-sm me-2"></span>
+              保存
             </button>
           </div>
         </div>
@@ -370,6 +448,8 @@ export default {
       showSimpleCreateModal: false,
       showImportModal: false,
       showDetailModal: false,
+      showEditModal: false,
+      editingTask: null,
       selectedTask: null,
       detailTab: 'config',
       taskConfigContent: '',
@@ -679,6 +759,86 @@ export default {
       this.resetSimpleForm()
       this.loadAgentHosts()
       this.showSimpleCreateModal = true
+    },
+    async editTask(task) {
+      try {
+        const res = await axios.get(`/api/deploy-tasks/${task.task_id}`)
+        const taskData = res.data.task
+        this.editingTask = {
+          task_id: taskData.task_id,
+          config_content: taskData.config_content || '',
+          registry: taskData.status?.registry || '',
+          tag: taskData.status?.tag || ''
+        }
+        this.showEditModal = true
+        // 如果详情模态框打开，先关闭它
+        if (this.showDetailModal) {
+          this.showDetailModal = false
+        }
+      } catch (error) {
+        console.error('获取任务详情失败:', error)
+        alert('获取任务详情失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    async saveEditTask() {
+      if (!this.editingTask.config_content.trim()) {
+        alert('配置内容不能为空')
+        return
+      }
+      
+      if (!confirm('确定要保存修改吗？这将删除原任务并创建新任务。')) {
+        return
+      }
+      
+      this.creating = true
+      try {
+        // 删除旧任务
+        await axios.delete(`/api/deploy-tasks/${this.editingTask.task_id}`)
+        
+        // 创建新任务
+        await axios.post('/api/deploy-tasks', {
+          config_content: this.editingTask.config_content,
+          registry: this.editingTask.registry || null,
+          tag: this.editingTask.tag || null
+        })
+        
+        alert('保存成功')
+        this.showEditModal = false
+        this.editingTask = null
+        this.loadTasks()
+      } catch (error) {
+        console.error('保存任务失败:', error)
+        alert('保存任务失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.creating = false
+      }
+    },
+    async copyTask(task) {
+      try {
+        const res = await axios.get(`/api/deploy-tasks/${task.task_id}`)
+        const taskData = res.data.task
+        
+        // 创建新任务（使用相同的配置）
+        await axios.post('/api/deploy-tasks', {
+          config_content: taskData.config_content,
+          registry: taskData.status?.registry || null,
+          tag: taskData.status?.tag || null
+        })
+        
+        alert('复制成功')
+        this.loadTasks()
+      } catch (error) {
+        console.error('复制任务失败:', error)
+        alert('复制任务失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    async refreshTask(task) {
+      // 刷新任务状态
+      await this.loadTasks()
+      // 如果详情模态框打开，重新加载任务详情
+      if (this.showDetailModal && this.selectedTask?.task_id === task.task_id) {
+        await this.viewTask(task)
+      }
     }
   }
 }
