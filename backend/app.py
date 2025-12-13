@@ -92,13 +92,20 @@ async def health_check_api():
     return {"status": "healthy", "service": "app2docker"}
 
 
+# 全局变量：本地 Agent WebSocket 客户端
+_local_agent_client = None
+
+
 # 启动事件
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
+    import asyncio
     from backend.config import ensure_config_exists, load_config
     from backend.scheduler import start_scheduler
     from backend.agent_host_manager import AgentHostManager
+    from backend.agent.websocket_client import WebSocketClient
+    import platform
 
     # 确保配置文件存在
     ensure_config_exists()
@@ -109,27 +116,76 @@ async def startup_event():
     # 启动流水线调度器
     start_scheduler()
     
-    # 自动注册主程序为 Agent
+    # 自动注册主程序为 Agent 并连接
+    global _local_agent_client
     try:
         agent_manager = AgentHostManager()
         agent_hosts = agent_manager.list_agent_hosts()
         
         # 检查是否已存在名为"本地主机"的 Agent
-        local_agent_exists = False
+        local_agent = None
         for host in agent_hosts:
             if host.get("name") == "本地主机":
-                local_agent_exists = True
+                local_agent = host
                 print(f"✅ 本地 Agent 已存在: {host.get('host_id')}")
                 break
         
         # 如果不存在，创建本地 Agent
-        if not local_agent_exists:
+        if not local_agent:
             local_agent = agent_manager.add_agent_host(
                 name="本地主机",
                 description="主程序自动注册的本地 Agent"
             )
             print(f"✅ 已自动注册本地 Agent: {local_agent.get('host_id')}")
             print(f"   Token: {local_agent.get('token')}")
+        
+        # 启动本地 Agent WebSocket 客户端连接到自身
+        try:
+            config = load_config()
+            server_config = config.get("server", {})
+            host_addr = os.getenv("APP_HOST", server_config.get("host", "0.0.0.0"))
+            port = int(os.getenv("APP_PORT", server_config.get("port", 8000)))
+            
+            # 构建服务器 URL
+            # 如果是 0.0.0.0，使用 localhost 或 127.0.0.1
+            if host_addr == "0.0.0.0":
+                server_url = f"http://127.0.0.1:{port}"
+            else:
+                server_url = f"http://{host_addr}:{port}"
+            
+            # 创建 WebSocket 客户端
+            def on_connect():
+                print("✅ 本地 Agent 已连接到主程序")
+            
+            def on_disconnect():
+                print("⚠️ 本地 Agent 与主程序断开连接")
+            
+            def on_message(message):
+                # 处理来自主程序的消息（部署任务等）
+                message_type = message.get("type")
+                if message_type == "deploy":
+                    # 部署任务会在主程序中处理，这里只是接收
+                    pass
+            
+            _local_agent_client = WebSocketClient(
+                server_url=server_url,
+                token=local_agent.get("token"),
+                on_message=on_message,
+                on_connect=on_connect,
+                on_disconnect=on_disconnect,
+                reconnect_interval=5,
+                heartbeat_interval=30,
+            )
+            
+            # 在后台任务中启动 WebSocket 客户端
+            asyncio.create_task(_local_agent_client.start())
+            print(f"✅ 本地 Agent WebSocket 客户端已启动，连接到: {server_url}")
+            
+        except Exception as e:
+            print(f"⚠️ 启动本地 Agent WebSocket 客户端失败: {e}")
+            import traceback
+            traceback.print_exc()
+            
     except Exception as e:
         print(f"⚠️ 自动注册本地 Agent 失败: {e}")
         import traceback
@@ -158,7 +214,16 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
+    global _local_agent_client
     from backend.scheduler import stop_scheduler
+    
+    # 停止本地 Agent WebSocket 客户端
+    if _local_agent_client:
+        try:
+            await _local_agent_client.stop()
+            print("✅ 本地 Agent WebSocket 客户端已停止")
+        except Exception as e:
+            print(f"⚠️ 停止本地 Agent WebSocket 客户端失败: {e}")
     
     # 停止流水线调度器
     stop_scheduler()
