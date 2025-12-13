@@ -68,6 +68,13 @@
                   <i class="fas fa-eye"></i>
                 </button>
                 <button 
+                  class="btn btn-outline-success" 
+                  @click="cloneTemplate(tpl)"
+                  title="克隆"
+                >
+                  <i class="fas fa-copy"></i>
+                </button>
+                <button 
                   class="btn btn-outline-primary" 
                   @click="openEditor(tpl, false)"
                   title="编辑"
@@ -347,6 +354,45 @@ function openEditor(tpl, isNewTemplate) {
 function previewTemplate(tpl) {
   currentTemplate.value = tpl
   showPreview.value = true
+}
+
+async function cloneTemplate(tpl) {
+  try {
+    // 获取模板内容
+    const res = await axios.get('/api/templates', {
+      params: { name: tpl.name }
+    })
+    
+    const projectType = res.data.project_type || tpl.project_type
+    
+    // 生成新模板名称
+    let newName = `${tpl.name}_copy`
+    let counter = 1
+    
+    // 检查名称是否已存在（只检查相同项目类型的模板）
+    while (templates.value.some(t => 
+      t.name === newName && (t.project_type || 'jar') === projectType
+    )) {
+      newName = `${tpl.name}_copy_${counter}`
+      counter++
+    }
+    
+    // 创建克隆的模板对象
+    const clonedTemplate = {
+      name: newName,
+      project_type: projectType,
+      content: res.data.content,
+      type: 'user' // 克隆的模板都是用户模板
+    }
+    
+    // 打开编辑器，设置为新建模式
+    currentTemplate.value = clonedTemplate
+    isNew.value = true
+    showEditor.value = true
+  } catch (error) {
+    console.error('克隆模板失败:', error)
+    alert(error.response?.data?.detail || '克隆模板失败')
+  }
 }
 
 async function parseTemplate(tpl) {

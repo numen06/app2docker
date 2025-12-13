@@ -160,13 +160,24 @@ const projectTypeChanged = computed(() => {
 watch(() => props.modelValue, async (show) => {
   if (show) {
     if (props.isNew) {
-      // 新建模板
-      form.value = {
-        name: '',
-        projectType: 'jar',
-        content: '# 新建 Dockerfile 模板\nFROM \n\nCOPY . /app\nWORKDIR /app\n\nEXPOSE 8080\n\nCMD []'
+      // 新建模板（包括克隆的情况）
+      if (props.template && props.template.content) {
+        // 克隆模式：使用传入的模板内容
+        form.value = {
+          name: props.template.name || '',
+          projectType: props.template.project_type || 'jar',
+          content: props.template.content || ''
+        }
+        originalName.value = ''
+      } else {
+        // 全新创建模式
+        form.value = {
+          name: '',
+          projectType: 'jar',
+          content: '# 新建 Dockerfile 模板\nFROM \n\nCOPY . /app\nWORKDIR /app\n\nEXPOSE 8080\n\nCMD []'
+        }
+        originalName.value = ''
       }
-      originalName.value = ''
     } else if (props.template) {
       // 编辑现有模板
       try {
