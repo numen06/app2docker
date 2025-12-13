@@ -231,7 +231,7 @@ class AgentHostManager:
         self,
         host_id: str,
         deploy_type: str = "run",
-        agent_image: str = "jar2docker/agent:latest",
+        agent_image: str = "registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest",
         server_url: Optional[str] = None
     ) -> Dict:
         """生成部署命令

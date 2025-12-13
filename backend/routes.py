@@ -6202,7 +6202,7 @@ async def get_deploy_command(
     request: Request,
     host_id: str,
     type: str = Query("run", description="部署类型: run 或 stack"),
-    agent_image: str = Query("jar2docker/agent:latest", description="Agent镜像"),
+    agent_image: str = Query("registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest", description="Agent镜像"),
     server_url: Optional[str] = Query(None, description="服务器URL（可选）"),
 ):
     """获取Agent部署命令"""
