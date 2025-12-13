@@ -143,17 +143,6 @@
             </div>
 
             <div class="mb-3">
-              <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
-              <input v-model="simpleForm.imageName" type="text" class="form-control" placeholder="registry.cn-hangzhou.aliyuncs.com/namespace/app:tag">
-              <small class="text-muted">完整镜像名称，包含仓库地址和标签</small>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">容器名称</label>
-              <input v-model="simpleForm.containerName" type="text" class="form-control" placeholder="my-app-container">
-            </div>
-
-            <div class="mb-3">
               <label class="form-label">部署方式 <span class="text-danger">*</span></label>
               <div class="btn-group w-100" role="group">
                 <input type="radio" class="btn-check" id="deploy-run" v-model="simpleForm.deployMode" value="docker_run" checked>
@@ -168,53 +157,39 @@
               </div>
             </div>
 
-            <div class="mb-3">
-              <label class="form-label">端口映射</label>
-              <div v-for="(port, idx) in simpleForm.ports" :key="idx" class="input-group mb-2">
-                <input v-model="simpleForm.ports[idx]" type="text" class="form-control" placeholder="8000:8000">
-                <button v-if="simpleForm.ports.length > 1" class="btn btn-outline-danger" @click="removePort(idx)">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              <button class="btn btn-sm btn-outline-secondary" @click="addPort">
-                <i class="fas fa-plus me-1"></i> 添加端口
-              </button>
+            <!-- Docker Run 命令输入 -->
+            <div v-if="simpleForm.deployMode === 'docker_run'" class="mb-3">
+              <label class="form-label">Docker Run 命令 <span class="text-danger">*</span></label>
+              <textarea 
+                v-model="simpleForm.runCommand" 
+                class="form-control font-monospace" 
+                rows="6"
+                placeholder="-d --name my-app -p 8000:8000 registry.cn-hangzhou.aliyuncs.com/namespace/app:tag"
+              ></textarea>
+              <small class="text-muted">输入 docker run 的参数（不包含 "docker run" 前缀）</small>
             </div>
 
-            <div class="mb-3">
-              <label class="form-label">环境变量</label>
-              <div v-for="(env, idx) in simpleForm.envVars" :key="idx" class="input-group mb-2">
-                <input v-model="simpleForm.envVars[idx]" type="text" class="form-control" placeholder="KEY=value">
-                <button v-if="simpleForm.envVars.length > 1" class="btn btn-outline-danger" @click="removeEnvVar(idx)">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              <button class="btn btn-sm btn-outline-secondary" @click="addEnvVar">
-                <i class="fas fa-plus me-1"></i> 添加环境变量
-              </button>
+            <!-- Docker Compose 命令输入 -->
+            <div v-if="simpleForm.deployMode === 'docker_compose'" class="mb-3">
+              <label class="form-label">Docker Compose 命令 <span class="text-danger">*</span></label>
+              <input 
+                v-model="simpleForm.composeCommand" 
+                type="text" 
+                class="form-control font-monospace" 
+                placeholder="up -d"
+              >
+              <small class="text-muted">输入 docker-compose 命令参数（不包含 "docker-compose" 前缀，如：up -d）</small>
             </div>
 
-            <div class="mb-3">
-              <label class="form-label">卷映射</label>
-              <div v-for="(volume, idx) in simpleForm.volumes" :key="idx" class="input-group mb-2">
-                <input v-model="simpleForm.volumes[idx]" type="text" class="form-control" placeholder="/host/path:/container/path">
-                <button v-if="simpleForm.volumes.length > 1" class="btn btn-outline-danger" @click="removeVolume(idx)">
-                  <i class="fas fa-times"></i>
-                </button>
-              </div>
-              <button class="btn btn-sm btn-outline-secondary" @click="addVolume">
-                <i class="fas fa-plus me-1"></i> 添加卷映射
-              </button>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">重启策略</label>
-              <select v-model="simpleForm.restartPolicy" class="form-select">
-                <option value="no">不重启</option>
-                <option value="always">总是重启</option>
-                <option value="unless-stopped">除非停止</option>
-                <option value="on-failure">失败时重启</option>
-              </select>
+            <div v-if="simpleForm.deployMode === 'docker_compose'" class="mb-3">
+              <label class="form-label">docker-compose.yml 内容 <span class="text-danger">*</span></label>
+              <textarea 
+                v-model="simpleForm.composeContent" 
+                class="form-control font-monospace" 
+                rows="15"
+                placeholder="version: '3.8'&#10;services:&#10;  app:&#10;    image: registry.cn-hangzhou.aliyuncs.com/namespace/app:tag&#10;    ports:&#10;      - '8000:8000'"
+              ></textarea>
+              <small class="text-muted">输入完整的 docker-compose.yml 内容</small>
             </div>
           </div>
           <div class="modal-footer">
@@ -633,24 +608,6 @@ export default {
         this.loadingHosts = false
       }
     },
-    addPort() {
-      this.simpleForm.ports.push('')
-    },
-    removePort(idx) {
-      this.simpleForm.ports.splice(idx, 1)
-    },
-    addEnvVar() {
-      this.simpleForm.envVars.push('')
-    },
-    removeEnvVar(idx) {
-      this.simpleForm.envVars.splice(idx, 1)
-    },
-    addVolume() {
-      this.simpleForm.volumes.push('')
-    },
-    removeVolume(idx) {
-      this.simpleForm.volumes.splice(idx, 1)
-    },
     async createSimpleTask() {
       // 验证必填字段
       if (!this.simpleForm.appName.trim()) {
@@ -661,12 +618,22 @@ export default {
         alert('请至少选择一个目标主机')
         return
       }
-      if (!this.simpleForm.imageName.trim()) {
-        alert('请输入镜像名称')
+      if (this.simpleForm.deployMode === 'docker_run' && !this.simpleForm.runCommand.trim()) {
+        alert('请输入 Docker Run 命令')
         return
       }
+      if (this.simpleForm.deployMode === 'docker_compose') {
+        if (!this.simpleForm.composeCommand.trim()) {
+          alert('请输入 Docker Compose 命令')
+          return
+        }
+        if (!this.simpleForm.composeContent.trim()) {
+          alert('请输入 docker-compose.yml 内容')
+          return
+        }
+      }
 
-      // 将表单数据转换为统一的YAML配置格式
+      // 将命令转换为统一的YAML配置格式
       // 无论前端是表单输入还是直接输入YAML，最终都统一为YAML格式保存
       // 后端会解析YAML并推送给Agent执行部署
       const targets = []
@@ -675,28 +642,23 @@ export default {
         if (!host) continue
 
         const dockerConfig = {
-          image_template: this.simpleForm.imageName,
-          container_name: this.simpleForm.containerName || `${this.simpleForm.appName}-${host.name}`,
-          restart_policy: this.simpleForm.restartPolicy,
           deploy_mode: this.simpleForm.deployMode
         }
 
-        // 添加端口映射
-        const ports = this.simpleForm.ports.filter(p => p.trim())
-        if (ports.length > 0) {
-          dockerConfig.ports = ports
-        }
-
-        // 添加环境变量
-        const envVars = this.simpleForm.envVars.filter(e => e.trim())
-        if (envVars.length > 0) {
-          dockerConfig.env = envVars
-        }
-
-        // 添加卷映射
-        const volumes = this.simpleForm.volumes.filter(v => v.trim())
-        if (volumes.length > 0) {
-          dockerConfig.volumes = volumes
+        if (this.simpleForm.deployMode === 'docker_run') {
+          // Docker Run 模式：将命令保存到 command 字段
+          dockerConfig.command = this.simpleForm.runCommand.trim()
+          // 尝试从命令中提取镜像名称（用于显示）
+          const imageMatch = this.simpleForm.runCommand.match(/([\w\.\-:\/]+(?::[\w\.\-]+)?)$/)
+          if (imageMatch) {
+            dockerConfig.image_template = imageMatch[1]
+          } else {
+            dockerConfig.image_template = 'unknown'
+          }
+        } else {
+          // Docker Compose 模式：保存命令和compose内容
+          dockerConfig.command = this.simpleForm.composeCommand.trim()
+          dockerConfig.compose_content = this.simpleForm.composeContent.trim()
         }
 
         targets.push({
@@ -746,13 +708,10 @@ export default {
       this.simpleForm = {
         appName: '',
         selectedHosts: [],
-        imageName: '',
-        containerName: '',
         deployMode: 'docker_run',
-        ports: ['8000:8000'],
-        envVars: [''],
-        volumes: [''],
-        restartPolicy: 'always'
+        runCommand: '',
+        composeCommand: '',
+        composeContent: ''
       }
     },
     openSimpleCreateModal() {

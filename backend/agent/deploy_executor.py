@@ -226,9 +226,79 @@ class DeployExecutor:
             raise ValueError("部署配置中缺少 docker 配置")
         
         if deploy_mode is None:
-            deploy_mode = deploy_config.get("deploy_mode", "docker_run")
+            deploy_mode = docker_config.get("deploy_mode", "docker_run")
         
         try:
+            # 检查是否有直接命令（用户输入的原始命令）
+            if "command" in docker_config:
+                # 直接执行用户输入的命令
+                command_str = docker_config.get("command", "").strip()
+                if not command_str:
+                    raise ValueError("命令不能为空")
+                
+                if deploy_mode == "docker_compose":
+                    # Docker Compose 模式：需要先创建 compose 文件
+                    if "compose_content" in docker_config:
+                        task_id = context.get("task_id", "default")
+                        compose_file = os.path.join(self.work_dir, f"docker-compose-{task_id}.yml")
+                        
+                        # 写入 compose 内容
+                        with open(compose_file, "w", encoding="utf-8") as f:
+                            f.write(docker_config["compose_content"])
+                        
+                        logger.info(f"创建 docker-compose.yml: {compose_file}")
+                        
+                        # 解析命令（可能包含 -f 参数）
+                        import shlex
+                        cmd_parts = shlex.split(command_str)
+                        
+                        # 如果命令中没有 -f 参数，添加它
+                        if "-f" not in cmd_parts:
+                            cmd_parts.insert(1, "-f")
+                            cmd_parts.insert(2, compose_file)
+                        else:
+                            # 替换 -f 后面的文件路径
+                            f_idx = cmd_parts.index("-f")
+                            if f_idx + 1 < len(cmd_parts):
+                                cmd_parts[f_idx + 1] = compose_file
+                            else:
+                                cmd_parts.insert(f_idx + 1, compose_file)
+                        
+                        cmd = ["docker-compose"] + cmd_parts
+                    else:
+                        raise ValueError("Docker Compose 模式需要提供 compose_content")
+                else:
+                    # Docker Run 模式：直接执行命令
+                    import shlex
+                    cmd_parts = shlex.split(command_str)
+                    cmd = ["docker"] + cmd_parts
+                
+                logger.info(f"执行命令: {' '.join(cmd)}")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    shell=False
+                )
+                
+                if result.returncode == 0:
+                    return {
+                        "success": True,
+                        "message": "部署成功",
+                        "output": result.stdout,
+                        "command": " ".join(cmd)
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": "部署失败",
+                        "error": result.stderr,
+                        "output": result.stdout,
+                        "command": " ".join(cmd)
+                    }
+            
+            # 如果没有直接命令，使用配置构建命令（原有逻辑）
             if deploy_mode == "docker_compose":
                 # 使用 docker-compose 部署
                 task_id = context.get("task_id", "default")
