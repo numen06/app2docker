@@ -3934,17 +3934,30 @@ def pipeline_to_task_config(
 
             if mapped_tag_value:
                 # 处理标签值（支持字符串、数组或逗号分隔的字符串）
+                # 如果传入了tag参数，且该tag在映射值中，使用传入的tag；否则使用映射值的第一个
+                tag_list = []
                 if isinstance(mapped_tag_value, list):
-                    # 如果是数组，取第一个标签（webhook触发时会为每个标签单独调用此函数）
-                    final_tag = mapped_tag_value[0] if mapped_tag_value else final_tag
+                    tag_list = mapped_tag_value
                 elif isinstance(mapped_tag_value, str):
-                    # 如果是字符串，检查是否包含逗号
                     if "," in mapped_tag_value:
-                        # 逗号分隔的多个标签，取第一个（webhook触发时会为每个标签单独调用此函数）
-                        final_tag = mapped_tag_value.split(",")[0].strip() or final_tag
+                        # 逗号分隔的多个标签
+                        tag_list = [t.strip() for t in mapped_tag_value.split(",") if t.strip()]
                     else:
                         # 单个标签
-                        final_tag = mapped_tag_value
+                        tag_list = [mapped_tag_value]
+                
+                # 如果传入了tag参数，且该tag在映射值列表中，使用传入的tag
+                # 这样可以支持多个标签的场景（如test分支映射到dev,test两个标签）
+                if tag and tag in tag_list:
+                    final_tag = tag
+                    print(f"   - 使用传入的tag参数: {tag} (在映射值中)")
+                elif tag_list:
+                    # 否则使用映射值的第一个标签
+                    final_tag = tag_list[0]
+                    print(f"   - 使用映射值的第一个标签: {tag_list[0]}")
+                else:
+                    # 映射值为空，保持当前final_tag
+                    pass
 
             # 替换映射标签中的动态日期占位符
             final_tag = replace_tag_date_placeholders(final_tag)
@@ -3970,17 +3983,27 @@ def pipeline_to_task_config(
                 import copy
                 service_push_config = copy.deepcopy(service_push_config)
                 
-                # 更新每个服务的 tag（如果服务配置中没有明确指定 tag，或者 tag 等于原始标签，则使用映射后的标签）
+                # 更新每个服务的 tag（强制使用映射后的标签，因为这是分支标签映射的结果）
+                # 注意：即使服务配置中已经有tag，也要更新为映射后的标签，因为这是分支标签映射的要求
                 for service_name in selected_services:
                     if service_name in service_push_config:
                         service_config = service_push_config[service_name]
                         if isinstance(service_config, dict):
-                            service_tag = service_config.get("tag", "")
-                            # 如果服务配置中没有明确指定 tag，或者 tag 等于原始标签，则使用映射后的标签
-                            if not service_tag or service_tag == pipeline_original_tag:
-                                service_push_config[service_name] = service_config.copy()
-                                service_push_config[service_name]["tag"] = final_tag
-                                print(f"   - 更新服务 {service_name} 的标签为: {final_tag}")
+                            # 深拷贝服务配置，避免修改原始对象
+                            service_config = service_config.copy()
+                            # 强制更新为映射后的标签（分支标签映射的优先级最高）
+                            service_config["tag"] = final_tag
+                            service_push_config[service_name] = service_config
+                            print(f"   - 更新服务 {service_name} 的标签为: {final_tag} (分支标签映射)")
+                        else:
+                            # 兼容旧格式：只有 push 布尔值，转换为新格式
+                            service_push_config[service_name] = {
+                                "enabled": True,
+                                "push": bool(service_config),
+                                "imageName": "",
+                                "tag": final_tag,
+                            }
+                            print(f"   - 为服务 {service_name} 转换并设置标签为: {final_tag} (分支标签映射)")
                     else:
                         # 如果服务没有配置，创建一个默认配置并使用映射后的标签
                         service_push_config[service_name] = {
@@ -3989,7 +4012,7 @@ def pipeline_to_task_config(
                             "imageName": "",
                             "tag": final_tag,
                         }
-                        print(f"   - 为服务 {service_name} 创建配置，标签为: {final_tag}")
+                        print(f"   - 为服务 {service_name} 创建配置，标签为: {final_tag} (分支标签映射)")
 
     should_push = False
     if push_mode == "single":
