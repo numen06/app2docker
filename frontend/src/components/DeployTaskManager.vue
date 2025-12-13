@@ -8,8 +8,11 @@
         <button class="btn btn-primary btn-sm" @click="showImportModal = true">
           <i class="fas fa-file-import me-1"></i> 导入配置
         </button>
-        <button class="btn btn-success btn-sm ms-2" @click="showCreateModal = true">
-          <i class="fas fa-plus me-1"></i> 新建任务
+        <button class="btn btn-success btn-sm ms-2" @click="openSimpleCreateModal">
+          <i class="fas fa-plus me-1"></i> 快速创建
+        </button>
+        <button class="btn btn-info btn-sm ms-2" @click="showCreateModal = true">
+          <i class="fas fa-code me-1"></i> YAML创建
         </button>
       </div>
     </div>
@@ -80,13 +83,141 @@
       </table>
     </div>
 
-    <!-- 创建任务模态框 -->
+    <!-- 简易创建任务模态框 -->
+    <div v-if="showSimpleCreateModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="fas fa-rocket me-2"></i> 快速创建部署任务
+            </h5>
+            <button type="button" class="btn-close" @click="showSimpleCreateModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">应用名称 <span class="text-danger">*</span></label>
+              <input v-model="simpleForm.appName" type="text" class="form-control" placeholder="my-app">
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label">选择目标主机 <span class="text-danger">*</span></label>
+              <div v-if="loadingHosts" class="text-muted small">加载中...</div>
+              <div v-else class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                <div v-for="host in agentHosts" :key="host.host_id" class="form-check">
+                  <input 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    :value="host.host_id"
+                    :id="'host-' + host.host_id"
+                    v-model="simpleForm.selectedHosts"
+                    :disabled="host.status !== 'online'"
+                  >
+                  <label class="form-check-label" :for="'host-' + host.host_id">
+                    {{ host.name }}
+                    <span :class="getStatusBadgeClass(host.status)" class="badge ms-2">
+                      {{ getStatusText(host.status) }}
+                    </span>
+                  </label>
+                </div>
+                <div v-if="agentHosts.length === 0" class="text-muted small">
+                  暂无可用主机，请先在"主机管理"中添加Agent主机
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+              <input v-model="simpleForm.imageName" type="text" class="form-control" placeholder="registry.cn-hangzhou.aliyuncs.com/namespace/app:tag">
+              <small class="text-muted">完整镜像名称，包含仓库地址和标签</small>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">容器名称</label>
+              <input v-model="simpleForm.containerName" type="text" class="form-control" placeholder="my-app-container">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">部署方式 <span class="text-danger">*</span></label>
+              <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" id="deploy-run" v-model="simpleForm.deployMode" value="docker_run" checked>
+                <label class="btn btn-outline-primary" for="deploy-run">
+                  <i class="fas fa-terminal me-1"></i> Docker Run
+                </label>
+                
+                <input type="radio" class="btn-check" id="deploy-compose" v-model="simpleForm.deployMode" value="docker_compose">
+                <label class="btn btn-outline-primary" for="deploy-compose">
+                  <i class="fas fa-layer-group me-1"></i> Docker Compose
+                </label>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">端口映射</label>
+              <div v-for="(port, idx) in simpleForm.ports" :key="idx" class="input-group mb-2">
+                <input v-model="simpleForm.ports[idx]" type="text" class="form-control" placeholder="8000:8000">
+                <button v-if="simpleForm.ports.length > 1" class="btn btn-outline-danger" @click="removePort(idx)">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              <button class="btn btn-sm btn-outline-secondary" @click="addPort">
+                <i class="fas fa-plus me-1"></i> 添加端口
+              </button>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">环境变量</label>
+              <div v-for="(env, idx) in simpleForm.envVars" :key="idx" class="input-group mb-2">
+                <input v-model="simpleForm.envVars[idx]" type="text" class="form-control" placeholder="KEY=value">
+                <button v-if="simpleForm.envVars.length > 1" class="btn btn-outline-danger" @click="removeEnvVar(idx)">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              <button class="btn btn-sm btn-outline-secondary" @click="addEnvVar">
+                <i class="fas fa-plus me-1"></i> 添加环境变量
+              </button>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">卷映射</label>
+              <div v-for="(volume, idx) in simpleForm.volumes" :key="idx" class="input-group mb-2">
+                <input v-model="simpleForm.volumes[idx]" type="text" class="form-control" placeholder="/host/path:/container/path">
+                <button v-if="simpleForm.volumes.length > 1" class="btn btn-outline-danger" @click="removeVolume(idx)">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              <button class="btn btn-sm btn-outline-secondary" @click="addVolume">
+                <i class="fas fa-plus me-1"></i> 添加卷映射
+              </button>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">重启策略</label>
+              <select v-model="simpleForm.restartPolicy" class="form-select">
+                <option value="no">不重启</option>
+                <option value="always">总是重启</option>
+                <option value="unless-stopped">除非停止</option>
+                <option value="on-failure">失败时重启</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showSimpleCreateModal = false">取消</button>
+            <button type="button" class="btn btn-primary" @click="createSimpleTask" :disabled="creating">
+              <span v-if="creating" class="spinner-border spinner-border-sm me-2"></span>
+              创建
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- YAML创建任务模态框 -->
     <div v-if="showCreateModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">
-              <i class="fas fa-plus me-2"></i> 新建部署任务
+              <i class="fas fa-code me-2"></i> YAML方式创建部署任务
             </h5>
             <button type="button" class="btn-close" @click="showCreateModal = false"></button>
           </div>
@@ -227,6 +358,7 @@
 
 <script>
 import axios from 'axios'
+import yaml from 'js-yaml'
 
 export default {
   name: 'DeployTaskManager',
@@ -235,6 +367,7 @@ export default {
       tasks: [],
       loading: false,
       showCreateModal: false,
+      showSimpleCreateModal: false,
       showImportModal: false,
       showDetailModal: false,
       selectedTask: null,
@@ -242,11 +375,25 @@ export default {
       taskConfigContent: '',
       taskRegistry: '',
       taskTag: '',
-      creating: false
+      creating: false,
+      agentHosts: [],
+      loadingHosts: false,
+      simpleForm: {
+        appName: '',
+        selectedHosts: [],
+        imageName: '',
+        containerName: '',
+        deployMode: 'docker_run',
+        ports: ['8000:8000'],
+        envVars: [''],
+        volumes: [''],
+        restartPolicy: 'always'
+      }
     }
   },
   mounted() {
     this.loadTasks()
+    this.loadAgentHosts()
   },
   methods: {
     async loadTasks() {
@@ -394,6 +541,145 @@ export default {
     formatTime(time) {
       if (!time) return '-'
       return new Date(time).toLocaleString('zh-CN')
+    },
+    async loadAgentHosts() {
+      this.loadingHosts = true
+      try {
+        const res = await axios.get('/api/agent-hosts')
+        this.agentHosts = res.data.hosts || []
+      } catch (error) {
+        console.error('加载Agent主机列表失败:', error)
+      } finally {
+        this.loadingHosts = false
+      }
+    },
+    addPort() {
+      this.simpleForm.ports.push('')
+    },
+    removePort(idx) {
+      this.simpleForm.ports.splice(idx, 1)
+    },
+    addEnvVar() {
+      this.simpleForm.envVars.push('')
+    },
+    removeEnvVar(idx) {
+      this.simpleForm.envVars.splice(idx, 1)
+    },
+    addVolume() {
+      this.simpleForm.volumes.push('')
+    },
+    removeVolume(idx) {
+      this.simpleForm.volumes.splice(idx, 1)
+    },
+    async createSimpleTask() {
+      // 验证必填字段
+      if (!this.simpleForm.appName.trim()) {
+        alert('请输入应用名称')
+        return
+      }
+      if (this.simpleForm.selectedHosts.length === 0) {
+        alert('请至少选择一个目标主机')
+        return
+      }
+      if (!this.simpleForm.imageName.trim()) {
+        alert('请输入镜像名称')
+        return
+      }
+
+      // 将表单数据转换为统一的YAML配置格式
+      // 无论前端是表单输入还是直接输入YAML，最终都统一为YAML格式保存
+      // 后端会解析YAML并推送给Agent执行部署
+      const targets = []
+      const targets = []
+      for (const hostId of this.simpleForm.selectedHosts) {
+        const host = this.agentHosts.find(h => h.host_id === hostId)
+        if (!host) continue
+
+        const dockerConfig = {
+          image_template: this.simpleForm.imageName,
+          container_name: this.simpleForm.containerName || `${this.simpleForm.appName}-${host.name}`,
+          restart_policy: this.simpleForm.restartPolicy,
+          deploy_mode: this.simpleForm.deployMode
+        }
+
+        // 添加端口映射
+        const ports = this.simpleForm.ports.filter(p => p.trim())
+        if (ports.length > 0) {
+          dockerConfig.ports = ports
+        }
+
+        // 添加环境变量
+        const envVars = this.simpleForm.envVars.filter(e => e.trim())
+        if (envVars.length > 0) {
+          dockerConfig.env = envVars
+        }
+
+        // 添加卷映射
+        const volumes = this.simpleForm.volumes.filter(v => v.trim())
+        if (volumes.length > 0) {
+          dockerConfig.volumes = volumes
+        }
+
+        targets.push({
+          name: `${host.name}-deploy`,
+          mode: 'agent',
+          agent: {
+            name: host.name
+          },
+          docker: dockerConfig
+        })
+      }
+
+      const yamlConfig = {
+        version: '1.0',
+        app: {
+          name: this.simpleForm.appName
+        },
+        targets: targets
+      }
+
+      // 转换为YAML字符串（统一格式，与直接输入YAML的方式一致）
+      const yamlContent = yaml.dump(yamlConfig, {
+        defaultFlowStyle: false,
+        allowUnicode: true
+      })
+
+      // 创建任务（统一调用后端API，后端会解析YAML并保存）
+      this.creating = true
+      try {
+        await axios.post('/api/deploy-tasks', {
+          config_content: yamlContent,
+          registry: null,
+          tag: null
+        })
+        alert('创建成功')
+        this.showSimpleCreateModal = false
+        this.resetSimpleForm()
+        this.loadTasks()
+      } catch (error) {
+        console.error('创建部署任务失败:', error)
+        alert('创建部署任务失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.creating = false
+      }
+    },
+    resetSimpleForm() {
+      this.simpleForm = {
+        appName: '',
+        selectedHosts: [],
+        imageName: '',
+        containerName: '',
+        deployMode: 'docker_run',
+        ports: ['8000:8000'],
+        envVars: [''],
+        volumes: [''],
+        restartPolicy: 'always'
+      }
+    },
+    openSimpleCreateModal() {
+      this.resetSimpleForm()
+      this.loadAgentHosts()
+      this.showSimpleCreateModal = true
     }
   }
 }

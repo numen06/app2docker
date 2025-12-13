@@ -402,15 +402,16 @@ class DeployTaskManager:
                 "message": f"Agent 主机离线: {agent_name}"
             }
         
-        # 渲染目标配置
+        # 渲染目标配置（统一处理：无论来源是表单还是YAML，都转换为统一的配置格式）
         rendered_target = self.parser.render_target_config(target, context)
         
-        # 构建部署消息
+        # 构建部署消息（推送给Agent的统一格式）
+        # deploy_config 包含完整的docker配置，Agent会根据此配置执行部署
         deploy_message = {
             "type": "deploy",
             "task_id": task_id,
-            "deploy_config": rendered_target.get("docker", {}),
-            "context": context,
+            "deploy_config": rendered_target.get("docker", {}),  # 统一的docker配置格式
+            "context": context,  # 模板变量上下文
             "target_name": target.get("name")
         }
         
