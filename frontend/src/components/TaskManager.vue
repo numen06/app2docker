@@ -274,7 +274,7 @@
                     <i class="fas fa-save"></i>
                   </button>
                   <button 
-                    v-if="task.status === 'failed'"
+                    v-if="task.status === 'completed' || task.status === 'failed' || task.status === 'stopped'"
                     class="btn btn-sm btn-outline-warning"
                     @click="rebuildTask(task)"
                     :disabled="rebuilding === task.task_id"
@@ -305,7 +305,7 @@
                     <span v-if="downloading === task.task_id" class="spinner-border spinner-border-sm ms-1"></span>
                   </button>
                   <button 
-                    v-if="task.status === 'failed'"
+                    v-if="task.status === 'completed' || task.status === 'failed' || task.status === 'stopped'"
                     class="btn btn-sm btn-outline-warning"
                     @click="retryExportTask(task)"
                     :disabled="retrying === task.task_id"
