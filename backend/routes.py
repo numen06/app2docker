@@ -4094,7 +4094,6 @@ async def run_pipeline(
         # 检查防抖（5秒内重复触发直接加入队列）
         if manager.check_debounce(pipeline_id, debounce_seconds=5):
             from backend.handlers import pipeline_to_task_config
-            from backend.build_manager import BuildManager
             
             build_manager = BuildManager()
             task_ids = []
