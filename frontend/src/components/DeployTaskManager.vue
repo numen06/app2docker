@@ -191,6 +191,21 @@
               ></textarea>
               <small class="text-muted">输入完整的 docker-compose.yml 内容</small>
             </div>
+
+            <div class="mb-3">
+              <div class="form-check form-switch">
+                <input 
+                  class="form-check-input" 
+                  type="checkbox" 
+                  id="redeploySwitch"
+                  v-model="simpleForm.redeploy"
+                >
+                <label class="form-check-label" for="redeploySwitch">
+                  <i class="fas fa-redo me-1"></i> 重新发布（如果主机上已存在，先停止并删除）
+                </label>
+              </div>
+              <small class="text-muted">启用后，部署前会先停止并删除已有的容器或服务</small>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="showSimpleCreateModal = false">取消</button>
@@ -642,7 +657,8 @@ export default {
         if (!host) continue
 
         const dockerConfig = {
-          deploy_mode: this.simpleForm.deployMode
+          deploy_mode: this.simpleForm.deployMode,
+          redeploy: this.simpleForm.redeploy
         }
 
         if (this.simpleForm.deployMode === 'docker_run') {
@@ -711,7 +727,8 @@ export default {
         deployMode: 'docker_run',
         runCommand: '',
         composeCommand: '',
-        composeContent: ''
+        composeContent: '',
+        redeploy: false
       }
     },
     openSimpleCreateModal() {

@@ -43,6 +43,113 @@ class DeployExecutor:
             result = result.replace(placeholder, str(value))
         return result
     
+    def _cleanup_existing_deployment(
+        self,
+        docker_config: Dict[str, Any],
+        deploy_mode: str,
+        context: Dict[str, Any]
+    ) -> None:
+        """
+        清理已有的部署（停止并删除容器或服务）
+        
+        Args:
+            docker_config: Docker 配置
+            deploy_mode: 部署模式
+            context: 模板变量上下文
+        """
+        try:
+            if deploy_mode == "docker_compose":
+                # Docker Compose 模式：执行 down 命令
+                if "compose_content" in docker_config:
+                    task_id = context.get("task_id", "default")
+                    compose_file = os.path.join(self.work_dir, f"docker-compose-{task_id}.yml")
+                    
+                    # 如果文件不存在，先创建它（用于 down 命令）
+                    if not os.path.exists(compose_file):
+                        with open(compose_file, "w", encoding="utf-8") as f:
+                            f.write(docker_config["compose_content"])
+                    
+                    # 执行 docker-compose down
+                    cmd = ["docker-compose", "-f", compose_file, "down", "-v"]
+                    logger.info(f"清理已有部署: {' '.join(cmd)}")
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+                    if result.returncode == 0:
+                        logger.info("已停止并删除已有的 Docker Compose 服务")
+                    else:
+                        logger.warning(f"清理 Docker Compose 服务时出现警告: {result.stderr}")
+                else:
+                    # 如果没有 compose_content，尝试从命令中提取服务名
+                    command_str = docker_config.get("command", "").strip()
+                    if command_str:
+                        import shlex
+                        cmd_parts = shlex.split(command_str)
+                        # 尝试找到服务名（通常在 up 命令之后）
+                        if "up" in cmd_parts:
+                            up_idx = cmd_parts.index("up")
+                            if up_idx + 1 < len(cmd_parts):
+                                service_name = cmd_parts[up_idx + 1]
+                                cmd = ["docker-compose", "stop", service_name]
+                                subprocess.run(cmd, capture_output=True, timeout=30)
+                                cmd = ["docker-compose", "rm", "-f", service_name]
+                                subprocess.run(cmd, capture_output=True, timeout=30)
+            else:
+                # Docker Run 模式：从命令中提取容器名并删除
+                command_str = docker_config.get("command", "").strip()
+                if not command_str:
+                    # 尝试从配置中获取容器名
+                    container_name = docker_config.get("container_name", "")
+                    if container_name:
+                        container_name = self._render_template(container_name, context)
+                    else:
+                        return
+                else:
+                    # 从命令中提取容器名（--name 参数）
+                    import shlex
+                    cmd_parts = shlex.split(command_str)
+                    container_name = None
+                    if "--name" in cmd_parts:
+                        name_idx = cmd_parts.index("--name")
+                        if name_idx + 1 < len(cmd_parts):
+                            container_name = cmd_parts[name_idx + 1]
+                    
+                    if not container_name:
+                        return
+                
+                # 停止并删除容器
+                logger.info(f"清理已有容器: {container_name}")
+                
+                # 停止容器
+                stop_cmd = ["docker", "stop", container_name]
+                stop_result = subprocess.run(
+                    stop_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                # 删除容器（无论停止是否成功）
+                rm_cmd = ["docker", "rm", "-f", container_name]
+                rm_result = subprocess.run(
+                    rm_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                if rm_result.returncode == 0:
+                    logger.info(f"已删除容器: {container_name}")
+                else:
+                    logger.warning(f"删除容器时出现警告: {rm_result.stderr}")
+        
+        except Exception as e:
+            logger.warning(f"清理已有部署时出现异常（继续部署）: {str(e)}")
+            # 不抛出异常，允许继续部署
+    
     def _build_docker_run_command(
         self,
         docker_config: Dict[str, Any],
@@ -228,7 +335,14 @@ class DeployExecutor:
         if deploy_mode is None:
             deploy_mode = docker_config.get("deploy_mode", "docker_run")
         
+        # 检查是否需要重新发布
+        redeploy = docker_config.get("redeploy", False)
+        
         try:
+            # 如果需要重新发布，先停止并删除已有的容器/服务
+            if redeploy:
+                self._cleanup_existing_deployment(docker_config, deploy_mode, context)
+            
             # 检查是否有直接命令（用户输入的原始命令）
             if "command" in docker_config:
                 # 直接执行用户输入的命令
