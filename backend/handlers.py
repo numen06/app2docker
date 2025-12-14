@@ -238,7 +238,10 @@ def parse_dockerfile_services(dockerfile_content: str) -> tuple:
     services = []
 
     # 需要排除的非服务阶段名称（常见的构建阶段）
-    excluded_stages = {"builder", "build", "base", "runtime", "deps", "dependencies"}
+    # 注意：只排除明确的构建阶段，不要排除可能作为最终镜像的阶段
+    excluded_stages = {"builder", "build", "runtime", "deps", "dependencies"}
+    # 排除以 -builder 结尾的阶段（如 frontend-builder），但保留 -base 结尾的（如 backend-base 可能是最终镜像）
+    excluded_suffixes = ["-builder"]
 
     def is_excluded_stage(stage_name: str) -> bool:
         """检查阶段名称是否应该被排除（不识别为服务）"""
@@ -246,9 +249,10 @@ def parse_dockerfile_services(dockerfile_content: str) -> tuple:
         # 完全匹配排除列表
         if stage_lower in excluded_stages:
             return True
-        # 匹配以 -builder 结尾的阶段（如 frontend-builder）
-        if stage_lower.endswith("-builder"):
-            return True
+        # 匹配排除的后缀（如 -builder）
+        for suffix in excluded_suffixes:
+            if stage_lower.endswith(suffix):
+                return True
         return False
 
     lines = dockerfile_content.split("\n")
@@ -2928,18 +2932,65 @@ logs/
                             services, _ = parse_dockerfile_services(dockerfile_content)
                             if services and len(services) > 0:
                                 # 构建服务名称到阶段的映射
-                                for idx, service in enumerate(services):
-                                    stage_name = service.get("name")
-                                    # 如果服务列表中有对应的服务名称，使用它；否则使用索引
-                                    if idx < len(selected_services):
-                                        service_to_stage_map[selected_services[idx]] = (
-                                            stage_name
+                                # 首先尝试精确匹配服务名称和阶段名称
+                                for service_name in selected_services:
+                                    # 尝试精确匹配
+                                    matched = False
+                                    for service in services:
+                                        stage_name = service.get("name")
+                                        # 精确匹配：服务名称等于阶段名称（忽略大小写）
+                                        if service_name.lower() == stage_name.lower():
+                                            service_to_stage_map[service_name] = (
+                                                stage_name
+                                            )
+                                            matched = True
+                                            break
+                                        # 部分匹配：阶段名称包含服务名称（如 app2docker-agent 包含 agent）
+                                        elif (
+                                            service_name.lower() in stage_name.lower()
+                                            or stage_name.lower()
+                                            in service_name.lower()
+                                        ):
+                                            service_to_stage_map[service_name] = (
+                                                stage_name
+                                            )
+                                            matched = True
+                                            break
+
+                                    # 如果没有匹配，使用索引映射（向后兼容）
+                                    if not matched:
+                                        service_index = selected_services.index(
+                                            service_name
                                         )
-                                    else:
-                                        # 如果服务数量不匹配，使用阶段名称本身
-                                        service_to_stage_map[stage_name] = stage_name
+                                        if service_index < len(services):
+                                            stage_name = services[service_index].get(
+                                                "name"
+                                            )
+                                            service_to_stage_map[service_name] = (
+                                                stage_name
+                                            )
+                                        else:
+                                            # 如果索引超出范围，尝试使用阶段名称本身
+                                            log(
+                                                f"⚠️ 服务 '{service_name}' 无法映射到阶段，尝试使用阶段名称本身\n"
+                                            )
+                                            # 使用阶段名称作为服务名称的映射
+                                            for service in services:
+                                                stage_name = service.get("name")
+                                                if (
+                                                    service_name.lower()
+                                                    in stage_name.lower()
+                                                ):
+                                                    service_to_stage_map[
+                                                        service_name
+                                                    ] = stage_name
+                                                    break
+
                                 log(
                                     f"🔍 从 Dockerfile 解析到阶段映射: {service_to_stage_map}\n"
+                                )
+                                log(
+                                    f"🔍 解析到的所有阶段: {[s.get('name') for s in services]}\n"
                                 )
                             else:
                                 log(f"⚠️ Dockerfile 中没有找到多阶段\n")
