@@ -71,6 +71,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # ✅ 设置 Python 无缓冲输出，确保日志立即输出到控制台
 ENV PYTHONUNBUFFERED=1
+# ✅ 设置 PYTHONPATH，确保可以正确导入 backend 模块
+ENV PYTHONPATH="/app"
 
 # 复制后端代码（Agent 需要访问 backend 模块）
 COPY backend/ ./backend/
@@ -90,6 +92,6 @@ COPY backend/ ./backend/
 #   -v /sys:/host/sys:ro \
 #   app2docker-agent:latest
 
-# 启动 Agent 程序
-CMD ["python", "backend/agent/main.py"]
+# 启动 Agent 程序（使用 -u 参数确保无缓冲输出）
+CMD ["python", "-u", "backend/agent/main.py"]
 

@@ -71,7 +71,11 @@ class WebSocketClient:
         """连接到服务器"""
         try:
             logger.info(f"正在连接到服务器: {self.ws_url}")
-            self.websocket = await connect(self.ws_url)
+            # 使用 asyncio.wait_for 设置连接超时
+            self.websocket = await asyncio.wait_for(
+                connect(self.ws_url, ping_interval=None, ping_timeout=None),
+                timeout=10.0  # 10秒连接超时
+            )
             self.connected = True
 
             if self.on_connect:
@@ -79,8 +83,27 @@ class WebSocketClient:
 
             logger.info("✅ WebSocket 连接成功")
             return True
+        except asyncio.TimeoutError:
+            logger.error(f"❌ WebSocket 连接超时（10秒）")
+            logger.error(f"   请检查：")
+            logger.error(f"   1. 主程序是否正在运行")
+            logger.error(f"   2. SERVER_URL 是否正确（在 Docker 中不能使用 localhost）")
+            logger.error(f"   3. 网络是否可达")
+            logger.error(f"   连接 URL: {self.ws_url}")
+            self.connected = False
+            return False
+        except ConnectionRefusedError as e:
+            logger.error(f"❌ WebSocket 连接被拒绝: {e}")
+            logger.error(f"   请检查：")
+            logger.error(f"   1. 主程序是否正在运行")
+            logger.error(f"   2. SERVER_URL 是否正确（在 Docker 中不能使用 localhost）")
+            logger.error(f"   3. 端口是否正确")
+            logger.error(f"   连接 URL: {self.ws_url}")
+            self.connected = False
+            return False
         except Exception as e:
-            logger.error(f"❌ WebSocket 连接失败: {e}")
+            logger.error(f"❌ WebSocket 连接失败: {type(e).__name__}: {e}")
+            logger.error(f"   连接 URL: {self.ws_url}")
             self.connected = False
             return False
 

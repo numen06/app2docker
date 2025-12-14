@@ -10,13 +10,7 @@ import logging
 import signal
 from typing import Dict, Any, Optional
 
-# 添加项目根目录到 Python 路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from backend.agent.websocket_client import WebSocketClient
-from backend.agent.deploy_executor import DeployExecutor
-
-# 配置日志 - 确保输出到 stdout，便于 Docker 容器查看
+# 先配置日志，确保启动错误能被看到
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -26,6 +20,25 @@ logging.basicConfig(
     force=True  # 强制重新配置，避免重复配置问题
 )
 logger = logging.getLogger(__name__)
+
+# 添加项目根目录到 Python 路径
+try:
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, project_root)
+    logger.info(f"项目根目录: {project_root}")
+    logger.info(f"Python 路径: {sys.path[:3]}")
+except Exception as e:
+    logger.error(f"设置 Python 路径失败: {e}", exc_info=True)
+    sys.exit(1)
+
+# 导入模块
+try:
+    from backend.agent.websocket_client import WebSocketClient
+    from backend.agent.deploy_executor import DeployExecutor
+    logger.info("✅ 模块导入成功")
+except ImportError as e:
+    logger.error(f"❌ 模块导入失败: {e}", exc_info=True)
+    sys.exit(1)
 
 # 设置其他模块的日志级别
 logging.getLogger("backend.agent").setLevel(logging.INFO)
@@ -229,15 +242,22 @@ async def main():
     """主函数"""
     global websocket_client, deploy_executor, running
     
+    logger.info("=" * 60)
+    logger.info("Agent 启动中...")
+    logger.info(f"工作目录: {os.getcwd()}")
+    logger.info(f"Python 版本: {sys.version}")
+    logger.info(f"Python 路径: {sys.path[:3]}")
+    logger.info("=" * 60)
+    
     # 从环境变量获取配置
     agent_token = os.getenv("AGENT_TOKEN")
     server_url = os.getenv("SERVER_URL", "http://localhost:8000")
     
     if not agent_token:
         logger.error("❌ 未设置 AGENT_TOKEN 环境变量")
+        logger.error("请设置环境变量: export AGENT_TOKEN=your-token")
         sys.exit(1)
     
-    logger.info(f"Agent 启动中...")
     logger.info(f"服务器地址: {server_url}")
     logger.info(f"Token: {agent_token[:8]}...")
     
@@ -280,10 +300,12 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        logger.info("开始运行 Agent 主程序...")
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Agent 已停止")
+        logger.info("Agent 已停止（键盘中断）")
     except Exception as e:
         logger.exception("启动失败")
+        print(f"致命错误: {e}", file=sys.stderr)
         sys.exit(1)
 

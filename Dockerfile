@@ -117,6 +117,11 @@ FROM backend-base AS app2docker-agent
 
 # Agent 不需要前端和模板，只需要后端代码（已在 backend-base 阶段复制）
 
+# ✅ 设置 Python 无缓冲输出，确保日志立即输出到控制台
+ENV PYTHONUNBUFFERED=1
+# ✅ 设置 PYTHONPATH，确保可以正确导入 backend 模块
+ENV PYTHONPATH="/app"
+
 # 说明：
 # - Agent 需要访问 Docker daemon（通过 /var/run/docker.sock 卷映射）
 # - Agent 需要访问主机信息（通过 /proc 和 /sys 卷映射）
@@ -135,8 +140,8 @@ FROM backend-base AS app2docker-agent
 #   -v /sys:/host/sys:ro \
 #   app2docker-agent:latest
 
-# 启动 Agent 程序
-CMD ["python", "backend/agent/main.py"]
+# 启动 Agent 程序（使用 -u 参数确保无缓冲输出）
+CMD ["python", "-u", "backend/agent/main.py"]
 
 # ============ 阶段 4: 主程序镜像（默认） ============
 FROM backend-base AS app2docker
