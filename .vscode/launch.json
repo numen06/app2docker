@@ -73,7 +73,7 @@
       "env": {
         "PYTHONPATH": "${workspaceFolder}",
         "AGENT_TOKEN": "3a86c70981398276410b83d7185fe004",
-        "SERVER_URL": "http://10.100.10.95:8000"
+        "SERVER_URL": "ws://10.100.10.95:8000"
       },
       "subProcess": true
     }
