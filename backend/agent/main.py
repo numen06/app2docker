@@ -311,8 +311,18 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Agent 已停止（键盘中断）")
+        sys.exit(0)
+    except SystemExit as e:
+        # 重新抛出 SystemExit，让 shell 脚本能看到退出码
+        raise
     except Exception as e:
+        # 确保错误输出到 stderr
+        import traceback
+        print("=" * 60, file=sys.stderr)
+        print("致命错误:", file=sys.stderr)
+        print(str(e), file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         logger.exception("启动失败")
-        print(f"致命错误: {e}", file=sys.stderr)
         sys.exit(1)
 

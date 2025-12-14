@@ -92,8 +92,10 @@ COPY backend/ ./backend/
 #   -v /sys:/host/sys:ro \
 #   app2docker-agent:latest
 
-# 启动 Agent 程序（使用 -u 参数确保无缓冲输出）
-# 使用绝对路径确保能找到文件
-WORKDIR /app
-CMD ["python", "-u", "/app/backend/agent/main.py"]
+# 复制启动脚本
+COPY backend/agent/start.sh /app/backend/agent/start.sh
+RUN chmod +x /app/backend/agent/start.sh
+
+# 启动 Agent 程序（使用启动脚本捕获错误）
+CMD ["/app/backend/agent/start.sh"]
 
