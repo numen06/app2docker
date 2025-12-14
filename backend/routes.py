@@ -2557,6 +2557,74 @@ async def stop_export_task(task_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"停止任务失败: {str(e)}")
 
 
+@router.post("/export-tasks/{task_id}/retry")
+async def retry_export_task(task_id: str, request: Request):
+    """重试导出任务（使用任务保存的配置）"""
+    try:
+        username = get_current_username(request)
+        task_manager = ExportTaskManager()
+        task = task_manager.get_task(task_id)
+        
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        
+        # 检查任务状态
+        current_status = task.get("status", "unknown")
+        if current_status == "running":
+            raise HTTPException(status_code=400, detail="任务正在运行中，无法重试")
+        
+        # 只有失败或停止的任务才能重试
+        if current_status not in ("failed", "stopped"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"只有失败或停止的任务才能重试（当前状态: {current_status}）"
+            )
+        
+        # 获取任务配置
+        image = task.get("image")
+        tag = task.get("tag", "latest")
+        compress = task.get("compress", "none")
+        registry = task.get("registry")
+        use_local = task.get("use_local", False)
+        
+        if not image:
+            raise HTTPException(status_code=400, detail="任务配置不完整，无法重试")
+        
+        # 创建新的导出任务（使用相同的配置）
+        new_task_id = task_manager.create_task(
+            image=image,
+            tag=tag,
+            compress=compress,
+            registry=registry,
+            use_local=use_local,
+        )
+        
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "retry_export_task",
+            {
+                "original_task_id": task_id,
+                "new_task_id": new_task_id,
+                "image": f"{image}:{tag}",
+            },
+        )
+        
+        return JSONResponse(
+            {
+                "success": True,
+                "task_id": new_task_id,
+                "message": "任务重试成功",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"重试任务失败: {str(e)}")
+
+
 @router.delete("/export-tasks/{task_id}")
 async def delete_export_task(task_id: str, request: Request):
     """删除导出任务（只有停止、完成或失败的任务才能删除）"""

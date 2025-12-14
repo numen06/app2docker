@@ -4826,12 +4826,15 @@ class ExportTaskManager:
                 return
 
             # 检查是否已请求停止（通过状态判断）
+            # 注意：只有在任务真正被用户停止时才返回，不要因为其他原因自动停止
             if task.status == "stopped":
+                print(f"⚠️ 导出任务 {task_id[:8]} 已被用户停止，不执行")
                 return
 
-            # 更新状态为 running
-            task.status = "running"
-            db.commit()
+            # 更新状态为 running（只有在 pending 状态时才更新）
+            if task.status == "pending":
+                task.status = "running"
+                db.commit()
 
             image = task.image
             tag = task.tag
@@ -4898,18 +4901,32 @@ class ExportTaskManager:
 
                 # 拉取镜像
                 pull_stream = docker_builder.pull_image(image, tag, auth_config)
+                chunk_count = 0
                 for chunk in pull_stream:
-                    # 检查停止标志
-                    task = self._get_task_from_db(task_id)
-                    if not task or task.status == "stopped":
-                        self._update_task_status(task_id, "stopped", "任务已停止")
-                        return
+                    chunk_count += 1
+                    # 减少停止标志检查频率（每 10 个 chunk 检查一次，避免频繁查询数据库）
+                    if chunk_count % 10 == 0:
+                        task = self._get_task_from_db(task_id)
+                        if not task:
+                            return
+                        # 只有在明确被用户停止时才停止
+                        if task.status == "stopped":
+                            print(f"⚠️ 导出任务 {task_id[:8]} 在拉取镜像过程中被用户停止")
+                            return
                     if "error" in chunk:
+                        # 有错误时先检查是否被停止
+                        task = self._get_task_from_db(task_id)
+                        if not task or task.status == "stopped":
+                            return
                         raise RuntimeError(chunk["error"])
 
-            # 再次检查停止标志
+            # 再次检查停止标志（只在关键节点检查）
             task = self._get_task_from_db(task_id)
-            if not task or task.status == "stopped":
+            if not task:
+                return
+            # 只有在明确被用户停止时才停止，不要因为其他状态变化而停止
+            if task.status == "stopped":
+                print(f"⚠️ 导出任务 {task_id[:8]} 在拉取镜像后被用户停止")
                 return
 
             full_tag = f"{image}:{tag}"
@@ -4928,19 +4945,31 @@ class ExportTaskManager:
 
             # 导出镜像
             image_stream = docker_builder.export_image(full_tag)
+            chunk_count = 0
             with open(tar_path, "wb") as f:
                 for chunk in image_stream:
-                    # 检查停止标志
-                    task = self._get_task_from_db(task_id)
-                    if not task or task.status == "stopped":
-                        # 删除部分文件
-                        try:
-                            if os.path.exists(tar_path):
-                                os.remove(tar_path)
-                        except:
-                            pass
-                        self._update_task_status(task_id, "stopped", "任务已停止")
-                        return
+                    chunk_count += 1
+                    # 减少停止标志检查频率（每 100 个 chunk 检查一次，避免频繁查询数据库）
+                    if chunk_count % 100 == 0:
+                        task = self._get_task_from_db(task_id)
+                        if not task:
+                            # 任务不存在，停止写入
+                            try:
+                                if os.path.exists(tar_path):
+                                    os.remove(tar_path)
+                            except:
+                                pass
+                            return
+                        # 只有在明确被用户停止时才停止
+                        if task.status == "stopped":
+                            print(f"⚠️ 导出任务 {task_id[:8]} 在导出过程中被用户停止")
+                            # 删除部分文件
+                            try:
+                                if os.path.exists(tar_path):
+                                    os.remove(tar_path)
+                            except:
+                                pass
+                            return
                     f.write(chunk)
 
             final_path = tar_path
