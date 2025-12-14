@@ -34,15 +34,16 @@ COPY --chown=node:node frontend/ ./
 # 构建生产版本（输出到 /app/dist）
 RUN npm run build
 
-# ============ 阶段 2: Python 后端 ============
+# ============ 阶段 2: Python 后端基础镜像 ============
 # 使用阿里云 Python 镜像加速下载
-FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli
+FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS backend-base
 
 # ✅ 替换 apk 源为阿里云镜像（关键！提速 5–10×）
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 RUN apk add --no-cache \
     python3 \
+    python3-dev \
     py3-pip \
     py3-setuptools \
     curl \
@@ -51,7 +52,8 @@ RUN apk add --no-cache \
     make \
     gcc \
     musl-dev \
-    linux-headers
+    linux-headers \
+    docker-compose
 
 # ✅ 创建软链接 python → python3（适配多数脚本）
 RUN ln -sf python3 /usr/bin/python && \
@@ -101,13 +103,52 @@ RUN python -m venv .venv && \
     .venv/bin/pip config set global.timeout 300 && \
     .venv/bin/pip config set global.retries 5 && \
     .venv/bin/pip install --upgrade pip && \
-    .venv/bin/pip install --no-cache-dir -r requirements.txt
+    .venv/bin/pip install --no-cache-dir -r requirements.txt && \
+    echo "✅ docker-compose version:" && docker-compose --version || echo "⚠️ docker-compose not found"
 
 # ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
 ENV PATH="/app/.venv/bin:$PATH"
 
 # 复制后端代码
 COPY backend/ ./backend/
+
+# ============ 阶段 3: Agent 镜像 ============
+FROM backend-base AS app2docker-agent
+
+# Agent 不需要前端和模板，只需要后端代码（已在 backend-base 阶段复制）
+
+# ✅ 设置 Python 无缓冲输出，确保日志立即输出到控制台
+ENV PYTHONUNBUFFERED=1
+# ✅ 设置 PYTHONPATH，确保可以正确导入 backend 模块
+ENV PYTHONPATH="/app"
+
+# 说明：
+# - Agent 需要访问 Docker daemon（通过 /var/run/docker.sock 卷映射）
+# - Agent 需要访问主机信息（通过 /proc 和 /sys 卷映射）
+# 
+# 构建 Agent 镜像：
+# docker build --target app2docker-agent -t app2docker-agent:latest .
+#
+# 运行 Agent 容器：
+# docker run -d \
+#   --name app2docker-agent \
+#   --restart=always \
+#   -e AGENT_TOKEN=<token> \
+#   -e SERVER_URL=http://<server_host>:<port> \
+#   -v /var/run/docker.sock:/var/run/docker.sock \
+#   -v /proc:/host/proc:ro \
+#   -v /sys:/host/sys:ro \
+#   app2docker-agent:latest
+
+# 复制启动脚本
+COPY backend/agent/start.sh /app/backend/agent/start.sh
+RUN chmod +x /app/backend/agent/start.sh
+
+# 启动 Agent 程序（使用启动脚本捕获错误）
+CMD ["/app/backend/agent/start.sh"]
+
+# ============ 阶段 4: 主程序镜像（默认） ============
+FROM backend-base AS app2docker
 
 # 从第一阶段复制构建好的前端文件（vite.config.js 中 outDir 设置为 '../dist'）
 COPY --from=frontend-builder /app/dist ./dist
@@ -120,12 +161,18 @@ COPY templates/ ./templates/
 # - data/ 目录在运行时通过卷映射提供
 # - favicon.ico 已包含在前端构建产物（dist/）中
 # 
+# 构建主程序镜像（默认，不指定 --target 时构建此镜像）：
+# docker build -t app2docker:latest .
+#
+# 或显式指定：
+# docker build --target app2docker -t app2docker:latest .
+#
 # 运行容器：
 # docker run -d \
 #   -v $(pwd)/data:/app/data \
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -p 8000:8000 \
-#   app2docker
+#   app2docker:latest
 #
 # 自定义端口：
 # docker run -d \
@@ -133,7 +180,7 @@ COPY templates/ ./templates/
 #   -v $(pwd)/data:/app/data \
 #   -v /var/run/docker.sock:/var/run/docker.sock \
 #   -p 9000:9000 \
-#   app2docker
+#   app2docker:latest
 
 # 设置默认服务端口（可通过环境变量覆盖）
 ENV APP_PORT=8000

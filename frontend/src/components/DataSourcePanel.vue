@@ -792,28 +792,16 @@ async function refreshSource(source) {
   
   refreshing.value = source.source_id
   try {
-    // 使用数据源的认证信息刷新
+    // 调用 verify-git-repo API，传递 source_id 会自动更新数据源的缓存
+    // 这与手动触发流水线中的刷新分支功能使用相同的逻辑
     const res = await axios.post('/api/verify-git-repo', {
       git_url: source.git_url,
       save_as_source: false,
-      source_id: source.source_id  // 传递 source_id 以使用数据源的认证信息
+      source_id: source.source_id  // 传递 source_id 会自动更新数据源的缓存（分支、标签、Dockerfile）
     })
     
     if (res.data.success) {
-      await axios.put(`/api/git-sources/${source.source_id}`, {
-        branches: res.data.branches || [],
-        tags: res.data.tags || [],
-        default_branch: res.data.default_branch || source.default_branch
-      })
-      // 更新扫描到的 Dockerfile
-      if (res.data.dockerfiles) {
-        for (const [dockerfile_path, content] of Object.entries(res.data.dockerfiles)) {
-          await axios.put(
-            `/api/git-sources/${source.source_id}/dockerfiles/${encodeURIComponent(dockerfile_path)}`,
-            { content: content }
-          )
-        }
-      }
+      // 后端已经自动更新了数据源的缓存，这里只需要刷新列表即可
       alert('数据源刷新成功')
       loadSources()
     } else {
@@ -1157,7 +1145,7 @@ function openCommitModal(dockerfilePath) {
   committingDockerfilePath.value = dockerfilePath
   commitForm.value = {
     branch: currentSource.value.default_branch || (currentSource.value.branches && currentSource.value.branches[0]) || '',
-    commitMessage: `Update ${dockerfilePath} via jar2docker`
+    commitMessage: `Update ${dockerfilePath} via app2docker`
   }
   showCommitModal.value = true
 }

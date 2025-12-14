@@ -305,7 +305,7 @@
                     <span v-if="downloading === task.task_id" class="spinner-border spinner-border-sm ms-1"></span>
                   </button>
                   <button 
-                    v-if="task.status === 'completed' || task.status === 'failed' || task.status === 'stopped'"
+                    v-if="task.status === 'failed' || task.status === 'stopped'"
                     class="btn btn-sm btn-outline-warning"
                     @click="retryExportTask(task)"
                     :disabled="retrying === task.task_id"
@@ -1445,6 +1445,12 @@ async function rebuildTask(task) {
 async function retryExportTask(task) {
   if (retrying.value) return
   
+  // 检查任务状态，只有失败或停止的任务才能重试
+  if (task.status !== 'failed' && task.status !== 'stopped') {
+    alert(`无法重试：只有失败或停止的任务才能重试（当前状态: ${task.status}）`)
+    return
+  }
+  
   // 确认对话框
   const taskName = task.image || '未知任务'
   const taskTag = task.tag || 'latest'
@@ -1470,21 +1476,23 @@ async function retryExportTask(task) {
       throw new Error('任务缺少镜像名称，无法重试导出')
     }
     
-    console.log('🔄 重试导出任务:', config)
+    console.log('🔄 重试导出任务:', task.task_id)
     
-    // 调用导出 API
-    const res = await axios.post('/api/export-tasks', config)
+    // 调用重试 API（使用任务 ID 重试，而不是创建新任务）
+    const res = await axios.post(`/api/export-tasks/${task.task_id}/retry`)
     
-    if (res.data.task_id) {
-      alert(`重试导出任务已创建！\n任务 ID: ${res.data.task_id}`)
+    if (res.data.success) {
+      alert(`重试导出任务已启动！\n任务 ID: ${task.task_id}`)
       // 刷新任务列表
       await loadTasks()
     } else {
-      throw new Error('创建任务失败，未返回任务 ID')
+      throw new Error(res.data.message || '重试导出失败')
     }
   } catch (err) {
     console.error('重试导出失败:', err)
     const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '重试导出失败'
+    // 显示错误提示
+    alert(`重试导出失败: ${errorMsg}`)
     error.value = `重试导出失败: ${errorMsg}`
     // 5秒后自动清除错误提示
     setTimeout(() => {

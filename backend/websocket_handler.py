@@ -177,6 +177,54 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     # 这里可以处理命令执行结果
                     print(f"📥 收到命令执行结果 ({host_id}): {command_id}")
                 
+                elif message_type == "deploy_result":
+                    # 部署任务执行结果
+                    task_id = message.get("task_id")
+                    deploy_status = message.get("status")
+                    deploy_message = message.get("message")
+                    deploy_result = message.get("result")
+                    
+                    print(f"📥 收到部署任务结果 ({host_id}): {task_id}, 状态: {deploy_status}")
+                    
+                    # 更新部署任务状态
+                    try:
+                        from backend.deploy_task_manager import DeployTaskManager
+                        task_manager = DeployTaskManager()
+                        
+                        # 获取任务信息以找到目标名称
+                        task = task_manager.get_task(task_id)
+                        if task:
+                            # 查找对应的目标（通过 host_id）
+                            targets = task.get("config", {}).get("targets", [])
+                            target_name = None
+                            for target in targets:
+                                if target.get("mode") == "agent":
+                                    agent_name = target.get("agent", {}).get("name")
+                                    if agent_name == host.get("name"):
+                                        target_name = target.get("name")
+                                        break
+                            
+                            if target_name:
+                                task_manager.update_task_status(
+                                    task_id,
+                                    target_name=target_name,
+                                    status=deploy_status,
+                                    result={
+                                        "message": deploy_message,
+                                        "result": deploy_result,
+                                        "error": message.get("error")
+                                    }
+                                )
+                    except Exception as e:
+                        print(f"⚠️ 更新部署任务状态失败: {e}")
+                    
+                    # 回复确认
+                    await websocket.send_json({
+                        "type": "deploy_result_ack",
+                        "task_id": task_id,
+                        "message": "部署结果已接收"
+                    })
+                
                 else:
                     # 未知消息类型
                     await websocket.send_json({

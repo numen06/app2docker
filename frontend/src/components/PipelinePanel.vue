@@ -2975,6 +2975,17 @@
                   >
                     <i class="fas fa-plus"></i> 添加服务
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-info"
+                    @click="parseDockerfileForMultiService"
+                    title="识别dockerfile"
+                    :disabled="parsingDockerfileForMultiService"
+                  >
+                    <i class="fas fa-file-code"></i> 
+                    <span v-if="parsingDockerfileForMultiService">识别中...</span>
+                    <span v-else>识别dockerfile</span>
+                  </button>
                 </div>
               </div>
 
@@ -3490,6 +3501,7 @@ const manualRunBranches = ref([]); // 手动触发可用的分支列表
 const loadingManualRunBranches = ref(false); // 正在加载分支列表
 const multiServiceConfigPipeline = ref(null);
 const savingMultiServiceConfig = ref(false);
+const parsingDockerfileForMultiService = ref(false);
 const multiServiceFormData = ref({
   push_mode: "multi",
   selected_services: [],
@@ -7283,6 +7295,93 @@ function closeMultiServiceConfigModal() {
     selected_services: [],
     service_push_config: {},
   };
+}
+
+// 识别dockerfile并解析多服务
+async function parseDockerfileForMultiService() {
+  if (!multiServiceConfigPipeline.value) {
+    alert("无法获取流水线信息");
+    return;
+  }
+
+  const pipeline = multiServiceConfigPipeline.value;
+  
+  // 检查必要的字段
+  if (!pipeline.git_url) {
+    alert("流水线未配置 Git 地址，无法识别 Dockerfile");
+    return;
+  }
+
+  if (!pipeline.branch) {
+    alert("流水线未配置分支，无法识别 Dockerfile");
+    return;
+  }
+
+  parsingDockerfileForMultiService.value = true;
+  
+  try {
+    const payload = {
+      git_url: pipeline.git_url,
+      branch: pipeline.branch,
+      dockerfile_name: pipeline.dockerfile_name || "Dockerfile",
+      source_id: pipeline.source_id || null,
+    };
+
+    const res = await axios.post("/api/parse-dockerfile-services", payload);
+    const servicesList = res.data.services || [];
+
+    if (servicesList.length === 0) {
+      alert("未从 Dockerfile 中识别到服务");
+      return;
+    }
+
+    // 将解析出的服务填充到表单中
+    // 如果已有服务，询问是否覆盖
+    if (multiServiceFormData.value.selected_services.length > 0) {
+      const confirmed = confirm(
+        `已识别到 ${servicesList.length} 个服务，是否覆盖现有服务列表？`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    // 清空现有服务
+    multiServiceFormData.value.selected_services = [];
+    multiServiceFormData.value.service_push_config = {};
+
+    // 添加解析出的服务
+    servicesList.forEach((service) => {
+      const serviceName = service.name;
+      multiServiceFormData.value.selected_services.push(serviceName);
+      
+      // 初始化服务配置
+      multiServiceFormData.value.service_push_config[serviceName] = {
+        enabled: true, // 默认启用
+        push: false,
+        imageName: "", // 留空使用全局前缀拼接
+        tag: multiServiceFormData.value.global_tag || "latest",
+      };
+    });
+
+    // 如果全局镜像名称前缀为空，尝试从 Git URL 生成
+    if (!multiServiceFormData.value.global_image_name || !multiServiceFormData.value.global_image_name.trim()) {
+      const gitUrl = pipeline.git_url;
+      // 尝试从 Git URL 提取项目名
+      const match = gitUrl.match(/\/([^\/]+?)(?:\.git)?$/);
+      if (match && match[1]) {
+        multiServiceFormData.value.global_image_name = match[1];
+      }
+    }
+
+    alert(`成功识别 ${servicesList.length} 个服务`);
+  } catch (error) {
+    console.error("解析 Dockerfile 失败:", error);
+    const errorMsg = error.response?.data?.detail || "解析 Dockerfile 失败";
+    alert(`识别失败: ${errorMsg}`);
+  } finally {
+    parsingDockerfileForMultiService.value = false;
+  }
 }
 
 // 添加服务到多服务配置

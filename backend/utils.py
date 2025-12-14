@@ -31,4 +31,5 @@ def ensure_dirs():
     os.makedirs("data/docker_build", exist_ok=True)
     os.makedirs("data/templates", exist_ok=True)  # 用户自定义模板目录
     os.makedirs("data/exports", exist_ok=True)
+    os.makedirs("data/deploy_tasks", exist_ok=True)  # 部署任务目录
     # 注意：templates/ 为内置模板目录，已打包在镜像中，无需创建

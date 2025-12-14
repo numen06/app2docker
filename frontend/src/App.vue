@@ -154,6 +154,11 @@
                   <i class="fas fa-server"></i> Docker 管理
                 </button>
               </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'deploy' }" @click="activeTab = 'deploy'">
+                  <i class="fas fa-rocket"></i> 部署管理
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -171,6 +176,7 @@
             <TaskManager v-if="activeTab === 'tasks'" />
             <ResourcePackagePanel v-if="activeTab === 'resource-package'" />
             <UnifiedHostManager v-if="activeTab === 'host'" />
+            <DeployTaskManager v-if="activeTab === 'deploy'" />
             <BuildConfigEditor 
               v-if="activeTab === 'build-config-editor'" 
               :initial-config="buildConfigToEdit"
@@ -213,6 +219,7 @@ import BuildConfigEditor from './components/BuildConfigEditor.vue'
 import TaskManager from './components/TaskManager.vue'
 import TemplatePanel from './components/TemplatePanel.vue'
 import UserCenterModal from './components/UserCenterModal.vue'
+import DeployTaskManager from './components/DeployTaskManager.vue'
 
 const authenticated = ref(false)
 const username = ref('')

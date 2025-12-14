@@ -1,0 +1,44 @@
+# deploy-config.yaml —— 支持 SSH 直连 & Agent 反向代理双模式
+version: "1.0"
+
+app:
+  name: "api-gateway"
+  repo: "git.example.com/prod/api-gateway"
+  branches: ["main", "release/*"]
+
+# ✅ 统一 target 描述：无论用 SSH 还是 Agent，都叫 "target"
+targets:
+  - name: "edge-prod-01" # 逻辑名称（用于日志、告警）
+    mode: "agent" # ← 关键：可选 "ssh" | "agent"
+
+    # 🔹 当 mode == "ssh" 时，使用以下字段（原样）
+    # host: "192.168.10.5"
+    # port: 22
+    # user: "deploy"
+    # identity_file: "/etc/secrets/id_rsa"
+
+    # 🔹 当 mode == "agent" 时，使用以下字段（新）
+    agent:
+      name: "xxx主机名" # 主机名
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." # JWT 或静态 Token（建议 Vault 注入）
+      # 或用 short-lived token：token_env: "DEPLOY_AGENT_TOKEN"（从 env 读取）
+
+    # 🌐 公共配置（SSH 和 Agent 均适用）
+    docker:
+      image_template: "{{ registry }}/{{ app.name }}:{{ tag }}"
+      container_name: "api-gateway-prod"
+      restart_policy: "always"
+      ports:
+        - "8000:8000"
+      env:
+        - "ENV=production"
+      volumes:
+        - "/data/api-gateway:/app/data"
+      health_check:
+        url: "http://localhost:8000/health"
+        timeout: "10s"
+
+# 🛡️ 策略（不变）
+policy:
+  require_image_digest: true
+  max_concurrent_deployments: 1

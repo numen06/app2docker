@@ -5,6 +5,7 @@ docker==7.1.0
 fastapi==0.115.6
 idna==3.11
 paramiko==3.4.0
+psutil==6.1.0  # 系统信息获取（Agent 需要）
 PyJWT==2.10.1
 python-multipart==0.0.20
 PyYAML==6.0.3
@@ -13,4 +14,5 @@ setuptools>=65.0.0  # 提供 distutils 兼容层（Python 3.12+ 需要）
 urllib3==2.5.0
 uvicorn[standard]==0.34.0
 watchdog==5.0.3
+websockets==14.1  # WebSocket 客户端（Agent 需要）
 sqlalchemy==2.0.23  # 数据库 ORM

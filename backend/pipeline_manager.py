@@ -515,11 +515,17 @@ class PipelineManager:
         """更新流水线配置"""
         db = get_db_session()
         try:
+            # 先刷新 session，确保获取最新的数据
+            db.expire_all()
+            
             pipeline = (
                 db.query(Pipeline).filter(Pipeline.pipeline_id == pipeline_id).first()
             )
             if not pipeline:
                 return False
+
+            # 刷新对象，确保与数据库同步
+            db.refresh(pipeline)
 
             # 更新字段
             if name is not None:
@@ -596,6 +602,7 @@ class PipelineManager:
 
             # 提交更改
             try:
+                db.flush()  # 先 flush，检查是否有错误
                 db.commit()
             except Exception as commit_error:
                 # 如果 commit 失败，记录错误并回滚
@@ -610,6 +617,7 @@ class PipelineManager:
                 ):
                     print(f"⚠️ 流水线可能在更新过程中被删除或并发修改: {pipeline_id}")
                     # 重新查询确认流水线是否还存在
+                    db.expire_all()  # 清除缓存
                     check_pipeline = (
                         db.query(Pipeline)
                         .filter(Pipeline.pipeline_id == pipeline_id)
@@ -622,7 +630,93 @@ class PipelineManager:
                         print(
                             f"⚠️ 确认：流水线仍然存在，可能是并发修改导致: {pipeline_id}"
                         )
-                        raise ValueError(f"流水线更新失败，可能是并发修改: {error_msg}")
+                        # 尝试重新更新：重新获取对象并更新
+                        try:
+                            db.refresh(check_pipeline)
+                            # 使用字典收集需要更新的字段，然后批量应用
+                            updates = {}
+                            if name is not None:
+                                updates['name'] = name
+                            if git_url is not None:
+                                updates['git_url'] = git_url
+                            if branch is not None:
+                                updates['branch'] = branch
+                            if project_type is not None:
+                                updates['project_type'] = project_type
+                            if template is not None:
+                                updates['template'] = template
+                            if image_name is not None:
+                                updates['image_name'] = image_name
+                            if tag is not None:
+                                updates['tag'] = tag
+                            if push is not None:
+                                updates['push'] = push
+                            if push_registry is not None:
+                                updates['push_registry'] = push_registry
+                            if template_params is not None:
+                                updates['template_params'] = template_params
+                            if sub_path is not None:
+                                updates['sub_path'] = sub_path
+                            if use_project_dockerfile is not None:
+                                updates['use_project_dockerfile'] = use_project_dockerfile
+                            if dockerfile_name is not None:
+                                updates['dockerfile_name'] = dockerfile_name
+                            if webhook_secret is not None:
+                                updates['webhook_secret'] = webhook_secret
+                            if webhook_token is not None:
+                                # 检查 token 是否已被其他流水线使用
+                                existing = (
+                                    db.query(Pipeline)
+                                    .filter(
+                                        Pipeline.webhook_token == webhook_token,
+                                        Pipeline.pipeline_id != pipeline_id,
+                                    )
+                                    .first()
+                                )
+                                if existing:
+                                    raise ValueError(
+                                        f"Webhook Token '{webhook_token}' 已被其他流水线使用"
+                                    )
+                                updates['webhook_token'] = webhook_token
+                            if enabled is not None:
+                                updates['enabled'] = enabled
+                            if description is not None:
+                                updates['description'] = description
+                            if cron_expression is not None:
+                                updates['cron_expression'] = cron_expression
+                            if webhook_branch_filter is not None:
+                                updates['webhook_branch_filter'] = webhook_branch_filter
+                            if webhook_use_push_branch is not None:
+                                updates['webhook_use_push_branch'] = webhook_use_push_branch
+                            if webhook_allowed_branches is not None:
+                                updates['webhook_allowed_branches'] = webhook_allowed_branches
+                            if branch_tag_mapping is not None:
+                                updates['branch_tag_mapping'] = branch_tag_mapping
+                            if source_id is not None:
+                                updates['source_id'] = source_id
+                            if selected_services is not None:
+                                updates['selected_services'] = selected_services
+                            if service_push_config is not None:
+                                updates['service_push_config'] = service_push_config
+                            if service_template_params is not None:
+                                updates['service_template_params'] = service_template_params
+                            if push_mode is not None:
+                                updates['push_mode'] = push_mode
+                            if resource_package_configs is not None:
+                                updates['resource_package_configs'] = resource_package_configs
+                            
+                            # 批量应用更新
+                            for key, value in updates.items():
+                                setattr(check_pipeline, key, value)
+                            
+                            check_pipeline.updated_at = datetime.now()
+                            db.commit()
+                            print(f"✅ 重试更新成功: {pipeline_id}")
+                            return True
+                        except Exception as retry_error:
+                            db.rollback()
+                            print(f"⚠️ 重试更新也失败: {retry_error}")
+                            raise ValueError(f"流水线更新失败，可能是并发修改: {error_msg}")
                 raise
 
             return True

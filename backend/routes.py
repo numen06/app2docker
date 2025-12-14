@@ -3,7 +3,7 @@
 import os
 import shutil
 import tempfile
-from typing import Optional
+from typing import Optional, List
 from fastapi import (
     APIRouter,
     File,
@@ -40,11 +40,13 @@ from backend.handlers import (
     docker_builder,
     DOCKER_AVAILABLE,
     parse_dockerfile_services,
+    validate_and_clean_image_name,
 )
 from backend.resource_package_manager import ResourcePackageManager
 from backend.host_manager import HostManager
 from backend.agent_host_manager import AgentHostManager
 from backend.websocket_handler import handle_agent_websocket
+from backend.deploy_task_manager import DeployTaskManager
 from backend.config import (
     load_config,
     save_config,
@@ -977,6 +979,30 @@ async def verify_git_repo(
             "default_branch": default_branch,
             "dockerfiles": dockerfiles,  # 扫描到的 Dockerfile 列表
         }
+
+        # 如果提供了 source_id，更新数据源的缓存（即使 save_as_source=False）
+        if source_id:
+            try:
+                source_manager = GitSourceManager()
+                source = source_manager.get_source(source_id, include_password=False)
+                if source:
+                    # 更新数据源的分支、标签和默认分支缓存
+                    source_manager.update_source(
+                        source_id=source_id,
+                        branches=result["branches"],
+                        tags=result["tags"],
+                        default_branch=result["default_branch"],
+                    )
+                    # 更新扫描到的 Dockerfile
+                    if result.get("dockerfiles"):
+                        for dockerfile_path, content in result["dockerfiles"].items():
+                            source_manager.update_dockerfile(
+                                source_id, dockerfile_path, content
+                            )
+                    print(f"✅ 已更新数据源 {source_id} 的缓存（分支、标签、Dockerfile）")
+            except Exception as e:
+                print(f"⚠️ 更新数据源缓存失败: {e}")
+                # 即使更新失败，也继续返回验证结果
 
         # 如果需要保存为数据源
         if save_as_source:
@@ -2405,6 +2431,12 @@ async def create_export_task(
             if inferred_tag:
                 tag_name = inferred_tag
 
+        # 验证和清理镜像名称（检查格式，移除协议前缀等）
+        try:
+            image_name = validate_and_clean_image_name(image_name)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
         # 创建导出任务
         task_manager = ExportTaskManager()
         task_id = task_manager.create_task(
@@ -2530,6 +2562,26 @@ async def stop_export_task(task_id: str, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"停止任务失败: {str(e)}")
+
+
+@router.post("/export-tasks/{task_id}/retry")
+async def retry_export_task(task_id: str, request: Request):
+    """重试导出任务（失败或停止的任务可以重试）"""
+    try:
+        username = get_current_username(request)
+        task_manager = ExportTaskManager()
+        if task_manager.retry_task(task_id):
+            OperationLogger.log(username, "retry_export_task", {"task_id": task_id})
+            return JSONResponse({"success": True, "message": "任务已重新启动"})
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="任务不存在或无法重试（只有失败或停止的任务才能重试）",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重试任务失败: {str(e)}")
 
 
 @router.delete("/export-tasks/{task_id}")
@@ -4029,15 +4081,63 @@ async def run_pipeline(
         )
         print(f"   - selected_branch is not None: {selected_branch is not None}")
 
+        # 处理分支标签映射（与webhook使用相同的逻辑）
+        branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
+        default_tag = pipeline.get("tag", "latest")  # 默认标签
+        
+        # 获取标签列表（支持单个标签或多个标签）
+        tags = [default_tag]  # 默认只有一个标签
+        
+        if final_branch and branch_tag_mapping:
+            mapped_tag_value = None
+            # 优先精确匹配
+            if final_branch in branch_tag_mapping:
+                mapped_tag_value = branch_tag_mapping[final_branch]
+            else:
+                # 尝试通配符匹配（如 feature/* -> feature）
+                import fnmatch
+                
+                for pattern, mapped_tag in branch_tag_mapping.items():
+                    if fnmatch.fnmatch(final_branch, pattern):
+                        mapped_tag_value = mapped_tag
+                        break
+            
+            # 处理标签值（支持字符串、数组或逗号分隔的字符串）
+            if mapped_tag_value:
+                if isinstance(mapped_tag_value, list):
+                    # 如果是数组，直接使用
+                    tags = mapped_tag_value
+                elif isinstance(mapped_tag_value, str):
+                    # 如果是字符串，检查是否包含逗号
+                    if "," in mapped_tag_value:
+                        # 逗号分隔的多个标签
+                        tags = [
+                            t.strip() for t in mapped_tag_value.split(",") if t.strip()
+                        ]
+                    else:
+                        # 单个标签
+                        tags = [mapped_tag_value]
+        
         # 检查防抖（5秒内重复触发直接加入队列）
         if manager.check_debounce(pipeline_id, debounce_seconds=5):
             from backend.handlers import pipeline_to_task_config
-
-            task_config = pipeline_to_task_config(
-                pipeline, trigger_source="manual", branch=final_branch
-            )
-            task_config["username"] = username
-            queue_id = manager.add_task_to_queue(pipeline_id, task_config)
+            
+            build_manager = BuildManager()
+            task_ids = []
+            
+            # 为每个标签创建任务
+            for tag in tags:
+                task_config = pipeline_to_task_config(
+                    pipeline,
+                    trigger_source="manual",
+                    branch=final_branch,
+                    tag=tag,
+                    branch_tag_mapping=branch_tag_mapping,
+                )
+                task_config["username"] = username
+                task_id = build_manager._trigger_task_from_config(task_config)
+                task_ids.append(task_id)
+            
             queue_length = manager.get_queue_length(pipeline_id)
 
             OperationLogger.log(
@@ -4046,7 +4146,8 @@ async def run_pipeline(
                 {
                     "pipeline_id": pipeline_id,
                     "pipeline_name": pipeline.get("name"),
-                    "queue_id": queue_id,
+                    "task_ids": task_ids if len(task_ids) > 1 else None,
+                    "task_id": task_ids[0] if task_ids else None,
                     "queue_length": queue_length,
                     "branch": final_branch,
                     "trigger_source": "manual",
@@ -4054,105 +4155,161 @@ async def run_pipeline(
                 },
             )
 
-            return JSONResponse(
-                {
-                    "message": "触发过于频繁，任务已加入队列",
-                    "status": "queued",
-                    "queue_id": queue_id,
-                    "queue_length": queue_length,
-                    "pipeline": pipeline.get("name"),
-                    "branch": final_branch,
-                }
-            )
-
-        # 从流水线配置生成任务配置JSON
-        from backend.handlers import pipeline_to_task_config
-
-        print(f"🔍 准备调用 pipeline_to_task_config:")
-        print(f"   - 传递的branch参数: {repr(final_branch)}")
-        task_config = pipeline_to_task_config(
-            pipeline, trigger_source="manual", branch=final_branch
-        )
-        print(f"🔍 pipeline_to_task_config 返回的task_config:")
-        print(f"   - task_config中的branch: {repr(task_config.get('branch'))}")
-        task_config["username"] = username
-
-        # 检查是否有正在运行的任务
-        current_task_id = manager.get_pipeline_running_task(pipeline_id)
-        if current_task_id:
-            # 检查任务是否真的在运行
-            build_manager = BuildManager()
-            task = build_manager.task_manager.get_task(current_task_id)
-            if task and task.get("status") in ["pending", "running"]:
-                # 有任务正在运行，立即创建新任务（状态为 pending，等待执行）
-                task_id = build_manager._trigger_task_from_config(task_config)
-                queue_length = manager.get_queue_length(pipeline_id)
-
-                # 记录操作日志
-                OperationLogger.log(
-                    username,
-                    "pipeline_run_queued",
-                    {
-                        "pipeline_id": pipeline_id,
-                        "pipeline_name": pipeline.get("name"),
-                        "task_id": task_id,
-                        "queue_length": queue_length,
-                        "branch": final_branch,
-                        "trigger_source": "manual",
-                    },
-                )
-
+            if len(task_ids) > 1:
                 return JSONResponse(
                     {
-                        "message": "构建任务已创建并加入队列",
+                        "message": f"触发过于频繁，已创建 {len(task_ids)} 个任务并加入队列",
                         "status": "queued",
-                        "task_id": task_id,
+                        "task_id": task_ids[0] if task_ids else None,
+                        "task_ids": task_ids if len(task_ids) > 1 else None,
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
                     }
                 )
             else:
-                # 任务已完成或不存在，解绑
-                manager.unbind_task(pipeline_id)
+                return JSONResponse(
+                    {
+                        "message": "触发过于频繁，任务已加入队列",
+                        "status": "queued",
+                        "task_id": task_ids[0] if task_ids else None,
+                        "queue_length": queue_length,
+                        "pipeline": pipeline.get("name"),
+                        "branch": final_branch,
+                    }
+                )
 
-        # 没有运行中的任务，立即启动构建任务
+        # 处理分支标签映射（与webhook使用相同的逻辑）
+        branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
+        default_tag = pipeline.get("tag", "latest")  # 默认标签
+        
+        # 获取标签列表（支持单个标签或多个标签）
+        tags = [default_tag]  # 默认只有一个标签
+        
+        if final_branch and branch_tag_mapping:
+            mapped_tag_value = None
+            # 优先精确匹配
+            if final_branch in branch_tag_mapping:
+                mapped_tag_value = branch_tag_mapping[final_branch]
+            else:
+                # 尝试通配符匹配（如 feature/* -> feature）
+                import fnmatch
+                
+                for pattern, mapped_tag in branch_tag_mapping.items():
+                    if fnmatch.fnmatch(final_branch, pattern):
+                        mapped_tag_value = mapped_tag
+                        break
+            
+            # 处理标签值（支持字符串、数组或逗号分隔的字符串）
+            if mapped_tag_value:
+                if isinstance(mapped_tag_value, list):
+                    # 如果是数组，直接使用
+                    tags = mapped_tag_value
+                elif isinstance(mapped_tag_value, str):
+                    # 如果是字符串，检查是否包含逗号
+                    if "," in mapped_tag_value:
+                        # 逗号分隔的多个标签
+                        tags = [
+                            t.strip() for t in mapped_tag_value.split(",") if t.strip()
+                        ]
+                    else:
+                        # 单个标签
+                        tags = [mapped_tag_value]
+        
+        # 为每个标签创建任务（与webhook使用相同的逻辑）
+        from backend.handlers import pipeline_to_task_config
+        
         build_manager = BuildManager()
-        task_id = build_manager._trigger_task_from_config(task_config)
-
-        # 记录触发并绑定任务（手动触发）
-        manager.record_trigger(
-            pipeline_id,
-            task_id,
-            trigger_source="manual",
-            trigger_info={
-                "username": username,
-                "branch": final_branch,
-            },
-        )
-
-        # 记录操作日志
-        OperationLogger.log(
-            username,
-            "pipeline_run",
-            {
-                "pipeline_id": pipeline_id,
-                "pipeline_name": pipeline.get("name"),
-                "task_id": task_id,
-                "branch": final_branch,
-                "trigger_source": "manual",
-            },
-        )
-
-        return JSONResponse(
-            {
-                "message": "构建任务已启动",
-                "status": "running",
-                "task_id": task_id,
-                "pipeline": pipeline.get("name"),
-                "branch": final_branch,
-            }
-        )
+        task_ids = []
+        
+        for tag in tags:
+            print(f"🔍 调用 pipeline_to_task_config:")
+            print(f"   - branch 参数: {final_branch}")
+            print(f"   - tag 参数: {tag}")
+            task_config = pipeline_to_task_config(
+                pipeline,
+                trigger_source="manual",
+                branch=final_branch,
+                tag=tag,
+                branch_tag_mapping=branch_tag_mapping,
+            )
+            task_config["username"] = username
+            
+            # 检查是否有正在运行的任务
+            current_task_id = manager.get_pipeline_running_task(pipeline_id)
+            if current_task_id:
+                # 检查任务是否真的在运行
+                task = build_manager.task_manager.get_task(current_task_id)
+                if task and task.get("status") in ["pending", "running"]:
+                    # 有任务正在运行，立即创建新任务（状态为 pending，等待执行）
+                    task_id = build_manager._trigger_task_from_config(task_config)
+                    task_ids.append(task_id)
+                else:
+                    # 任务已完成或不存在，解绑
+                    manager.unbind_task(pipeline_id)
+                    # 没有运行中的任务，立即启动构建任务
+                    task_id = build_manager._trigger_task_from_config(task_config)
+                    task_ids.append(task_id)
+            else:
+                # 没有运行中的任务，立即启动构建任务
+                task_id = build_manager._trigger_task_from_config(task_config)
+                task_ids.append(task_id)
+        
+        # 如果创建了多个任务，只绑定第一个任务
+        if task_ids:
+            first_task_id = task_ids[0]
+            
+            # 记录触发并绑定任务（手动触发）
+            manager.record_trigger(
+                pipeline_id,
+                first_task_id,
+                trigger_source="manual",
+                trigger_info={
+                    "username": username,
+                    "branch": final_branch,
+                },
+            )
+            
+            # 记录操作日志
+            OperationLogger.log(
+                username,
+                "pipeline_run" if len(task_ids) == 1 else "pipeline_run_queued",
+                {
+                    "pipeline_id": pipeline_id,
+                    "pipeline_name": pipeline.get("name"),
+                    "task_id": first_task_id,
+                    "task_ids": task_ids if len(task_ids) > 1 else None,
+                    "branch": final_branch,
+                    "trigger_source": "manual",
+                },
+            )
+            
+            queue_length = manager.get_queue_length(pipeline_id)
+            
+            if len(task_ids) > 1:
+                return JSONResponse(
+                    {
+                        "message": f"构建任务已启动（共 {len(task_ids)} 个任务）",
+                        "status": "running",
+                        "task_id": first_task_id,
+                        "task_ids": task_ids,
+                        "queue_length": queue_length,
+                        "pipeline": pipeline.get("name"),
+                        "branch": final_branch,
+                    }
+                )
+            else:
+                return JSONResponse(
+                    {
+                        "message": "构建任务已启动",
+                        "status": "running",
+                        "task_id": first_task_id,
+                        "pipeline": pipeline.get("name"),
+                        "branch": final_branch,
+                    }
+                )
+        else:
+            raise HTTPException(status_code=500, detail="未能创建构建任务")
     except HTTPException:
         raise
     except Exception as e:
@@ -4293,29 +4450,63 @@ async def webhook_trigger(webhook_token: str, request: Request):
         else:
             print(f"⚠️ 未能从 payload 中提取分支信息")
 
-        # 检查是否启用分支过滤和使用推送分支
+        # 统一分支策略处理（与手动触发保持一致）
+        # 支持新的webhook_branch_strategy字段，同时兼容旧的webhook_branch_filter和webhook_use_push_branch字段
+        webhook_branch_strategy = pipeline.get("webhook_branch_strategy")
+        webhook_allowed_branches = pipeline.get("webhook_allowed_branches", [])
         webhook_branch_filter = pipeline.get("webhook_branch_filter", False)
-        webhook_use_push_branch = pipeline.get(
-            "webhook_use_push_branch", True
-        )  # 默认为True
+        webhook_use_push_branch = pipeline.get("webhook_use_push_branch", True)
         configured_branch = pipeline.get("branch")
+
+        # 如果没有新策略字段，根据旧字段推断策略
+        if not webhook_branch_strategy:
+            if webhook_allowed_branches and len(webhook_allowed_branches) > 0:
+                webhook_branch_strategy = "select_branches"
+            elif webhook_branch_filter:
+                webhook_branch_strategy = "filter_match"
+            elif webhook_use_push_branch:
+                webhook_branch_strategy = "use_push"
+            else:
+                webhook_branch_strategy = "use_configured"
 
         # 调试信息：输出配置值
         print(f"🔍 Webhook 分支配置:")
-        print(f"   - webhook_branch_filter: {webhook_branch_filter}")
-        print(f"   - webhook_use_push_branch: {webhook_use_push_branch}")
+        print(f"   - webhook_branch_strategy: {webhook_branch_strategy}")
+        print(f"   - webhook_allowed_branches: {webhook_allowed_branches}")
         print(f"   - configured_branch: {configured_branch}")
         print(f"   - webhook_branch: {webhook_branch}")
 
-        # 分支触发逻辑：优先使用推送的分支进行构建
-        if webhook_branch_filter and configured_branch:
-            # 如果启用了分支过滤，检查推送的分支是否匹配配置的分支
+        # 根据分支策略确定使用的分支（统一逻辑）
+        branch = None
+        if webhook_branch_strategy == "select_branches":
+            # 选择分支触发策略：只允许匹配的分支触发
             if webhook_branch:
-                if webhook_branch != configured_branch:
-                    # 分支不匹配，忽略触发
-                    print(
-                        f"⚠️ 分支不匹配，忽略触发: pipeline={pipeline.get('name')}, webhook_branch={webhook_branch}, configured_branch={configured_branch}"
+                if webhook_branch in webhook_allowed_branches:
+                    branch = webhook_branch
+                    print(f"✅ 分支在允许列表中，使用推送分支: {branch}")
+                else:
+                    print(f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}")
+                    return JSONResponse(
+                        {
+                            "message": f"分支不在允许列表中，已忽略触发（推送分支: {webhook_branch}）",
+                            "pipeline": pipeline.get("name"),
+                            "webhook_branch": webhook_branch,
+                            "allowed_branches": webhook_allowed_branches,
+                            "ignored": True,
+                        }
                     )
+            else:
+                # Webhook未提供分支信息，使用配置的分支
+                branch = configured_branch
+                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
+        elif webhook_branch_strategy == "filter_match":
+            # 只允许匹配分支触发：检查推送分支是否匹配配置分支
+            if webhook_branch:
+                if webhook_branch == configured_branch:
+                    branch = webhook_branch
+                    print(f"✅ 分支匹配，使用推送分支: {branch}")
+                else:
+                    print(f"⚠️ 分支不匹配，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}")
                     return JSONResponse(
                         {
                             "message": f"分支不匹配，已忽略触发（推送分支: {webhook_branch}, 配置分支: {configured_branch}）",
@@ -4325,64 +4516,35 @@ async def webhook_trigger(webhook_token: str, request: Request):
                             "ignored": True,
                         }
                     )
-                else:
-                    # 分支匹配，使用推送的分支进行构建
-                    branch = webhook_branch
-                    print(
-                        f"✅ 分支匹配，使用推送分支构建: pipeline={pipeline.get('name')}, branch={branch}"
-                    )
             else:
-                # Webhook未提供分支信息，且启用了分支过滤，无法确定是否应该触发
-                print(
-                    f"⚠️ Webhook未提供分支信息，但启用了分支过滤，使用配置的分支: pipeline={pipeline.get('name')}, configured_branch={configured_branch}"
-                )
+                # Webhook未提供分支信息，使用配置的分支
                 branch = configured_branch
-        else:
-            # 未启用分支过滤，根据配置决定使用哪个分支
-            # 如果 webhook 提供了分支信息，优先使用推送的分支（更符合 webhook 的预期行为）
+                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
+        elif webhook_branch_strategy == "use_push":
+            # 使用推送分支构建：优先使用webhook推送的分支
             if webhook_branch:
-                # Webhook 提供了分支信息，优先使用推送的分支
-                if webhook_use_push_branch:
-                    # 明确配置了使用推送分支，使用推送的分支
-                    branch = webhook_branch
-                    print(
-                        f"🔔 Webhook 触发，使用推送分支构建: pipeline={pipeline.get('name')}, branch={branch}"
-                    )
-                else:
-                    # 虽然配置了不使用推送分支，但 webhook 提供了分支信息
-                    # 为了符合 webhook 的预期行为，仍然使用推送的分支
-                    branch = webhook_branch
-                    print(
-                        f"🔔 Webhook 触发，使用推送分支构建: pipeline={pipeline.get('name')}, branch={branch} (webhook_use_push_branch=False 但 webhook 提供了分支信息)"
-                    )
+                branch = webhook_branch
+                print(f"✅ 使用推送分支构建: {branch}")
             else:
-                # Webhook 未提供分支信息，根据配置决定
-                if webhook_use_push_branch:
-                    # 配置了使用推送分支，但没有推送分支信息，使用配置的分支
-                    branch = configured_branch
-                    print(
-                        f"⚠️ Webhook未提供分支信息，使用配置的分支: pipeline={pipeline.get('name')}, branch={branch}"
-                    )
-                else:
-                    # 禁用使用推送分支，使用配置的分支
-                    branch = configured_branch
-                    if not branch:
-                        # 如果配置的分支为空，且没有推送分支信息，无法确定使用哪个分支
-                        print(
-                            f"❌ 无法触发构建: pipeline={pipeline.get('name')}, 配置分支为空且Webhook未提供分支信息"
-                        )
-                        return JSONResponse(
-                            {
-                                "message": "无法触发构建：配置分支为空且Webhook未提供分支信息",
-                                "pipeline": pipeline.get("name"),
-                                "error": "missing_branch",
-                            },
-                            status_code=400,
-                        )
-                    else:
-                        print(
-                            f"🔔 Webhook 触发，使用配置分支构建: pipeline={pipeline.get('name')}, branch={branch} (Webhook未提供分支信息)"
-                        )
+                # Webhook未提供分支信息，使用配置的分支
+                branch = configured_branch
+                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
+        else:  # use_configured
+            # 使用配置分支构建：始终使用配置的分支
+            branch = configured_branch
+            print(f"✅ 使用配置分支构建: {branch}")
+
+        # 如果最终没有确定分支，报错
+        if not branch:
+            print(f"❌ 无法触发构建: pipeline={pipeline.get('name')}, 无法确定分支")
+            return JSONResponse(
+                {
+                    "message": "无法触发构建：无法确定分支",
+                    "pipeline": pipeline.get("name"),
+                    "error": "missing_branch",
+                },
+                status_code=400,
+            )
 
         # 根据推送的分支查找对应的标签（分支标签映射应该基于推送的分支，而不是用于构建的分支）
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
@@ -5227,14 +5389,14 @@ async def commit_dockerfile(
             )
             if config_result.returncode != 0 or not config_result.stdout.strip():
                 subprocess.run(
-                    ["git", "config", "user.name", "jar2docker"],
+                    ["git", "config", "user.name", "app2docker"],
                     cwd=temp_dir,
                     capture_output=True,
                     text=True,
                     timeout=10,
                 )
                 subprocess.run(
-                    ["git", "config", "user.email", "jar2docker@localhost"],
+                    ["git", "config", "user.email", "app2docker@localhost"],
                     cwd=temp_dir,
                     capture_output=True,
                     text=True,
@@ -5254,7 +5416,7 @@ async def commit_dockerfile(
                 )
 
             # 提交
-            commit_msg = commit_message or f"Update {dockerfile_path} via jar2docker"
+            commit_msg = commit_message or f"Update {dockerfile_path} via app2docker"
             commit_cmd = ["git", "commit", "-m", commit_msg]
             commit_result = subprocess.run(
                 commit_cmd, cwd=temp_dir, capture_output=True, text=True, timeout=30
@@ -5930,25 +6092,111 @@ async def delete_host(request: Request, host_id: str):
 
 class AgentHostRequest(BaseModel):
     name: str
+    host_type: str = "agent"  # agent 或 portainer
     description: str = ""
+    portainer_url: Optional[str] = None
+    portainer_api_key: Optional[str] = None
+    portainer_endpoint_id: Optional[int] = None
 
 
 class AgentHostUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    portainer_url: Optional[str] = None
+    portainer_api_key: Optional[str] = None
+    portainer_endpoint_id: Optional[int] = None
+
+
+class PortainerTestRequest(BaseModel):
+    portainer_url: str
+    api_key: str
+    endpoint_id: int
+
+
+class PortainerListEndpointsRequest(BaseModel):
+    portainer_url: str
+    api_key: str
+    endpoint_id: int = 0  # 获取列表时不需要真实的 endpoint_id
+
+
+class DeployTaskCreateRequest(BaseModel):
+    config_content: str
+    registry: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class DeployTaskExecuteRequest(BaseModel):
+    target_names: Optional[List[str]] = None
+
+
+@router.post("/agent-hosts/test-portainer")
+async def test_portainer_connection(request: Request, test_req: PortainerTestRequest):
+    """测试 Portainer 连接"""
+    try:
+        manager = AgentHostManager()
+        result = manager.test_portainer_connection(
+            test_req.portainer_url,
+            test_req.api_key,
+            test_req.endpoint_id
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试连接失败: {str(e)}")
+
+
+@router.post("/agent-hosts/list-portainer-endpoints")
+async def list_portainer_endpoints(request: Request, test_req: PortainerListEndpointsRequest):
+    """获取 Portainer Endpoints 列表"""
+    try:
+        from backend.portainer_client import PortainerClient
+        client = PortainerClient(test_req.portainer_url, test_req.api_key, 0)  # endpoint_id 暂时不需要
+        
+        # 获取所有 endpoints
+        endpoints = client._request('GET', '/endpoints', timeout=5)
+        
+        return JSONResponse({
+            "success": True,
+            "endpoints": [
+                {"id": ep.get('Id'), "name": ep.get('Name'), "type": ep.get('Type')}
+                for ep in endpoints
+            ]
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({
+            "success": False,
+            "message": f"获取 Endpoints 列表失败: {str(e)}",
+            "endpoints": []
+        })
 
 
 @router.post("/agent-hosts")
 async def add_agent_host(request: Request, host_req: AgentHostRequest):
-    """创建Agent主机"""
+    """创建主机（支持 Agent 和 Portainer 类型）"""
     try:
         username = get_current_username(request)
         manager = AgentHostManager()
 
         host_info = manager.add_agent_host(
             name=host_req.name,
+            host_type=host_req.host_type,
             description=host_req.description,
+            portainer_url=host_req.portainer_url,
+            portainer_api_key=host_req.portainer_api_key,
+            portainer_endpoint_id=host_req.portainer_endpoint_id,
         )
+
+        # 如果是 Portainer 类型，创建后立即更新状态
+        if host_req.host_type == "portainer" and host_info:
+            try:
+                updated_info = manager.update_portainer_host_status(host_info["host_id"])
+                if updated_info:
+                    host_info = updated_info
+            except Exception as e:
+                # 状态更新失败不影响创建，记录日志即可
+                import logging
+                logging.warning(f"创建 Portainer 主机后更新状态失败: {e}")
 
         # 记录操作日志
         OperationLogger.log(
@@ -6008,10 +6256,24 @@ async def update_agent_host(request: Request, host_id: str, host_req: AgentHostU
             host_id=host_id,
             name=host_req.name,
             description=host_req.description,
+            portainer_url=host_req.portainer_url,
+            portainer_api_key=host_req.portainer_api_key,
+            portainer_endpoint_id=host_req.portainer_endpoint_id,
         )
 
         if not host_info:
             raise HTTPException(status_code=404, detail="Agent主机不存在")
+
+        # 如果是 Portainer 类型，更新后立即刷新状态
+        if host_info.get("host_type") == "portainer":
+            try:
+                updated_info = manager.update_portainer_host_status(host_id)
+                if updated_info:
+                    host_info = updated_info
+            except Exception as e:
+                # 状态更新失败不影响更新，记录日志即可
+                import logging
+                logging.warning(f"更新 Portainer 主机后刷新状态失败: {e}")
 
         # 记录操作日志
         OperationLogger.log(
@@ -6029,6 +6291,29 @@ async def update_agent_host(request: Request, host_id: str, host_req: AgentHostU
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"更新Agent主机失败: {str(e)}")
+
+
+@router.post("/agent-hosts/{host_id}/refresh-status")
+async def refresh_agent_host_status(request: Request, host_id: str):
+    """刷新Agent主机状态"""
+    try:
+        manager = AgentHostManager()
+        host = manager.get_agent_host(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="Agent主机不存在")
+        
+        # 根据主机类型刷新状态
+        if host.get("host_type") == "portainer":
+            updated_info = manager.update_portainer_host_status(host_id)
+            if updated_info:
+                return JSONResponse({"success": True, "host": updated_info})
+            else:
+                return JSONResponse({"success": False, "message": "状态更新失败"})
+        else:
+            # Agent 类型的主机状态通过 WebSocket 心跳更新
+            return JSONResponse({"success": True, "host": host, "message": "Agent 类型主机状态通过 WebSocket 心跳更新"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"刷新状态失败: {str(e)}")
 
 
 @router.delete("/agent-hosts/{host_id}")
@@ -6057,7 +6342,7 @@ async def get_deploy_command(
     request: Request,
     host_id: str,
     type: str = Query("run", description="部署类型: run 或 stack"),
-    agent_image: str = Query("jar2docker/agent:latest", description="Agent镜像"),
+    agent_image: str = Query("registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest", description="Agent镜像"),
     server_url: Optional[str] = Query(None, description="服务器URL（可选）"),
 ):
     """获取Agent部署命令"""
@@ -6086,7 +6371,199 @@ async def get_deploy_command(
         raise HTTPException(status_code=500, detail=f"生成部署命令失败: {str(e)}")
 
 
-@router.websocket("/ws/agent/{token}")
-async def websocket_agent_endpoint(websocket: WebSocket, token: str):
-    """Agent WebSocket连接端点"""
+@router.websocket("/ws/agent")
+async def websocket_agent_endpoint(websocket: WebSocket, token: str = Query(...)):
+    """Agent WebSocket连接端点（通过查询参数传递token）"""
     await handle_agent_websocket(websocket, token)
+
+
+# ==================== 部署任务管理 ====================
+
+@router.post("/deploy-tasks")
+async def create_deploy_task(request: Request, task_req: DeployTaskCreateRequest):
+    """创建部署任务"""
+    try:
+        username = get_current_username(request)
+        task_manager = DeployTaskManager()
+        
+        task = task_manager.create_task(
+            config_content=task_req.config_content,
+            registry=task_req.registry,
+            tag=task_req.tag
+        )
+        
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "deploy_task_create",
+            {"task_id": task["task_id"]}
+        )
+        
+        return JSONResponse({
+            "success": True,
+            "task": task
+        })
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建部署任务失败: {str(e)}")
+
+
+@router.get("/deploy-tasks")
+async def list_deploy_tasks(request: Request):
+    """列出所有部署任务"""
+    try:
+        username = get_current_username(request)
+        task_manager = DeployTaskManager()
+        
+        tasks = task_manager.list_tasks()
+        
+        return JSONResponse({
+            "success": True,
+            "tasks": tasks
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取部署任务列表失败: {str(e)}")
+
+
+@router.get("/deploy-tasks/{task_id}")
+async def get_deploy_task(request: Request, task_id: str):
+    """获取部署任务详情"""
+    try:
+        username = get_current_username(request)
+        task_manager = DeployTaskManager()
+        
+        task = task_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+        
+        return JSONResponse({
+            "success": True,
+            "task": task
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取部署任务失败: {str(e)}")
+
+
+@router.post("/deploy-tasks/{task_id}/execute")
+async def execute_deploy_task(
+    request: Request,
+    task_id: str,
+    execute_req: Optional[DeployTaskExecuteRequest] = None
+):
+    """执行部署任务"""
+    try:
+        username = get_current_username(request)
+        task_manager = DeployTaskManager()
+        
+        target_names = None
+        if execute_req and execute_req.target_names:
+            target_names = execute_req.target_names
+        
+        result = await task_manager.execute_task(task_id, target_names=target_names)
+        
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "deploy_task_execute",
+            {"task_id": task_id, "target_names": target_names}
+        )
+        
+        return JSONResponse(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"执行部署任务失败: {str(e)}")
+
+
+@router.post("/deploy-tasks/import")
+async def import_deploy_task(request: Request, file: UploadFile = File(...)):
+    """导入部署任务（从YAML文件）"""
+    try:
+        username = get_current_username(request)
+        
+        # 读取文件内容
+        content = await file.read()
+        config_content = content.decode("utf-8")
+        
+        task_manager = DeployTaskManager()
+        task = task_manager.create_task(config_content=config_content)
+        
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "deploy_task_import",
+            {"task_id": task["task_id"], "filename": file.filename}
+        )
+        
+        return JSONResponse({
+            "success": True,
+            "task": task
+        })
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"导入部署任务失败: {str(e)}")
+
+
+@router.get("/deploy-tasks/{task_id}/export")
+async def export_deploy_task(request: Request, task_id: str):
+    """导出部署任务（YAML格式）"""
+    try:
+        username = get_current_username(request)
+        task_manager = DeployTaskManager()
+        
+        task = task_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+        
+        config_content = task.get("config_content", "")
+        
+        return PlainTextResponse(
+            content=config_content,
+            media_type="application/x-yaml",
+            headers={
+                "Content-Disposition": f'attachment; filename="deploy-task-{task_id}.yaml"'
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"导出部署任务失败: {str(e)}")
+
+
+@router.delete("/deploy-tasks/{task_id}")
+async def delete_deploy_task(request: Request, task_id: str):
+    """删除部署任务"""
+    try:
+        username = get_current_username(request)
+        task_manager = DeployTaskManager()
+        
+        success = task_manager.delete_task(task_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+        
+        # 记录操作日志
+        OperationLogger.log(username, "deploy_task_delete", {"task_id": task_id})
+        
+        return JSONResponse({"success": True, "message": "部署任务已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除部署任务失败: {str(e)}")
