@@ -494,7 +494,7 @@
                 class="form-control form-control-sm" 
                 v-model="agentImage"
                 @change="loadDeployCommand"
-                placeholder="registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest"
+                placeholder="registry.cn-shanghai.aliyuncs.com/51jbm/app2docker-agent:latest"
               />
             </div>
             <div v-if="deployCommand" class="mb-3">
@@ -532,7 +532,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import axios from 'axios';
 
 export default {
   name: 'AgentHostManager',
@@ -548,7 +548,7 @@ export default {
       selectedHost: null,
       saving: false,
       deployType: 'run',
-      agentImage: 'registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest',
+      agentImage: 'registry.cn-shanghai.aliyuncs.com/51jbm/app2docker-agent:latest',
       deployCommand: null,
       deployComposeContent: null,
       loadingDeployCommand: false,
