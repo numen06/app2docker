@@ -16,12 +16,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from backend.agent.websocket_client import WebSocketClient
 from backend.agent.deploy_executor import DeployExecutor
 
-# 配置日志
+# 配置日志 - 确保输出到 stdout，便于 Docker 容器查看
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # 明确输出到 stdout
+    ],
+    force=True  # 强制重新配置，避免重复配置问题
 )
 logger = logging.getLogger(__name__)
+
+# 设置其他模块的日志级别
+logging.getLogger("backend.agent").setLevel(logging.INFO)
+logging.getLogger("websockets").setLevel(logging.WARNING)  # 减少 websockets 库的噪音
 
 # 全局变量
 websocket_client: Optional[WebSocketClient] = None
@@ -175,13 +183,18 @@ async def handle_deploy_task(message: Dict[str, Any]):
     try:
         # 获取部署模式（如果有）
         deploy_mode = deploy_config.get("deploy_mode")
+        logger.info(f"部署模式: {deploy_mode or '从配置中获取'}")
+        logger.info(f"部署配置: {deploy_config}")
         
         # 执行部署
+        logger.info(f"开始执行部署操作...")
         result = deploy_executor.execute_deploy(
             deploy_config,
             context,
             deploy_mode=deploy_mode
         )
+        
+        logger.info(f"部署执行完成，结果: {result}")
         
         # 发送执行结果
         await websocket_client.send_message({
@@ -192,7 +205,7 @@ async def handle_deploy_task(message: Dict[str, Any]):
             "result": result
         })
         
-        logger.info(f"部署任务完成: {task_id}, 成功: {result.get('success')}")
+        logger.info(f"部署任务完成: {task_id}, 成功: {result.get('success')}, 消息: {result.get('message')}")
     
     except Exception as e:
         logger.exception(f"部署任务异常: {task_id}")

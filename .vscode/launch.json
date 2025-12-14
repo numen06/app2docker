@@ -60,6 +60,22 @@
       "runtimeArgs": ["run", "dev"],
       "skipFiles": ["<node_internals>/**"],
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Agent 主程序",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/agent/main.py",
+      "python": "${command:python.interpreterPath}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "AGENT_TOKEN": "c8be218b9a2fc5ee3b62e651fbe5daef",
+        "SERVER_URL": "http://localhost:8000"
+      },
+      "subProcess": true
     }
   ],
   "compounds": [

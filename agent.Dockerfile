@@ -69,6 +69,9 @@ RUN python -m venv .venv && \
 # ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
 ENV PATH="/app/.venv/bin:$PATH"
 
+# ✅ 设置 Python 无缓冲输出，确保日志立即输出到控制台
+ENV PYTHONUNBUFFERED=1
+
 # 复制后端代码（Agent 需要访问 backend 模块）
 COPY backend/ ./backend/
 

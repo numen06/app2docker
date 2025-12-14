@@ -78,6 +78,8 @@ class DeployExecutor:
                         text=True,
                         timeout=60
                     )
+                    if result.stdout:
+                        logger.info(f"清理输出: {result.stdout}")
                     if result.returncode == 0:
                         logger.info("已停止并删除已有的 Docker Compose 服务")
                     else:
@@ -125,21 +127,29 @@ class DeployExecutor:
                 
                 # 停止容器
                 stop_cmd = ["docker", "stop", container_name]
+                logger.info(f"执行命令: {' '.join(stop_cmd)}")
                 stop_result = subprocess.run(
                     stop_cmd,
                     capture_output=True,
                     text=True,
                     timeout=30
                 )
+                if stop_result.stdout:
+                    logger.info(f"停止容器输出: {stop_result.stdout}")
+                if stop_result.stderr:
+                    logger.warning(f"停止容器警告: {stop_result.stderr}")
                 
                 # 删除容器（无论停止是否成功）
                 rm_cmd = ["docker", "rm", "-f", container_name]
+                logger.info(f"执行命令: {' '.join(rm_cmd)}")
                 rm_result = subprocess.run(
                     rm_cmd,
                     capture_output=True,
                     text=True,
                     timeout=30
                 )
+                if rm_result.stdout:
+                    logger.info(f"删除容器输出: {rm_result.stdout}")
                 
                 if rm_result.returncode == 0:
                     logger.info(f"已删除容器: {container_name}")
@@ -411,6 +421,12 @@ class DeployExecutor:
                     shell=False
                 )
                 
+                # 输出命令执行结果到日志
+                if result.stdout:
+                    logger.info(f"命令输出: {result.stdout}")
+                if result.stderr:
+                    logger.warning(f"命令错误输出: {result.stderr}")
+                
                 if result.returncode == 0:
                     return {
                         "success": True,
@@ -419,6 +435,7 @@ class DeployExecutor:
                         "command": " ".join(cmd)
                     }
                 else:
+                    logger.error(f"命令执行失败 (返回码: {result.returncode})")
                     return {
                         "success": False,
                         "message": "部署失败",
@@ -439,12 +456,19 @@ class DeployExecutor:
                 
                 # 执行 docker-compose up
                 cmd = ["docker-compose", "-f", compose_file, "up", "-d"]
+                logger.info(f"执行命令: {' '.join(cmd)}")
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=300
                 )
+                
+                # 输出命令执行结果到日志
+                if result.stdout:
+                    logger.info(f"命令输出: {result.stdout}")
+                if result.stderr:
+                    logger.warning(f"命令错误输出: {result.stderr}")
                 
                 if result.returncode == 0:
                     return {
@@ -473,8 +497,15 @@ class DeployExecutor:
                     timeout=300
                 )
                 
+                # 输出命令执行结果到日志
+                if result.stdout:
+                    logger.info(f"命令输出: {result.stdout}")
+                if result.stderr:
+                    logger.warning(f"命令错误输出: {result.stderr}")
+                
                 if result.returncode == 0:
                     container_id = result.stdout.strip()
+                    logger.info(f"部署成功，容器ID: {container_id}")
                     return {
                         "success": True,
                         "message": "部署成功",
@@ -482,6 +513,7 @@ class DeployExecutor:
                         "output": result.stdout
                     }
                 else:
+                    logger.error(f"部署失败 (返回码: {result.returncode})")
                     return {
                         "success": False,
                         "message": "部署失败",
