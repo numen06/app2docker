@@ -140,8 +140,8 @@ ENV PYTHONPATH="/app"
 #   -v /sys:/host/sys:ro \
 #   app2docker-agent:latest
 
-# 启动 Agent 程序（使用 -u 参数确保无缓冲输出）
-CMD ["python", "-u", "backend/agent/main.py"]
+# 启动 Agent 程序（使用 -u 参数确保无缓冲输出，使用绝对路径）
+ENTRYPOINT ["python", "/app/backend/agent/main.py"]
 
 # ============ 阶段 4: 主程序镜像（默认） ============
 FROM backend-base AS app2docker
@@ -187,4 +187,4 @@ EXPOSE ${APP_PORT}
 
 # 启动后端服务（后端会服务前端构建文件）
 # 端口可通过环境变量 APP_PORT 设置
-CMD ["python", "backend/app.py"]
+ENTRYPOINT ["python", "backend/app.py"]

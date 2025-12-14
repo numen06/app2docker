@@ -72,8 +72,8 @@
       "cwd": "${workspaceFolder}",
       "env": {
         "PYTHONPATH": "${workspaceFolder}",
-        "AGENT_TOKEN": "c8be218b9a2fc5ee3b62e651fbe5daef",
-        "SERVER_URL": "http://localhost:8000"
+        "AGENT_TOKEN": "3a86c70981398276410b83d7185fe004",
+        "SERVER_URL": "http://10.100.10.95:8000"
       },
       "subProcess": true
     }

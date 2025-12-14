@@ -3,8 +3,14 @@
 Agent 主程序入口
 负责连接主程序的 WebSocket，接收部署任务，执行部署操作，发送执行结果和心跳
 """
-import os
+# 立即输出，确保 Docker 容器能看到启动信息
 import sys
+print("=" * 60, file=sys.stdout, flush=True)
+print("Agent 程序开始启动...", file=sys.stdout, flush=True)
+print(f"Python 版本: {sys.version}", file=sys.stdout, flush=True)
+print("=" * 60, file=sys.stdout, flush=True)
+
+import os
 import asyncio
 import logging
 import signal
@@ -20,6 +26,7 @@ logging.basicConfig(
     force=True  # 强制重新配置，避免重复配置问题
 )
 logger = logging.getLogger(__name__)
+logger.info("日志系统已初始化")
 
 # 添加项目根目录到 Python 路径
 try:

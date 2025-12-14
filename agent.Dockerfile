@@ -93,5 +93,7 @@ COPY backend/ ./backend/
 #   app2docker-agent:latest
 
 # 启动 Agent 程序（使用 -u 参数确保无缓冲输出）
-CMD ["python", "-u", "backend/agent/main.py"]
+# 使用绝对路径确保能找到文件
+WORKDIR /app
+CMD ["python", "-u", "/app/backend/agent/main.py"]
 
