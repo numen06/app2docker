@@ -150,9 +150,10 @@ class PortainerExecutor(DeployExecutor):
                 
                 update_status_callback(f"[Portainer] 正在通过 Portainer API 部署到 {self.host_name}...")
             
-            # 如果需要重新发布，先清理
-            if redeploy:
-                logger.info(f"开始清理已有部署...")
+            # 如果需要重新发布，根据策略处理
+            redeploy_strategy = deploy_config.get("redeploy_strategy", "update_existing")
+            if redeploy and redeploy_strategy == "remove_and_redeploy":
+                logger.info(f"开始清理已有部署（策略: {redeploy_strategy}）...")
                 if update_status_callback:
                     update_status_callback("正在清理已有部署...")
                 
@@ -164,8 +165,11 @@ class PortainerExecutor(DeployExecutor):
                             "endpointId": self.portainer_endpoint_id,
                             "name": stack_name
                         })
-                    except:
-                        pass
+                        logger.info(f"已删除 Stack: {stack_name}")
+                        # 等待 Stack 完全删除
+                        await asyncio.sleep(2)
+                    except Exception as e:
+                        logger.warning(f"删除 Stack 失败（可能不存在）: {e}")
                 else:
                     # 尝试删除容器
                     container_name = deploy_config.get("container_name", "")
@@ -194,6 +198,7 @@ class PortainerExecutor(DeployExecutor):
                 # Docker Compose 部署
                 stack_name = f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}"
                 compose_content = deploy_config.get("compose_content", "")
+                compose_mode = deploy_config.get("compose_mode", "docker-compose")
                 
                 if not compose_content:
                     return {

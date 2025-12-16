@@ -127,10 +127,14 @@ class SSHExecutor(DeployExecutor):
                 if update_status_callback:
                     command = deploy_config.get("command", "")
                     compose_content = deploy_config.get("compose_content", "")
+                    compose_mode = deploy_config.get("compose_mode", "docker-compose")
                     
                     if deploy_mode == "docker_compose":
                         if command:
-                            update_status_callback(f"[SSH] 执行命令: docker-compose {command}")
+                            if compose_mode == "docker-stack":
+                                update_status_callback(f"[SSH] 执行命令: docker stack deploy {command}")
+                            else:
+                                update_status_callback(f"[SSH] 执行命令: docker-compose {command}")
                         if compose_content:
                             compose_preview = compose_content.split('\n')[:5]
                             update_status_callback(f"[SSH] docker-compose.yml 内容预览:\n" + "\n".join([f"  {line}" for line in compose_preview]))

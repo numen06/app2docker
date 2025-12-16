@@ -113,6 +113,16 @@ class DeployConfigParser:
                 if deploy_type == "docker_compose":
                     if "compose_content" not in deploy_config:
                         raise ValueError("deploy.compose_content 是必需的（当 type=docker_compose 时）")
+                    
+                    # 验证 compose_mode（可选）
+                    compose_mode = deploy_config.get("compose_mode")
+                    if compose_mode and compose_mode not in ["docker-compose", "docker-stack"]:
+                        raise ValueError("deploy.compose_mode 必须是 'docker-compose' 或 'docker-stack'")
+                    
+                    # 验证 redeploy_strategy（可选）
+                    redeploy_strategy = deploy_config.get("redeploy_strategy")
+                    if redeploy_strategy and redeploy_strategy not in ["remove_and_redeploy", "update_existing"]:
+                        raise ValueError("deploy.redeploy_strategy 必须是 'remove_and_redeploy' 或 'update_existing'")
         
         # 验证每个 target
         for i, target in enumerate(targets):
@@ -192,6 +202,11 @@ class DeployConfigParser:
         
         if deploy_type == "docker_compose":
             deploy_config["compose_content"] = docker_config.get("compose_content", "")
+            # 保留 compose_mode 和 redeploy_strategy（如果存在）
+            if "compose_mode" in docker_config:
+                deploy_config["compose_mode"] = docker_config["compose_mode"]
+            if "redeploy_strategy" in docker_config:
+                deploy_config["redeploy_strategy"] = docker_config["redeploy_strategy"]
         
         normalized["deploy"] = deploy_config
         
@@ -395,6 +410,11 @@ class DeployConfigParser:
         
         if deploy_type == "docker_compose":
             deploy_config["compose_content"] = docker_config.get("compose_content", "")
+            # 保留 compose_mode 和 redeploy_strategy（如果存在）
+            if "compose_mode" in docker_config:
+                deploy_config["compose_mode"] = docker_config["compose_mode"]
+            if "redeploy_strategy" in docker_config:
+                deploy_config["redeploy_strategy"] = docker_config["redeploy_strategy"]
         
         return deploy_config
     

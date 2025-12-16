@@ -258,6 +258,7 @@ async def handle_deploy_task(message: Dict[str, Any]):
         )
 
         logger.info(f"部署执行完成，结果: {result}")
+        logger.info(f"部署结果详情: success={result.get('success')}, message={result.get('message')}, returncode={result.get('returncode', 'N/A')}")
 
         # 推送执行完成日志（包含命令输出）
         if result.get("success"):

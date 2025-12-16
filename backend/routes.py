@@ -4916,16 +4916,34 @@ async def deploy_webhook_trigger(webhook_token: str, request: Request):
 
         # 查找所有部署配置，找到匹配的webhook_token
         tasks = build_manager.list_tasks(task_type="deploy")
+        print(f"🔍 查找部署配置: webhook_token={webhook_token}, 共找到 {len(tasks)} 个部署任务")
+        
         for task in tasks:
-            task_config = task.get("task_config", {})
+            task_config = task.get("task_config") or {}
+            task_id = task.get("task_id", "unknown")
+            
+            # 检查是否是配置任务（没有source_config_id的任务）
+            source_config_id = task_config.get("source_config_id")
+            config_webhook_token = task_config.get("webhook_token")
+            
+            print(f"🔍 检查任务 {task_id[:8]}: source_config_id={source_config_id}, webhook_token={config_webhook_token[:8] + '...' if config_webhook_token else '(None)'}")
+            
             # 只检查配置任务（没有source_config_id的任务）
-            if not task_config.get("source_config_id"):
-                if task_config.get("webhook_token") == webhook_token:
+            if source_config_id is None:
+                if config_webhook_token == webhook_token:
                     deploy_config = task
+                    print(f"✅ 找到匹配的部署配置: task_id={task_id[:8]}")
                     break
 
         if not deploy_config:
             print(f"❌ 未找到部署配置: webhook_token={webhook_token}")
+            print(f"🔍 调试信息: 共检查了 {len(tasks)} 个任务")
+            # 打印所有配置任务的webhook_token（用于调试）
+            config_tasks = [t for t in tasks if not (t.get("task_config") or {}).get("source_config_id")]
+            print(f"🔍 配置任务数量: {len(config_tasks)}")
+            for t in config_tasks[:5]:  # 只打印前5个
+                token = (t.get("task_config") or {}).get("webhook_token")
+                print(f"  - task_id={t.get('task_id', 'unknown')[:8]}, webhook_token={token[:8] + '...' if token else '(None)'}")
             raise HTTPException(status_code=404, detail="部署配置不存在")
 
         task_config = deploy_config.get("task_config", {})
@@ -6722,54 +6740,82 @@ async def list_deploy_tasks(request: Request):
         # 转换为前端期望的格式
         formatted_tasks = []
         for task in tasks:
-            task_config = task.get("task_config", {})
+            task_config = task.get("task_config", {}) or {}
+
             # 只返回配置任务（没有source_config_id的任务），排除执行产生的任务
             source_config_id = task_config.get("source_config_id")
             if source_config_id:
                 # 这是执行产生的任务，跳过
                 continue
 
-            # 查找该配置的最新执行任务，获取其状态
+            # 查找该配置的所有执行任务
             config_task_id = task.get("task_id")
-            latest_execution_task = None
-            latest_execution_status = task.get("status")  # 默认使用配置任务的状态
-
-            # 查找所有从该配置触发的执行任务
             execution_tasks = [
                 t
                 for t in tasks
                 if t.get("task_config", {}).get("source_config_id") == config_task_id
             ]
 
+            # 计算触发次数（执行任务数量）
+            execution_count = len(execution_tasks)
+
+            # 默认使用配置任务的创建时间
+            created_at = task.get("created_at")
+
+            # 计算最后一次触发时间：优先使用统计字段，其次使用最新执行任务的创建时间
+            last_executed_at = task_config.get("last_executed_at")
+            latest_execution_task = None
             if execution_tasks:
                 # 按创建时间排序，获取最新的执行任务
                 execution_tasks.sort(
-                    key=lambda x: x.get("created_at", ""), reverse=True
+                    key=lambda x: x.get("created_at") or "", reverse=True
                 )
                 latest_execution_task = execution_tasks[0]
-                latest_execution_status = latest_execution_task.get("status")
+                # 如果未记录 last_executed_at，则使用最新执行任务的创建时间
+                if not last_executed_at:
+                    last_executed_at = latest_execution_task.get("created_at")
+
+            # 计算最新执行状态：有执行任务则用最新执行任务状态，否则用配置任务状态
+            latest_execution_status = (
+                latest_execution_task.get("status")
+                if latest_execution_task
+                else task.get("status")
+            )
+
+            # 计算最近一次执行的触发来源
+            latest_trigger_source = "manual"
+            if latest_execution_task:
+                latest_trigger_source = latest_execution_task.get(
+                    "trigger_source", "manual"
+                )
+            else:
+                latest_trigger_source = task.get("trigger_source", "manual")
 
             formatted_tasks.append(
                 {
                     "task_id": task.get("task_id"),
+                    # 顶层创建时间：配置任务本身的创建时间，用于“创建时间”列
+                    "created_at": created_at,
                     "status": {
                         "task_id": task.get("task_id"),
-                        "status": latest_execution_status,  # 使用最新执行任务的状态
-                        "created_at": task.get("created_at"),
+                        # 使用最新执行任务的状态
+                        "status": latest_execution_status,
+                        # 这里保留配置任务的创建时间（主要用于详情里展示）
+                        "created_at": created_at,
                         "registry": task_config.get("registry"),
                         "tag": task_config.get("tag"),
                         "targets": [],
                         # 最近一次执行的触发来源（manual / webhook / cron ...）
-                        "trigger_source": (
-                            latest_execution_task.get("trigger_source")
-                            if latest_execution_task
-                            else task.get("trigger_source", "manual")
-                        ),
+                        "trigger_source": latest_trigger_source,
                     },
                     "config": task_config.get("config", {}),
                     "config_content": task_config.get("config_content", ""),
-                    "execution_count": task_config.get("execution_count", 0),
-                    "last_executed_at": task_config.get("last_executed_at"),
+                    # 触发次数：执行任务数量和统计字段中较大的值，保证向后兼容
+                    "execution_count": max(
+                        execution_count, task_config.get("execution_count", 0)
+                    ),
+                    # 最后触发时间：统计字段和最新执行任务创建时间二者之一
+                    "last_executed_at": last_executed_at,
                     "latest_execution_task_id": (
                         latest_execution_task.get("task_id")
                         if latest_execution_task
