@@ -1858,10 +1858,15 @@
                       </button>
                     </label>
                     <small class="text-muted d-block mb-2">
-                      构建任务成功完成后，将触发配置的Webhook。支持模板变量：{task_id}, {image}, {tag}, {status}, {branch}, {pipeline_id}, {pipeline_name}, {created_at}, {completed_at}
+                      构建任务成功完成后，将触发配置的Webhook。支持模板变量：{task_id},
+                      {image}, {tag}, {status}, {branch}, {pipeline_id},
+                      {pipeline_name}, {created_at}, {completed_at}
                     </small>
                     <div
-                      v-if="formData.post_build_webhooks && formData.post_build_webhooks.length > 0"
+                      v-if="
+                        formData.post_build_webhooks &&
+                        formData.post_build_webhooks.length > 0
+                      "
                       class="border rounded p-2"
                     >
                       <div
@@ -1870,7 +1875,9 @@
                         class="card mb-2"
                       >
                         <div class="card-body">
-                          <div class="d-flex justify-content-between align-items-start mb-2">
+                          <div
+                            class="d-flex justify-content-between align-items-start mb-2"
+                          >
                             <div class="form-check form-switch">
                               <input
                                 class="form-check-input"
@@ -1940,15 +1947,17 @@
                               placeholder='{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}'
                             ></textarea>
                             <small class="text-muted"
-                              >支持变量：{task_id}, {image}, {tag}, {status}, {branch}, {pipeline_id},
-                              {pipeline_name}, {created_at}, {completed_at}</small
+                              >支持变量：{task_id}, {image}, {tag}, {status},
+                              {branch}, {pipeline_id}, {pipeline_name},
+                              {created_at}, {completed_at}</small
                             >
                           </div>
                         </div>
                       </div>
                     </div>
                     <div v-else class="alert alert-info py-2">
-                      <i class="fas fa-info-circle"></i> 暂无构建后Webhook配置，点击"添加"按钮添加
+                      <i class="fas fa-info-circle"></i>
+                      暂无构建后Webhook配置，点击"添加"按钮添加
                     </div>
                   </div>
                 </div>
@@ -3109,8 +3118,10 @@
                     title="识别dockerfile"
                     :disabled="parsingDockerfileForMultiService"
                   >
-                    <i class="fas fa-file-code"></i> 
-                    <span v-if="parsingDockerfileForMultiService">识别中...</span>
+                    <i class="fas fa-file-code"></i>
+                    <span v-if="parsingDockerfileForMultiService"
+                      >识别中...</span
+                    >
                     <span v-else>识别dockerfile</span>
                   </button>
                 </div>
@@ -4356,11 +4367,14 @@ function editPipeline(pipeline) {
         }))
       : [],
     post_build_webhooks: (() => {
-      if (!pipeline.post_build_webhooks || pipeline.post_build_webhooks.length === 0) {
+      if (
+        !pipeline.post_build_webhooks ||
+        pipeline.post_build_webhooks.length === 0
+      ) {
         return [];
       }
       // 将headers对象转换为headers_json字符串
-      return pipeline.post_build_webhooks.map(webhook => ({
+      return pipeline.post_build_webhooks.map((webhook) => ({
         url: webhook.url || "",
         method: webhook.method || "POST",
         headers: webhook.headers || {},
@@ -4482,7 +4496,8 @@ function addPostBuildWebhook() {
     method: "POST",
     headers: {},
     headers_json: "{}",
-    body_template: '{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}',
+    body_template:
+      '{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}',
     enabled: true,
   });
 }
@@ -4796,11 +4811,14 @@ async function savePipeline() {
           : null,
       // 构建后webhook配置
       post_build_webhooks: (() => {
-        if (!formData.value.post_build_webhooks || formData.value.post_build_webhooks.length === 0) {
+        if (
+          !formData.value.post_build_webhooks ||
+          formData.value.post_build_webhooks.length === 0
+        ) {
           return null;
         }
         // 处理每个webhook，将headers_json转换为headers对象
-        return formData.value.post_build_webhooks.map(webhook => {
+        return formData.value.post_build_webhooks.map((webhook) => {
           const processed = {
             url: webhook.url,
             method: webhook.method || "POST",
@@ -6922,7 +6940,8 @@ function showHistory(pipeline) {
   };
   historyPagination.value = {
     currentPage: 1,
-    pageSize: 20,
+    // 默认每页 10 条
+    pageSize: 10,
     total: 0,
     hasMore: false,
   };
@@ -6936,7 +6955,8 @@ function closeHistoryModal() {
   historyTasks.value = [];
   historyPagination.value = {
     currentPage: 1,
-    pageSize: 20,
+    // 默认每页 10 条
+    pageSize: 10,
     total: 0,
     hasMore: false,
   };
@@ -7495,7 +7515,7 @@ async function parseDockerfileForMultiService() {
   }
 
   const pipeline = multiServiceConfigPipeline.value;
-  
+
   // 检查必要的字段
   if (!pipeline.git_url) {
     alert("流水线未配置 Git 地址，无法识别 Dockerfile");
@@ -7508,7 +7528,7 @@ async function parseDockerfileForMultiService() {
   }
 
   parsingDockerfileForMultiService.value = true;
-  
+
   try {
     const payload = {
       git_url: pipeline.git_url,
@@ -7544,7 +7564,7 @@ async function parseDockerfileForMultiService() {
     servicesList.forEach((service) => {
       const serviceName = service.name;
       multiServiceFormData.value.selected_services.push(serviceName);
-      
+
       // 初始化服务配置
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: true, // 默认启用
@@ -7555,7 +7575,10 @@ async function parseDockerfileForMultiService() {
     });
 
     // 如果全局镜像名称前缀为空，尝试从 Git URL 生成
-    if (!multiServiceFormData.value.global_image_name || !multiServiceFormData.value.global_image_name.trim()) {
+    if (
+      !multiServiceFormData.value.global_image_name ||
+      !multiServiceFormData.value.global_image_name.trim()
+    ) {
       const gitUrl = pipeline.git_url;
       // 尝试从 Git URL 提取项目名
       const match = gitUrl.match(/\/([^\/]+?)(?:\.git)?$/);

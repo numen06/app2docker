@@ -1394,7 +1394,9 @@ async def get_all_tasks(
         else:
             # 获取构建任务（排除部署任务）
             build_task_type = task_type if task_type and task_type != "deploy" else None
-            build_tasks = build_manager.list_tasks(status=status, task_type=build_task_type)
+            build_tasks = build_manager.list_tasks(
+                status=status, task_type=build_task_type
+            )
             # 过滤掉部署任务（task_type="deploy"）
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
             for task in build_tasks:
@@ -3881,7 +3883,8 @@ async def get_pipeline(pipeline_id: str):
 async def get_pipeline_tasks(
     pipeline_id: str,
     status: Optional[str] = Query(None, description="过滤任务状态"),
-    limit: Optional[int] = Query(20, description="每页任务数量", ge=1, le=200),
+    # 默认每页返回 10 条历史记录
+    limit: Optional[int] = Query(10, description="每页任务数量", ge=1, le=200),
     offset: Optional[int] = Query(0, description="偏移量（分页）", ge=0),
     trigger_source: Optional[str] = Query(
         None, description="过滤触发来源: webhook, manual, cron"
@@ -6757,9 +6760,11 @@ async def list_deploy_tasks(request: Request):
                         "tag": task_config.get("tag"),
                         "targets": [],
                         # 最近一次执行的触发来源（manual / webhook / cron ...）
-                        "trigger_source": latest_execution_task.get("trigger_source")
-                        if latest_execution_task
-                        else task.get("trigger_source", "manual"),
+                        "trigger_source": (
+                            latest_execution_task.get("trigger_source")
+                            if latest_execution_task
+                            else task.get("trigger_source", "manual")
+                        ),
                     },
                     "config": task_config.get("config", {}),
                     "config_content": task_config.get("config_content", ""),
