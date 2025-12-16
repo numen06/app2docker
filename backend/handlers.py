@@ -4883,64 +4883,86 @@ class BuildTaskManager:
     ) -> str:
         """
         在后台线程中执行部署任务
+        每次执行都会创建一个新的任务，而不是重用原有任务
 
         Args:
-            task_id: 任务ID
+            task_id: 原始任务ID（用于获取配置）
             target_names: 要执行的目标名称列表（如果为 None，则执行所有目标）
 
         Returns:
-            任务ID
+            新创建的任务ID
         """
-        # 检查任务是否存在
-        task = self.get_task(task_id)
-        if not task:
+        # 检查原始任务是否存在
+        original_task = self.get_task(task_id)
+        if not original_task:
             raise ValueError(f"部署任务不存在: {task_id}")
 
-        if task.get("task_type") != "deploy":
+        if original_task.get("task_type") != "deploy":
             raise ValueError(f"任务类型不是部署任务: {task_id}")
 
-        # 检查任务状态：只有pending、failed、stopped或completed状态才能执行
-        current_status = task.get("status")
-        if current_status == "running":
-            raise ValueError(f"部署任务正在运行中，无法重复执行: {task_id}")
+        # 获取原始任务的配置
+        task_config = original_task.get("task_config", {})
+        config_content = task_config.get("config_content", "")
+        registry = task_config.get("registry")
+        tag = task_config.get("tag")
 
-        # 如果任务状态不是pending，重置为pending（重试场景）
-        # 注意：completed状态的任务也可以通过execute重新执行
-        if current_status not in ("pending", "failed", "stopped", "completed"):
-            print(
-                f"⚠️ 部署任务 {task_id[:8]} 状态异常 ({current_status})，重置为pending"
-            )
-            self.update_task_status(task_id, "pending")
-        elif current_status in ("failed", "stopped", "completed"):
-            # 对于已完成、失败或停止的任务，重置为pending以便重新执行
-            self.update_task_status(task_id, "pending")
-            # 清除之前的错误信息
-            from backend.database import get_db_session
-            from backend.models import Task
+        if not config_content:
+            raise ValueError(f"部署任务配置内容为空，无法执行: {task_id}")
 
-            db = get_db_session()
-            try:
-                task_obj = db.query(Task).filter(Task.task_id == task_id).first()
-                if task_obj:
-                    task_obj.error = None
-                    task_obj.completed_at = None
-                    task_obj.started_at = None  # 重置开始时间，重试时重新计时
-                    db.commit()
-            finally:
-                db.close()
+        # 创建新任务（每次执行都创建新任务）
+        new_task_id = self.create_deploy_task(
+            config_content=config_content,
+            registry=registry,
+            tag=tag,
+        )
 
-        # 更新任务状态为运行中
-        self.update_task_status(task_id, "running")
+        # 在新任务的配置中保存原始配置ID，并更新原始配置的统计信息
+        from backend.database import get_db_session
+        from backend.models import Task
 
-        # 在后台线程中执行部署任务
+        db = get_db_session()
+        try:
+            # 更新新任务的配置，保存原始配置ID
+            new_task_obj = db.query(Task).filter(Task.task_id == new_task_id).first()
+            if new_task_obj:
+                new_task_config = new_task_obj.task_config or {}
+                new_task_config["source_config_id"] = task_id  # 保存原始配置ID
+                new_task_obj.task_config = new_task_config
+
+            # 更新原始配置的执行统计
+            original_task_obj = db.query(Task).filter(Task.task_id == task_id).first()
+            if original_task_obj:
+                original_task_config = original_task_obj.task_config or {}
+                # 更新执行次数和最后执行时间
+                execution_count = original_task_config.get("execution_count", 0) + 1
+                original_task_config["execution_count"] = execution_count
+                original_task_config["last_executed_at"] = datetime.now().isoformat()
+                original_task_obj.task_config = original_task_config
+
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"⚠️ 更新任务关联信息失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            db.close()
+
+        print(f"🆕 基于任务 {task_id[:8]} 创建新部署任务: {new_task_id[:8]}")
+
+        # 更新新任务状态为运行中
+        self.update_task_status(new_task_id, "running")
+
+        # 在后台线程中执行新任务
         thread = threading.Thread(
             target=self._execute_deploy_task_in_thread,
-            args=(task_id, target_names),
+            args=(new_task_id, target_names),
             daemon=True,
         )
         thread.start()
 
-        return task_id
+        return new_task_id
 
     def _execute_deploy_task_in_thread(
         self, task_id: str, target_names: Optional[List[str]] = None
@@ -5042,7 +5064,7 @@ class BuildTaskManager:
 
     def retry_deploy_task(self, task_id: str) -> bool:
         """
-        重试失败或停止的部署任务
+        重试失败或停止的部署任务（在原任务上重试，不创建新任务）
 
         Args:
             task_id: 任务ID
@@ -5084,17 +5106,25 @@ class BuildTaskManager:
                 db.commit()
                 return False
 
-            # 重置任务状态
+            # 重置任务状态（在原任务上重试，不创建新任务）
             task.status = "pending"
             task.error = None
             task.completed_at = None
             task.started_at = None  # 重置开始时间，重试时重新计时
-
             db.commit()
 
-            # 启动部署任务（使用execute_deploy_task方法）
-            print(f"🔄 重新启动部署任务: {task_id[:8]}")
-            self.execute_deploy_task(task_id)
+            print(f"🔄 重试部署任务: {task_id[:8]}（在原任务上重试）")
+
+            # 直接执行原任务（不创建新任务）
+            self.update_task_status(task_id, "running")
+
+            # 在后台线程中执行任务
+            thread = threading.Thread(
+                target=self._execute_deploy_task_in_thread,
+                args=(task_id, None),  # target_names 为 None，执行所有目标
+                daemon=True,
+            )
+            thread.start()
 
             return True
         except Exception as e:

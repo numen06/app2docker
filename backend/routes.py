@@ -6533,6 +6533,12 @@ async def list_deploy_tasks(request: Request):
         formatted_tasks = []
         for task in tasks:
             task_config = task.get("task_config", {})
+            # 只返回配置任务（没有source_config_id的任务），排除执行产生的任务
+            source_config_id = task_config.get("source_config_id")
+            if source_config_id:
+                # 这是执行产生的任务，跳过
+                continue
+
             formatted_tasks.append(
                 {
                     "task_id": task.get("task_id"),
@@ -6546,6 +6552,8 @@ async def list_deploy_tasks(request: Request):
                     },
                     "config": task_config.get("config", {}),
                     "config_content": task_config.get("config_content", ""),
+                    "execution_count": task_config.get("execution_count", 0),
+                    "last_executed_at": task_config.get("last_executed_at"),
                 }
             )
 
@@ -6661,11 +6669,15 @@ async def retry_deploy_task(task_id: str, request: Request):
         if task.get("status") in ["pending", "running"]:
             raise HTTPException(status_code=400, detail="任务正在运行中，无法重试")
 
-        # 重试部署任务
+        # 重试部署任务（在原任务上重试，不创建新任务）
         if build_manager.retry_deploy_task(task_id):
             OperationLogger.log(username, "retry_deploy_task", {"task_id": task_id})
             return JSONResponse(
-                {"success": True, "message": "任务已重新启动", "task_id": task_id}
+                {
+                    "success": True,
+                    "message": "任务已重新启动",
+                    "task_id": task_id,
+                }
             )
         else:
             raise HTTPException(

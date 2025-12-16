@@ -2,7 +2,8 @@
   <div>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">
-        <i class="fas fa-rocket text-primary"></i> 部署任务管理
+        <i class="fas fa-rocket text-primary"></i> 部署配置管理
+        <small class="text-muted ms-2">（配置触发后会生成任务）</small>
       </h5>
       <div>
         <button class="btn btn-primary btn-sm" @click="showImportModal = true">
@@ -17,18 +18,18 @@
       </div>
     </div>
 
-    <!-- 任务列表 -->
+    <!-- 配置列表 -->
     <div class="table-responsive">
       <table class="table table-hover">
         <thead>
           <tr>
-            <th width="10%">任务ID</th>
+            <th width="10%">配置ID</th>
             <th width="15%">应用名称</th>
-            <th width="10%">状态</th>
-            <th width="15%">目标主机</th>
+            <th width="12%">目标主机</th>
+            <th width="10%">触发次数</th>
             <th width="15%">创建时间</th>
-            <th width="15%">完成时间</th>
-            <th width="20%">操作</th>
+            <th width="15%">最后触发</th>
+            <th width="23%">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -40,7 +41,7 @@
           </tr>
           <tr v-else-if="tasks.length === 0">
             <td colspan="7" class="text-center py-4 text-muted">
-              暂无部署任务
+              暂无部署配置
             </td>
           </tr>
           <tr v-else v-for="task in tasks" :key="task.task_id">
@@ -49,17 +50,26 @@
             </td>
             <td>{{ task.config?.app?.name || '-' }}</td>
             <td>
-              <span :class="getStatusBadgeClass(task.status)" class="badge">
-                {{ getStatusText(task.status) }}
-              </span>
-            </td>
-            <td>
               <span v-for="(target, idx) in task.config?.targets || []" :key="idx" class="badge bg-secondary me-1">
                 {{ target.name || target.host_name || '-' }}
               </span>
             </td>
+            <td>
+              <span class="badge bg-info">
+                <i class="fas fa-play-circle"></i> {{ task.execution_count || 0 }}
+              </span>
+              <button 
+                v-if="task.execution_count > 0"
+                class="btn btn-link btn-sm p-0 ms-1" 
+                @click="viewExecutions(task)"
+                title="查看执行历史"
+                style="font-size: 0.75rem; text-decoration: none;"
+              >
+                <i class="fas fa-external-link-alt"></i>
+              </button>
+            </td>
             <td>{{ formatTime(task.created_at) }}</td>
-            <td>{{ formatTime(task.completed_at) || '-' }}</td>
+            <td>{{ formatTime(task.last_executed_at) || '-' }}</td>
             <td>
               <div class="btn-group" role="group">
                 <button class="btn btn-sm btn-outline-primary" @click="viewTask(task)" title="查看详情">
@@ -68,29 +78,20 @@
                 <button 
                   class="btn btn-sm btn-outline-success" 
                   @click="executeTask(task)"
-                  :disabled="task.status === 'running'"
-                  :title="task.status === 'running' ? '任务执行中' : '执行任务'"
+                  title="触发部署（将创建新任务）"
                 >
-                  <i class="fas fa-play"></i>
-                </button>
-                <button 
-                  v-if="task.status === 'running'"
-                  class="btn btn-sm btn-outline-warning" 
-                  @click="refreshTask(task)"
-                  title="刷新状态"
-                >
-                  <i class="fas fa-sync-alt"></i>
+                  <i class="fas fa-play"></i> 触发
                 </button>
                 <button class="btn btn-sm btn-outline-secondary" @click="editTask(task)" title="编辑配置">
                   <i class="fas fa-edit"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-info" @click="copyTask(task)" title="复制任务">
+                <button class="btn btn-sm btn-outline-info" @click="copyTask(task)" title="复制配置">
                   <i class="fas fa-copy"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-info" @click="exportTask(task)" title="导出配置">
                   <i class="fas fa-download"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)" title="删除任务">
+                <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)" title="删除配置">
                   <i class="fas fa-trash"></i>
                 </button>
               </div>
@@ -1235,7 +1236,9 @@ export default {
             ...task,
             status: task.status?.status || task.status || 'pending',
             config: task.config || task.task_config?.config || {},
-            config_content: task.config_content || task.task_config?.config_content || ''
+            config_content: task.config_content || task.task_config?.config_content || '',
+            execution_count: task.execution_count || 0,
+            last_executed_at: task.last_executed_at || null
           }
         })
       } catch (error) {
@@ -1298,19 +1301,26 @@ export default {
       reader.readAsText(file)
     },
     async executeTask(task) {
-      if (!confirm('确定要执行此部署任务吗？')) return
+      if (!confirm('确定要触发此部署配置吗？\n\n触发后将创建新的部署任务，可在"任务管理"页面查看执行情况。')) return
       
       try {
-        await axios.post(`/api/deploy-tasks/${task.task_id}/execute`)
-        alert('任务已开始执行')
+        const res = await axios.post(`/api/deploy-tasks/${task.task_id}/execute`)
+        const newTaskId = res.data.task_id
+        alert(`部署配置已触发！\n\n新任务ID: ${newTaskId.substring(0, 8)}\n可在"任务管理"页面查看执行情况。`)
         this.loadTasks()
         if (this.showDetailModal) {
           this.viewTask(task)
         }
       } catch (error) {
-        console.error('执行部署任务失败:', error)
-        alert('执行部署任务失败: ' + (error.response?.data?.detail || error.message))
+        console.error('触发部署配置失败:', error)
+        alert('触发部署配置失败: ' + (error.response?.data?.detail || error.message))
       }
+    },
+    viewExecutions(task) {
+      // 跳转到任务管理页面，筛选该配置的任务
+      const configId = task.task_id
+      sessionStorage.setItem('deployConfigFilter', configId)
+      window.location.href = '/#/tasks?deploy_config=' + configId
     },
     async deleteTask(task) {
       if (!confirm('确定要删除此部署任务吗？')) return
