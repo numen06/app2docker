@@ -1394,13 +1394,28 @@ async def get_all_tasks(
         else:
             # 获取构建任务（排除部署任务）
             build_task_type = task_type if task_type and task_type != "deploy" else None
-            build_tasks = build_manager.list_tasks(
-                status=status, task_type=build_task_type
-            )
+            build_tasks = build_manager.list_tasks(status=status, task_type=build_task_type)
             # 过滤掉部署任务（task_type="deploy"）
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
             for task in build_tasks:
-                task["task_category"] = "build"  # 标记为构建任务
+                # 标记为构建任务
+                task["task_category"] = "build"
+
+                # 如果是流水线触发的任务，补充流水线名称（用于在任务列表中显示）
+                try:
+                    if task.get("pipeline_id"):
+                        from backend.pipeline_manager import PipelineManager
+
+                        pm = PipelineManager()
+                        pipeline = pm.get_pipeline(task["pipeline_id"])
+                        if pipeline and isinstance(pipeline, dict):
+                            task["pipeline_name"] = pipeline.get("name")
+                except Exception as e:
+                    # 获取流水线名称失败不影响任务显示
+                    print(
+                        f"⚠️ 获取流水线名称失败 (task_id={task.get('task_id', 'unknown')[:8]}): {e}"
+                    )
+
                 all_tasks.append(task)
 
         # 获取部署任务（包括配置和执行产生的任务）
@@ -3479,6 +3494,7 @@ class CreatePipelineRequest(BaseModel):
         "multi"  # 推送模式：'single' 单一推送，'multi' 多阶段推送
     )
     resource_package_configs: Optional[list] = None  # 资源包配置列表
+    post_build_webhooks: Optional[list] = None  # 构建完成后触发的webhook列表
 
 
 class RunPipelineRequest(BaseModel):
@@ -3516,6 +3532,7 @@ class UpdatePipelineRequest(BaseModel):
     service_template_params: Optional[dict] = None
     push_mode: Optional[str] = None
     resource_package_configs: Optional[list] = None
+    post_build_webhooks: Optional[list] = None  # 构建完成后触发的webhook列表
 
 
 @router.post("/pipelines")
@@ -3581,6 +3598,7 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
             service_template_params=request.service_template_params,
             push_mode=request.push_mode or "multi",
             resource_package_configs=request.resource_package_configs,
+            post_build_webhooks=request.post_build_webhooks,
         )
 
         # 记录操作日志
@@ -4064,6 +4082,7 @@ async def update_pipeline(
             service_template_params=request.service_template_params,
             push_mode=request.push_mode,
             resource_package_configs=request.resource_package_configs,
+            post_build_webhooks=request.post_build_webhooks,
         )
 
         if not success:
@@ -4869,6 +4888,160 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 "tags": tags,
                 "pipeline": pipeline.get("name"),
                 "branch": branch,
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Webhook 处理失败: {str(e)}")
+
+
+# === 部署配置 Webhook 触发 ===
+@router.post("/webhook/deploy/{webhook_token}")
+async def deploy_webhook_trigger(webhook_token: str, request: Request):
+    """部署配置 Webhook 触发端点（支持 GitHub/GitLab/Gitee）"""
+    try:
+        # 获取请求体（原始字节）
+        body = await request.body()
+
+        # 获取部署配置
+        build_manager = BuildTaskManager()
+        deploy_config = None
+
+        # 查找所有部署配置，找到匹配的webhook_token
+        tasks = build_manager.list_tasks(task_type="deploy")
+        for task in tasks:
+            task_config = task.get("task_config", {})
+            # 只检查配置任务（没有source_config_id的任务）
+            if not task_config.get("source_config_id"):
+                if task_config.get("webhook_token") == webhook_token:
+                    deploy_config = task
+                    break
+
+        if not deploy_config:
+            print(f"❌ 未找到部署配置: webhook_token={webhook_token}")
+            raise HTTPException(status_code=404, detail="部署配置不存在")
+
+        task_config = deploy_config.get("task_config", {})
+        print(f"✅ 找到部署配置: task_id={deploy_config.get('task_id')}")
+
+        # 验证 Webhook 签名（可选）
+        webhook_secret = task_config.get("webhook_secret")
+        if webhook_secret:
+            signature_verified = False
+            signature_found = False
+
+            # GitHub: X-Hub-Signature-256 或 X-Hub-Signature
+            if "x-hub-signature-256" in request.headers:
+                signature = request.headers["x-hub-signature-256"]
+                signature_found = True
+                from backend.pipeline_manager import PipelineManager
+
+                manager = PipelineManager()
+                signature_verified = manager.verify_webhook_signature(
+                    body, signature, webhook_secret, "sha256"
+                )
+            elif "x-hub-signature" in request.headers:
+                signature = request.headers["x-hub-signature"]
+                signature_found = True
+                from backend.pipeline_manager import PipelineManager
+
+                manager = PipelineManager()
+                signature_verified = manager.verify_webhook_signature(
+                    body, signature, webhook_secret, "sha1"
+                )
+            # GitLab: X-Gitlab-Token
+            elif "x-gitlab-token" in request.headers:
+                gitlab_token = request.headers["x-gitlab-token"]
+                signature_found = True
+                signature_verified = gitlab_token == webhook_secret
+            # Gitee: X-Gitee-Token
+            elif "x-gitee-token" in request.headers:
+                gitee_token = request.headers["x-gitee-token"]
+                if gitee_token and gitee_token.strip():
+                    signature_found = True
+                    signature_verified = gitee_token == webhook_secret
+
+            # 如果提供了签名但验证失败，则拒绝请求
+            if signature_found and not signature_verified:
+                print(
+                    f"❌ Webhook 签名验证失败: task_id={deploy_config.get('task_id')}"
+                )
+                raise HTTPException(status_code=403, detail="Webhook 签名验证失败")
+
+        # 解析 Webhook 负载（尝试解析 JSON）
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except:
+            payload = {}
+
+        # 提取分支信息（不同平台格式不同）
+        webhook_branch = None
+        # GitHub: ref = refs/heads/main
+        if "ref" in payload:
+            ref = payload["ref"]
+            if ref.startswith("refs/heads/"):
+                webhook_branch = ref.replace("refs/heads/", "")
+        # GitLab: ref = main (可能已经是分支名)
+        if not webhook_branch and "ref" in payload:
+            ref = payload["ref"]
+            if not ref.startswith("refs/"):
+                webhook_branch = ref
+
+        # 应用分支策略
+        webhook_branch_strategy = task_config.get("webhook_branch_strategy", "use_push")
+        webhook_allowed_branches = task_config.get("webhook_allowed_branches", [])
+        configured_branch = None  # 部署配置没有配置分支的概念，所以这里为None
+
+        # 根据分支策略决定是否触发
+        should_trigger = True
+        if webhook_branch_strategy == "select_branches":
+            # 选择分支触发策略：只允许匹配的分支触发
+            if webhook_branch:
+                if webhook_branch not in webhook_allowed_branches:
+                    should_trigger = False
+                    print(
+                        f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
+                    )
+        elif webhook_branch_strategy == "filter_match":
+            # 只允许匹配分支触发：部署配置没有配置分支，所以这个策略不适用
+            # 如果配置了这个策略但没有配置分支，则允许所有分支触发
+            pass
+        elif webhook_branch_strategy == "use_configured":
+            # 使用配置分支构建：部署配置没有配置分支，所以这个策略不适用
+            # 如果配置了这个策略，则允许所有分支触发
+            pass
+        # use_push: 使用推送分支构建，允许所有分支触发
+
+        if not should_trigger:
+            return JSONResponse(
+                {
+                    "message": f"分支不在允许列表中，已忽略触发（推送分支: {webhook_branch}）",
+                    "webhook_branch": webhook_branch,
+                    "allowed_branches": webhook_allowed_branches,
+                    "ignored": True,
+                }
+            )
+
+        # 触发部署任务（标记为 webhook 来源）
+        deploy_task_id = deploy_config.get("task_id")
+        result_task_id = build_manager.execute_deploy_task(
+            deploy_task_id, trigger_source="webhook"
+        )
+
+        print(
+            f"🔔 部署配置 Webhook 触发，已启动部署任务: task_id={result_task_id}（trigger_source=webhook）"
+        )
+
+        return JSONResponse(
+            {
+                "message": "部署任务已启动",
+                "status": "started",
+                "task_id": result_task_id,
+                "deploy_config_id": deploy_task_id,
             }
         )
     except HTTPException:
@@ -6200,6 +6373,10 @@ class DeployTaskCreateRequest(BaseModel):
     config_content: str
     registry: Optional[str] = None
     tag: Optional[str] = None
+    webhook_token: Optional[str] = None  # Webhook token（如果为空则自动生成）
+    webhook_secret: Optional[str] = None  # Webhook 密钥
+    webhook_branch_strategy: Optional[str] = None  # 分支策略
+    webhook_allowed_branches: Optional[List[str]] = None  # 允许触发的分支列表
 
 
 class DeployTaskExecuteRequest(BaseModel):
@@ -6496,6 +6673,12 @@ async def create_deploy_task(request: Request, task_req: DeployTaskCreateRequest
             config_content=task_req.config_content,
             registry=task_req.registry,
             tag=task_req.tag,
+            webhook_token=task_req.webhook_token,
+            webhook_secret=task_req.webhook_secret,
+            webhook_branch_strategy=task_req.webhook_branch_strategy,
+            webhook_allowed_branches=task_req.webhook_allowed_branches,
+            trigger_source="manual",
+            source="手动部署",
         )
 
         # 获取任务信息
@@ -6573,6 +6756,10 @@ async def list_deploy_tasks(request: Request):
                         "registry": task_config.get("registry"),
                         "tag": task_config.get("tag"),
                         "targets": [],
+                        # 最近一次执行的触发来源（manual / webhook / cron ...）
+                        "trigger_source": latest_execution_task.get("trigger_source")
+                        if latest_execution_task
+                        else task.get("trigger_source", "manual"),
                     },
                     "config": task_config.get("config", {}),
                     "config_content": task_config.get("config_content", ""),
@@ -6582,6 +6769,14 @@ async def list_deploy_tasks(request: Request):
                         latest_execution_task.get("task_id")
                         if latest_execution_task
                         else None
+                    ),
+                    "webhook_token": task_config.get("webhook_token"),
+                    "webhook_secret": task_config.get("webhook_secret"),
+                    "webhook_branch_strategy": task_config.get(
+                        "webhook_branch_strategy"
+                    ),
+                    "webhook_allowed_branches": task_config.get(
+                        "webhook_allowed_branches", []
                     ),
                 }
             )
@@ -6624,6 +6819,14 @@ async def get_deploy_task(request: Request, task_id: str):
                     },
                     "config": task_config.get("config", {}),
                     "config_content": task_config.get("config_content", ""),
+                    "webhook_token": task_config.get("webhook_token"),
+                    "webhook_secret": task_config.get("webhook_secret"),
+                    "webhook_branch_strategy": task_config.get(
+                        "webhook_branch_strategy"
+                    ),
+                    "webhook_allowed_branches": task_config.get(
+                        "webhook_allowed_branches", []
+                    ),
                 },
             }
         )
@@ -6634,6 +6837,57 @@ async def get_deploy_task(request: Request, task_id: str):
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取部署任务失败: {str(e)}")
+
+
+@router.put("/deploy-tasks/{task_id}")
+async def update_deploy_task(
+    request: Request, task_id: str, task_req: DeployTaskCreateRequest
+):
+    """更新部署配置"""
+    try:
+        username = get_current_username(request)
+        build_manager = BuildTaskManager()
+
+        success = build_manager.update_deploy_task(
+            task_id=task_id,
+            config_content=task_req.config_content,
+            registry=task_req.registry,
+            tag=task_req.tag,
+            webhook_token=task_req.webhook_token,
+            webhook_secret=task_req.webhook_secret,
+            webhook_branch_strategy=task_req.webhook_branch_strategy,
+            webhook_allowed_branches=task_req.webhook_allowed_branches,
+        )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="部署任务不存在或无法更新")
+
+        # 获取任务信息
+        task = build_manager.get_task(task_id)
+
+        # 记录操作日志
+        OperationLogger.log(username, "deploy_task_update", {"task_id": task_id})
+
+        return JSONResponse(
+            {
+                "success": True,
+                "task": {
+                    "task_id": task_id,
+                    "status": task.get("status"),
+                    "config": task.get("task_config", {}).get("config"),
+                    "config_content": task.get("task_config", {}).get("config_content"),
+                },
+            }
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新部署任务失败: {str(e)}")
 
 
 @router.post("/deploy-tasks/{task_id}/execute")
@@ -6651,9 +6905,9 @@ async def execute_deploy_task(
         if execute_req and execute_req.target_names:
             target_names = execute_req.target_names
 
-        # 执行部署任务（后台执行）
+        # 执行部署任务（后台执行，来源为手动）
         result_task_id = build_manager.execute_deploy_task(
-            task_id, target_names=target_names
+            task_id, target_names=target_names, trigger_source="manual"
         )
 
         # 记录操作日志

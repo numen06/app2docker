@@ -98,6 +98,9 @@ class PipelineManager:
                     if pipeline.next_run_time
                     else None
                 ),
+                "post_build_webhooks": self._safe_get_json_field(
+                    pipeline, "post_build_webhooks", []
+                ),
                 "current_task_id": pipeline.current_task_id,
                 "task_queue": self._safe_get_json_field(pipeline, "task_queue", []),
                 "created_at": (
@@ -158,6 +161,7 @@ class PipelineManager:
         service_template_params: dict = None,
         push_mode: str = "multi",
         resource_package_configs: list = None,
+        post_build_webhooks: list = None,
     ) -> str:
         """创建流水线配置"""
         pipeline_id = str(uuid.uuid4())
@@ -211,6 +215,7 @@ class PipelineManager:
                 push_mode=push_mode or "multi",
                 resource_package_configs=resource_package_configs or [],
                 cron_expression=cron_expression,
+                post_build_webhooks=post_build_webhooks or [],
                 task_queue=[],
             )
 
@@ -301,6 +306,14 @@ class PipelineManager:
                 ),
                 "cron_expression": row["cron_expression"],
                 "next_run_time": row["next_run_time"],
+                "post_build_webhooks": self._safe_parse_json(
+                    (
+                        row["post_build_webhooks"]
+                        if "post_build_webhooks" in row.keys()
+                        else None
+                    ),
+                    [],
+                ),
                 "current_task_id": row["current_task_id"],
                 "task_queue": self._safe_parse_json(row["task_queue"], []),
                 "created_at": row["created_at"],
@@ -422,6 +435,14 @@ class PipelineManager:
                             ),
                             "cron_expression": row["cron_expression"],
                             "next_run_time": row["next_run_time"],
+                            "post_build_webhooks": self._safe_parse_json(
+                                (
+                                    row["post_build_webhooks"]
+                                    if "post_build_webhooks" in row.keys()
+                                    else None
+                                ),
+                                [],
+                            ),
                             "current_task_id": row["current_task_id"],
                             "task_queue": self._safe_parse_json(row["task_queue"], []),
                             "created_at": row["created_at"],
@@ -511,13 +532,14 @@ class PipelineManager:
         service_template_params: dict = None,
         push_mode: str = None,
         resource_package_configs: list = None,
+        post_build_webhooks: list = None,
     ) -> bool:
         """更新流水线配置"""
         db = get_db_session()
         try:
             # 先刷新 session，确保获取最新的数据
             db.expire_all()
-            
+
             pipeline = (
                 db.query(Pipeline).filter(Pipeline.pipeline_id == pipeline_id).first()
             )
@@ -597,6 +619,8 @@ class PipelineManager:
                 pipeline.push_mode = push_mode
             if resource_package_configs is not None:
                 pipeline.resource_package_configs = resource_package_configs
+            if post_build_webhooks is not None:
+                pipeline.post_build_webhooks = post_build_webhooks
 
             pipeline.updated_at = datetime.now()
 
@@ -636,33 +660,35 @@ class PipelineManager:
                             # 使用字典收集需要更新的字段，然后批量应用
                             updates = {}
                             if name is not None:
-                                updates['name'] = name
+                                updates["name"] = name
                             if git_url is not None:
-                                updates['git_url'] = git_url
+                                updates["git_url"] = git_url
                             if branch is not None:
-                                updates['branch'] = branch
+                                updates["branch"] = branch
                             if project_type is not None:
-                                updates['project_type'] = project_type
+                                updates["project_type"] = project_type
                             if template is not None:
-                                updates['template'] = template
+                                updates["template"] = template
                             if image_name is not None:
-                                updates['image_name'] = image_name
+                                updates["image_name"] = image_name
                             if tag is not None:
-                                updates['tag'] = tag
+                                updates["tag"] = tag
                             if push is not None:
-                                updates['push'] = push
+                                updates["push"] = push
                             if push_registry is not None:
-                                updates['push_registry'] = push_registry
+                                updates["push_registry"] = push_registry
                             if template_params is not None:
-                                updates['template_params'] = template_params
+                                updates["template_params"] = template_params
                             if sub_path is not None:
-                                updates['sub_path'] = sub_path
+                                updates["sub_path"] = sub_path
                             if use_project_dockerfile is not None:
-                                updates['use_project_dockerfile'] = use_project_dockerfile
+                                updates["use_project_dockerfile"] = (
+                                    use_project_dockerfile
+                                )
                             if dockerfile_name is not None:
-                                updates['dockerfile_name'] = dockerfile_name
+                                updates["dockerfile_name"] = dockerfile_name
                             if webhook_secret is not None:
-                                updates['webhook_secret'] = webhook_secret
+                                updates["webhook_secret"] = webhook_secret
                             if webhook_token is not None:
                                 # 检查 token 是否已被其他流水线使用
                                 existing = (
@@ -677,38 +703,46 @@ class PipelineManager:
                                     raise ValueError(
                                         f"Webhook Token '{webhook_token}' 已被其他流水线使用"
                                     )
-                                updates['webhook_token'] = webhook_token
+                                updates["webhook_token"] = webhook_token
                             if enabled is not None:
-                                updates['enabled'] = enabled
+                                updates["enabled"] = enabled
                             if description is not None:
-                                updates['description'] = description
+                                updates["description"] = description
                             if cron_expression is not None:
-                                updates['cron_expression'] = cron_expression
+                                updates["cron_expression"] = cron_expression
                             if webhook_branch_filter is not None:
-                                updates['webhook_branch_filter'] = webhook_branch_filter
+                                updates["webhook_branch_filter"] = webhook_branch_filter
                             if webhook_use_push_branch is not None:
-                                updates['webhook_use_push_branch'] = webhook_use_push_branch
+                                updates["webhook_use_push_branch"] = (
+                                    webhook_use_push_branch
+                                )
                             if webhook_allowed_branches is not None:
-                                updates['webhook_allowed_branches'] = webhook_allowed_branches
+                                updates["webhook_allowed_branches"] = (
+                                    webhook_allowed_branches
+                                )
                             if branch_tag_mapping is not None:
-                                updates['branch_tag_mapping'] = branch_tag_mapping
+                                updates["branch_tag_mapping"] = branch_tag_mapping
                             if source_id is not None:
-                                updates['source_id'] = source_id
+                                updates["source_id"] = source_id
                             if selected_services is not None:
-                                updates['selected_services'] = selected_services
+                                updates["selected_services"] = selected_services
                             if service_push_config is not None:
-                                updates['service_push_config'] = service_push_config
+                                updates["service_push_config"] = service_push_config
                             if service_template_params is not None:
-                                updates['service_template_params'] = service_template_params
+                                updates["service_template_params"] = (
+                                    service_template_params
+                                )
                             if push_mode is not None:
-                                updates['push_mode'] = push_mode
+                                updates["push_mode"] = push_mode
                             if resource_package_configs is not None:
-                                updates['resource_package_configs'] = resource_package_configs
-                            
+                                updates["resource_package_configs"] = (
+                                    resource_package_configs
+                                )
+
                             # 批量应用更新
                             for key, value in updates.items():
                                 setattr(check_pipeline, key, value)
-                            
+
                             check_pipeline.updated_at = datetime.now()
                             db.commit()
                             print(f"✅ 重试更新成功: {pipeline_id}")
@@ -716,7 +750,9 @@ class PipelineManager:
                         except Exception as retry_error:
                             db.rollback()
                             print(f"⚠️ 重试更新也失败: {retry_error}")
-                            raise ValueError(f"流水线更新失败，可能是并发修改: {error_msg}")
+                            raise ValueError(
+                                f"流水线更新失败，可能是并发修改: {error_msg}"
+                            )
                 raise
 
             return True

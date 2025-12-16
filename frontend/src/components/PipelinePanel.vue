@@ -587,6 +587,17 @@
                 <li class="nav-item" role="presentation">
                   <button
                     class="nav-link"
+                    :class="{ active: activeTab === 'post_webhook' }"
+                    type="button"
+                    @click="activeTab = 'post_webhook'"
+                    id="post-webhook-tab"
+                  >
+                    <i class="fas fa-bell"></i> 构建后 Webhook
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
                     :class="{ active: activeTab === 'other' }"
                     type="button"
                     @click="activeTab = 'other'"
@@ -1759,6 +1770,7 @@
                     </small>
                   </div>
 
+                  <!-- 构建后Webhook配置 -->
                   <!-- 分支标签映射 -->
                   <div class="mb-3">
                     <label class="form-label">
@@ -1822,6 +1834,121 @@
                     </div>
                     <div v-else class="text-muted small">
                       暂无映射，点击"添加"按钮添加分支标签映射
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 构建后 Webhook Tab -->
+                <div
+                  class="tab-pane fade"
+                  :class="{ 'show active': activeTab === 'post_webhook' }"
+                  role="tabpanel"
+                  id="post-webhook-pane"
+                >
+                  <div class="mb-3">
+                    <label class="form-label">
+                      <strong>构建后Webhook（构建完成后触发）</strong>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-success ms-2"
+                        @click="addPostBuildWebhook"
+                        title="添加Webhook"
+                      >
+                        <i class="fas fa-plus"></i> 添加
+                      </button>
+                    </label>
+                    <small class="text-muted d-block mb-2">
+                      构建任务成功完成后，将触发配置的Webhook。支持模板变量：{task_id}, {image}, {tag}, {status}, {branch}, {pipeline_id}, {pipeline_name}, {created_at}, {completed_at}
+                    </small>
+                    <div
+                      v-if="formData.post_build_webhooks && formData.post_build_webhooks.length > 0"
+                      class="border rounded p-2"
+                    >
+                      <div
+                        v-for="(webhook, index) in formData.post_build_webhooks"
+                        :key="index"
+                        class="card mb-2"
+                      >
+                        <div class="card-body">
+                          <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="form-check form-switch">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                :id="`post-webhook-enabled-${index}`"
+                                v-model="webhook.enabled"
+                              />
+                              <label
+                                class="form-check-label fw-bold"
+                                :for="`post-webhook-enabled-${index}`"
+                              >
+                                Webhook {{ index + 1 }}
+                              </label>
+                            </div>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-danger"
+                              @click="removePostBuildWebhook(index)"
+                              title="删除"
+                            >
+                              <i class="fas fa-trash"></i>
+                            </button>
+                          </div>
+                          <div class="mb-2">
+                            <label class="form-label small"
+                              >URL <span class="text-danger">*</span></label
+                            >
+                            <input
+                              v-model="webhook.url"
+                              type="text"
+                              class="form-control form-control-sm"
+                              placeholder="https://example.com/webhook"
+                            />
+                          </div>
+                          <div class="row g-2 mb-2">
+                            <div class="col-md-6">
+                              <label class="form-label small">请求方法</label>
+                              <select
+                                v-model="webhook.method"
+                                class="form-select form-select-sm"
+                              >
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="PATCH">PATCH</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="mb-2">
+                            <label class="form-label small"
+                              >请求头（JSON格式，可选）</label
+                            >
+                            <textarea
+                              v-model="webhook.headers_json"
+                              class="form-control form-control-sm font-monospace"
+                              rows="2"
+                              placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}'
+                            ></textarea>
+                          </div>
+                          <div class="mb-2">
+                            <label class="form-label small"
+                              >请求体模板（支持变量替换）</label
+                            >
+                            <textarea
+                              v-model="webhook.body_template"
+                              class="form-control form-control-sm font-monospace"
+                              rows="4"
+                              placeholder='{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}'
+                            ></textarea>
+                            <small class="text-muted"
+                              >支持变量：{task_id}, {image}, {tag}, {status}, {branch}, {pipeline_id},
+                              {pipeline_name}, {created_at}, {completed_at}</small
+                            >
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="alert alert-info py-2">
+                      <i class="fas fa-info-circle"></i> 暂无构建后Webhook配置，点击"添加"按钮添加
                     </div>
                   </div>
                 </div>
@@ -3471,10 +3598,10 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { Codemirror } from "vue-codemirror";
 import { getDockerfilesWithCache } from "../utils/dockerfileCache.js";
 import {
-    clearGitCache,
-    getGitCache,
-    getGitInfoWithCache,
-    setGitCache,
+  clearGitCache,
+  getGitCache,
+  getGitInfoWithCache,
+  setGitCache,
 } from "../utils/gitCache.js";
 import { getServiceAnalysisWithCache } from "../utils/serviceAnalysisCache.js";
 
@@ -3596,6 +3723,7 @@ const formData = ref({
   webhook_branch_strategy: "use_push", // Webhook分支策略
   webhook_allowed_branches: [], // 允许触发的分支列表（用于选择分支触发策略）
   branch_tag_mapping: [], // 分支标签映射
+  post_build_webhooks: [], // 构建完成后触发的webhook列表
   enabled: true,
   trigger_schedule: false, // 是否启用定时触发
   cron_expression: "", // Cron 表达式
@@ -4131,6 +4259,7 @@ function showCreateModal() {
     webhook_branch_strategy: "use_push",
     webhook_allowed_branches: [],
     branch_tag_mapping: [],
+    post_build_webhooks: [],
     enabled: true,
     trigger_schedule: false,
     cron_expression: "",
@@ -4226,6 +4355,20 @@ function editPipeline(pipeline) {
           tag: Array.isArray(tag) ? tag.join(",") : tag, // 如果是数组，转换为逗号分隔的字符串
         }))
       : [],
+    post_build_webhooks: (() => {
+      if (!pipeline.post_build_webhooks || pipeline.post_build_webhooks.length === 0) {
+        return [];
+      }
+      // 将headers对象转换为headers_json字符串
+      return pipeline.post_build_webhooks.map(webhook => ({
+        url: webhook.url || "",
+        method: webhook.method || "POST",
+        headers: webhook.headers || {},
+        headers_json: JSON.stringify(webhook.headers || {}, null, 2),
+        body_template: webhook.body_template || "{}",
+        enabled: webhook.enabled !== false,
+      }));
+    })(),
     enabled: pipeline.enabled !== false,
     trigger_schedule: !!pipeline.cron_expression, // 如果有cron表达式则启用
     cron_expression: pipeline.cron_expression || "",
@@ -4330,6 +4473,26 @@ function addBranchTagMapping() {
 }
 
 // 删除分支标签映射
+function addPostBuildWebhook() {
+  if (!formData.value.post_build_webhooks) {
+    formData.value.post_build_webhooks = [];
+  }
+  formData.value.post_build_webhooks.push({
+    url: "",
+    method: "POST",
+    headers: {},
+    headers_json: "{}",
+    body_template: '{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}',
+    enabled: true,
+  });
+}
+
+function removePostBuildWebhook(index) {
+  if (formData.value.post_build_webhooks) {
+    formData.value.post_build_webhooks.splice(index, 1);
+  }
+}
+
 function removeBranchTagMapping(index) {
   formData.value.branch_tag_mapping.splice(index, 1);
 }
@@ -4631,6 +4794,33 @@ async function savePipeline() {
         formData.value.webhook_branch_strategy === "select_branches"
           ? formData.value.webhook_allowed_branches || []
           : null,
+      // 构建后webhook配置
+      post_build_webhooks: (() => {
+        if (!formData.value.post_build_webhooks || formData.value.post_build_webhooks.length === 0) {
+          return null;
+        }
+        // 处理每个webhook，将headers_json转换为headers对象
+        return formData.value.post_build_webhooks.map(webhook => {
+          const processed = {
+            url: webhook.url,
+            method: webhook.method || "POST",
+            body_template: webhook.body_template || "{}",
+            enabled: webhook.enabled !== false,
+          };
+          // 解析headers_json为对象
+          if (webhook.headers_json) {
+            try {
+              processed.headers = JSON.parse(webhook.headers_json);
+            } catch (e) {
+              console.warn("解析webhook headers失败，使用空对象:", e);
+              processed.headers = {};
+            }
+          } else {
+            processed.headers = webhook.headers || {};
+          }
+          return processed;
+        });
+      })(),
     };
     // 移除webhook_branch_strategy，因为后端不需要这个字段
     delete payload.webhook_branch_strategy;

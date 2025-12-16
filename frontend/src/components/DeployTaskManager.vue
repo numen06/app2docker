@@ -23,24 +23,25 @@
       <table class="table table-hover">
         <thead>
           <tr>
-            <th width="10%">配置ID</th>
-            <th width="15%">应用名称</th>
-            <th width="12%">目标主机</th>
-            <th width="10%">触发次数</th>
-            <th width="15%">创建时间</th>
-            <th width="15%">最后触发</th>
-            <th width="23%">操作</th>
+            <th width="8%">配置ID</th>
+            <th width="12%">应用名称</th>
+            <th width="10%">目标主机</th>
+            <th width="8%">触发次数</th>
+            <th width="12%">创建时间</th>
+            <th width="12%">最后触发</th>
+            <th width="18%">Webhook URL</th>
+            <th width="20%">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="7" class="text-center py-4">
+            <td colspan="8" class="text-center py-4">
               <div class="spinner-border spinner-border-sm me-2"></div>
               加载中...
             </td>
           </tr>
           <tr v-else-if="tasks.length === 0">
-            <td colspan="7" class="text-center py-4 text-muted">
+            <td colspan="8" class="text-center py-4 text-muted">
               暂无部署配置
             </td>
           </tr>
@@ -69,7 +70,46 @@
               </button>
             </td>
             <td>{{ formatTime(task.created_at) }}</td>
-            <td>{{ formatTime(task.last_executed_at) || '-' }}</td>
+            <td>
+              <div class="d-flex flex-column">
+                <span>{{ formatTime(task.last_executed_at) || '-' }}</span>
+                <small v-if="task.status?.trigger_source" class="text-muted">
+                  <span v-if="task.status.trigger_source === 'webhook'">
+                    <i class="fas fa-link text-success me-1"></i> Webhook 触发
+                  </span>
+                  <span v-else-if="task.status.trigger_source === 'manual'">
+                    <i class="fas fa-user text-primary me-1"></i> 手动触发
+                  </span>
+                  <span v-else-if="task.status.trigger_source === 'cron'">
+                    <i class="fas fa-clock text-warning me-1"></i> 定时触发
+                  </span>
+                  <span v-else>
+                    <i class="fas fa-question-circle text-secondary me-1"></i>
+                    {{ task.status.trigger_source }}
+                  </span>
+                </small>
+              </div>
+            </td>
+            <td>
+              <div v-if="task.webhook_token" class="d-flex align-items-center gap-1">
+                <code 
+                  class="small" 
+                  style="font-size: 0.75rem; word-break: break-all; max-width: 180px; display: block;"
+                  :title="getWebhookUrl(task)"
+                >
+                  {{ getWebhookUrl(task) }}
+                </code>
+                <button 
+                  class="btn btn-sm btn-link p-0" 
+                  @click="copyWebhookUrl(task)" 
+                  title="复制 Webhook URL"
+                  style="font-size: 0.875rem; flex-shrink: 0;"
+                >
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+              <span v-else class="text-muted small">未配置</span>
+            </td>
             <td>
               <div class="btn-group" role="group">
                 <button class="btn btn-sm btn-outline-primary" @click="viewTask(task)" title="查看详情">
@@ -88,8 +128,13 @@
                 <button class="btn btn-sm btn-outline-info" @click="copyTask(task)" title="复制配置">
                   <i class="fas fa-copy"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-info" @click="exportTask(task)" title="导出配置">
-                  <i class="fas fa-download"></i>
+                <button 
+                  v-if="task.webhook_token" 
+                  class="btn btn-sm btn-outline-success" 
+                  @click="showWebhookUrl(task)" 
+                  title="查看 Webhook URL 详情"
+                >
+                  <i class="fas fa-link"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)" title="删除配置">
                   <i class="fas fa-trash"></i>
@@ -657,6 +702,16 @@
                   <i class="fas fa-code me-1"></i> YAML编辑
                 </button>
               </li>
+              <li class="nav-item">
+                <button 
+                  class="nav-link" 
+                  :class="{ active: editMode === 'webhook' }" 
+                  @click="editMode = 'webhook'"
+                  type="button"
+                >
+                  <i class="fas fa-link me-1"></i> Webhook设置
+                </button>
+              </li>
             </ul>
 
             <!-- 表单编辑模式 -->
@@ -964,6 +1019,94 @@
               </div>
             </div>
 
+            <!-- Webhook设置模式 -->
+            <div v-if="editMode === 'webhook'">
+              <div class="mb-3">
+                <label class="form-label">Webhook Token（用于 URL）</label>
+                <div class="input-group input-group-sm">
+                  <input
+                    v-model="editForm.webhook_token"
+                    type="text"
+                    class="form-control font-monospace"
+                    placeholder="留空自动生成"
+                  />
+                  <button
+                    class="btn btn-outline-secondary"
+                    type="button"
+                    @click="regenerateEditWebhookToken"
+                    title="重新生成 Token"
+                  >
+                    <i class="fas fa-sync-alt"></i> 重新生成
+                  </button>
+                </div>
+                <small class="text-muted">用于构建 Webhook URL，留空将自动生成 UUID</small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Webhook 密钥</label>
+                <div class="input-group input-group-sm">
+                  <input
+                    v-model="editForm.webhook_secret"
+                    type="text"
+                    class="form-control font-monospace"
+                    placeholder="留空自动生成"
+                  />
+                  <button
+                    class="btn btn-outline-secondary"
+                    type="button"
+                    @click="regenerateEditWebhookSecret"
+                    title="重新生成密钥"
+                  >
+                    <i class="fas fa-sync-alt"></i> 重新生成
+                  </button>
+                </div>
+                <small class="text-muted">用于验证 Webhook 签名（可选）</small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label"><strong>Webhook 分支策略</strong></label>
+                <div class="btn-group w-100 d-flex flex-wrap" role="group" style="gap: 0.25rem">
+                  <input type="radio" class="btn-check" id="edit-strategy-use-push" value="use_push" v-model="editForm.webhook_branch_strategy" />
+                  <label class="btn btn-outline-primary flex-fill" for="edit-strategy-use-push" style="white-space: normal; padding: 0.5rem">
+                    <i class="fas fa-code-branch d-block mb-1"></i>
+                    <small class="d-block fw-bold">使用推送分支</small>
+                    <small class="text-muted d-block" style="font-size: 0.7rem">所有分支都触发</small>
+                  </label>
+                  <input type="radio" class="btn-check" id="edit-strategy-filter-match" value="filter_match" v-model="editForm.webhook_branch_strategy" />
+                  <label class="btn btn-outline-primary flex-fill" for="edit-strategy-filter-match" style="white-space: normal; padding: 0.5rem">
+                    <i class="fas fa-filter d-block mb-1"></i>
+                    <small class="d-block fw-bold">只允许匹配分支</small>
+                    <small class="text-muted d-block" style="font-size: 0.7rem">使用推送分支构建</small>
+                  </label>
+                  <input type="radio" class="btn-check" id="edit-strategy-use-configured" value="use_configured" v-model="editForm.webhook_branch_strategy" />
+                  <label class="btn btn-outline-primary flex-fill" for="edit-strategy-use-configured" style="white-space: normal; padding: 0.5rem">
+                    <i class="fas fa-cog d-block mb-1"></i>
+                    <small class="d-block fw-bold">使用配置分支</small>
+                    <small class="text-muted d-block" style="font-size: 0.7rem">所有分支都触发</small>
+                  </label>
+                  <input type="radio" class="btn-check" id="edit-strategy-select-branches" value="select_branches" v-model="editForm.webhook_branch_strategy" />
+                  <label class="btn btn-outline-primary flex-fill" for="edit-strategy-select-branches" style="white-space: normal; padding: 0.5rem">
+                    <i class="fas fa-check-square d-block mb-1"></i>
+                    <small class="d-block fw-bold">选择分支触发</small>
+                    <small class="text-muted d-block" style="font-size: 0.7rem">仅选中的分支触发</small>
+                  </label>
+                </div>
+              </div>
+              <div v-if="editForm.webhook_branch_strategy === 'select_branches'" class="mb-3">
+                <label class="form-label">允许触发的分支</label>
+                <input
+                  v-model="editForm.webhook_allowed_branches_input"
+                  type="text"
+                  class="form-control"
+                  placeholder="输入分支名称，多个分支用逗号分隔，如：main,dev,release"
+                />
+                <small class="text-muted">输入分支名称，多个分支用逗号分隔</small>
+              </div>
+              <div class="mb-3">
+                <button type="button" class="btn btn-sm btn-outline-info" @click="showEditWebhookUrl">
+                  <i class="fas fa-link me-1"></i> 查看 Webhook URL
+                </button>
+              </div>
+            </div>
+
             <!-- YAML编辑模式 -->
             <div v-if="editMode === 'yaml' && editingTask">
               <div class="mb-3">
@@ -996,11 +1139,6 @@
                 </div>
               </div>
             </div>
-
-            <div class="alert alert-warning mt-3">
-              <i class="fas fa-exclamation-triangle me-2"></i>
-              注意：编辑任务会删除原任务并创建新任务，任务ID会发生变化。
-            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" @click="showEditModal = false">取消</button>
@@ -1012,12 +1150,66 @@
         </div>
       </div>
     </div>
+
+    <!-- Webhook URL 模态框 -->
+    <div
+      v-if="showWebhookModal"
+      class="modal fade show"
+      style="display: block; z-index: 1050"
+      tabindex="-1"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="fas fa-link"></i> Webhook URL</h5>
+            <button
+              type="button"
+              class="btn-close"
+              @click="showWebhookModal = false"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Webhook URL</label>
+              <div class="input-group">
+                <input
+                  :value="webhookUrl"
+                  type="text"
+                  class="form-control form-control-sm font-monospace"
+                  readonly
+                  ref="webhookUrlInput"
+                />
+                <button
+                  class="btn btn-outline-secondary btn-sm"
+                  @click="copyWebhookUrlFromModal"
+                >
+                  <i class="fas fa-copy"></i> 复制
+                </button>
+              </div>
+            </div>
+            <div class="alert alert-info small mb-0">
+              <strong>使用说明：</strong><br />
+              1. 在 Git 平台（GitHub/GitLab/Gitee）的仓库设置中添加 Webhook<br />
+              2. 将上述 URL 粘贴到 Payload URL 中<br />
+              3. Content Type 选择 <code>application/json</code><br />
+              4. Secret 填写部署配置的 Webhook 密钥（如果有）<br />
+              5. 选择触发事件（通常是 Push events）
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div
+      v-if="showWebhookModal"
+      class="modal-backdrop fade show"
+      style="z-index: 1045"
+    ></div>
   </div>
 </template>
 
 <script>
-import axios from 'axios'
-import yaml from 'js-yaml'
+import axios from 'axios';
+import yaml from 'js-yaml';
 
 export default {
   name: 'DeployTaskManager',
@@ -1034,9 +1226,12 @@ export default {
       selectedTask: null,
       taskLogs: [],
       detailTab: 'config',
+      editMode: 'form', // 编辑模式：'form', 'yaml', 'webhook'
       editHostFilter: 'all',
       editFilterOnlineOnly: true,
       editHostSearchKeyword: '',
+      showWebhookModal: false, // Webhook URL 模态框显示状态
+      webhookUrl: '', // Webhook URL
       editForm: {
         appName: '',
         selectedHosts: [],
@@ -1044,7 +1239,12 @@ export default {
         runCommand: '',
         composeCommand: '',
         composeContent: '',
-        redeploy: false
+        redeploy: false,
+        webhook_token: '',
+        webhook_secret: '',
+        webhook_branch_strategy: 'use_push',
+        webhook_allowed_branches: [],
+        webhook_allowed_branches_input: ''
       },
       taskConfigContent: '',
       taskRegistry: '',
@@ -1632,16 +1832,40 @@ export default {
           task_id: taskData.task_id,
           config_content: configContent,
           registry: (taskData.status && taskData.status.registry) || taskConfig.registry || '',
-          tag: (taskData.status && taskData.status.tag) || taskConfig.tag || ''
+          tag: (taskData.status && taskData.status.tag) || taskConfig.tag || '',
+          webhook_token: taskData.webhook_token || '',
+          webhook_secret: taskData.webhook_secret || '',
+          webhook_branch_strategy: taskData.webhook_branch_strategy || 'use_push',
+          webhook_allowed_branches: taskData.webhook_allowed_branches || []
         }
         
         // 先加载主机列表（解析表单时需要主机列表）
         await this.loadAgentHosts()
         await this.loadSSHHosts()
         
+        // 先保存webhook配置（因为parseYamlToForm会重置editForm）
+        const savedWebhookToken = taskData.webhook_token || ''
+        const savedWebhookSecret = taskData.webhook_secret || ''
+        const savedWebhookBranchStrategy = taskData.webhook_branch_strategy || 'use_push'
+        const savedWebhookAllowedBranches = taskData.webhook_allowed_branches || []
+        
         // 解析YAML配置到表单
         const config = taskData.config || taskConfig.config || {}
         this.parseYamlToForm(configContent, config)
+        
+        // 恢复webhook配置（必须在parseYamlToForm之后）
+        this.editForm.webhook_token = savedWebhookToken
+        this.editForm.webhook_secret = savedWebhookSecret
+        this.editForm.webhook_branch_strategy = savedWebhookBranchStrategy
+        this.editForm.webhook_allowed_branches = savedWebhookAllowedBranches
+        this.editForm.webhook_allowed_branches_input = savedWebhookAllowedBranches.join(',')
+        
+        console.log('加载webhook配置:', {
+          webhook_token: savedWebhookToken ? savedWebhookToken.substring(0, 8) + '...' : '(空)',
+          webhook_secret: savedWebhookSecret ? '***' : '(空)',
+          webhook_branch_strategy: savedWebhookBranchStrategy,
+          webhook_allowed_branches: savedWebhookAllowedBranches
+        })
         
         this.showEditModal = true
         this.editMode = 'form' // 默认使用表单编辑
@@ -1664,7 +1888,12 @@ export default {
         composeCommand: '',
         composeContent: '',
         redeploy: false,
-        steps: []
+        steps: [],
+        webhook_token: '',
+        webhook_secret: '',
+        webhook_branch_strategy: 'use_push',
+        webhook_allowed_branches: [],
+        webhook_allowed_branches_input: ''
       }
       
       if (!config) {
@@ -1814,20 +2043,49 @@ export default {
         yamlContent = this.editingTask.config_content
       }
       
-      if (!confirm('确定要保存修改吗？这将删除原任务并创建新任务。')) {
+      if (!confirm('确定要保存修改吗？')) {
         return
       }
       
       this.creating = true
       try {
-        // 删除旧任务
-        await axios.delete(`/api/deploy-tasks/${this.editingTask.task_id}`)
+        // 处理webhook允许的分支列表
+        let webhook_allowed_branches = []
+        if (this.editForm.webhook_branch_strategy === 'select_branches' && this.editForm.webhook_allowed_branches_input) {
+          webhook_allowed_branches = this.editForm.webhook_allowed_branches_input
+            .split(',')
+            .map(b => b.trim())
+            .filter(b => b)
+        }
+
+        // 更新现有任务
+        // 处理webhook字段：editForm中已经加载了webhook配置，直接使用
+        // 确保webhook_token不为undefined，如果为空字符串则让后端生成新token
+        const webhookToken = this.editForm.webhook_token !== undefined && this.editForm.webhook_token !== null
+          ? this.editForm.webhook_token
+          : ''
+        const webhookSecret = this.editForm.webhook_secret !== undefined && this.editForm.webhook_secret !== null
+          ? this.editForm.webhook_secret
+          : ''
+        const webhookBranchStrategy = this.editForm.webhook_branch_strategy || 'use_push'
         
-        // 创建新任务
-        await axios.post('/api/deploy-tasks', {
+        console.log('保存webhook配置:', {
+          webhook_token: webhookToken ? webhookToken.substring(0, 8) + '...' : '(空，将生成)',
+          webhook_secret: webhookSecret ? '***' : '(空)',
+          webhook_branch_strategy: webhookBranchStrategy,
+          webhook_allowed_branches: webhook_allowed_branches
+        })
+        
+        await axios.put(`/api/deploy-tasks/${this.editingTask.task_id}`, {
           config_content: yamlContent,
           registry: registry,
-          tag: tag
+          tag: tag,
+          webhook_token: webhookToken,
+          webhook_secret: webhookSecret,
+          webhook_branch_strategy: webhookBranchStrategy,
+          webhook_allowed_branches: webhook_allowed_branches.length > 0 
+            ? webhook_allowed_branches 
+            : (webhookBranchStrategy === 'select_branches' ? [] : null)
         })
         
         alert('保存成功')
@@ -1993,6 +2251,80 @@ export default {
         return 'text-info'
       }
       return 'text-light'
+    },
+    generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0
+        const v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+      })
+    },
+    regenerateEditWebhookToken() {
+      if (confirm('确定要重新生成 Webhook Token 吗？重新生成后需要更新外部系统的 Webhook URL。')) {
+        this.editForm.webhook_token = this.generateUUID()
+      }
+    },
+    regenerateEditWebhookSecret() {
+      if (confirm('确定要重新生成 Webhook Secret 吗？重新生成后需要更新外部系统的 Webhook Secret。')) {
+        this.editForm.webhook_secret = this.generateUUID()
+      }
+    },
+    showEditWebhookUrl() {
+      const token = this.editForm.webhook_token || '未设置'
+      const baseUrl = window.location.origin.replace(':3000', ':8000').replace(':5173', ':8000')
+      this.webhookUrl = token !== '未设置' ? `${baseUrl}/api/webhook/deploy/${token}` : '请先设置 Webhook Token'
+      this.showWebhookModal = true
+    },
+    getWebhookUrl(task) {
+      const token = task.webhook_token
+      if (!token) return ''
+      // 使用后端API的URL（通常是8000端口），而不是前端开发服务器的URL
+      // 如果前端和后端在同一域名下，使用window.location.origin
+      // 否则需要配置后端URL
+      const baseUrl = window.location.origin.replace(':3000', ':8000').replace(':5173', ':8000')
+      return `${baseUrl}/api/webhook/deploy/${token}`
+    },
+    copyWebhookUrl(task) {
+      const url = this.getWebhookUrl(task)
+      if (!url) {
+        alert('Webhook URL 未配置')
+        return
+      }
+      // 复制到剪贴板
+      navigator.clipboard.writeText(url).then(() => {
+        alert('Webhook URL 已复制到剪贴板')
+      }).catch(() => {
+        // 降级方案：使用传统方法
+        const textarea = document.createElement('textarea')
+        textarea.value = url
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        try {
+          document.execCommand('copy')
+          alert('Webhook URL 已复制到剪贴板')
+        } catch (err) {
+          alert('复制失败，请手动复制：\n\n' + url)
+        }
+        document.body.removeChild(textarea)
+      })
+    },
+    showWebhookUrl(task) {
+      const url = this.getWebhookUrl(task)
+      if (!url) {
+        alert('Webhook URL 未配置，请在编辑配置的"Webhook设置"tab中配置。')
+        return
+      }
+      this.webhookUrl = url
+      this.showWebhookModal = true
+    },
+    copyWebhookUrlFromModal() {
+      if (this.$refs.webhookUrlInput) {
+        this.$refs.webhookUrlInput.select()
+        document.execCommand('copy')
+        alert('Webhook URL 已复制到剪贴板')
+      }
     }
   }
 }

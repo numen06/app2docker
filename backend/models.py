@@ -66,6 +66,9 @@ class Pipeline(Base):
     cron_expression = Column(String(255))
     next_run_time = Column(DateTime)
 
+    # 构建后Webhook配置
+    post_build_webhooks = Column(JSON, default=list)  # 构建完成后触发的webhook列表
+
     # 任务绑定
     current_task_id = Column(String(36), ForeignKey("tasks.task_id"), nullable=True)
     task_queue = Column(JSON, default=list)  # 保留向后兼容
@@ -293,15 +296,21 @@ class AgentHost(Base):
 
     host_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False, unique=True)
-    host_type = Column(String(20), default="agent")  # agent, portainer（Portainer 和 Portainer Agent 统一为 portainer）
-    token = Column(String(64), unique=True, nullable=True)  # 用于WebSocket连接认证（Agent模式）
+    host_type = Column(
+        String(20), default="agent"
+    )  # agent, portainer（Portainer 和 Portainer Agent 统一为 portainer）
+    token = Column(
+        String(64), unique=True, nullable=True
+    )  # 用于WebSocket连接认证（Agent模式）
     # Portainer 相关字段（Portainer 和 Portainer Agent 都通过 Portainer API 控制）
     portainer_url = Column(String(512))  # Portainer API URL
     portainer_api_key = Column(Text)  # Portainer API Key（加密存储）
     portainer_endpoint_id = Column(Integer)  # Portainer Endpoint ID
     status = Column(String(20), default="offline")  # offline, online, connecting
     last_heartbeat = Column(DateTime)  # 最后心跳时间
-    host_info = Column(JSON, default=dict)  # 主机信息（IP、操作系统、CPU、内存、磁盘等）
+    host_info = Column(
+        JSON, default=dict
+    )  # 主机信息（IP、操作系统、CPU、内存、磁盘等）
     docker_info = Column(JSON, default=dict)  # Docker信息（版本、容器数、镜像数等）
     description = Column(Text, default="")
 
