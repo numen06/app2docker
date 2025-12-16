@@ -173,6 +173,14 @@ def on_message(message: Dict[str, Any]):
         # 心跳确认
         pass
 
+    elif message_type == "host_info_ack":
+        # 主机信息确认
+        logger.debug(f"收到主机信息确认: {message.get('message')}")
+
+    elif message_type == "deploy_result_ack":
+        # 部署结果确认
+        logger.debug(f"收到部署结果确认: {message.get('message')}")
+
     elif message_type == "error":
         logger.error(f"收到错误消息: {message.get('message')}")
 
