@@ -246,7 +246,34 @@ async def handle_deploy_task(message: Dict[str, Any]):
         logger.info(
             f"准备发送部署结果: task_id={task_id}, target={target_name}, status={deploy_status}"
         )
-        await websocket_client.send_message(deploy_message)
+        logger.info(
+            f"部署结果消息内容: type={deploy_message.get('type')}, task_id={deploy_message.get('task_id')}, "
+            f"target_name={deploy_message.get('target_name')}, status={deploy_message.get('status')}"
+        )
+
+        # 尝试发送消息，最多重试3次
+        max_retries = 3
+        send_success = False
+        for attempt in range(max_retries):
+            send_success = await websocket_client.send_message(deploy_message)
+            if send_success:
+                logger.info(
+                    f"✅ 部署结果消息已发送: task_id={task_id}, target={target_name}, status={deploy_status}"
+                )
+                break
+            else:
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 1  # 1秒, 2秒
+                    logger.warning(
+                        f"⚠️ 部署结果消息发送失败（尝试 {attempt + 1}/{max_retries}），"
+                        f"{wait_time}秒后重试: task_id={task_id}, target={target_name}"
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(
+                        f"❌ 部署结果消息发送失败（{max_retries}次尝试后）: "
+                        f"task_id={task_id}, target={target_name}, status={deploy_status}"
+                    )
 
         logger.info(
             f"部署任务完成: task_id={task_id}, target={target_name}, 成功: {result.get('success')}, 消息: {result.get('message')}"

@@ -133,14 +133,22 @@ class WebSocketClient:
     async def send_message(self, message: Dict[str, Any]) -> bool:
         """发送消息"""
         if not self.connected or not self.websocket:
-            logger.warning("WebSocket 未连接，无法发送消息")
+            logger.warning(
+                f"WebSocket 未连接，无法发送消息: type={message.get('type')}, "
+                f"connected={self.connected}, websocket={self.websocket is not None}"
+            )
             return False
 
         try:
-            await self.websocket.send(json.dumps(message))
+            message_str = json.dumps(message)
+            await self.websocket.send(message_str)
+            logger.info(
+                f"✅ 消息已发送: type={message.get('type')}, size={len(message_str)} bytes, "
+                f"preview={message_str[:100]}"
+            )
             return True
         except Exception as e:
-            logger.error(f"发送消息失败: {e}")
+            logger.error(f"❌ 发送消息失败: type={message.get('type')}, error={e}")
             self.connected = False
             # 确保重连任务正在运行
             if self.running and (

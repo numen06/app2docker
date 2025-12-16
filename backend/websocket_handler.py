@@ -134,16 +134,32 @@ class ConnectionManager:
             task_id: 任务ID（可能是task_id或deploy_task_id）
             result: 部署结果字典
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         if task_id in deploy_result_futures:
             future = deploy_result_futures.pop(task_id)
             if not future.done():
                 future.set_result(result)
+                logger.info(
+                    f"[WebSocket] ✅ 已设置部署结果并通知执行器: task_id={task_id}, "
+                    f"success={result.get('success')}, message={result.get('message', '')[:50]}"
+                )
                 print(
                     f"✅ 已设置部署结果并通知执行器: task_id={task_id}, success={result.get('success')}, message={result.get('message', '')[:50]}"
                 )
             else:
+                logger.warning(
+                    f"[WebSocket] ⚠️ Future已完成，无法设置结果: task_id={task_id}"
+                )
                 print(f"⚠️ Future已完成，无法设置结果: task_id={task_id}")
         else:
+            logger.warning(
+                f"[WebSocket] ⚠️ 未找到等待的Future: task_id={task_id}, "
+                f"当前等待的Future数量: {len(deploy_result_futures)}, "
+                f"前10个: {list(deploy_result_futures.keys())[:10]}"
+            )
             print(
                 f"⚠️ 未找到等待的Future: task_id={task_id}, 当前等待的Future数量: {len(deploy_result_futures)}, 前5个: {list(deploy_result_futures.keys())[:5]}"
             )
@@ -206,20 +222,35 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
         )
 
         # 处理消息
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[WebSocket] 开始接收消息循环: host_id={host_id}, name={host.get('name')}")
+        print(f"📡 开始接收消息循环: host_id={host_id}, name={host.get('name')}")
+        
         while True:
             try:
                 # 接收消息
+                logger.info(f"[WebSocket] 等待接收消息: host_id={host_id}")
                 data = await websocket.receive_text()
+                logger.info(f"[WebSocket] 📥 收到原始消息: host_id={host_id}, size={len(data)} bytes")
+                print(f"📥 收到原始消息 ({host_id}): size={len(data)} bytes, preview={data[:100]}")
 
                 try:
                     message = json.loads(data)
-                except json.JSONDecodeError:
+                    message_type = message.get("type")
+                    logger.info(f"[WebSocket] 消息解析成功: host_id={host_id}, type={message_type}")
+                    print(f"✅ 消息解析成功 ({host_id}): type={message_type}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"[WebSocket] JSON解析失败: host_id={host_id}, error={e}, data={data[:200]}")
+                    print(f"❌ JSON解析失败 ({host_id}): {e}, data={data[:200]}")
                     await websocket.send_json(
                         {"type": "error", "message": "无效的JSON格式"}
                     )
                     continue
 
                 message_type = message.get("type")
+                logger.info(f"[WebSocket] 开始处理消息: host_id={host_id}, type={message_type}")
+                print(f"🔄 开始处理消息 ({host_id}): type={message_type}")
 
                 if message_type == "heartbeat":
                     # 心跳消息
@@ -258,12 +289,20 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
 
                 elif message_type == "deploy_result":
                     # 部署任务执行结果
+                    import logging
+
+                    logger = logging.getLogger(__name__)
+
                     task_id = message.get("task_id")  # 任务ID（用于匹配）
                     target_name = message.get("target_name", "")  # 目标名称
                     deploy_status = message.get("status")
                     deploy_message = message.get("message")
                     deploy_result = message.get("result")
 
+                    logger.info(
+                        f"[WebSocket] 📥 收到部署任务结果: host_id={host_id}, "
+                        f"task_id={task_id}, target={target_name}, status={deploy_status}"
+                    )
                     print(
                         f"📥 收到部署任务结果 ({host_id}): task_id={task_id}, target={target_name}, 状态: {deploy_status}"
                     )
@@ -291,22 +330,45 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                         # 使用 task_id:target_name 作为 Future 的 key（因为同一任务可能有多个目标）
                         future_key = f"{task_id}:{target_name}"
 
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+
+                        logger.info(
+                            f"[WebSocket] 📥 通知等待的执行器: task_id={task_id}, target={target_name}, "
+                            f"future_key={future_key}, success={result_dict.get('success')} "
+                            f"(type: {type(result_dict.get('success'))}), message={result_dict.get('message')}"
+                        )
                         print(
                             f"📥 通知等待的执行器: task_id={task_id}, target={target_name}, future_key={future_key}, success={result_dict.get('success')} (type: {type(result_dict.get('success'))}), message={result_dict.get('message')}"
                         )
 
-                        # 通知等待的执行器（使用 future_key）
-                        connection_manager.set_deploy_result(future_key, result_dict)
-
-                        print(
-                            f"✅ 已通知执行器: task_id={task_id}, target={target_name}, future_key={future_key}, result_dict keys: {list(result_dict.keys())}"
-                        )
-
-                        # 验证Future是否存在
+                        # 检查 Future 是否存在
                         if future_key not in deploy_result_futures:
+                            logger.warning(
+                                f"[WebSocket] ⚠️ Future不存在: future_key={future_key}, "
+                                f"当前等待的Future数量: {len(deploy_result_futures)}, "
+                                f"前10个: {list(deploy_result_futures.keys())[:10]}"
+                            )
                             print(
                                 f"⚠️ 警告: future_key={future_key} 的Future不存在，可能已超时或已处理"
                             )
+                        else:
+                            logger.info(
+                                f"[WebSocket] ✅ 找到Future: future_key={future_key}, "
+                                f"准备设置结果"
+                            )
+
+                        # 通知等待的执行器（使用 future_key）
+                        connection_manager.set_deploy_result(future_key, result_dict)
+
+                        logger.info(
+                            f"[WebSocket] ✅ 已通知执行器: task_id={task_id}, target={target_name}, "
+                            f"future_key={future_key}, result_dict keys: {list(result_dict.keys())}"
+                        )
+                        print(
+                            f"✅ 已通知执行器: task_id={task_id}, target={target_name}, future_key={future_key}, result_dict keys: {list(result_dict.keys())}"
+                        )
                     elif deploy_status == "running":
                         # running状态：只记录日志，不触发Future完成
                         print(
@@ -384,20 +446,41 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     )
 
             except WebSocketDisconnect:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"[WebSocket] WebSocket断开连接: host_id={host_id}")
                 break
             except Exception as e:
+                import logging
+                import traceback
+                logger = logging.getLogger(__name__)
+                logger.exception(
+                    f"[WebSocket] 处理消息时出错: host_id={host_id}, error={e}"
+                )
                 print(f"⚠️ 处理消息时出错 ({host_id}): {e}")
+                traceback.print_exc()
                 try:
                     await websocket.send_json(
                         {"type": "error", "message": f"处理消息失败: {str(e)}"}
                     )
                 except:
+                    logger.error(f"[WebSocket] 无法发送错误消息: host_id={host_id}")
                     break
 
     except WebSocketDisconnect:
-        pass
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[WebSocket] WebSocket断开连接: host_id={host_id}")
     except Exception as e:
+        import logging
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.exception(f"[WebSocket] WebSocket连接错误: host_id={host_id}, error={e}")
         print(f"⚠️ WebSocket连接错误 ({host_id}): {e}")
+        traceback.print_exc()
     finally:
         # 断开连接
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[WebSocket] 清理连接: host_id={host_id}")
         connection_manager.disconnect(host_id)
