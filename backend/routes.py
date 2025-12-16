@@ -1394,13 +1394,28 @@ async def get_all_tasks(
         else:
             # 获取构建任务（排除部署任务）
             build_task_type = task_type if task_type and task_type != "deploy" else None
-            build_tasks = build_manager.list_tasks(
-                status=status, task_type=build_task_type
-            )
+            build_tasks = build_manager.list_tasks(status=status, task_type=build_task_type)
             # 过滤掉部署任务（task_type="deploy"）
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
             for task in build_tasks:
-                task["task_category"] = "build"  # 标记为构建任务
+                # 标记为构建任务
+                task["task_category"] = "build"
+
+                # 如果是流水线触发的任务，补充流水线名称（用于在任务列表中显示）
+                try:
+                    if task.get("pipeline_id"):
+                        from backend.pipeline_manager import PipelineManager
+
+                        pm = PipelineManager()
+                        pipeline = pm.get_pipeline(task["pipeline_id"])
+                        if pipeline and isinstance(pipeline, dict):
+                            task["pipeline_name"] = pipeline.get("name")
+                except Exception as e:
+                    # 获取流水线名称失败不影响任务显示
+                    print(
+                        f"⚠️ 获取流水线名称失败 (task_id={task.get('task_id', 'unknown')[:8]}): {e}"
+                    )
+
                 all_tasks.append(task)
 
         # 获取部署任务（包括配置和执行产生的任务）
