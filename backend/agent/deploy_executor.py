@@ -114,13 +114,24 @@ class DeployExecutor:
 
                     cmd_parts = shlex.split(command_str)
                     container_name = None
+
+                    # 支持两种格式：--name test 或 --name=test
                     if "--name" in cmd_parts:
                         name_idx = cmd_parts.index("--name")
                         if name_idx + 1 < len(cmd_parts):
                             container_name = cmd_parts[name_idx + 1]
+                    else:
+                        # 检查 --name=value 格式
+                        for part in cmd_parts:
+                            if part.startswith("--name="):
+                                container_name = part.split("=", 1)[1]
+                                break
 
                     if not container_name:
+                        logger.warning(f"无法从命令中提取容器名: {command_str}")
                         return
+
+                    logger.info(f"从命令中提取到容器名: {container_name}")
 
                 # 停止并删除容器
                 logger.info(f"清理已有容器: {container_name}")
@@ -337,10 +348,14 @@ class DeployExecutor:
         # 检查是否需要重新发布
         redeploy = docker_config.get("redeploy", False)
 
+        logger.info(f"redeploy 配置: {redeploy}, deploy_mode: {deploy_mode}")
+
         try:
             # 如果需要重新发布，先停止并删除已有的容器/服务
             if redeploy:
+                logger.info("开始清理已有部署...")
                 self._cleanup_existing_deployment(docker_config, deploy_mode, context)
+                logger.info("清理已有部署完成")
 
             # 检查是否有直接命令（用户输入的原始命令）
             if "command" in docker_config:

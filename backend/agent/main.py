@@ -225,17 +225,24 @@ async def handle_deploy_task(message: Dict[str, Any]):
         logger.info(f"部署执行完成，结果: {result}")
 
         # 发送执行结果（使用deploy_task_id）
-        await websocket_client.send_message(
-            {
-                "type": "deploy_result",
-                "task_id": task_id,  # 保留原始task_id用于日志
-                "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID
-                "target_name": target_name,
-                "status": "completed" if result.get("success") else "failed",
-                "message": result.get("message"),
-                "result": result,
-            }
-        )
+        deploy_status = "completed" if result.get("success") else "failed"
+        deploy_message = {
+            "type": "deploy_result",
+            "task_id": task_id,  # 保留原始task_id用于日志
+            "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID
+            "target_name": target_name,
+            "status": deploy_status,
+            "message": result.get("message"),
+            "result": result,
+        }
+
+        # 如果失败，添加error字段到消息顶层（方便主程序处理）
+        if deploy_status == "failed":
+            deploy_message["error"] = result.get(
+                "error", result.get("message", "部署失败")
+            )
+
+        await websocket_client.send_message(deploy_message)
 
         logger.info(
             f"部署任务完成: deploy_task_id={deploy_task_id}, 成功: {result.get('success')}, 消息: {result.get('message')}"

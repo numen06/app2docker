@@ -1403,17 +1403,21 @@ async def get_all_tasks(
                 task["task_category"] = "build"  # 标记为构建任务
                 all_tasks.append(task)
 
-        # 获取部署任务
+        # 获取部署任务（包括配置和执行产生的任务）
         if not task_type or task_type == "deploy":
             try:
                 deploy_tasks = build_manager.list_tasks(
                     status=status, task_type="deploy"
                 )
                 for task in deploy_tasks:
+                    task_config = task.get("task_config", {})
+                    # 任务管理页面显示所有部署任务（包括配置和执行产生的任务）
+                    # 不需要过滤 source_config_id，因为任务管理应该显示所有任务
+
                     task["task_category"] = "deploy"  # 标记为部署任务
+
                     # 为部署任务添加显示名称
                     try:
-                        task_config = task.get("task_config", {})
                         # 如果 task_config 是字符串，尝试解析为 JSON
                         if isinstance(task_config, str):
                             try:

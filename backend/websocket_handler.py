@@ -103,6 +103,15 @@ class ConnectionManager:
             future = deploy_result_futures.pop(task_id)
             if not future.done():
                 future.set_result(result)
+                print(
+                    f"✅ 已设置部署结果并通知执行器: task_id={task_id}, success={result.get('success')}"
+                )
+            else:
+                print(f"⚠️ Future已完成，无法设置结果: task_id={task_id}")
+        else:
+            print(
+                f"⚠️ 未找到等待的Future: task_id={task_id}, 当前等待的Future: {list(deploy_result_futures.keys())}"
+            )
 
     def cancel_deploy_result_future(self, task_id: str):
         """
@@ -230,18 +239,29 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     # 只处理完成或失败的状态，忽略running状态
                     if deploy_status in ["completed", "failed"]:
                         # 构建统一的结果格式
+                        # 优先使用消息顶层的error字段，如果没有则从result中获取
+                        error_msg = message.get("error")
+                        if not error_msg and deploy_result:
+                            error_msg = deploy_result.get("error")
+
                         result_dict = {
                             "success": deploy_status == "completed",
                             "message": deploy_message,
                             "status": deploy_status,
                             "result": deploy_result,
-                            "error": message.get("error"),
+                            "error": error_msg,
                         }
+
+                        print(
+                            f"📥 通知等待的执行器: deploy_task_id={deploy_task_id}, success={result_dict.get('success')}, message={result_dict.get('message')}"
+                        )
 
                         # 通知等待的执行器（使用deploy_task_id）
                         connection_manager.set_deploy_result(
                             deploy_task_id, result_dict
                         )
+
+                        print(f"✅ 已通知执行器: deploy_task_id={deploy_task_id}")
 
                         # 更新部署任务状态（使用BuildTaskManager）
                         try:
