@@ -443,10 +443,10 @@ class DeployExecutor:
 
                             cmd_parts = shlex.split(command_str)
 
-                            # 如果命令中没有 -f 参数，添加它
+                            # 如果命令中没有 -f 参数，在开头添加它（-f 必须在 docker-compose 之后，子命令之前）
                             if "-f" not in cmd_parts:
-                                cmd_parts.insert(1, "-f")
-                                cmd_parts.insert(2, compose_file)
+                                cmd_parts.insert(0, "-f")
+                                cmd_parts.insert(1, compose_file)
                             else:
                                 # 替换 -f 后面的文件路径
                                 f_idx = cmd_parts.index("-f")
@@ -455,6 +455,7 @@ class DeployExecutor:
                                 else:
                                     cmd_parts.insert(f_idx + 1, compose_file)
 
+                            # 构建完整命令：docker-compose -f <file> <command>
                             cmd = ["docker-compose"] + cmd_parts
                     else:
                         raise ValueError("Docker Compose 模式需要提供 compose_content")
