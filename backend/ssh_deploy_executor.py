@@ -134,11 +134,14 @@ class SSHDeployExecutor:
                     redeploy_strategy = docker_config.get("redeploy_strategy", "update_existing")
                     redeploy = docker_config.get("redeploy", False)
                     
-                    # 生成 Stack 名称（用于 docker stack deploy）
-                    stack_name = docker_config.get("stack_name", "app")
-                    # 确保 Stack 名称符合 Docker Stack 命名规范（小写字母、数字、连字符）
+                    # 生成 Stack/项目名称（优先使用应用名称，否则使用配置的 stack_name）
+                    app_name = docker_config.get("app_name") or docker_config.get("stack_name", "app")
+                    # 确保名称符合 Docker 命名规范（小写字母、数字、连字符）
                     import re
-                    stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
+                    project_name = re.sub(r'[^a-z0-9-]', '-', app_name.lower())
+                    
+                    # 对于 docker-compose，使用 project_name；对于 docker-stack，使用 project_name 作为 stack_name
+                    stack_name = project_name
                     
                     # 根据 redeploy_strategy 处理重新发布
                     if redeploy and redeploy_strategy == "remove_and_redeploy":
@@ -219,8 +222,17 @@ class SSHDeployExecutor:
                     else:
                         # Docker Compose 模式：使用 docker-compose
                         command = docker_config.get("command", "up -d")
-                        compose_command = f"cd /tmp/{stack_name} && docker-compose {command}"
+                        # 添加项目名称参数（-p 或 --project-name）
+                        # 检查命令中是否已包含项目名称参数
+                        import shlex
+                        cmd_parts = shlex.split(command)
+                        if "-p" not in cmd_parts and "--project-name" not in cmd_parts:
+                            # 添加项目名称参数
+                            compose_command = f"cd /tmp/{stack_name} && docker-compose -p {project_name} {command}"
+                        else:
+                            compose_command = f"cd /tmp/{stack_name} && docker-compose {command}"
                         logger.info(f"执行 SSH Compose 命令: {compose_command}")
+                        logger.info(f"使用项目名称: {project_name}")
                         stdin, stdout, stderr = ssh_client.exec_command(compose_command)
                         stack_command = compose_command
                     

@@ -358,6 +358,11 @@ class DeployTaskManager:
                 adapted_config["compose_mode"] = deploy_config["compose_mode"]
             if "redeploy_strategy" in deploy_config:
                 adapted_config["redeploy_strategy"] = deploy_config["redeploy_strategy"]
+            # 合并应用名称（用于 Docker Compose 项目名称）
+            if context and isinstance(context.get("app"), dict):
+                app_name = context.get("app", {}).get("name", "")
+                if app_name:
+                    adapted_config["app_name"] = app_name
             # 合并 compose_mode 和 redeploy_strategy（如果存在）
             if "compose_mode" in deploy_config:
                 adapted_config["compose_mode"] = deploy_config["compose_mode"]

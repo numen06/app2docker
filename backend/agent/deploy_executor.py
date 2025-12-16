@@ -455,7 +455,19 @@ class DeployExecutor:
                                 else:
                                     cmd_parts.insert(f_idx + 1, compose_file)
 
-                            # 构建完整命令：docker-compose -f <file> <command>
+                            # 添加项目名称参数（使用应用名称）
+                            app_name = context.get("app", {}).get("name", "") if isinstance(context.get("app"), dict) else ""
+                            if app_name:
+                                # 确保项目名称符合 Docker Compose 命名规范（小写字母、数字、连字符）
+                                import re
+                                project_name = re.sub(r'[^a-z0-9-]', '-', app_name.lower())
+                                # 如果命令中没有 -p 或 --project-name 参数，添加它
+                                if "-p" not in cmd_parts and "--project-name" not in cmd_parts:
+                                    cmd_parts.insert(0, "-p")
+                                    cmd_parts.insert(1, project_name)
+                                    logger.info(f"使用应用名称作为项目名称: {project_name}")
+
+                            # 构建完整命令：docker-compose -p <project-name> -f <file> <command>
                             cmd = ["docker-compose"] + cmd_parts
                     else:
                         raise ValueError("Docker Compose 模式需要提供 compose_content")
@@ -553,8 +565,8 @@ class DeployExecutor:
                     
                     logger.info(f"容器名称冲突检测结果: is_container_conflict={is_container_conflict}, deploy_mode={deploy_mode}")
                     
-                    # 如果是容器名称冲突，尝试自动清理
-                    if is_container_conflict and deploy_mode == "docker_compose":
+                    # 如果是容器名称冲突，尝试自动清理（支持 docker_run 和 docker_compose）
+                    if is_container_conflict:
                         logger.warning("检测到容器名称冲突，尝试自动清理...")
                         
                         # 从错误信息中提取容器名称
@@ -578,19 +590,34 @@ class DeployExecutor:
                                 container_name = container_name_match.group(1).strip()
                                 logger.info(f"从错误信息中提取到容器名称 (格式2): {container_name}")
                         
-                        # 如果还是没找到，尝试从 compose 文件中提取容器名称
+                        # 如果还是没找到，尝试从命令或配置中提取容器名称
                         if not container_name:
-                            if "compose_content" in docker_config:
-                                compose_content = docker_config["compose_content"]
-                                # 查找 container_name
-                                container_match = re.search(r'container_name:\s*["\']?([^"\'\n\s]+)', compose_content, re.IGNORECASE)
-                                if container_match:
-                                    container_name = container_match.group(1).strip()
-                                    logger.info(f"从 compose 文件中提取到容器名称: {container_name}")
+                            if deploy_mode == "docker_compose":
+                                # Docker Compose 模式：从 compose 文件中提取
+                                if "compose_content" in docker_config:
+                                    compose_content = docker_config["compose_content"]
+                                    # 查找 container_name
+                                    container_match = re.search(r'container_name:\s*["\']?([^"\'\n\s]+)', compose_content, re.IGNORECASE)
+                                    if container_match:
+                                        container_name = container_match.group(1).strip()
+                                        logger.info(f"从 compose 文件中提取到容器名称: {container_name}")
+                                    else:
+                                        logger.warning("无法从 compose 文件中提取容器名称")
                                 else:
-                                    logger.warning("无法从 compose 文件中提取容器名称")
+                                    logger.warning("compose_content 不存在，无法提取容器名称")
                             else:
-                                logger.warning("compose_content 不存在，无法提取容器名称")
+                                # Docker Run 模式：从命令中提取 --name 参数
+                                command_str = docker_config.get("command", "")
+                                if command_str:
+                                    # 查找 --name=value 或 --name value 格式
+                                    name_match = re.search(r'--name[=\s]+([^\s]+)', command_str, re.IGNORECASE)
+                                    if name_match:
+                                        container_name = name_match.group(1).strip()
+                                        logger.info(f"从命令中提取到容器名称: {container_name}")
+                                    else:
+                                        logger.warning("无法从命令中提取容器名称")
+                                else:
+                                    logger.warning("命令不存在，无法提取容器名称")
                         
                         if container_name:
                             logger.info(f"尝试删除冲突的容器: {container_name}")
@@ -778,19 +805,34 @@ class DeployExecutor:
                                 container_name = container_name_match.group(1).strip()
                                 logger.info(f"从错误信息中提取到容器名称 (格式2): {container_name}")
                         
-                        # 如果还是没找到，尝试从 compose 文件中提取容器名称
+                        # 如果还是没找到，尝试从命令或配置中提取容器名称
                         if not container_name:
-                            if "compose_content" in docker_config:
-                                compose_content = docker_config["compose_content"]
-                                # 查找 container_name
-                                container_match = re.search(r'container_name:\s*["\']?([^"\'\n\s]+)', compose_content, re.IGNORECASE)
-                                if container_match:
-                                    container_name = container_match.group(1).strip()
-                                    logger.info(f"从 compose 文件中提取到容器名称: {container_name}")
+                            if deploy_mode == "docker_compose":
+                                # Docker Compose 模式：从 compose 文件中提取
+                                if "compose_content" in docker_config:
+                                    compose_content = docker_config["compose_content"]
+                                    # 查找 container_name
+                                    container_match = re.search(r'container_name:\s*["\']?([^"\'\n\s]+)', compose_content, re.IGNORECASE)
+                                    if container_match:
+                                        container_name = container_match.group(1).strip()
+                                        logger.info(f"从 compose 文件中提取到容器名称: {container_name}")
+                                    else:
+                                        logger.warning("无法从 compose 文件中提取容器名称")
                                 else:
-                                    logger.warning("无法从 compose 文件中提取容器名称")
+                                    logger.warning("compose_content 不存在，无法提取容器名称")
                             else:
-                                logger.warning("compose_content 不存在，无法提取容器名称")
+                                # Docker Run 模式：从命令中提取 --name 参数
+                                command_str = docker_config.get("command", "")
+                                if command_str:
+                                    # 查找 --name=value 或 --name value 格式
+                                    name_match = re.search(r'--name[=\s]+([^\s]+)', command_str, re.IGNORECASE)
+                                    if name_match:
+                                        container_name = name_match.group(1).strip()
+                                        logger.info(f"从命令中提取到容器名称: {container_name}")
+                                    else:
+                                        logger.warning("无法从命令中提取容器名称")
+                                else:
+                                    logger.warning("命令不存在，无法提取容器名称")
                         
                         if container_name:
                             logger.info(f"尝试删除冲突的容器: {container_name}")

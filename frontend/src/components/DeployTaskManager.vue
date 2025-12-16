@@ -160,8 +160,18 @@
             <!-- 应用基本信息 -->
             <div class="mb-3">
               <label class="form-label">应用名称 <span class="text-danger">*</span></label>
-              <input v-model="simpleForm.appName" type="text" class="form-control" placeholder="my-app">
+              <input 
+                v-model="simpleForm.appName" 
+                type="text" 
+                class="form-control" 
+                :class="{ 'is-invalid': simpleForm.appName && isAppNameDuplicate(simpleForm.appName.trim(), null) }"
+                placeholder="my-app"
+                @blur="checkAppNameDuplicate(simpleForm.appName.trim(), null)"
+              >
               <small class="text-muted">用于标识此部署任务的应用名称</small>
+              <div v-if="simpleForm.appName && isAppNameDuplicate(simpleForm.appName.trim(), null)" class="invalid-feedback d-block">
+                应用名称已存在，请使用其他名称
+              </div>
             </div>
             
             <!-- 统一部署配置 -->
@@ -772,8 +782,18 @@
               <!-- 应用基本信息 -->
               <div class="mb-3">
                 <label class="form-label">应用名称 <span class="text-danger">*</span></label>
-                <input v-model="editForm.appName" type="text" class="form-control" placeholder="my-app">
+                <input 
+                  v-model="editForm.appName" 
+                  type="text" 
+                  class="form-control" 
+                  :class="{ 'is-invalid': editForm.appName && isAppNameDuplicate(editForm.appName.trim(), editingTask?.task_id) }"
+                  placeholder="my-app"
+                  @blur="checkAppNameDuplicate(editForm.appName.trim(), editingTask?.task_id)"
+                >
                 <small class="text-muted">用于标识此部署任务的应用名称</small>
+                <div v-if="editForm.appName && isAppNameDuplicate(editForm.appName.trim(), editingTask?.task_id)" class="invalid-feedback d-block">
+                  应用名称已存在，请使用其他名称
+                </div>
               </div>
               
               <!-- 统一部署配置 -->
@@ -1566,6 +1586,21 @@ export default {
         return
       }
       
+      // 检查YAML中的应用名称是否重复
+      try {
+        const config = yaml.load(this.taskConfigContent)
+        const appName = config?.app?.name
+        if (appName) {
+          if (this.isAppNameDuplicate(appName.trim(), null)) {
+            alert(`应用名称 "${appName}" 已存在，请使用其他名称`)
+            return
+          }
+        }
+      } catch (e) {
+        console.error('解析YAML失败:', e)
+        // YAML解析失败时继续，让后端验证
+      }
+      
       this.creating = true
       try {
         await axios.post('/api/deploy-tasks', {
@@ -1724,6 +1759,19 @@ export default {
       if (!time) return '-'
       return new Date(time).toLocaleString('zh-CN')
     },
+    isAppNameDuplicate(appName, excludeTaskId) {
+      if (!appName) return false
+      return this.tasks.some(task => {
+        const taskAppName = task.config?.app?.name
+        return taskAppName && taskAppName === appName && task.task_id !== excludeTaskId
+      })
+    },
+    checkAppNameDuplicate(appName, excludeTaskId) {
+      if (!appName) return
+      if (this.isAppNameDuplicate(appName, excludeTaskId)) {
+        // 应用名称重复，已经在模板中显示错误提示
+      }
+    },
     async loadAgentHosts() {
       this.loadingHosts = true
       try {
@@ -1748,6 +1796,17 @@ export default {
       // 验证必填字段
       if (!this.simpleForm.appName.trim()) {
         alert('请输入应用名称')
+        return
+      }
+      
+      // 检查应用名称是否已存在
+      const appName = this.simpleForm.appName.trim()
+      const existingTask = this.tasks.find(task => {
+        const taskAppName = task.config?.app?.name
+        return taskAppName && taskAppName === appName
+      })
+      if (existingTask) {
+        alert(`应用名称 "${appName}" 已存在，请使用其他名称`)
         return
       }
       if (this.simpleForm.selectedHosts.length === 0) {
@@ -2122,6 +2181,14 @@ export default {
           alert('请输入应用名称')
           return
         }
+        
+        // 检查应用名称是否已存在（排除当前任务）
+        const appName = this.editForm.appName.trim()
+        if (this.isAppNameDuplicate(appName, this.editingTask?.task_id)) {
+          alert(`应用名称 "${appName}" 已存在，请使用其他名称`)
+          return
+        }
+        
         if (this.editForm.selectedHosts.length === 0) {
           alert('请至少选择一个目标主机')
           return
@@ -2167,6 +2234,21 @@ export default {
           return
         }
         yamlContent = this.editingTask.config_content
+        
+        // 检查YAML中的应用名称是否重复
+        try {
+          const config = yaml.load(yamlContent)
+          const appName = config?.app?.name
+          if (appName) {
+            if (this.isAppNameDuplicate(appName.trim(), this.editingTask?.task_id)) {
+              alert(`应用名称 "${appName}" 已存在，请使用其他名称`)
+              return
+            }
+          }
+        } catch (e) {
+          console.error('解析YAML失败:', e)
+          // YAML解析失败时继续，让后端验证
+        }
       }
       
       if (!confirm('确定要保存修改吗？')) {

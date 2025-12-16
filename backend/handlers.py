@@ -4864,6 +4864,42 @@ class BuildTaskManager:
             parser = DeployConfigParser()
             config = parser.parse_yaml_content(config_content)
 
+            # 检查应用名称是否已存在（只检查配置任务，不包括执行产生的任务）
+            app_name = config.get("app", {}).get("name", "")
+            if app_name:
+                from backend.database import get_db_session
+                from backend.models import Task
+                
+                db = get_db_session()
+                try:
+                    # 查询所有部署配置任务（task_type='deploy' 且没有 source_config_id）
+                    existing_tasks = db.query(Task).filter(
+                        Task.task_type == "deploy"
+                    ).all()
+                    
+                    for existing_task in existing_tasks:
+                        existing_config = existing_task.task_config.get("config", {}) if existing_task.task_config else {}
+                        existing_app_name = existing_config.get("app", {}).get("name", "")
+                        
+                        # 如果应用名称相同，且不是当前任务（编辑时），则报错
+                        if existing_app_name == app_name:
+                            # 如果是编辑操作（提供了 source_config_id），跳过自己
+                            if source_config_id and existing_task.task_id == source_config_id:
+                                continue
+                            # 如果是创建新配置，检查是否有其他配置任务使用相同名称
+                            if not source_config_id:
+                                # 检查是否是配置任务（没有 source_config_id）
+                                existing_source_config_id = existing_task.task_config.get("source_config_id") if existing_task.task_config else None
+                                if not existing_source_config_id:
+                                    raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+                            else:
+                                # 编辑操作：检查是否有其他配置任务使用相同名称
+                                existing_source_config_id = existing_task.task_config.get("source_config_id") if existing_task.task_config else None
+                                if not existing_source_config_id and existing_task.task_id != source_config_id:
+                                    raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+                finally:
+                    db.close()
+
             # 生成任务ID
             task_id = str(uuid.uuid4())
             created_at = datetime.now()
@@ -4979,6 +5015,33 @@ class BuildTaskManager:
             # 解析YAML配置
             parser = DeployConfigParser()
             config = parser.parse_yaml_content(config_content)
+
+            # 检查应用名称是否已存在（排除当前任务）
+            app_name = config.get("app", {}).get("name", "")
+            if app_name:
+                db_check = get_db_session()
+                try:
+                    # 查询所有部署配置任务（task_type='deploy'）
+                    existing_tasks = db_check.query(Task).filter(
+                        Task.task_type == "deploy"
+                    ).all()
+                    
+                    for existing_task in existing_tasks:
+                        # 跳过当前任务
+                        if existing_task.task_id == task_id:
+                            continue
+                        
+                        existing_config = existing_task.task_config.get("config", {}) if existing_task.task_config else {}
+                        existing_app_name = existing_config.get("app", {}).get("name", "")
+                        
+                        # 如果应用名称相同，检查是否是配置任务（没有 source_config_id）
+                        if existing_app_name == app_name:
+                            existing_source_config_id = existing_task.task_config.get("source_config_id") if existing_task.task_config else None
+                            # 如果是配置任务（没有 source_config_id），则报错
+                            if not existing_source_config_id:
+                                raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+                finally:
+                    db_check.close()
 
             db = get_db_session()
             try:
