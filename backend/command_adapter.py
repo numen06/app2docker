@@ -125,34 +125,25 @@ class CommandAdapter:
             command: docker-compose命令（如"up -d"）
             compose_content: docker-compose.yml内容
             host_type: 主机类型
-            context: 模板变量上下文
+            context: 模板变量上下文（可能包含 compose_mode 和 redeploy_strategy）
         
         Returns:
             适配后的配置字典
         """
-        if host_type == "agent":
-            return {
-                "deploy_mode": "docker_compose",
-                "command": command,
-                "compose_content": compose_content
-            }
+        result = {
+            "deploy_mode": "docker_compose",
+            "command": command,
+            "compose_content": compose_content
+        }
         
-        elif host_type == "portainer":
-            return {
-                "deploy_mode": "docker_compose",
-                "command": command,
-                "compose_content": compose_content
-            }
+        # 从 context 中获取 compose_mode 和 redeploy_strategy（如果存在）
+        if context:
+            if "compose_mode" in context:
+                result["compose_mode"] = context["compose_mode"]
+            if "redeploy_strategy" in context:
+                result["redeploy_strategy"] = context["redeploy_strategy"]
         
-        elif host_type == "ssh":
-            return {
-                "deploy_mode": "docker_compose",
-                "command": command,
-                "compose_content": compose_content
-            }
-        
-        else:
-            raise ValueError(f"未知的主机类型: {host_type}")
+        return result
     
     @staticmethod
     def _parse_docker_run_command(command: str) -> Dict[str, Any]:

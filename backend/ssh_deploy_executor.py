@@ -129,16 +129,36 @@ class SSHDeployExecutor:
                             "message": "Docker Compose 模式需要提供 compose_content"
                         }
                     
-                    # 检查是否需要重新发布
+                    # 获取 Compose 模式（docker-compose 或 docker-stack）
+                    compose_mode = docker_config.get("compose_mode", "docker-compose")
+                    redeploy_strategy = docker_config.get("redeploy_strategy", "update_existing")
                     redeploy = docker_config.get("redeploy", False)
-                    stack_name = docker_config.get("stack_name", "app")
                     
-                    if redeploy:
-                        # 停止并删除已有的 Stack
-                        stdin, stdout, stderr = ssh_client.exec_command(
-                            f"docker-compose -f /tmp/{stack_name}/docker-compose.yml down -v || true"
-                        )
-                        stdout.channel.recv_exit_status()
+                    # 生成 Stack 名称（用于 docker stack deploy）
+                    stack_name = docker_config.get("stack_name", "app")
+                    # 确保 Stack 名称符合 Docker Stack 命名规范（小写字母、数字、连字符）
+                    import re
+                    stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
+                    
+                    # 根据 redeploy_strategy 处理重新发布
+                    if redeploy and redeploy_strategy == "remove_and_redeploy":
+                        if compose_mode == "docker-stack":
+                            # Docker Stack 模式：删除 Stack
+                            logger.info(f"删除已有 Stack: {stack_name}")
+                            stdin, stdout, stderr = ssh_client.exec_command(
+                                f"docker stack rm {stack_name} || true"
+                            )
+                            stdout.channel.recv_exit_status()
+                            # 等待 Stack 完全删除
+                            import time
+                            time.sleep(2)
+                        else:
+                            # Docker Compose 模式：停止并删除
+                            logger.info(f"停止并删除已有 Compose Stack: {stack_name}")
+                            stdin, stdout, stderr = ssh_client.exec_command(
+                                f"docker-compose -f /tmp/{stack_name}/docker-compose.yml down -v || true"
+                            )
+                            stdout.channel.recv_exit_status()
                     
                     # 创建临时目录
                     stdin, stdout, stderr = ssh_client.exec_command(
@@ -148,51 +168,96 @@ class SSHDeployExecutor:
                     
                     # 写入 docker-compose.yml
                     sftp = ssh_client.open_sftp()
-                    remote_file = sftp.file(f"/tmp/{stack_name}/docker-compose.yml", "w")
+                    compose_file = f"/tmp/{stack_name}/docker-compose.yml"
+                    remote_file = sftp.file(compose_file, "w")
                     remote_file.write(compose_content)
                     remote_file.close()
                     sftp.close()
                     
-                    # 执行 docker-compose up
-                    command = docker_config.get("command", "up -d")
-                    compose_command = f"cd /tmp/{stack_name} && docker-compose {command}"
-                    logger.info(f"执行 SSH Compose 命令: {compose_command}")
-                    stdin, stdout, stderr = ssh_client.exec_command(compose_command)
+                    # 如果是 docker-stack 模式，检查 compose 文件中是否有不兼容的选项
+                    if compose_mode == "docker-stack":
+                        # docker stack deploy 不支持 container_name，会显示警告
+                        if "container_name" in compose_content:
+                            logger.warning("docker stack deploy 不支持 container_name 选项，该选项将被忽略")
+                    
+                    # 根据 compose_mode 执行不同的命令
+                    if compose_mode == "docker-stack":
+                        # Docker Stack 模式：使用 docker stack deploy
+                        command = docker_config.get("command", "")
+                        # 构建 docker stack deploy 命令
+                        # 命令格式：docker stack deploy -c <compose-file> <stack-name> [OPTIONS]
+                        if command:
+                            # 如果命令中包含 -c 或 --compose-file，需要替换文件路径
+                            import shlex
+                            cmd_parts = shlex.split(command)
+                            
+                            # 检查并替换 -c 或 --compose-file 参数
+                            has_compose_file = False
+                            for i, part in enumerate(cmd_parts):
+                                if part == "-c" and i + 1 < len(cmd_parts):
+                                    cmd_parts[i + 1] = compose_file
+                                    has_compose_file = True
+                                    break
+                                elif part == "--compose-file" and i + 1 < len(cmd_parts):
+                                    cmd_parts[i + 1] = compose_file
+                                    has_compose_file = True
+                                    break
+                            
+                            if has_compose_file:
+                                # 已经有 -c 或 --compose-file，直接使用（stack_name 必须在最后）
+                                stack_command = f"docker stack deploy {' '.join(cmd_parts)} {stack_name}"
+                            else:
+                                # 没有 -c 或 --compose-file，添加它（stack_name 必须在最后）
+                                stack_command = f"docker stack deploy -c {compose_file} {' '.join(cmd_parts)} {stack_name}"
+                        else:
+                            # 默认命令：使用 -c 参数（stack_name 必须在最后）
+                            import shlex
+                            stack_command = f"docker stack deploy -c {shlex.quote(compose_file)} {shlex.quote(stack_name)}"
+                        
+                        logger.info(f"执行 SSH Stack 命令: {stack_command}")
+                        stdin, stdout, stderr = ssh_client.exec_command(stack_command)
+                    else:
+                        # Docker Compose 模式：使用 docker-compose
+                        command = docker_config.get("command", "up -d")
+                        compose_command = f"cd /tmp/{stack_name} && docker-compose {command}"
+                        logger.info(f"执行 SSH Compose 命令: {compose_command}")
+                        stdin, stdout, stderr = ssh_client.exec_command(compose_command)
+                        stack_command = compose_command
                     
                     exit_status = stdout.channel.recv_exit_status()
                     stdout_text = stdout.read().decode("utf-8", errors='ignore')
                     stderr_text = stderr.read().decode("utf-8", errors='ignore')
                     
                     # 记录详细的执行结果
-                    logger.info(f"SSH Compose 命令执行完成: exit_status={exit_status}")
+                    logger.info(f"SSH {compose_mode} 命令执行完成: exit_status={exit_status}")
                     if stdout_text:
-                        logger.info(f"SSH Compose stdout: {stdout_text[:500]}")
+                        logger.info(f"SSH {compose_mode} stdout: {stdout_text[:500]}")
                     if stderr_text:
-                        logger.warning(f"SSH Compose stderr: {stderr_text[:500]}")
+                        logger.warning(f"SSH {compose_mode} stderr: {stderr_text[:500]}")
                     
                     if exit_status == 0:
                         return {
                             "success": True,
-                            "message": "Stack 部署成功",
+                            "message": f"{'Stack' if compose_mode == 'docker-stack' else 'Compose'} 部署成功",
                             "output": stdout_text,
-                            "command": compose_command
+                            "command": stack_command
                         }
                     else:
                         # 构建详细的错误消息
-                        error_message = "Stack 部署失败"
+                        error_message = f"{'Stack' if compose_mode == 'docker-stack' else 'Compose'} 部署失败"
                         if stderr_text:
-                            error_message = f"Stack 部署失败: {stderr_text.strip()}"
+                            error_message = f"{error_message}: {stderr_text.strip()}"
                         elif stdout_text:
-                            error_message = f"Stack 部署失败: {stdout_text.strip()}"
+                            error_message = f"{error_message}: {stdout_text.strip()}"
                         
-                        logger.error(f"SSH Compose 部署失败: exit_status={exit_status}, error={stderr_text}, output={stdout_text}")
+                        logger.error(f"SSH {compose_mode} 部署失败: exit_status={exit_status}, error={stderr_text}, output={stdout_text}")
                         return {
                             "success": False,
                             "message": error_message,
                             "error": stderr_text,
                             "output": stdout_text,
                             "exit_status": exit_status,
-                            "command": compose_command
+                            "command": stack_command
                         }
                 else:
                     # Docker Run 模式

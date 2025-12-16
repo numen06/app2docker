@@ -326,14 +326,20 @@ class DeployTaskManager:
             if overrides.get("compose_content"):
                 compose_content = overrides["compose_content"]
 
-            # 适配命令
+            # 适配命令（将 compose_mode 和 redeploy_strategy 传递到 context）
+            enhanced_context = context.copy() if context else {}
+            if "compose_mode" in deploy_config:
+                enhanced_context["compose_mode"] = deploy_config["compose_mode"]
+            if "redeploy_strategy" in deploy_config:
+                enhanced_context["redeploy_strategy"] = deploy_config["redeploy_strategy"]
+            
             try:
                 adapted_config = self.command_adapter.adapt_command(
                     command=command,
                     deploy_type=deploy_type,
                     host_type=host_type,
                     compose_content=compose_content,
-                    context=context,
+                    context=enhanced_context,
                 )
             except Exception as e:
                 logger.error(f"适配命令失败: {e}")
@@ -347,6 +353,16 @@ class DeployTaskManager:
             # 合并redeploy等配置
             if deploy_config.get("redeploy"):
                 adapted_config["redeploy"] = True
+            # 合并 compose_mode 和 redeploy_strategy（如果存在）
+            if "compose_mode" in deploy_config:
+                adapted_config["compose_mode"] = deploy_config["compose_mode"]
+            if "redeploy_strategy" in deploy_config:
+                adapted_config["redeploy_strategy"] = deploy_config["redeploy_strategy"]
+            # 合并 compose_mode 和 redeploy_strategy（如果存在）
+            if "compose_mode" in deploy_config:
+                adapted_config["compose_mode"] = deploy_config["compose_mode"]
+            if "redeploy_strategy" in deploy_config:
+                adapted_config["redeploy_strategy"] = deploy_config["redeploy_strategy"]
 
         # 创建状态更新回调
         def update_status_callback(message: str):
@@ -376,13 +392,20 @@ class DeployTaskManager:
                 compose_content = adapted_config.get("compose_content", "")
 
                 if deploy_type == "docker_compose":
+                    compose_mode = adapted_config.get("compose_mode", "docker-compose")
+                    mode_name = "Docker Stack" if compose_mode == "docker-stack" else "Docker Compose"
                     task_manager.add_log(
-                        task_id, f"📋 部署配置（Docker Compose 模式）：\n"
+                        task_id, f"📋 部署配置（{mode_name} 模式）：\n"
                     )
                     if command:
-                        task_manager.add_log(
-                            task_id, f"  命令: docker-compose {command}\n"
-                        )
+                        if compose_mode == "docker-stack":
+                            task_manager.add_log(
+                                task_id, f"  命令: docker stack deploy {command}\n"
+                            )
+                        else:
+                            task_manager.add_log(
+                                task_id, f"  命令: docker-compose {command}\n"
+                            )
                     if compose_content:
                         # 只显示前几行，避免日志过长
                         compose_lines = compose_content.split("\n")[:10]

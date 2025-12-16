@@ -56,32 +56,65 @@ class DeployExecutor:
         """
         try:
             if deploy_mode == "docker_compose":
-                # Docker Compose 模式：执行 down 命令
+                # Docker Compose 模式：根据 compose_mode 和 redeploy_strategy 处理
+                compose_mode = docker_config.get("compose_mode", "docker-compose")
+                redeploy_strategy = docker_config.get("redeploy_strategy", "update_existing")
+                
+                # 只有在 remove_and_redeploy 策略时才执行清理
+                if redeploy_strategy != "remove_and_redeploy":
+                    logger.info(f"重新发布策略为 {redeploy_strategy}，跳过清理步骤")
+                    return
+                
                 if "compose_content" in docker_config:
                     task_id = context.get("task_id", "default")
                     compose_file = os.path.join(
                         self.work_dir, f"docker-compose-{task_id}.yml"
                     )
 
-                    # 如果文件不存在，先创建它（用于 down 命令）
+                    # 如果文件不存在，先创建它（用于 down/rm 命令）
                     if not os.path.exists(compose_file):
                         with open(compose_file, "w", encoding="utf-8") as f:
                             f.write(docker_config["compose_content"])
 
-                    # 执行 docker-compose down
-                    cmd = ["docker-compose", "-f", compose_file, "down", "-v"]
-                    logger.info(f"清理已有部署: {' '.join(cmd)}")
-                    result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=60
-                    )
-                    if result.stdout:
-                        logger.info(f"清理输出: {result.stdout}")
-                    if result.returncode == 0:
-                        logger.info("已停止并删除已有的 Docker Compose 服务")
-                    else:
-                        logger.warning(
-                            f"清理 Docker Compose 服务时出现警告: {result.stderr}"
+                    if compose_mode == "docker-stack":
+                        # Docker Stack 模式：删除 Stack
+                        app_name = context.get("app", {}).get("name", "app") if isinstance(context.get("app"), dict) else "app"
+                        stack_name = f"{app_name}-{task_id}"
+                        # 确保 Stack 名称符合 Docker Stack 命名规范
+                        import re
+                        stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
+                        
+                        cmd = ["docker", "stack", "rm", stack_name]
+                        logger.info(f"清理已有 Stack: {' '.join(cmd)}")
+                        result = subprocess.run(
+                            cmd, capture_output=True, text=True, timeout=60
                         )
+                        if result.stdout:
+                            logger.info(f"清理输出: {result.stdout}")
+                        if result.returncode == 0:
+                            logger.info(f"已删除 Stack: {stack_name}")
+                        else:
+                            logger.warning(
+                                f"删除 Stack 时出现警告: {result.stderr}"
+                            )
+                        # 等待 Stack 完全删除
+                        import time
+                        time.sleep(2)
+                    else:
+                        # Docker Compose 模式：执行 down 命令
+                        cmd = ["docker-compose", "-f", compose_file, "down", "-v"]
+                        logger.info(f"清理已有部署: {' '.join(cmd)}")
+                        result = subprocess.run(
+                            cmd, capture_output=True, text=True, timeout=60
+                        )
+                        if result.stdout:
+                            logger.info(f"清理输出: {result.stdout}")
+                        if result.returncode == 0:
+                            logger.info("已停止并删除已有的 Docker Compose 服务")
+                        else:
+                            logger.warning(
+                                f"清理 Docker Compose 服务时出现警告: {result.stderr}"
+                            )
                 else:
                     # 如果没有 compose_content，尝试从命令中提取服务名
                     command_str = docker_config.get("command", "").strip()
@@ -347,13 +380,14 @@ class DeployExecutor:
 
         # 检查是否需要重新发布
         redeploy = docker_config.get("redeploy", False)
+        redeploy_strategy = docker_config.get("redeploy_strategy", "update_existing")
 
-        logger.info(f"redeploy 配置: {redeploy}, deploy_mode: {deploy_mode}")
+        logger.info(f"redeploy 配置: {redeploy}, redeploy_strategy: {redeploy_strategy}, deploy_mode: {deploy_mode}")
 
         try:
-            # 如果需要重新发布，先停止并删除已有的容器/服务
-            if redeploy:
-                logger.info("开始清理已有部署...")
+            # 如果需要重新发布且策略为 remove_and_redeploy，先停止并删除已有的容器/服务
+            if redeploy and redeploy_strategy == "remove_and_redeploy":
+                logger.info("开始清理已有部署（策略: remove_and_redeploy）...")
                 self._cleanup_existing_deployment(docker_config, deploy_mode, context)
                 logger.info("清理已有部署完成")
 
@@ -367,6 +401,7 @@ class DeployExecutor:
                 if deploy_mode == "docker_compose":
                     # Docker Compose 模式：需要先创建 compose 文件
                     if "compose_content" in docker_config:
+                        compose_mode = docker_config.get("compose_mode", "docker-compose")
                         task_id = context.get("task_id", "default")
                         compose_file = os.path.join(
                             self.work_dir, f"docker-compose-{task_id}.yml"
@@ -378,24 +413,49 @@ class DeployExecutor:
 
                         logger.info(f"创建 docker-compose.yml: {compose_file}")
 
-                        # 解析命令（可能包含 -f 参数）
-                        import shlex
+                        if compose_mode == "docker-stack":
+                            # Docker Stack 模式：使用 docker stack deploy
+                            app_name = context.get("app", {}).get("name", "app") if isinstance(context.get("app"), dict) else "app"
+                            stack_name = f"{app_name}-{task_id}"
+                            # 确保 Stack 名称符合 Docker Stack 命名规范
+                            import re
+                            stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
+                            
+                            # 解析命令（可能包含 -c 或 --compose-file 参数）
+                            import shlex
+                            cmd_parts = shlex.split(command_str) if command_str else []
 
-                        cmd_parts = shlex.split(command_str)
-
-                        # 如果命令中没有 -f 参数，添加它
-                        if "-f" not in cmd_parts:
-                            cmd_parts.insert(1, "-f")
-                            cmd_parts.insert(2, compose_file)
-                        else:
-                            # 替换 -f 后面的文件路径
-                            f_idx = cmd_parts.index("-f")
-                            if f_idx + 1 < len(cmd_parts):
-                                cmd_parts[f_idx + 1] = compose_file
+                            # 构建 docker stack deploy 命令
+                            # 格式：docker stack deploy -c <compose-file> <stack-name> [OPTIONS]
+                            if command_str:
+                                # 如果命令中包含 -c 或 --compose-file，使用用户提供的命令
+                                if "-c" in cmd_parts or "--compose-file" in cmd_parts:
+                                    cmd = ["docker", "stack", "deploy"] + cmd_parts + [stack_name]
+                                else:
+                                    # 否则，将命令作为额外参数
+                                    cmd = ["docker", "stack", "deploy", "-c", compose_file] + cmd_parts + [stack_name]
                             else:
-                                cmd_parts.insert(f_idx + 1, compose_file)
+                                cmd = ["docker", "stack", "deploy", "-c", compose_file, stack_name]
+                        else:
+                            # Docker Compose 模式：使用 docker-compose
+                            # 解析命令（可能包含 -f 参数）
+                            import shlex
 
-                        cmd = ["docker-compose"] + cmd_parts
+                            cmd_parts = shlex.split(command_str)
+
+                            # 如果命令中没有 -f 参数，添加它
+                            if "-f" not in cmd_parts:
+                                cmd_parts.insert(1, "-f")
+                                cmd_parts.insert(2, compose_file)
+                            else:
+                                # 替换 -f 后面的文件路径
+                                f_idx = cmd_parts.index("-f")
+                                if f_idx + 1 < len(cmd_parts):
+                                    cmd_parts[f_idx + 1] = compose_file
+                                else:
+                                    cmd_parts.insert(f_idx + 1, compose_file)
+
+                            cmd = ["docker-compose"] + cmd_parts
                     else:
                         raise ValueError("Docker Compose 模式需要提供 compose_content")
                 else:
@@ -451,14 +511,27 @@ class DeployExecutor:
 
             # 如果没有直接命令，使用配置构建命令（原有逻辑）
             if deploy_mode == "docker_compose":
-                # 使用 docker-compose 部署
+                # 使用 docker-compose 或 docker stack deploy 部署
+                compose_mode = docker_config.get("compose_mode", "docker-compose")
                 task_id = context.get("task_id", "default")
                 compose_file = self._create_docker_compose_file(
                     docker_config, context, task_id
                 )
 
-                # 执行 docker-compose up
-                cmd = ["docker-compose", "-f", compose_file, "up", "-d"]
+                if compose_mode == "docker-stack":
+                    # Docker Stack 模式：使用 docker stack deploy
+                    app_name = context.get("app", {}).get("name", "app") if isinstance(context.get("app"), dict) else "app"
+                    stack_name = f"{app_name}-{task_id}"
+                    # 确保 Stack 名称符合 Docker Stack 命名规范
+                    import re
+                    stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
+                    
+                    # 执行 docker stack deploy
+                    cmd = ["docker", "stack", "deploy", "-c", compose_file, stack_name]
+                else:
+                    # Docker Compose 模式：执行 docker-compose up
+                    cmd = ["docker-compose", "-f", compose_file, "up", "-d"]
+                
                 logger.info(f"执行命令: {' '.join(cmd)}")
                 result = subprocess.run(
                     cmd, capture_output=True, text=True, timeout=300

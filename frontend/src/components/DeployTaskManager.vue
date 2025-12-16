@@ -204,16 +204,69 @@
                   <small class="text-muted">输入 docker run 的参数（可包含 "docker run" 前缀，系统会自动适配）</small>
                 </div>
 
+                <!-- Docker Compose 模式选择 -->
+                <div v-if="simpleForm.deployMode === 'docker_compose'" class="mb-3">
+                  <label class="form-label">Compose 部署模式 <span class="text-danger">*</span></label>
+                  <div class="btn-group w-100" role="group">
+                    <input type="radio" class="btn-check" id="compose-mode-compose" v-model="simpleForm.composeMode" value="docker-compose">
+                    <label class="btn btn-outline-secondary" for="compose-mode-compose">
+                      <i class="fas fa-layer-group me-1"></i> docker-compose
+                    </label>
+                    
+                    <input type="radio" class="btn-check" id="compose-mode-stack" v-model="simpleForm.composeMode" value="docker-stack">
+                    <label class="btn btn-outline-secondary" for="compose-mode-stack">
+                      <i class="fas fa-server me-1"></i> docker stack deploy
+                    </label>
+                  </div>
+                  <small class="text-muted d-block mt-1">
+                    <span v-if="simpleForm.composeMode === 'docker-compose'">使用 docker-compose 命令部署（传统 Compose 模式）</span>
+                    <span v-else>使用 docker stack deploy 命令部署（Docker Swarm Stack 模式）</span>
+                  </small>
+                </div>
+
+                <!-- 重新发布策略选择 -->
+                <div v-if="simpleForm.deployMode === 'docker_compose'" class="mb-3">
+                  <label class="form-label">重新发布策略</label>
+                  <div class="btn-group w-100" role="group">
+                    <input type="radio" class="btn-check" id="redeploy-strategy-remove" v-model="simpleForm.redeployStrategy" value="remove_and_redeploy">
+                    <label class="btn btn-outline-warning" for="redeploy-strategy-remove">
+                      <i class="fas fa-trash-alt me-1"></i> 删除后重新部署
+                    </label>
+                    
+                    <input type="radio" class="btn-check" id="redeploy-strategy-update" v-model="simpleForm.redeployStrategy" value="update_existing">
+                    <label class="btn btn-outline-info" for="redeploy-strategy-update">
+                      <i class="fas fa-sync-alt me-1"></i> 直接更新
+                    </label>
+                  </div>
+                  <small class="text-muted d-block mt-1">
+                    <span v-if="simpleForm.redeployStrategy === 'remove_and_redeploy'">
+                      <span v-if="simpleForm.composeMode === 'docker-compose'">先执行 docker-compose down，然后重新部署</span>
+                      <span v-else>先执行 docker stack rm，然后重新部署</span>
+                    </span>
+                    <span v-else>
+                      <span v-if="simpleForm.composeMode === 'docker-compose'">直接执行 docker-compose up -d（自动更新）</span>
+                      <span v-else>直接执行 docker stack deploy（自动更新）</span>
+                    </span>
+                  </small>
+                </div>
+
                 <!-- Docker Compose 命令输入 -->
                 <div v-if="simpleForm.deployMode === 'docker_compose'" class="mb-3">
-                  <label class="form-label">Docker Compose 命令 <span class="text-danger">*</span></label>
+                  <label class="form-label">
+                    <span v-if="simpleForm.composeMode === 'docker-compose'">Docker Compose 命令</span>
+                    <span v-else>Docker Stack 命令</span>
+                    <span class="text-danger">*</span>
+                  </label>
                   <input 
                     v-model="simpleForm.composeCommand" 
                     type="text" 
                     class="form-control font-monospace" 
-                    placeholder="up -d"
+                    :placeholder="simpleForm.composeMode === 'docker-compose' ? 'up -d' : '--compose-file docker-compose.yml'"
                   >
-                  <small class="text-muted">输入 docker-compose 命令参数（不包含 "docker-compose" 前缀，如：up -d）</small>
+                  <small class="text-muted">
+                    <span v-if="simpleForm.composeMode === 'docker-compose'">输入 docker-compose 命令参数（不包含 "docker-compose" 前缀，如：up -d）</span>
+                    <span v-else>输入 docker stack deploy 的参数（不包含 "docker stack deploy" 前缀，如：--compose-file docker-compose.yml）</span>
+                  </small>
                 </div>
 
                 <div v-if="simpleForm.deployMode === 'docker_compose'" class="mb-3">
@@ -763,16 +816,69 @@
                     <small class="text-muted">输入 docker run 的参数（可包含 "docker run" 前缀，系统会自动适配）</small>
                   </div>
 
+                  <!-- Docker Compose 模式选择 -->
+                  <div v-if="editForm.deployMode === 'docker_compose'" class="mb-3">
+                    <label class="form-label">Compose 部署模式 <span class="text-danger">*</span></label>
+                    <div class="btn-group w-100" role="group">
+                      <input type="radio" class="btn-check" id="edit-compose-mode-compose" v-model="editForm.composeMode" value="docker-compose">
+                      <label class="btn btn-outline-secondary" for="edit-compose-mode-compose">
+                        <i class="fas fa-layer-group me-1"></i> docker-compose
+                      </label>
+                      
+                      <input type="radio" class="btn-check" id="edit-compose-mode-stack" v-model="editForm.composeMode" value="docker-stack">
+                      <label class="btn btn-outline-secondary" for="edit-compose-mode-stack">
+                        <i class="fas fa-server me-1"></i> docker stack deploy
+                      </label>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                      <span v-if="editForm.composeMode === 'docker-compose'">使用 docker-compose 命令部署（传统 Compose 模式）</span>
+                      <span v-else>使用 docker stack deploy 命令部署（Docker Swarm Stack 模式）</span>
+                    </small>
+                  </div>
+
+                  <!-- 重新发布策略选择 -->
+                  <div v-if="editForm.deployMode === 'docker_compose'" class="mb-3">
+                    <label class="form-label">重新发布策略</label>
+                    <div class="btn-group w-100" role="group">
+                      <input type="radio" class="btn-check" id="edit-redeploy-strategy-remove" v-model="editForm.redeployStrategy" value="remove_and_redeploy">
+                      <label class="btn btn-outline-warning" for="edit-redeploy-strategy-remove">
+                        <i class="fas fa-trash-alt me-1"></i> 删除后重新部署
+                      </label>
+                      
+                      <input type="radio" class="btn-check" id="edit-redeploy-strategy-update" v-model="editForm.redeployStrategy" value="update_existing">
+                      <label class="btn btn-outline-info" for="edit-redeploy-strategy-update">
+                        <i class="fas fa-sync-alt me-1"></i> 直接更新
+                      </label>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                      <span v-if="editForm.redeployStrategy === 'remove_and_redeploy'">
+                        <span v-if="editForm.composeMode === 'docker-compose'">先执行 docker-compose down，然后重新部署</span>
+                        <span v-else>先执行 docker stack rm，然后重新部署</span>
+                      </span>
+                      <span v-else>
+                        <span v-if="editForm.composeMode === 'docker-compose'">直接执行 docker-compose up -d（自动更新）</span>
+                        <span v-else>直接执行 docker stack deploy（自动更新）</span>
+                      </span>
+                    </small>
+                  </div>
+
                   <!-- Docker Compose 命令输入 -->
                   <div v-if="editForm.deployMode === 'docker_compose'" class="mb-3">
-                    <label class="form-label">Docker Compose 命令 <span class="text-danger">*</span></label>
+                    <label class="form-label">
+                      <span v-if="editForm.composeMode === 'docker-compose'">Docker Compose 命令</span>
+                      <span v-else>Docker Stack 命令</span>
+                      <span class="text-danger">*</span>
+                    </label>
                     <input 
                       v-model="editForm.composeCommand" 
                       type="text" 
                       class="form-control font-monospace" 
-                      placeholder="up -d"
+                      :placeholder="editForm.composeMode === 'docker-compose' ? 'up -d' : '--compose-file docker-compose.yml'"
                     >
-                    <small class="text-muted">输入 docker-compose 命令参数（不包含 "docker-compose" 前缀，如：up -d）</small>
+                    <small class="text-muted">
+                      <span v-if="editForm.composeMode === 'docker-compose'">输入 docker-compose 命令参数（不包含 "docker-compose" 前缀，如：up -d）</span>
+                      <span v-else>输入 docker stack deploy 的参数（不包含 "docker stack deploy" 前缀，如：--compose-file docker-compose.yml）</span>
+                    </small>
                   </div>
 
                   <div v-if="editForm.deployMode === 'docker_compose'" class="mb-3">
@@ -1236,6 +1342,8 @@ export default {
         appName: '',
         selectedHosts: [],
         deployMode: 'docker_run',
+        composeMode: 'docker-compose',
+        redeployStrategy: 'update_existing',
         runCommand: '',
         composeCommand: '',
         composeContent: '',
@@ -1262,6 +1370,10 @@ export default {
         imageName: '',
         containerName: '',
         deployMode: 'docker_run',
+        composeMode: 'docker-compose',
+        redeployStrategy: 'update_existing',
+        composeCommand: '',
+        composeContent: '',
         ports: ['8000:8000'],
         envVars: [''],
         volumes: [''],
@@ -1704,6 +1816,13 @@ export default {
 
         if (this.simpleForm.deployMode === 'docker_compose') {
           deployConfig.compose_content = this.simpleForm.composeContent.trim()
+          // 添加 compose_mode 和 redeploy_strategy
+          if (this.simpleForm.composeMode) {
+            deployConfig.compose_mode = this.simpleForm.composeMode
+          }
+          if (this.simpleForm.redeployStrategy) {
+            deployConfig.redeploy_strategy = this.simpleForm.redeployStrategy
+          }
         }
       }
 
@@ -1750,6 +1869,8 @@ export default {
         appName: '',
         selectedHosts: [],
         deployMode: 'docker_run',
+        composeMode: 'docker-compose',
+        redeployStrategy: 'update_existing',
         runCommand: '',
         composeCommand: '',
         composeContent: '',
@@ -1884,6 +2005,8 @@ export default {
         appName: '',
         selectedHosts: [],
         deployMode: 'docker_run',
+        composeMode: 'docker-compose',
+        redeployStrategy: 'update_existing',
         runCommand: '',
         composeCommand: '',
         composeContent: '',
@@ -1951,6 +2074,9 @@ export default {
           } else {
             this.editForm.composeCommand = deployConfig.command || 'up -d'
             this.editForm.composeContent = deployConfig.compose_content || ''
+            // 解析 compose_mode 和 redeploy_strategy
+            this.editForm.composeMode = deployConfig.compose_mode || 'docker-compose'
+            this.editForm.redeployStrategy = deployConfig.redeploy_strategy || 'update_existing'
           }
         }
         
@@ -2145,6 +2271,13 @@ export default {
 
         if (form.deployMode === 'docker_compose') {
           deployConfig.compose_content = form.composeContent.trim()
+          // 添加 compose_mode 和 redeploy_strategy
+          if (form.composeMode) {
+            deployConfig.compose_mode = form.composeMode
+          }
+          if (form.redeployStrategy) {
+            deployConfig.redeploy_strategy = form.redeployStrategy
+          }
         }
       }
 
