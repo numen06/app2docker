@@ -2,7 +2,8 @@
   <div>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">
-        <i class="fas fa-rocket text-primary"></i> 部署任务管理
+        <i class="fas fa-rocket text-primary"></i> 部署配置管理
+        <small class="text-muted ms-2">（配置触发后会生成任务）</small>
       </h5>
       <div>
         <button class="btn btn-primary btn-sm" @click="showImportModal = true">
@@ -17,18 +18,18 @@
       </div>
     </div>
 
-    <!-- 任务列表 -->
+    <!-- 配置列表 -->
     <div class="table-responsive">
       <table class="table table-hover">
         <thead>
           <tr>
-            <th width="10%">任务ID</th>
+            <th width="10%">配置ID</th>
             <th width="15%">应用名称</th>
-            <th width="10%">状态</th>
-            <th width="15%">目标主机</th>
+            <th width="12%">目标主机</th>
+            <th width="10%">触发次数</th>
             <th width="15%">创建时间</th>
-            <th width="15%">完成时间</th>
-            <th width="20%">操作</th>
+            <th width="15%">最后触发</th>
+            <th width="23%">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -40,7 +41,7 @@
           </tr>
           <tr v-else-if="tasks.length === 0">
             <td colspan="7" class="text-center py-4 text-muted">
-              暂无部署任务
+              暂无部署配置
             </td>
           </tr>
           <tr v-else v-for="task in tasks" :key="task.task_id">
@@ -49,17 +50,26 @@
             </td>
             <td>{{ task.config?.app?.name || '-' }}</td>
             <td>
-              <span :class="getStatusBadgeClass(task.status?.status)" class="badge">
-                {{ getStatusText(task.status?.status) }}
+              <span v-for="(target, idx) in task.config?.targets || []" :key="idx" class="badge bg-secondary me-1">
+                {{ target.name || target.host_name || '-' }}
               </span>
             </td>
             <td>
-              <span v-for="(target, idx) in task.status?.targets || []" :key="idx" class="badge bg-secondary me-1">
-                {{ target.name }}
+              <span class="badge bg-info">
+                <i class="fas fa-play-circle"></i> {{ task.execution_count || 0 }}
               </span>
+              <button 
+                v-if="task.execution_count > 0"
+                class="btn btn-link btn-sm p-0 ms-1" 
+                @click="viewExecutions(task)"
+                title="查看执行历史"
+                style="font-size: 0.75rem; text-decoration: none;"
+              >
+                <i class="fas fa-external-link-alt"></i>
+              </button>
             </td>
-            <td>{{ formatTime(task.status?.created_at) }}</td>
-            <td>{{ formatTime(task.status?.completed_at) || '-' }}</td>
+            <td>{{ formatTime(task.created_at) }}</td>
+            <td>{{ formatTime(task.last_executed_at) || '-' }}</td>
             <td>
               <div class="btn-group" role="group">
                 <button class="btn btn-sm btn-outline-primary" @click="viewTask(task)" title="查看详情">
@@ -68,29 +78,20 @@
                 <button 
                   class="btn btn-sm btn-outline-success" 
                   @click="executeTask(task)"
-                  :disabled="task.status?.status === 'running'"
-                  :title="task.status?.status === 'running' ? '任务执行中' : '执行任务'"
+                  title="触发部署（将创建新任务）"
                 >
-                  <i class="fas fa-play"></i>
-                </button>
-                <button 
-                  v-if="task.status?.status === 'running'"
-                  class="btn btn-sm btn-outline-warning" 
-                  @click="refreshTask(task)"
-                  title="刷新状态"
-                >
-                  <i class="fas fa-sync-alt"></i>
+                  <i class="fas fa-play"></i> 触发
                 </button>
                 <button class="btn btn-sm btn-outline-secondary" @click="editTask(task)" title="编辑配置">
                   <i class="fas fa-edit"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-info" @click="copyTask(task)" title="复制任务">
+                <button class="btn btn-sm btn-outline-info" @click="copyTask(task)" title="复制配置">
                   <i class="fas fa-copy"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-info" @click="exportTask(task)" title="导出配置">
                   <i class="fas fa-download"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)" title="删除任务">
+                <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task)" title="删除配置">
                   <i class="fas fa-trash"></i>
                 </button>
               </div>
@@ -519,54 +520,43 @@
             </ul>
 
             <div v-if="detailTab === 'config'">
-              <pre class="bg-dark text-light p-3 rounded" style="max-height: 500px; overflow-y: auto;"><code>{{ selectedTask.config_content }}</code></pre>
+              <pre class="bg-dark text-light p-3 rounded" style="max-height: 500px; overflow-y: auto;"><code>{{ selectedTask.config_content || selectedTask.task_config?.config_content || '' }}</code></pre>
             </div>
 
             <div v-if="detailTab === 'status'">
               <div class="mb-3">
                 <strong>任务状态:</strong>
-                <span :class="getStatusBadgeClass(selectedTask.status?.status)" class="badge ms-2">
-                  {{ getStatusText(selectedTask.status?.status) }}
+                <span :class="getStatusBadgeClass(selectedTask.status)" class="badge ms-2">
+                  {{ getStatusText(selectedTask.status) }}
                 </span>
-                <span v-if="selectedTask.status?.created_at" class="text-muted small ms-3">
-                  创建时间: {{ formatTime(selectedTask.status.created_at) }}
+                <span v-if="selectedTask.created_at" class="text-muted small ms-3">
+                  创建时间: {{ formatTime(selectedTask.created_at) }}
                 </span>
-                <span v-if="selectedTask.status?.completed_at" class="text-muted small ms-3">
-                  完成时间: {{ formatTime(selectedTask.status.completed_at) }}
+                <span v-if="selectedTask.completed_at" class="text-muted small ms-3">
+                  完成时间: {{ formatTime(selectedTask.completed_at) }}
                 </span>
               </div>
-              <div v-if="selectedTask.status?.targets" class="mb-3">
-                <strong>目标主机执行状态:</strong>
+              <div v-if="selectedTask.error" class="alert alert-danger mb-3">
+                <strong>错误信息:</strong> {{ selectedTask.error }}
+              </div>
+              <div v-if="selectedTask.config?.targets" class="mb-3">
+                <strong>目标主机配置:</strong>
                 <table class="table table-sm mt-2">
                   <thead>
                     <tr>
                       <th>主机名称</th>
-                      <th>状态</th>
-                      <th>结果</th>
+                      <th>主机类型</th>
+                      <th>配置</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="target in selectedTask.status.targets" :key="target.name">
-                      <td>{{ target.name }}</td>
+                    <tr v-for="target in selectedTask.config.targets" :key="target.name">
+                      <td>{{ target.name || target.host_name || '-' }}</td>
                       <td>
-                        <span :class="getStatusBadgeClass(target.status)" class="badge">
-                          {{ getStatusText(target.status) }}
-                        </span>
+                        <span class="badge bg-info">{{ target.host_type || target.mode || '-' }}</span>
                       </td>
                       <td>
-                        <div v-if="target.result" class="small">
-                          <div :class="target.result.success ? 'text-success' : 'text-danger'">
-                            <strong>{{ target.result.success ? '✓' : '✗' }}</strong>
-                            {{ target.result.message || '-' }}
-                          </div>
-                          <div v-if="target.result.error" class="text-danger mt-1">
-                            <strong>错误:</strong> {{ target.result.error }}
-                          </div>
-                          <div v-if="target.result.output" class="text-muted mt-1 font-monospace small" style="max-height: 100px; overflow-y: auto;">
-                            {{ target.result.output }}
-                          </div>
-                        </div>
-                        <span v-else class="text-muted">-</span>
+                        <small class="text-muted">{{ target.host_name || target.host || target.agent?.name || '-' }}</small>
                       </td>
                     </tr>
                   </tbody>
@@ -587,76 +577,16 @@
                 </button>
               </div>
               
-              <div v-if="selectedTask.status?.targets && selectedTask.status.targets.length > 0">
-                <div 
-                  v-for="target in selectedTask.status.targets" 
-                  :key="target.name"
-                  class="card mb-3"
-                >
-                  <div class="card-header d-flex justify-content-between align-items-center">
-                    <div>
-                      <strong>{{ target.name }}</strong>
-                      <span :class="getStatusBadgeClass(target.status)" class="badge ms-2">
-                        {{ getStatusText(target.status) }}
-                      </span>
-                    </div>
-                    <span v-if="target.updated_at" class="text-muted small">
-                      {{ formatTime(target.updated_at) }}
-                    </span>
-                  </div>
-                  <div class="card-body">
-                    <!-- 执行结果 -->
-                    <div v-if="target.result" class="mb-3">
-                      <div class="d-flex align-items-center mb-2">
-                        <strong class="me-2">执行结果:</strong>
-                        <span :class="target.result.success ? 'text-success' : 'text-danger'">
-                          <i :class="target.result.success ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
-                          {{ target.result.success ? '成功' : '失败' }}
-                        </span>
-                      </div>
-                      <div v-if="target.result.message" class="alert" :class="target.result.success ? 'alert-success' : 'alert-danger'">
-                        {{ target.result.message }}
-                      </div>
-                      <div v-if="target.result.error" class="alert alert-danger">
-                        <strong>错误信息:</strong>
-                        <pre class="mb-0 mt-2">{{ target.result.error }}</pre>
-                      </div>
-                      <div v-if="target.result.output" class="mt-2">
-                        <strong>输出内容:</strong>
-                        <pre class="bg-dark text-light p-3 rounded mt-2" style="max-height: 300px; overflow-y: auto; font-size: 12px;">{{ target.result.output }}</pre>
-                      </div>
-                      <div v-if="target.result.command" class="mt-2">
-                        <strong>执行命令:</strong>
-                        <code class="d-block bg-light p-2 rounded mt-1">{{ target.result.command }}</code>
-                      </div>
-                      <div v-if="target.result.exit_status !== undefined" class="mt-2">
-                        <strong>退出状态码:</strong>
-                        <span :class="target.result.exit_status === 0 ? 'text-success' : 'text-danger'">
-                          {{ target.result.exit_status }}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <!-- 执行日志消息 -->
-                    <div v-if="target.messages && target.messages.length > 0">
-                      <strong class="mb-2 d-block">执行过程:</strong>
-                      <div class="log-container bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;">
-                        <div 
-                          v-for="(msg, idx) in target.messages" 
-                          :key="idx"
-                          class="log-line mb-1"
-                          :class="getLogLineClass(msg.message)"
-                        >
-                          <span class="text-muted">[{{ formatTime(msg.time) }}]</span>
-                          <span class="ms-2">{{ msg.message }}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div v-if="!target.result && (!target.messages || target.messages.length === 0)" class="text-muted text-center py-3">
-                      <i class="fas fa-info-circle me-1"></i>
-                      暂无日志信息
-                    </div>
+              <div v-if="taskLogs && taskLogs.length > 0">
+                <div class="log-container bg-dark text-light p-3 rounded" style="max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                  <div 
+                    v-for="(log, idx) in taskLogs" 
+                    :key="idx"
+                    class="log-line mb-1"
+                    :class="getLogLineClass(log)"
+                  >
+                    <span class="text-muted">[{{ formatTime(log.log_time) }}]</span>
+                    <span class="ms-2" v-html="formatLogMessage(log.log_message)"></span>
                   </div>
                 </div>
               </div>
@@ -684,10 +614,10 @@
             <button 
               class="btn btn-success" 
               @click="executeTask(selectedTask)"
-              :disabled="selectedTask.status?.status === 'running'"
+              :disabled="selectedTask.status === 'running'"
             >
               <i class="fas fa-play me-1"></i> 
-              {{ selectedTask.status?.status === 'running' ? '执行中...' : '执行任务' }}
+              {{ selectedTask.status === 'running' ? '执行中...' : '执行任务' }}
             </button>
           </div>
         </div>
@@ -1102,6 +1032,7 @@ export default {
       showEditModal: false,
       editingTask: null,
       selectedTask: null,
+      taskLogs: [],
       detailTab: 'config',
       editHostFilter: 'all',
       editFilterOnlineOnly: true,
@@ -1135,7 +1066,8 @@ export default {
         envVars: [''],
         volumes: [''],
         restartPolicy: 'always'
-      }
+      },
+      autoRefreshInterval: null  // 自动刷新定时器
     }
   },
   computed: {
@@ -1279,14 +1211,36 @@ export default {
     this.loadSSHHosts()
   },
   beforeUnmount() {
-    this.stopAutoRefresh()
+    // 清理资源（如果有自动刷新定时器，在这里清理）
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval)
+      this.autoRefreshInterval = null
+    }
   },
   methods: {
+    stopAutoRefresh() {
+      // 停止自动刷新（兼容性方法）
+      if (this.autoRefreshInterval) {
+        clearInterval(this.autoRefreshInterval)
+        this.autoRefreshInterval = null
+      }
+    },
     async loadTasks() {
       this.loading = true
       try {
         const res = await axios.get('/api/deploy-tasks')
-        this.tasks = res.data.tasks || []
+        // 适配新的数据结构：后端返回的tasks已经是格式化后的
+        this.tasks = (res.data.tasks || []).map(task => {
+          // 确保数据结构一致
+          return {
+            ...task,
+            status: task.status?.status || task.status || 'pending',
+            config: task.config || task.task_config?.config || {},
+            config_content: task.config_content || task.task_config?.config_content || '',
+            execution_count: task.execution_count || 0,
+            last_executed_at: task.last_executed_at || null
+          }
+        })
       } catch (error) {
         console.error('加载部署任务失败:', error)
         alert('加载部署任务失败: ' + (error.response?.data?.detail || error.message))
@@ -1347,19 +1301,26 @@ export default {
       reader.readAsText(file)
     },
     async executeTask(task) {
-      if (!confirm('确定要执行此部署任务吗？')) return
+      if (!confirm('确定要触发此部署配置吗？\n\n触发后将创建新的部署任务，可在"任务管理"页面查看执行情况。')) return
       
       try {
-        await axios.post(`/api/deploy-tasks/${task.task_id}/execute`)
-        alert('任务已开始执行')
+        const res = await axios.post(`/api/deploy-tasks/${task.task_id}/execute`)
+        const newTaskId = res.data.task_id
+        alert(`部署配置已触发！\n\n新任务ID: ${newTaskId.substring(0, 8)}\n可在"任务管理"页面查看执行情况。`)
         this.loadTasks()
         if (this.showDetailModal) {
           this.viewTask(task)
         }
       } catch (error) {
-        console.error('执行部署任务失败:', error)
-        alert('执行部署任务失败: ' + (error.response?.data?.detail || error.message))
+        console.error('触发部署配置失败:', error)
+        alert('触发部署配置失败: ' + (error.response?.data?.detail || error.message))
       }
+    },
+    viewExecutions(task) {
+      // 跳转到任务管理页面，筛选该配置的任务
+      const configId = task.task_id
+      sessionStorage.setItem('deployConfigFilter', configId)
+      window.location.href = '/#/tasks?deploy_config=' + configId
     },
     async deleteTask(task) {
       if (!confirm('确定要删除此部署任务吗？')) return
@@ -1398,12 +1359,35 @@ export default {
     async viewTask(task) {
       try {
         const res = await axios.get(`/api/deploy-tasks/${task.task_id}`)
-        this.selectedTask = res.data.task
+        const taskData = res.data.task
+        // 适配新的数据结构
+        this.selectedTask = {
+          ...taskData,
+          status: taskData.status?.status || taskData.status || 'pending',
+          config: taskData.config || taskData.task_config?.config || {},
+          config_content: taskData.config_content || taskData.task_config?.config_content || '',
+          created_at: taskData.created_at || taskData.status?.created_at,
+          completed_at: taskData.completed_at || taskData.status?.completed_at,
+          error: taskData.error
+        }
         this.detailTab = 'config'
         this.showDetailModal = true
+        
+        // 加载任务日志
+        await this.loadTaskLogs(task.task_id)
       } catch (error) {
         console.error('获取任务详情失败:', error)
         alert('获取任务详情失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    async loadTaskLogs(taskId) {
+      try {
+        // 从任务管理API获取日志（部署任务现在也使用统一的任务管理）
+        const res = await axios.get(`/api/tasks/${taskId}`)
+        this.taskLogs = res.data.logs || []
+      } catch (error) {
+        console.error('加载任务日志失败:', error)
+        this.taskLogs = []
       }
     },
     getStatusBadgeClass(status) {
@@ -1582,6 +1566,18 @@ export default {
     removeStep(index) {
       this.simpleForm.steps.splice(index, 1)
     },
+    moveStep(index, direction) {
+      // direction: -1 上移, 1 下移
+      if (direction === -1 && index > 0) {
+        const temp = this.simpleForm.steps[index]
+        this.simpleForm.steps[index] = this.simpleForm.steps[index - 1]
+        this.simpleForm.steps[index - 1] = temp
+      } else if (direction === 1 && index < this.simpleForm.steps.length - 1) {
+        const temp = this.simpleForm.steps[index]
+        this.simpleForm.steps[index] = this.simpleForm.steps[index + 1]
+        this.simpleForm.steps[index + 1] = temp
+      }
+    },
     addEditStep() {
       this.editForm.steps.push({
         name: '',
@@ -1629,11 +1625,14 @@ export default {
         const res = await axios.get(`/api/deploy-tasks/${task.task_id}`)
         const taskData = res.data.task
         // 确保 editingTask 对象完整初始化，包括 registry 和 tag
+        // 后端返回的数据结构：task.config_content 或 task.task_config.config_content
+        const configContent = taskData.config_content || (taskData.task_config && taskData.task_config.config_content) || ''
+        const taskConfig = taskData.task_config || {}
         this.editingTask = {
           task_id: taskData.task_id,
-          config_content: taskData.config_content || '',
-          registry: taskData.status?.registry || taskData.registry || '',
-          tag: taskData.status?.tag || taskData.tag || ''
+          config_content: configContent,
+          registry: (taskData.status && taskData.status.registry) || taskConfig.registry || '',
+          tag: (taskData.status && taskData.status.tag) || taskConfig.tag || ''
         }
         
         // 先加载主机列表（解析表单时需要主机列表）
@@ -1641,7 +1640,8 @@ export default {
         await this.loadSSHHosts()
         
         // 解析YAML配置到表单
-        this.parseYamlToForm(taskData.config_content, taskData.config)
+        const config = taskData.config || taskConfig.config || {}
+        this.parseYamlToForm(configContent, config)
         
         this.showEditModal = true
         this.editMode = 'form' // 默认使用表单编辑
@@ -1936,10 +1936,12 @@ export default {
         const taskData = res.data.task
         
         // 创建新任务（使用相同的配置）
+        const configContent = taskData.config_content || (taskData.task_config && taskData.task_config.config_content) || ''
+        const taskConfig = taskData.task_config || {}
         const createRes = await axios.post('/api/deploy-tasks', {
-          config_content: taskData.config_content,
-          registry: taskData.status?.registry || null,
-          tag: taskData.status?.tag || null
+          config_content: configContent,
+          registry: (taskData.status && taskData.status.registry) || taskConfig.registry || null,
+          tag: (taskData.status && taskData.status.tag) || taskConfig.tag || null
         })
         
         alert('任务克隆成功！\n\n已创建新的部署任务，您可以对其进行编辑和执行。')
@@ -1957,25 +1959,37 @@ export default {
     async refreshTask(task) {
       // 刷新任务状态
       await this.loadTasks()
-      // 如果详情模态框打开，重新加载任务详情
+      // 如果详情模态框打开，重新加载任务详情和日志
       if (this.showDetailModal && this.selectedTask?.task_id === task.task_id) {
         await this.viewTask(task)
       }
     },
-    getLogLineClass(message) {
+    formatLogMessage(message) {
+      // 格式化日志消息，支持简单的HTML标记
+      if (!message) return ''
+      // 转义HTML，但保留换行
+      return message
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+    },
+    getLogLineClass(log) {
       // 根据日志消息内容返回样式类
+      // log可能是字符串或对象
+      const message = typeof log === 'string' ? log : (log.log_message || log.message || '')
       if (!message) return ''
       const msg = message.toLowerCase()
-      if (msg.includes('错误') || msg.includes('error') || msg.includes('失败') || msg.includes('failed')) {
+      if (msg.includes('错误') || msg.includes('error') || msg.includes('失败') || msg.includes('failed') || msg.includes('❌')) {
         return 'text-danger'
       }
-      if (msg.includes('成功') || msg.includes('success') || msg.includes('完成') || msg.includes('completed')) {
+      if (msg.includes('成功') || msg.includes('success') || msg.includes('完成') || msg.includes('completed') || msg.includes('✅')) {
         return 'text-success'
       }
-      if (msg.includes('警告') || msg.includes('warning')) {
+      if (msg.includes('警告') || msg.includes('warning') || msg.includes('⚠️')) {
         return 'text-warning'
       }
-      if (msg.includes('信息') || msg.includes('info')) {
+      if (msg.includes('信息') || msg.includes('info') || msg.includes('📦') || msg.includes('🚀')) {
         return 'text-info'
       }
       return 'text-light'

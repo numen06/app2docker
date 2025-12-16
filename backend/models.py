@@ -101,6 +101,7 @@ class Task(Base):
         String(50), default="pending"
     )  # pending, running, completed, failed, stopped
     created_at = Column(DateTime, default=datetime.now)
+    started_at = Column(DateTime)  # 任务开始执行的时间（重试时会重置）
     completed_at = Column(DateTime)
     error = Column(Text)
 

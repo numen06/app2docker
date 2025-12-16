@@ -109,6 +109,9 @@ def init_db():
     
     # 迁移：修复JSON字段的无效数据
     migrate_fix_json_fields()
+    
+    # 迁移：添加started_at字段到tasks表（如果不存在）
+    migrate_add_started_at_field()
 
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
@@ -317,6 +320,39 @@ def migrate_token_nullable():
             print(f"⚠️ 迁移token字段失败: {e}")
     except Exception as e:
         print(f"⚠️ 迁移token字段失败: {e}")
+
+
+def migrate_add_started_at_field():
+    """迁移：为tasks表添加started_at字段"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 检查字段是否已存在
+        cursor.execute("PRAGMA table_info(tasks)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if "started_at" not in columns:
+            print("🔄 添加 started_at 字段到 tasks 表...")
+            cursor.execute(
+                "ALTER TABLE tasks ADD COLUMN started_at DATETIME"
+            )
+            conn.commit()
+            print("✅ started_at 字段添加成功")
+        else:
+            print("✅ started_at 字段已存在")
+
+        conn.close()
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e).lower():
+            print("✅ started_at 字段已存在")
+        else:
+            print(f"⚠️ 迁移started_at字段失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 迁移started_at字段失败: {e}")
 
 
 def migrate_fix_json_fields():

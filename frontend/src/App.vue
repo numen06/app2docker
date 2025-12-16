@@ -199,27 +199,27 @@
 <script setup>
 import axios from 'axios'
 import { onMounted, onUnmounted, ref } from 'vue'
-import { getToken, getUsername, isAuthenticated, logout } from './utils/auth'
 import { useModalEscape } from './composables/useModalEscape'
+import { getToken, getUsername, isAuthenticated, logout } from './utils/auth'
 
 // 懒加载组件
+import BuildConfigEditor from './components/BuildConfigEditor.vue'
 import ConfigModal from './components/ConfigModal.vue'
 import DashboardPanel from './components/DashboardPanel.vue'
 import DataSourcePanel from './components/DataSourcePanel.vue'
+import DeployTaskManager from './components/DeployTaskManager.vue'
 import DockerManager from './components/DockerManager.vue'
-import RegistryPanel from './components/RegistryPanel.vue'
-import ResourcePackagePanel from './components/ResourcePackagePanel.vue'
 import ExportPanel from './components/ExportPanel.vue'
-import UnifiedHostManager from './components/UnifiedHostManager.vue'
 import LoginPage from './components/LoginPage.vue'
 import OperationLogs from './components/OperationLogs.vue'
 import PipelinePanel from './components/PipelinePanel.vue'
+import RegistryPanel from './components/RegistryPanel.vue'
+import ResourcePackagePanel from './components/ResourcePackagePanel.vue'
 import StepBuildPanel from './components/StepBuildPanel.vue'
-import BuildConfigEditor from './components/BuildConfigEditor.vue'
 import TaskManager from './components/TaskManager.vue'
 import TemplatePanel from './components/TemplatePanel.vue'
+import UnifiedHostManager from './components/UnifiedHostManager.vue'
 import UserCenterModal from './components/UserCenterModal.vue'
-import DeployTaskManager from './components/DeployTaskManager.vue'
 
 const authenticated = ref(false)
 const username = ref('')
@@ -276,7 +276,8 @@ async function updateRunningTasksCount() {
 function getTaskTypeLabel(type) {
   const map = {
     build: '构建',
-    export: '导出'
+    export: '导出',
+    deploy: '部署'
   }
   return map[type] || type
 }
@@ -285,7 +286,8 @@ function getTaskTypeLabel(type) {
 function getTaskTypeBadge(type) {
   const map = {
     build: 'bg-primary',
-    export: 'bg-info'
+    export: 'bg-info',
+    deploy: 'bg-success'
   }
   return map[type] || 'bg-secondary'
 }

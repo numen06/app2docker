@@ -3471,10 +3471,10 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { Codemirror } from "vue-codemirror";
 import { getDockerfilesWithCache } from "../utils/dockerfileCache.js";
 import {
-  clearGitCache,
-  getGitCache,
-  getGitInfoWithCache,
-  setGitCache,
+    clearGitCache,
+    getGitCache,
+    getGitInfoWithCache,
+    setGitCache,
 } from "../utils/gitCache.js";
 import { getServiceAnalysisWithCache } from "../utils/serviceAnalysisCache.js";
 

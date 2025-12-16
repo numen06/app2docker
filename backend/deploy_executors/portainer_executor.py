@@ -121,6 +121,35 @@ class PortainerExecutor(DeployExecutor):
             
             logger.info(f"部署模式: {deploy_mode}, 重新发布: {redeploy}")
             
+            # 记录命令信息
+            if update_status_callback:
+                steps = deploy_config.get("steps")
+                if steps and isinstance(steps, list):
+                    update_status_callback(f"[Portainer] 部署配置（多步骤模式，共 {len(steps)} 个步骤）")
+                    for idx, step in enumerate(steps, 1):
+                        step_name = step.get("name", f"步骤 {idx}")
+                        step_command = step.get("command", "").strip()
+                        if step_command:
+                            update_status_callback(f"[Portainer] 步骤 {idx}: {step_name} - {step_command}")
+                else:
+                    command = deploy_config.get("command", "")
+                    compose_content = deploy_config.get("compose_content", "")
+                    
+                    if deploy_mode == "docker_compose":
+                        if command:
+                            update_status_callback(f"[Portainer] 执行命令: docker-compose {command}")
+                        if compose_content:
+                            compose_preview = compose_content.split('\n')[:5]
+                            update_status_callback(f"[Portainer] docker-compose.yml 内容预览:\n" + "\n".join([f"  {line}" for line in compose_preview]))
+                    else:
+                        if command:
+                            update_status_callback(f"[Portainer] 执行命令: docker run {command}")
+                        image = deploy_config.get("image_template", "")
+                        if image:
+                            update_status_callback(f"[Portainer] 镜像: {image}")
+                
+                update_status_callback(f"[Portainer] 正在通过 Portainer API 部署到 {self.host_name}...")
+            
             # 如果需要重新发布，先清理
             if redeploy:
                 logger.info(f"开始清理已有部署...")

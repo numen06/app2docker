@@ -999,7 +999,9 @@ async def verify_git_repo(
                             source_manager.update_dockerfile(
                                 source_id, dockerfile_path, content
                             )
-                    print(f"✅ 已更新数据源 {source_id} 的缓存（分支、标签、Dockerfile）")
+                    print(
+                        f"✅ 已更新数据源 {source_id} 的缓存（分支、标签、Dockerfile）"
+                    )
             except Exception as e:
                 print(f"⚠️ 更新数据源缓存失败: {e}")
                 # 即使更新失败，也继续返回验证结果
@@ -1377,26 +1379,90 @@ async def get_build_tasks(
 async def get_all_tasks(
     status: Optional[str] = Query(None, description="任务状态过滤"),
     task_type: Optional[str] = Query(
-        None, description="任务类型过滤: build, build_from_source, export"
+        None, description="任务类型过滤: build, build_from_source, export, deploy"
     ),
 ):
-    """获取所有任务（构建任务 + 导出任务）"""
+    """获取所有任务（构建任务 + 导出任务 + 部署任务）"""
     try:
         all_tasks = []
 
-        # 获取构建任务
+        # 获取构建任务（排除部署任务）
         build_manager = BuildTaskManager()
-        build_tasks = build_manager.list_tasks(status=status, task_type=task_type)
-        for task in build_tasks:
-            task["task_category"] = "build"  # 标记为构建任务
-            all_tasks.append(task)
+        if task_type and task_type == "deploy":
+            # 如果只查询部署任务，跳过构建任务
+            build_tasks = []
+        else:
+            # 获取构建任务（排除部署任务）
+            build_task_type = task_type if task_type and task_type != "deploy" else None
+            build_tasks = build_manager.list_tasks(
+                status=status, task_type=build_task_type
+            )
+            # 过滤掉部署任务（task_type="deploy"）
+            build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
+            for task in build_tasks:
+                task["task_category"] = "build"  # 标记为构建任务
+                all_tasks.append(task)
+
+        # 获取部署任务（包括配置和执行产生的任务）
+        if not task_type or task_type == "deploy":
+            try:
+                deploy_tasks = build_manager.list_tasks(
+                    status=status, task_type="deploy"
+                )
+                for task in deploy_tasks:
+                    task_config = task.get("task_config", {})
+                    # 任务管理页面显示所有部署任务（包括配置和执行产生的任务）
+                    # 不需要过滤 source_config_id，因为任务管理应该显示所有任务
+
+                    task["task_category"] = "deploy"  # 标记为部署任务
+
+                    # 为部署任务添加显示名称
+                    try:
+                        # 如果 task_config 是字符串，尝试解析为 JSON
+                        if isinstance(task_config, str):
+                            try:
+                                task_config = json.loads(task_config)
+                            except (json.JSONDecodeError, TypeError):
+                                task_config = {}
+
+                        # 安全地获取配置信息
+                        if isinstance(task_config, dict):
+                            config = task_config.get("config", {})
+                            if isinstance(config, str):
+                                try:
+                                    config = json.loads(config)
+                                except (json.JSONDecodeError, TypeError):
+                                    config = {}
+
+                            if isinstance(config, dict):
+                                app = config.get("app", {})
+                                if isinstance(app, dict):
+                                    app_name = app.get("name")
+                                    if app_name:
+                                        task["image"] = (
+                                            app_name  # 使用应用名称作为显示名称
+                                        )
+                    except Exception as e:
+                        # 如果解析失败，不影响任务添加，只是没有显示名称
+                        print(
+                            f"⚠️ 解析部署任务配置失败 (task_id={task.get('task_id', 'unknown')[:8]}): {e}"
+                        )
+
+                    all_tasks.append(task)
+            except Exception as e:
+                # 如果获取部署任务失败，记录错误但不影响其他任务
+                print(f"⚠️ 获取部署任务失败: {e}")
+                import traceback
+
+                traceback.print_exc()
 
         # 获取导出任务
-        export_manager = ExportTaskManager()
-        export_tasks = export_manager.list_tasks(status=status)
-        for task in export_tasks:
-            task["task_category"] = "export"  # 标记为导出任务
-            all_tasks.append(task)
+        if not task_type or task_type == "export":
+            export_manager = ExportTaskManager()
+            export_tasks = export_manager.list_tasks(status=status)
+            for task in export_tasks:
+                task["task_category"] = "export"  # 标记为导出任务
+                all_tasks.append(task)
 
         # 按创建时间倒序排列
         all_tasks.sort(key=lambda x: x.get("created_at", ""), reverse=True)
@@ -2897,16 +2963,20 @@ async def update_template(request: TemplateRequest, http_request: Request):
         name = request.name
         content = request.content
         original_name = request.original_name or name  # 支持重命名
-        old_project_type = request.old_project_type or request.project_type  # 使用旧的项目类型或当前项目类型
+        old_project_type = (
+            request.old_project_type or request.project_type
+        )  # 使用旧的项目类型或当前项目类型
 
         templates = get_all_templates()
 
         # 查找原始模板：优先使用 old_project_type 来匹配
         template_info = None
-        
+
         # 方法1: 如果提供了 old_project_type，直接通过路径查找
         if old_project_type:
-            expected_path = os.path.join(USER_TEMPLATES_DIR, old_project_type, f"{original_name}.Dockerfile")
+            expected_path = os.path.join(
+                USER_TEMPLATES_DIR, old_project_type, f"{original_name}.Dockerfile"
+            )
             if os.path.exists(expected_path):
                 template_info = {
                     "name": original_name,
@@ -2914,7 +2984,7 @@ async def update_template(request: TemplateRequest, http_request: Request):
                     "type": "user",
                     "project_type": old_project_type,
                 }
-        
+
         # 方法2: 在 templates 字典中查找匹配的模板（名称和项目类型都匹配）
         if not template_info:
             for tpl_name, tpl_info in templates.items():
@@ -2941,8 +3011,10 @@ async def update_template(request: TemplateRequest, http_request: Request):
         old_path = template_info.get("path")
         if not old_path:
             # 如果路径不存在，根据项目类型和名称构建路径
-            old_path = os.path.join(USER_TEMPLATES_DIR, old_project_type, f"{original_name}.Dockerfile")
-        
+            old_path = os.path.join(
+                USER_TEMPLATES_DIR, old_project_type, f"{original_name}.Dockerfile"
+            )
+
         # 确保旧文件存在
         if not os.path.exists(old_path):
             raise HTTPException(status_code=404, detail=f"模板文件不存在: {old_path}")
@@ -3032,23 +3104,26 @@ async def delete_template(request: DeleteTemplateRequest, http_request: Request)
 
 # === Docker 管理相关 ===
 @router.get("/docker/info")
-async def get_docker_info(force_refresh: bool = Query(False, description="是否强制刷新缓存")):
+async def get_docker_info(
+    force_refresh: bool = Query(False, description="是否强制刷新缓存")
+):
     """获取 Docker 服务信息（带30分钟缓存）"""
     try:
         from backend.docker_info_cache import docker_info_cache
-        
+
         # 使用缓存获取Docker信息
         info = docker_info_cache.get_docker_info(force_refresh=force_refresh)
-        
+
         # 添加缓存年龄信息
         cache_age = docker_info_cache.get_cache_age()
         if cache_age is not None:
             info["cache_age_seconds"] = int(cache_age)
             info["cache_age_minutes"] = round(cache_age / 60, 1)
-        
+
         return JSONResponse(info)
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取Docker信息失败: {str(e)}")
 
@@ -3059,33 +3134,30 @@ async def refresh_docker_info(request: Request):
     try:
         username = get_current_username(request)
         from backend.docker_info_cache import docker_info_cache
-        
+
         # 强制刷新缓存
         info = docker_info_cache.refresh_cache()
-        
+
         # 记录操作日志
         OperationLogger.log(
             username,
             "docker_info_refresh",
-            {"cache_age_seconds": docker_info_cache.get_cache_age() or 0}
+            {"cache_age_seconds": docker_info_cache.get_cache_age() or 0},
         )
-        
+
         cache_age = docker_info_cache.get_cache_age()
         if cache_age is not None:
             info["cache_age_seconds"] = int(cache_age)
             info["cache_age_minutes"] = round(cache_age / 60, 1)
-        
-        return JSONResponse({
-            "success": True,
-            "message": "Docker信息已刷新",
-            "info": info
-        })
+
+        return JSONResponse(
+            {"success": True, "message": "Docker信息已刷新", "info": info}
+        )
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"刷新Docker信息失败: {str(e)}")
-
-
 
 
 @router.get("/docker/images")
@@ -4084,10 +4156,10 @@ async def run_pipeline(
         # 处理分支标签映射（与webhook使用相同的逻辑）
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         default_tag = pipeline.get("tag", "latest")  # 默认标签
-        
+
         # 获取标签列表（支持单个标签或多个标签）
         tags = [default_tag]  # 默认只有一个标签
-        
+
         if final_branch and branch_tag_mapping:
             mapped_tag_value = None
             # 优先精确匹配
@@ -4096,12 +4168,12 @@ async def run_pipeline(
             else:
                 # 尝试通配符匹配（如 feature/* -> feature）
                 import fnmatch
-                
+
                 for pattern, mapped_tag in branch_tag_mapping.items():
                     if fnmatch.fnmatch(final_branch, pattern):
                         mapped_tag_value = mapped_tag
                         break
-            
+
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
                 if isinstance(mapped_tag_value, list):
@@ -4117,14 +4189,14 @@ async def run_pipeline(
                     else:
                         # 单个标签
                         tags = [mapped_tag_value]
-        
+
         # 检查防抖（5秒内重复触发直接加入队列）
         if manager.check_debounce(pipeline_id, debounce_seconds=5):
             from backend.handlers import pipeline_to_task_config
-            
+
             build_manager = BuildManager()
             task_ids = []
-            
+
             # 为每个标签创建任务
             for tag in tags:
                 task_config = pipeline_to_task_config(
@@ -4137,7 +4209,7 @@ async def run_pipeline(
                 task_config["username"] = username
                 task_id = build_manager._trigger_task_from_config(task_config)
                 task_ids.append(task_id)
-            
+
             queue_length = manager.get_queue_length(pipeline_id)
 
             OperationLogger.log(
@@ -4182,10 +4254,10 @@ async def run_pipeline(
         # 处理分支标签映射（与webhook使用相同的逻辑）
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         default_tag = pipeline.get("tag", "latest")  # 默认标签
-        
+
         # 获取标签列表（支持单个标签或多个标签）
         tags = [default_tag]  # 默认只有一个标签
-        
+
         if final_branch and branch_tag_mapping:
             mapped_tag_value = None
             # 优先精确匹配
@@ -4194,12 +4266,12 @@ async def run_pipeline(
             else:
                 # 尝试通配符匹配（如 feature/* -> feature）
                 import fnmatch
-                
+
                 for pattern, mapped_tag in branch_tag_mapping.items():
                     if fnmatch.fnmatch(final_branch, pattern):
                         mapped_tag_value = mapped_tag
                         break
-            
+
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
                 if isinstance(mapped_tag_value, list):
@@ -4215,13 +4287,13 @@ async def run_pipeline(
                     else:
                         # 单个标签
                         tags = [mapped_tag_value]
-        
+
         # 为每个标签创建任务（与webhook使用相同的逻辑）
         from backend.handlers import pipeline_to_task_config
-        
+
         build_manager = BuildManager()
         task_ids = []
-        
+
         for tag in tags:
             print(f"🔍 调用 pipeline_to_task_config:")
             print(f"   - branch 参数: {final_branch}")
@@ -4234,7 +4306,7 @@ async def run_pipeline(
                 branch_tag_mapping=branch_tag_mapping,
             )
             task_config["username"] = username
-            
+
             # 检查是否有正在运行的任务
             current_task_id = manager.get_pipeline_running_task(pipeline_id)
             if current_task_id:
@@ -4254,11 +4326,11 @@ async def run_pipeline(
                 # 没有运行中的任务，立即启动构建任务
                 task_id = build_manager._trigger_task_from_config(task_config)
                 task_ids.append(task_id)
-        
+
         # 如果创建了多个任务，只绑定第一个任务
         if task_ids:
             first_task_id = task_ids[0]
-            
+
             # 记录触发并绑定任务（手动触发）
             manager.record_trigger(
                 pipeline_id,
@@ -4269,7 +4341,7 @@ async def run_pipeline(
                     "branch": final_branch,
                 },
             )
-            
+
             # 记录操作日志
             OperationLogger.log(
                 username,
@@ -4283,9 +4355,9 @@ async def run_pipeline(
                     "trigger_source": "manual",
                 },
             )
-            
+
             queue_length = manager.get_queue_length(pipeline_id)
-            
+
             if len(task_ids) > 1:
                 return JSONResponse(
                     {
@@ -4485,7 +4557,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     branch = webhook_branch
                     print(f"✅ 分支在允许列表中，使用推送分支: {branch}")
                 else:
-                    print(f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}")
+                    print(
+                        f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
+                    )
                     return JSONResponse(
                         {
                             "message": f"分支不在允许列表中，已忽略触发（推送分支: {webhook_branch}）",
@@ -4506,7 +4580,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     branch = webhook_branch
                     print(f"✅ 分支匹配，使用推送分支: {branch}")
                 else:
-                    print(f"⚠️ 分支不匹配，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}")
+                    print(
+                        f"⚠️ 分支不匹配，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}"
+                    )
                     return JSONResponse(
                         {
                             "message": f"分支不匹配，已忽略触发（推送分支: {webhook_branch}, 配置分支: {configured_branch}）",
@@ -6090,6 +6166,7 @@ async def delete_host(request: Request, host_id: str):
 
 # ==================== Agent主机管理 ====================
 
+
 class AgentHostRequest(BaseModel):
     name: str
     host_type: str = "agent"  # agent 或 portainer
@@ -6135,9 +6212,7 @@ async def test_portainer_connection(request: Request, test_req: PortainerTestReq
     try:
         manager = AgentHostManager()
         result = manager.test_portainer_connection(
-            test_req.portainer_url,
-            test_req.api_key,
-            test_req.endpoint_id
+            test_req.portainer_url, test_req.api_key, test_req.endpoint_id
         )
         return JSONResponse(result)
     except Exception as e:
@@ -6145,30 +6220,40 @@ async def test_portainer_connection(request: Request, test_req: PortainerTestReq
 
 
 @router.post("/agent-hosts/list-portainer-endpoints")
-async def list_portainer_endpoints(request: Request, test_req: PortainerListEndpointsRequest):
+async def list_portainer_endpoints(
+    request: Request, test_req: PortainerListEndpointsRequest
+):
     """获取 Portainer Endpoints 列表"""
     try:
         from backend.portainer_client import PortainerClient
-        client = PortainerClient(test_req.portainer_url, test_req.api_key, 0)  # endpoint_id 暂时不需要
-        
+
+        client = PortainerClient(
+            test_req.portainer_url, test_req.api_key, 0
+        )  # endpoint_id 暂时不需要
+
         # 获取所有 endpoints
-        endpoints = client._request('GET', '/endpoints', timeout=5)
-        
-        return JSONResponse({
-            "success": True,
-            "endpoints": [
-                {"id": ep.get('Id'), "name": ep.get('Name'), "type": ep.get('Type')}
-                for ep in endpoints
-            ]
-        })
+        endpoints = client._request("GET", "/endpoints", timeout=5)
+
+        return JSONResponse(
+            {
+                "success": True,
+                "endpoints": [
+                    {"id": ep.get("Id"), "name": ep.get("Name"), "type": ep.get("Type")}
+                    for ep in endpoints
+                ],
+            }
+        )
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        return JSONResponse({
-            "success": False,
-            "message": f"获取 Endpoints 列表失败: {str(e)}",
-            "endpoints": []
-        })
+        return JSONResponse(
+            {
+                "success": False,
+                "message": f"获取 Endpoints 列表失败: {str(e)}",
+                "endpoints": [],
+            }
+        )
 
 
 @router.post("/agent-hosts")
@@ -6190,12 +6275,15 @@ async def add_agent_host(request: Request, host_req: AgentHostRequest):
         # 如果是 Portainer 类型，创建后立即更新状态
         if host_req.host_type == "portainer" and host_info:
             try:
-                updated_info = manager.update_portainer_host_status(host_info["host_id"])
+                updated_info = manager.update_portainer_host_status(
+                    host_info["host_id"]
+                )
                 if updated_info:
                     host_info = updated_info
             except Exception as e:
                 # 状态更新失败不影响创建，记录日志即可
                 import logging
+
                 logging.warning(f"创建 Portainer 主机后更新状态失败: {e}")
 
         # 记录操作日志
@@ -6213,6 +6301,7 @@ async def add_agent_host(request: Request, host_req: AgentHostRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"创建Agent主机失败: {str(e)}")
 
@@ -6246,7 +6335,9 @@ async def get_agent_host(request: Request, host_id: str):
 
 
 @router.put("/agent-hosts/{host_id}")
-async def update_agent_host(request: Request, host_id: str, host_req: AgentHostUpdateRequest):
+async def update_agent_host(
+    request: Request, host_id: str, host_req: AgentHostUpdateRequest
+):
     """更新Agent主机信息"""
     try:
         username = get_current_username(request)
@@ -6273,6 +6364,7 @@ async def update_agent_host(request: Request, host_id: str, host_req: AgentHostU
             except Exception as e:
                 # 状态更新失败不影响更新，记录日志即可
                 import logging
+
                 logging.warning(f"更新 Portainer 主机后刷新状态失败: {e}")
 
         # 记录操作日志
@@ -6289,6 +6381,7 @@ async def update_agent_host(request: Request, host_id: str, host_req: AgentHostU
         raise
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"更新Agent主机失败: {str(e)}")
 
@@ -6301,7 +6394,7 @@ async def refresh_agent_host_status(request: Request, host_id: str):
         host = manager.get_agent_host(host_id)
         if not host:
             raise HTTPException(status_code=404, detail="Agent主机不存在")
-        
+
         # 根据主机类型刷新状态
         if host.get("host_type") == "portainer":
             updated_info = manager.update_portainer_host_status(host_id)
@@ -6311,7 +6404,13 @@ async def refresh_agent_host_status(request: Request, host_id: str):
                 return JSONResponse({"success": False, "message": "状态更新失败"})
         else:
             # Agent 类型的主机状态通过 WebSocket 心跳更新
-            return JSONResponse({"success": True, "host": host, "message": "Agent 类型主机状态通过 WebSocket 心跳更新"})
+            return JSONResponse(
+                {
+                    "success": True,
+                    "host": host,
+                    "message": "Agent 类型主机状态通过 WebSocket 心跳更新",
+                }
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"刷新状态失败: {str(e)}")
 
@@ -6342,7 +6441,10 @@ async def get_deploy_command(
     request: Request,
     host_id: str,
     type: str = Query("run", description="部署类型: run 或 stack"),
-    agent_image: str = Query("registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest", description="Agent镜像"),
+    agent_image: str = Query(
+        "registry.cn-hangzhou.aliyuncs.com/51jbm/app2docker-agent:latest",
+        description="Agent镜像",
+    ),
     server_url: Optional[str] = Query(None, description="服务器URL（可选）"),
 ):
     """获取Agent部署命令"""
@@ -6351,7 +6453,9 @@ async def get_deploy_command(
         manager = AgentHostManager()
 
         if type not in ["run", "stack"]:
-            raise HTTPException(status_code=400, detail="部署类型必须是 'run' 或 'stack'")
+            raise HTTPException(
+                status_code=400, detail="部署类型必须是 'run' 或 'stack'"
+            )
 
         result = manager.generate_deploy_command(
             host_id=host_id,
@@ -6367,6 +6471,7 @@ async def get_deploy_command(
         raise
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"生成部署命令失败: {str(e)}")
 
@@ -6379,53 +6484,112 @@ async def websocket_agent_endpoint(websocket: WebSocket, token: str = Query(...)
 
 # ==================== 部署任务管理 ====================
 
+
 @router.post("/deploy-tasks")
 async def create_deploy_task(request: Request, task_req: DeployTaskCreateRequest):
-    """创建部署任务"""
+    """创建部署配置（配置触发后会在任务管理中生成任务）"""
     try:
         username = get_current_username(request)
-        task_manager = DeployTaskManager()
-        
-        task = task_manager.create_task(
+        build_manager = BuildTaskManager()
+
+        task_id = build_manager.create_deploy_task(
             config_content=task_req.config_content,
             registry=task_req.registry,
-            tag=task_req.tag
+            tag=task_req.tag,
         )
-        
+
+        # 获取任务信息
+        task = build_manager.get_task(task_id)
+
         # 记录操作日志
-        OperationLogger.log(
-            username,
-            "deploy_task_create",
-            {"task_id": task["task_id"]}
+        OperationLogger.log(username, "deploy_task_create", {"task_id": task_id})
+
+        return JSONResponse(
+            {
+                "success": True,
+                "task": {
+                    "task_id": task_id,
+                    "status": task.get("status"),
+                    "config": task.get("task_config", {}).get("config"),
+                    "config_content": task.get("task_config", {}).get("config_content"),
+                },
+            }
         )
-        
-        return JSONResponse({
-            "success": True,
-            "task": task
-        })
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"创建部署任务失败: {str(e)}")
 
 
 @router.get("/deploy-tasks")
 async def list_deploy_tasks(request: Request):
-    """列出所有部署任务"""
+    """列出所有部署配置（只返回配置，不返回执行产生的任务）"""
     try:
         username = get_current_username(request)
-        task_manager = DeployTaskManager()
-        
-        tasks = task_manager.list_tasks()
-        
-        return JSONResponse({
-            "success": True,
-            "tasks": tasks
-        })
+        build_manager = BuildTaskManager()
+
+        tasks = build_manager.list_tasks(task_type="deploy")
+
+        # 转换为前端期望的格式
+        formatted_tasks = []
+        for task in tasks:
+            task_config = task.get("task_config", {})
+            # 只返回配置任务（没有source_config_id的任务），排除执行产生的任务
+            source_config_id = task_config.get("source_config_id")
+            if source_config_id:
+                # 这是执行产生的任务，跳过
+                continue
+
+            # 查找该配置的最新执行任务，获取其状态
+            config_task_id = task.get("task_id")
+            latest_execution_task = None
+            latest_execution_status = task.get("status")  # 默认使用配置任务的状态
+
+            # 查找所有从该配置触发的执行任务
+            execution_tasks = [
+                t
+                for t in tasks
+                if t.get("task_config", {}).get("source_config_id") == config_task_id
+            ]
+
+            if execution_tasks:
+                # 按创建时间排序，获取最新的执行任务
+                execution_tasks.sort(
+                    key=lambda x: x.get("created_at", ""), reverse=True
+                )
+                latest_execution_task = execution_tasks[0]
+                latest_execution_status = latest_execution_task.get("status")
+
+            formatted_tasks.append(
+                {
+                    "task_id": task.get("task_id"),
+                    "status": {
+                        "task_id": task.get("task_id"),
+                        "status": latest_execution_status,  # 使用最新执行任务的状态
+                        "created_at": task.get("created_at"),
+                        "registry": task_config.get("registry"),
+                        "tag": task_config.get("tag"),
+                        "targets": [],
+                    },
+                    "config": task_config.get("config", {}),
+                    "config_content": task_config.get("config_content", ""),
+                    "execution_count": task_config.get("execution_count", 0),
+                    "last_executed_at": task_config.get("last_executed_at"),
+                    "latest_execution_task_id": (
+                        latest_execution_task.get("task_id")
+                        if latest_execution_task
+                        else None
+                    ),
+                }
+            )
+
+        return JSONResponse({"success": True, "tasks": formatted_tasks})
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取部署任务列表失败: {str(e)}")
 
@@ -6435,20 +6599,39 @@ async def get_deploy_task(request: Request, task_id: str):
     """获取部署任务详情"""
     try:
         username = get_current_username(request)
-        task_manager = DeployTaskManager()
-        
-        task = task_manager.get_task(task_id)
-        if not task:
+        build_manager = BuildTaskManager()
+
+        task = build_manager.get_task(task_id)
+        if not task or task.get("task_type") != "deploy":
             raise HTTPException(status_code=404, detail="部署任务不存在")
-        
-        return JSONResponse({
-            "success": True,
-            "task": task
-        })
+
+        task_config = task.get("task_config", {})
+
+        return JSONResponse(
+            {
+                "success": True,
+                "task": {
+                    "task_id": task.get("task_id"),
+                    "status": {
+                        "task_id": task.get("task_id"),
+                        "status": task.get("status"),
+                        "created_at": task.get("created_at"),
+                        "started_at": task.get("started_at"),
+                        "completed_at": task.get("completed_at"),
+                        "registry": task_config.get("registry"),
+                        "tag": task_config.get("tag"),
+                        "targets": [],
+                    },
+                    "config": task_config.get("config", {}),
+                    "config_content": task_config.get("config_content", ""),
+                },
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取部署任务失败: {str(e)}")
 
@@ -6457,33 +6640,86 @@ async def get_deploy_task(request: Request, task_id: str):
 async def execute_deploy_task(
     request: Request,
     task_id: str,
-    execute_req: Optional[DeployTaskExecuteRequest] = None
+    execute_req: Optional[DeployTaskExecuteRequest] = None,
 ):
-    """执行部署任务"""
+    """触发部署配置（会在任务管理中创建新任务）"""
     try:
         username = get_current_username(request)
-        task_manager = DeployTaskManager()
-        
+        build_manager = BuildTaskManager()
+
         target_names = None
         if execute_req and execute_req.target_names:
             target_names = execute_req.target_names
-        
-        result = await task_manager.execute_task(task_id, target_names=target_names)
-        
+
+        # 执行部署任务（后台执行）
+        result_task_id = build_manager.execute_deploy_task(
+            task_id, target_names=target_names
+        )
+
         # 记录操作日志
         OperationLogger.log(
             username,
             "deploy_task_execute",
-            {"task_id": task_id, "target_names": target_names}
+            {"task_id": task_id, "target_names": target_names},
         )
-        
-        return JSONResponse(result)
+
+        return JSONResponse(
+            {
+                "success": True,
+                "task_id": result_task_id,
+                "message": "部署任务已启动，正在后台执行",
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"执行部署任务失败: {str(e)}")
+
+
+@router.post("/deploy-tasks/{task_id}/retry")
+async def retry_deploy_task(task_id: str, request: Request):
+    """重试部署任务（失败或停止的任务可以重试）"""
+    try:
+        username = get_current_username(request)
+        build_manager = BuildTaskManager()
+
+        # 检查任务是否存在
+        task = build_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+
+        if task.get("task_type") != "deploy":
+            raise HTTPException(status_code=400, detail="任务类型不是部署任务")
+
+        # 检查任务状态
+        if task.get("status") in ["pending", "running"]:
+            raise HTTPException(status_code=400, detail="任务正在运行中，无法重试")
+
+        # 重试部署任务（在原任务上重试，不创建新任务）
+        if build_manager.retry_deploy_task(task_id):
+            OperationLogger.log(username, "retry_deploy_task", {"task_id": task_id})
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": "任务已重新启动",
+                    "task_id": task_id,
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="任务不存在或无法重试（只有失败或停止的任务才能重试）",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"重试部署任务失败: {str(e)}")
 
 
 @router.post("/deploy-tasks/import")
@@ -6491,29 +6727,48 @@ async def import_deploy_task(request: Request, file: UploadFile = File(...)):
     """导入部署任务（从YAML文件）"""
     try:
         username = get_current_username(request)
-        
+
         # 读取文件内容
         content = await file.read()
         config_content = content.decode("utf-8")
-        
-        task_manager = DeployTaskManager()
-        task = task_manager.create_task(config_content=config_content)
-        
+
+        build_manager = BuildTaskManager()
+        task_id = build_manager.create_deploy_task(config_content=config_content)
+
+        # 获取任务信息
+        task = build_manager.get_task(task_id)
+        task_config = task.get("task_config", {})
+
         # 记录操作日志
         OperationLogger.log(
             username,
             "deploy_task_import",
-            {"task_id": task["task_id"], "filename": file.filename}
+            {"task_id": task_id, "filename": file.filename},
         )
-        
-        return JSONResponse({
-            "success": True,
-            "task": task
-        })
+
+        return JSONResponse(
+            {
+                "success": True,
+                "task": {
+                    "task_id": task_id,
+                    "status": {
+                        "task_id": task_id,
+                        "status": task.get("status"),
+                        "created_at": task.get("created_at"),
+                        "registry": task_config.get("registry"),
+                        "tag": task_config.get("tag"),
+                        "targets": [],
+                    },
+                    "config": task_config.get("config", {}),
+                    "config_content": task_config.get("config_content", ""),
+                },
+            }
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"导入部署任务失败: {str(e)}")
 
@@ -6523,25 +6778,27 @@ async def export_deploy_task(request: Request, task_id: str):
     """导出部署任务（YAML格式）"""
     try:
         username = get_current_username(request)
-        task_manager = DeployTaskManager()
-        
-        task = task_manager.get_task(task_id)
-        if not task:
+        build_manager = BuildTaskManager()
+
+        task = build_manager.get_task(task_id)
+        if not task or task.get("task_type") != "deploy":
             raise HTTPException(status_code=404, detail="部署任务不存在")
-        
-        config_content = task.get("config_content", "")
-        
+
+        task_config = task.get("task_config", {})
+        config_content = task_config.get("config_content", "")
+
         return PlainTextResponse(
             content=config_content,
             media_type="application/x-yaml",
             headers={
                 "Content-Disposition": f'attachment; filename="deploy-task-{task_id}.yaml"'
-            }
+            },
         )
     except HTTPException:
         raise
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"导出部署任务失败: {str(e)}")
 
@@ -6551,19 +6808,20 @@ async def delete_deploy_task(request: Request, task_id: str):
     """删除部署任务"""
     try:
         username = get_current_username(request)
-        task_manager = DeployTaskManager()
-        
-        success = task_manager.delete_task(task_id)
+        build_manager = BuildTaskManager()
+
+        success = build_manager.delete_task(task_id)
         if not success:
             raise HTTPException(status_code=404, detail="部署任务不存在")
-        
+
         # 记录操作日志
         OperationLogger.log(username, "deploy_task_delete", {"task_id": task_id})
-        
+
         return JSONResponse({"success": True, "message": "部署任务已删除"})
     except HTTPException:
         raise
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"删除部署任务失败: {str(e)}")

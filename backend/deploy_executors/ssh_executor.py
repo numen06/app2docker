@@ -122,7 +122,21 @@ class SSHExecutor(DeployExecutor):
             else:
                 # 单命令模式：使用原有的执行逻辑
                 deploy_mode = deploy_config.get("deploy_mode", "docker_run")
+                
+                # 记录命令信息
                 if update_status_callback:
+                    command = deploy_config.get("command", "")
+                    compose_content = deploy_config.get("compose_content", "")
+                    
+                    if deploy_mode == "docker_compose":
+                        if command:
+                            update_status_callback(f"[SSH] 执行命令: docker-compose {command}")
+                        if compose_content:
+                            compose_preview = compose_content.split('\n')[:5]
+                            update_status_callback(f"[SSH] docker-compose.yml 内容预览:\n" + "\n".join([f"  {line}" for line in compose_preview]))
+                    else:
+                        if command:
+                            update_status_callback(f"[SSH] 执行命令: docker run {command}")
                     update_status_callback(f"[SSH] 正在执行部署到 {self.host_name}...")
                 
                 # 使用 SSH 部署执行器执行部署

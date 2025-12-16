@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler
 from urllib import parse
+from typing import Optional, List
 import yaml
 
 from backend.config import (
@@ -4463,6 +4464,7 @@ class BuildTaskManager:
             "tag": task.tag,
             "status": task.status,
             "created_at": task.created_at.isoformat() if task.created_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
             "completed_at": (
                 task.completed_at.isoformat() if task.completed_at else None
             ),
@@ -4546,6 +4548,11 @@ class BuildTaskManager:
             task.status = status
             if error:
                 task.error = error
+            if status == "running":
+                # 任务开始执行时，设置开始时间
+                if not task.started_at:
+                    task.started_at = datetime.now()
+                    print(f"🔍 [update_task_status] 设置开始时间: {task.started_at}")
             if status in ("completed", "failed", "stopped"):
                 task.completed_at = datetime.now()
                 print(f"🔍 [update_task_status] 设置完成时间: {task.completed_at}")
@@ -4623,6 +4630,32 @@ class BuildTaskManager:
 
             db.commit()
             print(f"✅ 任务 {task_id[:8]} 已停止")
+
+            # 如果是部署任务，取消所有相关的Future
+            if task.task_type == "deploy":
+                try:
+                    from backend.websocket_handler import connection_manager
+                    from backend.deploy_task_manager import DeployTaskManager
+
+                    # 获取任务配置，找到所有目标
+                    deploy_manager = DeployTaskManager()
+                    task_config = task.task_config or {}
+                    config = task_config.get("config", {})
+                    targets = config.get("targets", [])
+
+                    # 取消所有目标的Future
+                    for target in targets:
+                        target_name = target.get("name", "")
+                        if target_name:
+                            future_key = f"{task_id}:{target_name}"
+                            connection_manager.cancel_deploy_result_future(future_key)
+                            print(f"✅ 已取消Future: {future_key}")
+                except Exception as e:
+                    print(f"⚠️ 取消Future失败: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+
             return True
         except Exception as e:
             db.rollback()
@@ -4786,6 +4819,346 @@ class BuildTaskManager:
         except Exception as e:
             db.rollback()
             print(f"⚠️ 清理过期任务失败: {e}")
+        finally:
+            db.close()
+
+    def create_deploy_task(
+        self,
+        config_content: str,
+        registry: Optional[str] = None,
+        tag: Optional[str] = None,
+        source_config_id: Optional[str] = None,
+    ) -> str:
+        """
+        创建部署任务并保存到数据库
+
+        Args:
+            config_content: YAML 配置内容
+            registry: 镜像仓库地址（可选）
+            tag: 镜像标签（可选）
+            source_config_id: 原始配置ID（如果提供，表示这是从配置触发的任务）
+
+        Returns:
+            任务ID
+        """
+        from backend.deploy_config_parser import DeployConfigParser
+
+        try:
+            # 解析YAML配置
+            parser = DeployConfigParser()
+            config = parser.parse_yaml_content(config_content)
+
+            # 生成任务ID
+            task_id = str(uuid.uuid4())
+            created_at = datetime.now()
+
+            # 构建任务配置
+            task_config = {
+                "config_content": config_content,
+                "config": config,
+                "registry": registry,
+                "tag": tag,
+                "targets": config.get("targets", []),
+            }
+
+            # 如果提供了 source_config_id，说明这是从配置触发的任务
+            if source_config_id:
+                task_config["source_config_id"] = source_config_id
+
+            # 保存任务到数据库
+            from backend.database import get_db_session
+            from backend.models import Task
+
+            db = get_db_session()
+            try:
+                task_obj = Task(
+                    task_id=task_id,
+                    task_type="deploy",
+                    image=None,  # 部署任务可能没有镜像名称
+                    tag=tag,
+                    status="pending",
+                    created_at=created_at,
+                    task_config=task_config,
+                    source="手动部署",
+                    pipeline_id=None,
+                    git_url=None,
+                    branch=None,
+                    project_type=None,
+                    template=None,
+                    should_push=False,
+                    sub_path=None,
+                    use_project_dockerfile=False,
+                    dockerfile_name=None,
+                    trigger_source="manual",
+                )
+
+                db.add(task_obj)
+                db.commit()
+                print(f"✅ 部署任务创建成功: task_id={task_id}")
+                return task_id
+            except Exception as save_error:
+                db.rollback()
+                print(f"⚠️ 保存部署任务失败: {save_error}")
+                raise
+            finally:
+                db.close()
+        except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
+            print(f"❌ 创建部署任务异常: {e}")
+            print(f"错误堆栈:\n{error_trace}")
+            raise
+
+    def execute_deploy_task(
+        self, task_id: str, target_names: Optional[List[str]] = None
+    ) -> str:
+        """
+        在后台线程中执行部署任务
+        每次执行都会创建一个新的任务，而不是重用原有任务
+
+        Args:
+            task_id: 原始任务ID（用于获取配置）
+            target_names: 要执行的目标名称列表（如果为 None，则执行所有目标）
+
+        Returns:
+            新创建的任务ID
+        """
+        # 检查原始任务是否存在
+        original_task = self.get_task(task_id)
+        if not original_task:
+            raise ValueError(f"部署任务不存在: {task_id}")
+
+        if original_task.get("task_type") != "deploy":
+            raise ValueError(f"任务类型不是部署任务: {task_id}")
+
+        # 获取原始任务的配置
+        task_config = original_task.get("task_config", {})
+        config_content = task_config.get("config_content", "")
+        registry = task_config.get("registry")
+        tag = task_config.get("tag")
+
+        if not config_content:
+            raise ValueError(f"部署任务配置内容为空，无法执行: {task_id}")
+
+        # 创建新任务（每次执行都创建新任务，并标记为从配置触发）
+        new_task_id = self.create_deploy_task(
+            config_content=config_content,
+            registry=registry,
+            tag=tag,
+            source_config_id=task_id,  # 标记这是从配置触发的任务
+        )
+
+        # 更新原始配置的执行统计
+        from backend.database import get_db_session
+        from backend.models import Task
+
+        db = get_db_session()
+        try:
+            # 更新原始配置的执行统计
+            original_task_obj = db.query(Task).filter(Task.task_id == task_id).first()
+            if original_task_obj:
+                original_task_config = original_task_obj.task_config or {}
+                # 更新执行次数和最后执行时间
+                execution_count = original_task_config.get("execution_count", 0) + 1
+                original_task_config["execution_count"] = execution_count
+                original_task_config["last_executed_at"] = datetime.now().isoformat()
+                original_task_obj.task_config = original_task_config
+                db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"⚠️ 更新配置统计信息失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            db.close()
+
+        print(f"🆕 基于任务 {task_id[:8]} 创建新部署任务: {new_task_id[:8]}")
+
+        # 更新新任务状态为运行中
+        self.update_task_status(new_task_id, "running")
+
+        # 在后台线程中执行新任务
+        thread = threading.Thread(
+            target=self._execute_deploy_task_in_thread,
+            args=(new_task_id, target_names),
+            daemon=True,
+        )
+        thread.start()
+
+        return new_task_id
+
+    def _execute_deploy_task_in_thread(
+        self, task_id: str, target_names: Optional[List[str]] = None
+    ):
+        """
+        在后台线程中执行部署任务的实际逻辑
+
+        Args:
+            task_id: 任务ID
+            target_names: 要执行的目标名称列表
+        """
+        import asyncio
+
+        try:
+            # 创建新的事件循环（因为在线程中）
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            # 执行部署任务
+            loop.run_until_complete(
+                self._execute_deploy_task_async(task_id, target_names)
+            )
+        except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
+            print(f"❌ 执行部署任务异常: {e}")
+            print(f"错误堆栈:\n{error_trace}")
+
+            # 更新任务状态为失败
+            self.update_task_status(task_id, "failed", error=str(e))
+            self.add_log(task_id, f"❌ 部署任务执行失败: {str(e)}\n")
+
+    async def _execute_deploy_task_async(
+        self, task_id: str, target_names: Optional[List[str]] = None
+    ):
+        """
+        异步执行部署任务
+
+        Args:
+            task_id: 任务ID
+            target_names: 要执行的目标名称列表
+        """
+        from backend.deploy_task_manager import DeployTaskManager
+
+        try:
+            # 获取任务信息
+            task = self.get_task(task_id)
+            if not task:
+                raise ValueError(f"部署任务不存在: {task_id}")
+
+            task_config = task.get("task_config", {})
+            config_content = task_config.get("config_content", "")
+            config = task_config.get("config", {})
+            registry = task_config.get("registry")
+            tag = task_config.get("tag")
+
+            if not config_content:
+                raise ValueError("部署任务配置内容为空")
+
+            # 创建DeployTaskManager实例（简化版，只用于执行）
+            deploy_manager = DeployTaskManager()
+
+            # 执行部署任务（传入task_manager用于状态更新）
+            result = await deploy_manager.execute_task_with_manager(
+                task_id=task_id,
+                config_content=config_content,
+                config=config,
+                registry=registry,
+                tag=tag,
+                target_names=target_names,
+                task_manager=self,
+            )
+
+            # 检查执行结果
+            if result.get("success"):
+                # 检查是否有失败的目标
+                results = result.get("results", {})
+                has_failed = any(not r.get("success", False) for r in results.values())
+                if has_failed:
+                    self.update_task_status(task_id, "failed", error="部分目标部署失败")
+                else:
+                    self.update_task_status(task_id, "completed")
+            else:
+                self.update_task_status(
+                    task_id, "failed", error=result.get("message", "部署失败")
+                )
+
+        except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
+            print(f"❌ 执行部署任务异常: {e}")
+            print(f"错误堆栈:\n{error_trace}")
+
+            # 更新任务状态为失败
+            self.update_task_status(task_id, "failed", error=str(e))
+            self.add_log(task_id, f"❌ 部署任务执行失败: {str(e)}\n")
+
+    def retry_deploy_task(self, task_id: str) -> bool:
+        """
+        重试失败或停止的部署任务（在原任务上重试，不创建新任务）
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功重试
+        """
+        from backend.database import get_db_session
+        from backend.models import Task
+
+        db = get_db_session()
+        try:
+            task = db.query(Task).filter(Task.task_id == task_id).first()
+            if not task:
+                print(f"⚠️ 部署任务 {task_id[:8]} 不存在")
+                return False
+
+            # 验证任务类型（确保是部署任务）
+            if task.task_type != "deploy":
+                print(
+                    f"⚠️ 任务 {task_id[:8]} 不是部署任务（task_type={task.task_type}），无法重试"
+                )
+                return False
+
+            # 只有失败、停止或已完成的任务才能重试
+            if task.status not in ("failed", "stopped", "completed"):
+                print(
+                    f"⚠️ 部署任务 {task_id[:8]} 状态为 {task.status}，无法重试（只有失败、停止或已完成的任务才能重试）"
+                )
+                return False
+
+            # 验证必要配置
+            task_config = task.task_config or {}
+            config_content = task_config.get("config_content", "")
+            if not config_content:
+                print(f"⚠️ 部署任务 {task_id[:8]} 缺少配置内容，无法重试")
+                task.error = "任务缺少配置内容，无法重试"
+                task.status = "failed"
+                db.commit()
+                return False
+
+            # 重置任务状态（在原任务上重试，不创建新任务）
+            task.status = "pending"
+            task.error = None
+            task.completed_at = None
+            task.started_at = None  # 重置开始时间，重试时重新计时
+            db.commit()
+
+            print(f"🔄 重试部署任务: {task_id[:8]}（在原任务上重试）")
+
+            # 直接执行原任务（不创建新任务）
+            self.update_task_status(task_id, "running")
+
+            # 在后台线程中执行任务
+            thread = threading.Thread(
+                target=self._execute_deploy_task_in_thread,
+                args=(task_id, None),  # target_names 为 None，执行所有目标
+                daemon=True,
+            )
+            thread.start()
+
+            return True
+        except Exception as e:
+            db.rollback()
+            import traceback
+
+            print(f"❌ 重试部署任务失败: {e}")
+            traceback.print_exc()
+            return False
         finally:
             db.close()
 

@@ -1,31 +1,91 @@
 <template>
   <div class="task-manager">
-    <!-- 基本信息块：下载目录和编译目录大小 -->
+    <!-- 统计信息栏 -->
     <div class="info-cards mb-3">
-      <div class="card info-card">
+      <!-- 总任务数 -->
+      <div class="card info-card info-card-primary">
         <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="info-icon me-3">
-              <i class="fas fa-download"></i>
+          <div class="d-flex align-items-start">
+            <div class="info-icon-wrapper">
+              <div class="info-icon bg-primary">
+                <i class="fas fa-tasks"></i>
+              </div>
             </div>
-            <div class="flex-grow-1">
-              <div class="info-label">下载目录大小</div>
-              <div class="info-value">{{ exportDirSize }}</div>
-              <div v-if="exportDirCount > 0" class="info-sub">{{ exportDirCount }} 个文件</div>
+            <div class="flex-grow-1 ms-3">
+              <div class="info-label">总任务</div>
+              <div class="info-value">{{ taskStats.total }}</div>
+              <div class="info-badges mt-2">
+                <span class="badge badge-success">{{ taskStats.completed }}</span>
+                <span class="badge badge-warning">{{ taskStats.running }}</span>
+                <span class="badge badge-danger">{{ taskStats.failed }}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="card info-card">
+      
+      <!-- 任务类型统计 -->
+      <div class="card info-card info-card-info">
         <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="info-icon me-3">
-              <i class="fas fa-folder-open"></i>
+          <div class="d-flex align-items-start">
+            <div class="info-icon-wrapper">
+              <div class="info-icon bg-info">
+                <i class="fas fa-layer-group"></i>
+              </div>
             </div>
-            <div class="flex-grow-1">
-              <div class="info-label">编译目录大小</div>
-              <div class="info-value">{{ buildDirSize }}</div>
-              <div v-if="buildDirCount > 0" class="info-sub">{{ buildDirCount }} 个目录</div>
+            <div class="flex-grow-1 ms-3">
+              <div class="info-label">任务类型</div>
+              <div class="info-badges mt-2">
+                <span class="badge badge-primary">{{ taskStats.build }} 构建</span>
+                <span class="badge badge-success">{{ taskStats.export }} 导出</span>
+                <span class="badge badge-info">{{ taskStats.deploy }} 部署</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 目录统计（合并下载和编译目录） -->
+      <div class="card info-card info-card-secondary">
+        <div class="card-body">
+          <div class="d-flex align-items-start">
+            <div class="info-icon-wrapper">
+              <div class="info-icon bg-secondary">
+                <i class="fas fa-folder"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <div class="info-label">目录统计</div>
+              <div class="info-dirs mt-2">
+                <div class="info-dir-item">
+                  <i class="fas fa-download text-success"></i>
+                  <span class="ms-1">{{ exportDirSize }}</span>
+                </div>
+                <div class="info-dir-item mt-1">
+                  <i class="fas fa-folder-open text-secondary"></i>
+                  <span class="ms-1">{{ buildDirSize }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 成功率 -->
+      <div class="card info-card info-card-success">
+        <div class="card-body">
+          <div class="d-flex align-items-start">
+            <div class="info-icon-wrapper">
+              <div class="info-icon bg-success">
+                <i class="fas fa-chart-line"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <div class="info-label">成功率</div>
+              <div class="info-value">{{ taskStats.successRate }}%</div>
+              <div class="info-sub mt-2">
+                <small class="text-muted">{{ taskStats.completed }}/{{ taskStats.total || 1 }} 完成</small>
+              </div>
             </div>
           </div>
         </div>
@@ -36,19 +96,96 @@
       <h5 class="mb-0">
         <i class="fas fa-tasks"></i> 任务管理
       </h5>
-      <div class="d-flex gap-2 align-items-center">
-        <select v-model="statusFilter" class="form-select form-select-sm" style="width: auto;" @change="resetPage">
-          <option value="">全部状态</option>
-          <option value="pending">等待中</option>
-          <option value="running">进行中</option>
-          <option value="completed">已完成</option>
-          <option value="failed">失败</option>
-        </select>
-        <select v-model="categoryFilter" class="form-select form-select-sm" style="width: auto;" @change="resetPage">
-          <option value="">全部类型</option>
-          <option value="build">构建任务</option>
-          <option value="export">导出任务</option>
-        </select>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <!-- 状态筛选 - 平铺显示 -->
+        <div class="btn-group btn-group-sm" role="group">
+          <button 
+            type="button" 
+            class="btn"
+            :class="statusFilter === '' ? 'btn-primary' : 'btn-outline-primary'"
+            @click="statusFilter = ''; handleFilterChange()"
+            title="全部状态"
+          >
+            全部状态
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="statusFilter === 'pending' ? 'btn-primary' : 'btn-outline-primary'"
+            @click="statusFilter = 'pending'; handleFilterChange()"
+            title="等待中"
+          >
+            等待中
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="statusFilter === 'running' ? 'btn-primary' : 'btn-outline-primary'"
+            @click="statusFilter = 'running'; handleFilterChange()"
+            title="进行中"
+          >
+            进行中
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="statusFilter === 'completed' ? 'btn-primary' : 'btn-outline-primary'"
+            @click="statusFilter = 'completed'; handleFilterChange()"
+            title="已完成"
+          >
+            已完成
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="statusFilter === 'failed' ? 'btn-primary' : 'btn-outline-primary'"
+            @click="statusFilter = 'failed'; handleFilterChange()"
+            title="失败"
+          >
+            失败
+          </button>
+        </div>
+        
+        <!-- 类型筛选 - 平铺显示 -->
+        <div class="btn-group btn-group-sm" role="group">
+          <button 
+            type="button" 
+            class="btn"
+            :class="categoryFilter === '' ? 'btn-success' : 'btn-outline-success'"
+            @click="categoryFilter = ''; handleFilterChange()"
+            title="全部类型"
+          >
+            全部类型
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="categoryFilter === 'build' ? 'btn-success' : 'btn-outline-success'"
+            @click="categoryFilter = 'build'; handleFilterChange()"
+            title="构建任务"
+          >
+            构建任务
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="categoryFilter === 'export' ? 'btn-success' : 'btn-outline-success'"
+            @click="categoryFilter = 'export'; handleFilterChange()"
+            title="导出任务"
+          >
+            导出任务
+          </button>
+          <button 
+            type="button" 
+            class="btn"
+            :class="categoryFilter === 'deploy' ? 'btn-success' : 'btn-outline-success'"
+            @click="categoryFilter = 'deploy'; handleFilterChange()"
+            title="部署任务"
+          >
+            部署任务
+          </button>
+        </div>
+        
         <button class="btn btn-sm btn-outline-primary" @click="loadTasks">
           <i class="fas fa-sync-alt"></i> 刷新
         </button>
@@ -121,6 +258,11 @@
       </div>
     </div>
 
+    <div v-else-if="filtering" class="text-center py-2">
+      <div class="spinner-border spinner-border-sm me-2" style="width: 1rem; height: 1rem;" role="status"></div>
+      <small class="text-muted">筛选中...</small>
+    </div>
+
     <div v-else-if="paginatedTasks.length === 0" class="text-center py-4 text-muted">
       <i class="fas fa-inbox fa-2x mb-2"></i>
       <p class="mb-0">暂无任务</p>
@@ -150,20 +292,36 @@
               <span v-if="task.task_category === 'build'" class="badge bg-info">
                 <i class="fas fa-hammer"></i> 构建
               </span>
+              <span v-else-if="task.task_category === 'deploy'" class="badge bg-success">
+                <i class="fas fa-rocket"></i> 部署
+              </span>
               <span v-else class="badge bg-secondary">
                 <i class="fas fa-download"></i> 导出
               </span>
             </td>
             <td>
               <div>
-                <code class="small">{{ task.image || (task.task_type ? task.task_type : '未知') }}</code>
-                <div v-if="task.selected_services && task.selected_services.length > 0" class="mt-1">
-                  <span class="badge bg-info me-1" style="font-size: 0.7rem;">
-                    <i class="fas fa-layer-group"></i> 多服务 ({{ task.selected_services.length }})
+                <div class="d-flex align-items-center gap-2">
+                  <code class="small mb-0">{{ task.image || (task.task_type ? task.task_type : '未知') }}</code>
+                  <!-- 多服务标识 - 更明显 -->
+                  <span v-if="task.selected_services && task.selected_services.length > 0" 
+                        class="badge bg-info" 
+                        style="font-size: 0.7rem; font-weight: 600;"
+                        :title="`多服务构建: ${task.selected_services.join(', ')}`">
+                    <i class="fas fa-layer-group"></i> {{ task.selected_services.length }} 服务
                   </span>
-                  <div class="d-flex flex-wrap gap-1 mt-1">
+                </div>
+                <!-- 部署任务显示目标主机 -->
+                <div v-if="task.task_category === 'deploy' && task.task_config?.targets" class="mt-1">
+                  <span class="badge bg-success me-1" style="font-size: 0.7rem;">
+                    <i class="fas fa-server"></i> {{ task.task_config.targets.length }} 个目标
+                  </span>
+                </div>
+                <!-- 构建任务显示服务列表 -->
+                <div v-else-if="task.selected_services && task.selected_services.length > 0" class="mt-1">
+                  <div class="d-flex flex-wrap gap-1">
                     <span 
-                      v-for="service in task.selected_services.slice(0, 5)" 
+                      v-for="service in task.selected_services.slice(0, 8)" 
                       :key="service"
                       class="badge bg-secondary" 
                       style="font-size: 0.65rem;"
@@ -171,15 +329,16 @@
                       {{ service }}
                     </span>
                     <span 
-                      v-if="task.selected_services.length > 5"
+                      v-if="task.selected_services.length > 8"
                       class="badge bg-secondary" 
                       style="font-size: 0.65rem;"
+                      :title="task.selected_services.slice(8).join(', ')"
                     >
-                      +{{ task.selected_services.length - 5 }}
+                      +{{ task.selected_services.length - 8 }}
                     </span>
                   </div>
                 </div>
-                <span v-else-if="task.push_mode === 'multi' && !task.selected_services" class="badge bg-secondary me-1" style="font-size: 0.7rem;">
+                <span v-else-if="task.push_mode === 'multi' && !task.selected_services && task.task_category !== 'deploy'" class="badge bg-secondary me-1 mt-1" style="font-size: 0.7rem;">
                   <i class="fas fa-cube"></i> 单应用
                 </span>
               </div>
@@ -215,26 +374,42 @@
               <span v-else-if="task.source === '镜像构建' || task.source === '分步构建'" class="badge bg-warning">
                 <i class="fas fa-list-ol"></i> 镜像构建
               </span>
+              <span v-else-if="task.source === '手动部署'" class="badge bg-success">
+                <i class="fas fa-rocket"></i> 手动部署
+              </span>
               <span v-else class="badge bg-secondary">
                 <i class="fas fa-hammer"></i> {{ task.source || '手动构建' }}
               </span>
             </td>
             <td>
-              <span v-if="task.status === 'pending'" class="badge bg-secondary">
-                <i class="fas fa-clock"></i> 等待中
-              </span>
-              <span v-else-if="task.status === 'running'" class="badge bg-primary">
-                <span class="spinner-border spinner-border-sm me-1"></span> 进行中
-              </span>
-              <span v-else-if="task.status === 'stopped'" class="badge bg-warning">
-                <i class="fas fa-stop-circle"></i> 已停止
-              </span>
-              <span v-else-if="task.status === 'completed'" class="badge bg-success">
-                <i class="fas fa-check-circle"></i> 已完成
-              </span>
-              <span v-else-if="task.status === 'failed'" class="badge bg-danger">
-                <i class="fas fa-times-circle"></i> 失败
-              </span>
+              <div class="d-flex flex-column gap-1">
+                <span v-if="task.status === 'pending'" class="badge bg-secondary">
+                  <i class="fas fa-clock"></i> 等待中
+                </span>
+                <span v-else-if="task.status === 'running'" class="badge bg-primary">
+                  <span class="spinner-border spinner-border-sm me-1"></span> 进行中
+                </span>
+                <span v-else-if="task.status === 'stopped'" class="badge bg-warning">
+                  <i class="fas fa-stop-circle"></i> 已停止
+                </span>
+                <span v-else-if="task.status === 'completed'" class="badge bg-success">
+                  <i class="fas fa-check-circle"></i> 已完成
+                </span>
+                <span v-else-if="task.status === 'failed'" class="badge bg-danger">
+                  <i class="fas fa-times-circle"></i> 失败
+                </span>
+                <!-- 多服务任务显示服务数量提示 -->
+                <small v-if="task.selected_services && task.selected_services.length > 0 && task.status === 'running'" 
+                       class="text-muted" 
+                       style="font-size: 0.7rem;">
+                  <i class="fas fa-cog fa-spin"></i> 构建中...
+                </small>
+                <small v-else-if="task.selected_services && task.selected_services.length > 0 && task.status === 'completed'" 
+                       class="text-success" 
+                       style="font-size: 0.7rem;">
+                  <i class="fas fa-check"></i> {{ task.selected_services.length }} 个服务已完成
+                </small>
+              </div>
             </td>
             <td class="small text-muted">
               {{ formatTime(task.created_at) }}
@@ -242,10 +417,10 @@
             <td class="small">
               <span v-if="task.status === 'running'" class="text-primary">
                 <span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span>
-                {{ calculateDuration(task.created_at, null) }}
+                {{ calculateDuration(task.started_at || task.created_at, null) }}
               </span>
               <span v-else-if="task.completed_at" :class="{'text-success': task.status === 'completed', 'text-danger': task.status === 'failed'}">
-                {{ calculateDuration(task.created_at, task.completed_at) }}
+                {{ calculateDuration(task.started_at || task.created_at, task.completed_at) }}
               </span>
               <span v-else class="text-muted">-</span>
             </td>
@@ -287,6 +462,35 @@
                     class="btn btn-sm btn-outline-secondary"
                     @click="viewTaskConfig(task)"
                     :title="'查看配置JSON'"
+                  >
+                    <i class="fas fa-code"></i>
+                  </button>
+                </template>
+                
+                <!-- 部署任务操作 -->
+                <template v-if="task.task_category === 'deploy'">
+                  <button 
+                    class="btn btn-sm btn-outline-info"
+                    @click="viewLogs(task)"
+                    :disabled="viewingLogs === task.task_id"
+                    :title="'查看部署日志'"
+                  >
+                    <i class="fas fa-terminal"></i>
+                  </button>
+                  <button 
+                    v-if="task.status === 'failed' || task.status === 'stopped' || task.status === 'completed'"
+                    class="btn btn-sm btn-outline-success"
+                    @click="retryDeployTask(task)"
+                    :disabled="retryingDeploy === task.task_id"
+                    :title="'重试部署'"
+                  >
+                    <i class="fas fa-redo"></i>
+                    <span v-if="retryingDeploy === task.task_id" class="spinner-border spinner-border-sm ms-1"></span>
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-outline-secondary"
+                    @click="viewDeployConfig(task)"
+                    :title="'查看部署配置'"
                   >
                     <i class="fas fa-code"></i>
                   </button>
@@ -336,11 +540,11 @@
     </div>
 
     <!-- 分页控件 -->
-    <div v-if="totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+    <div v-if="!loading && !filtering && totalTasks > 0" class="d-flex justify-content-between align-items-center mt-3">
       <div class="text-muted small">
         显示第 {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalTasks) }} 条，共 {{ totalTasks }} 条
       </div>
-      <nav>
+      <nav v-if="totalPages > 1">
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item" :class="{ disabled: currentPage === 1 }">
             <button class="page-link" @click="changePage(1)" :disabled="currentPage === 1">
@@ -372,6 +576,9 @@
           </li>
         </ul>
       </nav>
+      <div v-else class="text-muted small">
+        <span v-if="totalTasks <= pageSize">全部显示</span>
+      </div>
     </div>
 
     <!-- 错误提示 -->
@@ -467,13 +674,16 @@ import TaskLogModal from './TaskLogModal.vue'
 
 const tasks = ref([])
 const loading = ref(false)
+const filtering = ref(false) // 筛选中的状态（轻量级loading）
 const error = ref(null)
 const statusFilter = ref('')
 const categoryFilter = ref('')
+let filterDebounceTimer = null // 防抖定时器
 const downloading = ref(null)
 const deleting = ref(null)
 const rebuilding = ref(null)  // 重建中的任务ID
 const retrying = ref(null)  // 重试中的任务ID
+const retryingDeploy = ref(null)  // 重试部署中的任务ID
 const stopping = ref(null)  // 停止中的任务ID
 const viewingLogs = ref(null)
 const showLogModal = ref(false)
@@ -528,15 +738,71 @@ const pipelineForm = ref({
 })
 let refreshInterval = null
 
+// 启动定时刷新（只在有运行中任务时启动）
+function startRefreshInterval() {
+  // 先清除现有定时器
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+  
+  // 检查是否有运行中的任务
+  const hasRunningTasks = tasks.value.some(t => t.status === 'running' || t.status === 'pending')
+  
+  if (hasRunningTasks) {
+    // 每3秒自动刷新一次（只更新运行中任务的状态，不刷新整个页面）
+    refreshInterval = setInterval(() => {
+      refreshRunningTasks()
+    }, 3000)
+  }
+}
+
+// 筛选已在后端完成，直接返回任务列表
 const filteredTasks = computed(() => {
-  let result = tasks.value
-  if (statusFilter.value) {
-    result = result.filter(t => t.status === statusFilter.value)
+  return tasks.value
+})
+
+// 任务统计信息
+const taskStats = computed(() => {
+  const stats = {
+    total: tasks.value.length,
+    pending: 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+    stopped: 0,
+    build: 0,
+    export: 0,
+    deploy: 0,
+    successRate: 0
   }
-  if (categoryFilter.value) {
-    result = result.filter(t => t.task_category === categoryFilter.value)
+  
+  tasks.value.forEach(task => {
+    // 统计状态
+    const status = task.status || 'pending'
+    if (stats.hasOwnProperty(status)) {
+      stats[status]++
+    }
+    
+    // 统计类型
+    const category = task.task_category || 'build'
+    if (category === 'build') stats.build++
+    else if (category === 'export') stats.export++
+    else if (category === 'deploy') stats.deploy++
+  })
+  
+  // 计算成功率（已完成任务 / 已完成+失败+停止的任务）
+  const finishedTasks = stats.completed + stats.failed + stats.stopped
+  if (finishedTasks > 0) {
+    stats.successRate = Math.round((stats.completed / finishedTasks) * 100)
+  } else if (stats.total === 0) {
+    stats.successRate = 0
+  } else {
+    // 如果没有已完成的任务，显示0%
+    stats.successRate = 0
   }
-  return result
+  
+  return stats
 })
 
 // 总任务数
@@ -687,24 +953,53 @@ async function loadExportDirStats() {
   }
 }
 
-async function loadTasks() {
+async function loadTasks(includeStats = true) {
   loading.value = true
   error.value = null
   
-  // 同时加载编译目录和下载目录统计
-  await Promise.all([loadBuildDirStats(), loadExportDirStats()])
-  
   try {
+    // 构建请求参数，在后端进行筛选（更快速）
     const params = {}
     if (statusFilter.value) params.status = statusFilter.value
+    if (categoryFilter.value) params.task_type = categoryFilter.value
+    
+    // 根据是否需要统计信息决定是否并行加载
+    if (includeStats) {
+      // 同时加载编译目录和下载目录统计
+      await Promise.all([loadBuildDirStats(), loadExportDirStats()])
+    }
+    
     const res = await axios.get('/api/tasks', { params })
     tasks.value = res.data.tasks || []
+    
+    // 加载任务后，检查是否需要启动定时刷新
+    startRefreshInterval()
   } catch (err) {
     error.value = err.response?.data?.error || err.message || '加载任务列表失败'
     console.error('加载任务列表失败:', err)
   } finally {
     loading.value = false
+    filtering.value = false
   }
+}
+
+// 筛选条件改变时的处理函数（使用防抖优化）
+function handleFilterChange() {
+  resetPage()
+  
+  // 清除之前的定时器
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer)
+  }
+  
+  // 显示轻量级筛选状态
+  filtering.value = true
+  
+  // 防抖：300ms后执行，避免频繁请求
+  filterDebounceTimer = setTimeout(() => {
+    // 筛选时不需要重新加载统计信息，提升速度
+    loadTasks(false)
+  }, 300)
 }
 
 // 只刷新运行中任务的状态（不刷新整个页面）
@@ -715,7 +1010,12 @@ async function refreshRunningTasks() {
       .filter(t => t.status === 'running' || t.status === 'pending')
       .map(t => ({ id: t.task_id, category: t.task_category }))
     
+    // 如果没有运行中的任务，停止定时器
     if (runningTaskIds.length === 0) {
+      if (refreshInterval) {
+        clearInterval(refreshInterval)
+        refreshInterval = null
+      }
       return
     }
     
@@ -726,6 +1026,19 @@ async function refreshRunningTasks() {
         if (category === 'build') {
           const res = await axios.get(`/api/build-tasks/${id}`)
           updatedTask = res.data
+        } else if (category === 'deploy') {
+          // 部署任务使用部署任务API
+          const res = await axios.get(`/api/deploy-tasks/${id}`)
+          const taskData = res.data.task || res.data
+          // 部署任务的状态已经是扁平化的，直接使用
+          if (taskData) {
+            updatedTask = {
+              status: typeof taskData.status === 'string' ? taskData.status : (taskData.status?.status || 'pending'),
+              completed_at: taskData.completed_at || taskData.status?.completed_at,
+              error: taskData.error || taskData.status?.error,
+              file_size: taskData.file_size
+            }
+          }
         } else if (category === 'export') {
           const res = await axios.get(`/api/export-tasks/${id}`)
           updatedTask = res.data.task
@@ -760,6 +1073,13 @@ async function refreshRunningTasks() {
         // 单个任务更新失败不影响其他任务
         console.error(`更新任务 ${id} 状态失败:`, err)
       }
+    }
+    
+    // 再次检查是否还有运行中的任务，如果没有则停止定时器
+    const stillRunning = tasks.value.some(t => t.status === 'running' || t.status === 'pending')
+    if (!stillRunning && refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
     }
     // 不再调用 loadTasks()，避免刷新整个页面
   } catch (err) {
@@ -968,6 +1288,9 @@ async function stopTask(task) {
   try {
     if (task.task_category === 'build') {
       await axios.post(`/api/build-tasks/${task.task_id}/stop`)
+    } else if (task.task_category === 'deploy') {
+      // 部署任务使用构建任务管理器的stop接口（因为部署任务现在也在BuildTaskManager中）
+      await axios.post(`/api/build-tasks/${task.task_id}/stop`)
     } else {
       await axios.post(`/api/export-tasks/${task.task_id}/stop`)
     }
@@ -1008,6 +1331,8 @@ async function deleteTask(task) {
   try {
     if (task.task_category === 'build') {
       await axios.delete(`/api/build-tasks/${task.task_id}`)
+    } else if (task.task_category === 'deploy') {
+      await axios.delete(`/api/deploy-tasks/${task.task_id}`)
     } else {
       await axios.delete(`/api/export-tasks/${task.task_id}`)
     }
@@ -1505,6 +1830,66 @@ async function retryExportTask(task) {
   }
 }
 
+// 重试部署任务
+async function retryDeployTask(task) {
+  if (retryingDeploy.value) return
+  
+  // 检查任务状态，只有失败、停止或已完成的任务才能重试
+  if (task.status !== 'failed' && task.status !== 'stopped' && task.status !== 'completed') {
+    alert(`无法重试：只有失败、停止或已完成的任务才能重试（当前状态: ${task.status}）`)
+    return
+  }
+  
+  // 确认对话框
+  const taskName = task.image || task.task_id.substring(0, 8)
+  if (!confirm(`确定要重试部署任务 "${taskName}" 吗？`)) {
+    return
+  }
+  
+  retryingDeploy.value = task.task_id
+  error.value = null
+  
+  try {
+    const res = await axios.post(`/api/deploy-tasks/${task.task_id}/retry`)
+    if (res.data.success) {
+      alert('部署任务已重新启动')
+      await loadTasks()
+    } else {
+      throw new Error(res.data.message || '重试失败')
+    }
+  } catch (err) {
+    console.error('重试部署任务失败:', err)
+    const errorMsg = err.response?.data?.detail || err.message || '重试失败'
+    error.value = `重试部署任务失败: ${errorMsg}`
+    alert(`重试部署任务失败: ${errorMsg}`)
+    // 5秒后自动清除错误提示
+    setTimeout(() => {
+      if (error.value && error.value.includes('重试部署任务失败')) {
+        error.value = null
+      }
+    }, 5000)
+  } finally {
+    retryingDeploy.value = null
+  }
+}
+
+// 查看部署配置
+async function viewDeployConfig(task) {
+  try {
+    const res = await axios.get(`/api/deploy-tasks/${task.task_id}`)
+    const taskData = res.data.task
+    const configContent = taskData.config_content || (taskData.task_config && taskData.task_config.config_content) || ''
+    
+    taskConfigJson.value = configContent
+    taskConfigJsonText.value = configContent
+    showConfigModal.value = true
+  } catch (err) {
+    console.error('获取部署配置失败:', err)
+    const errorMsg = err.response?.data?.detail || err.message || '获取配置失败'
+    alert(`获取部署配置失败: ${errorMsg}`)
+  }
+}
+
 // 监听任务创建事件
 function handleTaskCreated(event) {
   console.log('收到任务创建事件，刷新任务列表:', event.detail)
@@ -1524,10 +1909,8 @@ onMounted(() => {
     sessionStorage.removeItem('taskStatusFilter') // 使用后清除
   }
   loadTasks()
-  // 每3秒自动刷新一次（只更新运行中任务的状态，不刷新整个页面）
-  refreshInterval = setInterval(() => {
-    refreshRunningTasks()
-  }, 3000)
+  // 启动定时刷新（如果有运行中的任务）
+  startRefreshInterval()
 })
 
 onUnmounted(() => {
@@ -1536,6 +1919,11 @@ onUnmounted(() => {
   
   if (refreshInterval) {
     clearInterval(refreshInterval)
+  }
+  
+  // 清除防抖定时器
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer)
   }
 })
 </script>
@@ -1552,67 +1940,186 @@ onUnmounted(() => {
 
 /* 基本信息块样式 */
 .info-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 1rem;
 }
 
 .info-card {
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.info-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.info-card-primary::before {
+  background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+}
+
+.info-card-info::before {
+  background: linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%);
+}
+
+.info-card-secondary::before {
+  background: linear-gradient(90deg, #6b7280 0%, #9ca3af 100%);
+}
+
+.info-card-success::before {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
 }
 
 .info-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+}
+
+.info-card:hover::before {
+  opacity: 1;
 }
 
 .info-card .card-body {
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.info-icon-wrapper {
+  flex-shrink: 0;
 }
 
 .info-icon {
   width: 48px;
   height: 48px;
-  border-radius: 10px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s ease;
 }
 
-.info-card:first-child .info-icon {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+.info-card:hover .info-icon {
+  transform: scale(1.1) rotate(5deg);
 }
 
-.info-card:last-child .info-icon {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+.info-icon.bg-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.info-icon.bg-info {
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+}
+
+.info-icon.bg-secondary {
+  background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+}
+
+.info-icon.bg-success {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
 .info-label {
-  font-size: 0.85rem;
-  color: #6c757d;
-  margin-bottom: 0.25rem;
-  font-weight: 500;
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .info-value {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  color: #212529;
+  color: #1e293b;
   line-height: 1.2;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .info-sub {
-  font-size: 0.75rem;
-  color: #adb5bd;
+  font-size: 0.8rem;
+  color: #94a3b8;
   margin-top: 0.25rem;
+}
+
+.info-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.badge-success {
+  background-color: #10b981;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-warning {
+  background-color: #f59e0b;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-danger {
+  background-color: #ef4444;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-primary {
+  background-color: #667eea;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-info {
+  background-color: #06b6d4;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.info-dirs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-dir-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+  color: #475569;
+  font-weight: 500;
 }
 
 .table {
