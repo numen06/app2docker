@@ -270,20 +270,26 @@ class AgentExecutor(DeployExecutor):
                 f"[Agent] ✅ Future已完成，收到结果: task_id={task_id}, target_name={target_name}, "
                 f"success={result.get('success')}, result_type={type(result)}, result_keys={list(result.keys()) if isinstance(result, dict) else 'N/A'}"
             )
+            logger.info(f"[Agent] 完整结果内容: {result}")
 
             # 确保result是字典类型
             if not isinstance(result, dict):
                 logger.error(
-                    f"[Agent] 收到非字典类型的结果: {type(result)}, value={result}"
+                    f"[Agent] ❌ 收到非字典类型的结果: type={type(result)}, value={result}"
                 )
                 result = {"success": False, "message": f"结果格式错误: {type(result)}"}
 
             # 确保success字段存在且是布尔值
+            original_success = result.get("success")
             if "success" not in result:
-                logger.warning(f"[Agent] 结果中缺少success字段: {result}")
+                logger.warning(f"[Agent] ⚠️ 结果中缺少success字段: {result}")
                 result["success"] = False
             else:
                 result["success"] = bool(result["success"])
+                if original_success != result["success"]:
+                    logger.warning(
+                        f"[Agent] ⚠️ success字段类型转换: {original_success} ({type(original_success)}) -> {result['success']} (bool)"
+                    )
 
             # 添加主机类型和部署方法信息
             result.setdefault("host_type", "agent")
@@ -291,7 +297,9 @@ class AgentExecutor(DeployExecutor):
             result.setdefault("host_id", self.host_id)
 
             logger.info(
-                f"[Agent] 收到部署结果: task_id={task_id}, target_name={target_name}, success={result.get('success')}, message={result.get('message')}, result_keys={list(result.keys())}"
+                f"[Agent] ✅ 最终返回结果: task_id={task_id}, target_name={target_name}, "
+                f"success={result.get('success')} (type: {type(result.get('success'))}), "
+                f"message={result.get('message')}, result_keys={list(result.keys())}"
             )
 
             return result

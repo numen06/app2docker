@@ -93,8 +93,17 @@ class DeployTaskManager:
 
             try:
                 # 使用新的执行器架构
+                logger.info(
+                    f"[DeployTaskManager] 开始执行目标: {target_name}, task_id={task_id}"
+                )
                 result = await self._execute_target_with_executor(
                     task_id, target, deploy_config, context, task_manager=task_manager
+                )
+
+                logger.info(
+                    f"[DeployTaskManager] 目标 {target_name} 执行完成，收到结果: "
+                    f"type={type(result)}, is_dict={isinstance(result, dict)}, "
+                    f"keys={list(result.keys()) if isinstance(result, dict) else 'N/A'}"
                 )
 
                 results[target_name] = result
@@ -102,7 +111,7 @@ class DeployTaskManager:
                 # 确保result是字典类型
                 if not isinstance(result, dict):
                     logger.error(
-                        f"目标 {target_name} 返回非字典类型的结果: {type(result)}, value={result}"
+                        f"❌ 目标 {target_name} 返回非字典类型的结果: type={type(result)}, value={result}"
                     )
                     result = {
                         "success": False,
@@ -113,14 +122,20 @@ class DeployTaskManager:
                 # 确保success字段存在且是布尔值
                 if "success" not in result:
                     logger.warning(
-                        f"目标 {target_name} 结果中缺少success字段: {result}"
+                        f"⚠️ 目标 {target_name} 结果中缺少success字段: {result}"
                     )
                     result["success"] = False
                 else:
+                    original_success = result["success"]
                     result["success"] = bool(result["success"])
+                    if original_success != result["success"]:
+                        logger.warning(
+                            f"⚠️ 目标 {target_name} success字段类型转换: {original_success} ({type(original_success)}) -> {result['success']} (bool)"
+                        )
 
                 logger.info(
-                    f"目标 {target_name} 执行结果: success={result.get('success')}, message={result.get('message', '')[:100]}, result_keys={list(result.keys())}"
+                    f"✅ 目标 {target_name} 执行结果: success={result.get('success')} (type: {type(result.get('success'))}), "
+                    f"message={result.get('message', '')[:100]}, result_keys={list(result.keys())}"
                 )
 
                 # 添加日志
@@ -138,7 +153,8 @@ class DeployTaskManager:
             except Exception as e:
                 import traceback
 
-                logger.exception(f"执行目标 {target_name} 时发生异常")
+                logger.exception(f"❌ 执行目标 {target_name} 时发生异常: {e}")
+                traceback.print_exc()
                 error_result = {
                     "success": False,
                     "message": f"执行异常: {str(e)}",
@@ -148,29 +164,43 @@ class DeployTaskManager:
                 task_manager.add_log(
                     task_id, f"❌ 目标 {target_name} 执行异常: {str(e)}\n"
                 )
+                logger.error(
+                    f"❌ 目标 {target_name} 异常结果: {error_result}, "
+                    f"success={error_result.get('success')}, type={type(error_result.get('success'))}"
+                )
 
         # 检查整体状态
         # 确保所有结果都有success字段且不是None
         all_completed = True
+        missing_results = []
         for target_name, result in results.items():
             if not isinstance(result, dict):
-                logger.error(f"目标 {target_name} 结果不是字典: {type(result)}")
+                logger.error(
+                    f"目标 {target_name} 结果不是字典: {type(result)}, value={result}"
+                )
                 all_completed = False
+                missing_results.append(f"{target_name}: 不是字典类型")
                 break
             if "success" not in result or result.get("success") is None:
                 logger.warning(
                     f"目标 {target_name} 结果中success字段缺失或为None: {result}"
                 )
                 all_completed = False
+                missing_results.append(f"{target_name}: success字段缺失或为None")
                 break
 
         logger.info(
             f"部署任务检查: task_id={task_id}, 目标数量={len(results)}, all_completed={all_completed}"
         )
+        logger.info(f"  所有目标名称: {list(results.keys())}")
         for target_name, result in results.items():
             logger.info(
-                f"  目标 {target_name}: success={result.get('success')}, success_type={type(result.get('success'))}, message={result.get('message', '')[:50]}"
+                f"  目标 {target_name}: success={result.get('success')}, success_type={type(result.get('success'))}, "
+                f"message={result.get('message', '')[:50]}, result_keys={list(result.keys()) if isinstance(result, dict) else 'N/A'}"
             )
+
+        if missing_results:
+            logger.warning(f"  缺失或无效的结果: {missing_results}")
 
         if all_completed:
             has_failed = any(not r.get("success", False) for r in results.values())
@@ -180,14 +210,19 @@ class DeployTaskManager:
                 task_manager.update_task_status(
                     task_id, "failed", error="部分目标部署失败"
                 )
-                logger.info(f"任务状态已更新为失败: task_id={task_id}")
+                logger.info(f"✅ 任务状态已更新为失败: task_id={task_id}")
             else:
                 task_manager.add_log(task_id, f"✅ 部署任务完成，所有目标成功\n")
                 # 更新任务状态为完成
                 task_manager.update_task_status(task_id, "completed")
-                logger.info(f"任务状态已更新为完成: task_id={task_id}")
+                logger.info(f"✅ 任务状态已更新为完成: task_id={task_id}")
         else:
-            logger.warning(f"任务未完成: task_id={task_id}, 部分目标结果未返回")
+            logger.warning(
+                f"❌ 任务未完成: task_id={task_id}, 部分目标结果未返回或格式错误"
+            )
+            logger.warning(f"  结果详情: {results}")
+            if missing_results:
+                logger.warning(f"  问题: {missing_results}")
             task_manager.add_log(task_id, f"⚠️ 部分目标结果未返回，任务可能仍在执行中\n")
 
         return {"success": True, "task_id": task_id, "results": results}
