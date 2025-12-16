@@ -32,13 +32,19 @@ class ConnectionManager:
 
         host_id = host["host_id"]
 
-        # 如果已有连接，先关闭旧连接
+        # 如果已有连接，先关闭旧连接并从active_connections中删除
         if host_id in active_connections:
             try:
                 old_ws = active_connections[host_id]
+                # 先从active_connections中删除，避免时序问题
+                del active_connections[host_id]
+                # 然后尝试关闭旧连接
                 await old_ws.close(code=1000, reason="New connection")
-            except:
-                pass
+            except Exception as e:
+                # 旧连接可能已经断开，忽略错误
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"[WebSocket] 关闭旧连接时出错（可忽略）: {e}")
 
         # 接受连接
         await websocket.accept()
