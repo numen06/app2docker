@@ -4464,6 +4464,7 @@ class BuildTaskManager:
             "tag": task.tag,
             "status": task.status,
             "created_at": task.created_at.isoformat() if task.created_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
             "completed_at": (
                 task.completed_at.isoformat() if task.completed_at else None
             ),
@@ -4547,6 +4548,11 @@ class BuildTaskManager:
             task.status = status
             if error:
                 task.error = error
+            if status == "running":
+                # 任务开始执行时，设置开始时间
+                if not task.started_at:
+                    task.started_at = datetime.now()
+                    print(f"🔍 [update_task_status] 设置开始时间: {task.started_at}")
             if status in ("completed", "failed", "stopped"):
                 task.completed_at = datetime.now()
                 print(f"🔍 [update_task_status] 设置完成时间: {task.completed_at}")
@@ -4893,6 +4899,36 @@ class BuildTaskManager:
         if task.get("task_type") != "deploy":
             raise ValueError(f"任务类型不是部署任务: {task_id}")
 
+        # 检查任务状态：只有pending、failed、stopped或completed状态才能执行
+        current_status = task.get("status")
+        if current_status == "running":
+            raise ValueError(f"部署任务正在运行中，无法重复执行: {task_id}")
+
+        # 如果任务状态不是pending，重置为pending（重试场景）
+        # 注意：completed状态的任务也可以通过execute重新执行
+        if current_status not in ("pending", "failed", "stopped", "completed"):
+            print(
+                f"⚠️ 部署任务 {task_id[:8]} 状态异常 ({current_status})，重置为pending"
+            )
+            self.update_task_status(task_id, "pending")
+        elif current_status in ("failed", "stopped", "completed"):
+            # 对于已完成、失败或停止的任务，重置为pending以便重新执行
+            self.update_task_status(task_id, "pending")
+            # 清除之前的错误信息
+            from backend.database import get_db_session
+            from backend.models import Task
+
+            db = get_db_session()
+            try:
+                task_obj = db.query(Task).filter(Task.task_id == task_id).first()
+                if task_obj:
+                    task_obj.error = None
+                    task_obj.completed_at = None
+                    task_obj.started_at = None  # 重置开始时间，重试时重新计时
+                    db.commit()
+            finally:
+                db.close()
+
         # 更新任务状态为运行中
         self.update_task_status(task_id, "running")
 
@@ -4999,8 +5035,77 @@ class BuildTaskManager:
             error_trace = traceback.format_exc()
             print(f"❌ 执行部署任务异常: {e}")
             print(f"错误堆栈:\n{error_trace}")
+
+            # 更新任务状态为失败
             self.update_task_status(task_id, "failed", error=str(e))
             self.add_log(task_id, f"❌ 部署任务执行失败: {str(e)}\n")
+
+    def retry_deploy_task(self, task_id: str) -> bool:
+        """
+        重试失败或停止的部署任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功重试
+        """
+        from backend.database import get_db_session
+        from backend.models import Task
+
+        db = get_db_session()
+        try:
+            task = db.query(Task).filter(Task.task_id == task_id).first()
+            if not task:
+                print(f"⚠️ 部署任务 {task_id[:8]} 不存在")
+                return False
+
+            # 验证任务类型（确保是部署任务）
+            if task.task_type != "deploy":
+                print(
+                    f"⚠️ 任务 {task_id[:8]} 不是部署任务（task_type={task.task_type}），无法重试"
+                )
+                return False
+
+            # 只有失败、停止或已完成的任务才能重试
+            if task.status not in ("failed", "stopped", "completed"):
+                print(
+                    f"⚠️ 部署任务 {task_id[:8]} 状态为 {task.status}，无法重试（只有失败、停止或已完成的任务才能重试）"
+                )
+                return False
+
+            # 验证必要配置
+            task_config = task.task_config or {}
+            config_content = task_config.get("config_content", "")
+            if not config_content:
+                print(f"⚠️ 部署任务 {task_id[:8]} 缺少配置内容，无法重试")
+                task.error = "任务缺少配置内容，无法重试"
+                task.status = "failed"
+                db.commit()
+                return False
+
+            # 重置任务状态
+            task.status = "pending"
+            task.error = None
+            task.completed_at = None
+            task.started_at = None  # 重置开始时间，重试时重新计时
+
+            db.commit()
+
+            # 启动部署任务（使用execute_deploy_task方法）
+            print(f"🔄 重新启动部署任务: {task_id[:8]}")
+            self.execute_deploy_task(task_id)
+
+            return True
+        except Exception as e:
+            db.rollback()
+            import traceback
+
+            print(f"❌ 重试部署任务失败: {e}")
+            traceback.print_exc()
+            return False
+        finally:
+            db.close()
 
 
 # ============ 导出任务管理器 ============

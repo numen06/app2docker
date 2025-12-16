@@ -272,6 +272,41 @@ class DeployTaskManager:
             if task_manager:
                 task_manager.add_log(task_id, f"{message}\n")
         
+        # 在执行前记录命令信息
+        if task_manager:
+            steps = adapted_config.get("steps")
+            if steps and isinstance(steps, list):
+                # 多步骤模式：记录所有步骤的命令
+                task_manager.add_log(task_id, f"📋 部署配置（多步骤模式，共 {len(steps)} 个步骤）：\n")
+                for idx, step in enumerate(steps, 1):
+                    step_name = step.get("name", f"步骤 {idx}")
+                    step_command = step.get("command", "").strip()
+                    if step_command:
+                        task_manager.add_log(task_id, f"  步骤 {idx}: {step_name}\n")
+                        task_manager.add_log(task_id, f"    命令: {step_command}\n")
+            else:
+                # 单命令模式：记录命令
+                deploy_type = adapted_config.get("deploy_mode") or adapted_config.get("type", "docker_run")
+                command = adapted_config.get("command", "")
+                compose_content = adapted_config.get("compose_content", "")
+                
+                if deploy_type == "docker_compose":
+                    task_manager.add_log(task_id, f"📋 部署配置（Docker Compose 模式）：\n")
+                    if command:
+                        task_manager.add_log(task_id, f"  命令: docker-compose {command}\n")
+                    if compose_content:
+                        # 只显示前几行，避免日志过长
+                        compose_lines = compose_content.split('\n')[:10]
+                        task_manager.add_log(task_id, f"  docker-compose.yml 内容（前10行）：\n")
+                        for line in compose_lines:
+                            task_manager.add_log(task_id, f"    {line}\n")
+                        if len(compose_content.split('\n')) > 10:
+                            task_manager.add_log(task_id, f"    ... (共 {len(compose_content.split('\n'))} 行)\n")
+                else:
+                    task_manager.add_log(task_id, f"📋 部署配置（Docker Run 模式）：\n")
+                    if command:
+                        task_manager.add_log(task_id, f"  命令: docker run {command}\n")
+        
         # 执行部署
         try:
             result = await executor.execute(

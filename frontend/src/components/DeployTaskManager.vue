@@ -1065,7 +1065,8 @@ export default {
         envVars: [''],
         volumes: [''],
         restartPolicy: 'always'
-      }
+      },
+      autoRefreshInterval: null  // 自动刷新定时器
     }
   },
   computed: {
@@ -1209,9 +1210,20 @@ export default {
     this.loadSSHHosts()
   },
   beforeUnmount() {
-    this.stopAutoRefresh()
+    // 清理资源（如果有自动刷新定时器，在这里清理）
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval)
+      this.autoRefreshInterval = null
+    }
   },
   methods: {
+    stopAutoRefresh() {
+      // 停止自动刷新（兼容性方法）
+      if (this.autoRefreshInterval) {
+        clearInterval(this.autoRefreshInterval)
+        this.autoRefreshInterval = null
+      }
+    },
     async loadTasks() {
       this.loading = true
       try {
