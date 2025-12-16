@@ -265,7 +265,38 @@ class AgentExecutor(DeployExecutor):
                 f"[Agent] 等待Future完成: task_id={task_id}, target_name={target_name}, future_key={future_key}, "
                 f"Future状态: done={result_future.done()}, cancelled={result_future.cancelled()}"
             )
-            result = await asyncio.wait_for(result_future, timeout=300.0)
+
+            # 在等待期间，定期检查任务状态（避免任务被停止后还在等待）
+            async def check_task_status():
+                """定期检查任务状态"""
+                from backend.handlers import BuildTaskManager
+
+                build_manager = BuildTaskManager()
+                while not result_future.done():
+                    await asyncio.sleep(1)  # 每秒检查一次
+                    task = build_manager.get_task(task_id)
+                    if task and task.get("status") == "stopped":
+                        logger.warning(f"[Agent] 检测到任务已停止: task_id={task_id}")
+                        if not result_future.done():
+                            result_future.cancel()
+                            logger.info(
+                                f"[Agent] 已取消Future: future_key={future_key}"
+                            )
+                        break
+
+            # 启动任务状态检查任务
+            status_check_task = asyncio.create_task(check_task_status())
+
+            try:
+                result = await asyncio.wait_for(result_future, timeout=300.0)
+            finally:
+                # 取消状态检查任务
+                if not status_check_task.done():
+                    status_check_task.cancel()
+                    try:
+                        await status_check_task
+                    except asyncio.CancelledError:
+                        pass
             logger.info(
                 f"[Agent] ✅ Future已完成，收到结果: task_id={task_id}, target_name={target_name}, "
                 f"success={result.get('success')}, result_type={type(result)}, result_keys={list(result.keys()) if isinstance(result, dict) else 'N/A'}"
@@ -304,6 +335,22 @@ class AgentExecutor(DeployExecutor):
 
             return result
 
+        except asyncio.CancelledError:
+            # Future被取消（可能是任务被停止）
+            connection_manager.cancel_deploy_result_future(future_key)
+            error_msg = f"任务已被取消或停止"
+            logger.warning(
+                f"[Agent] {error_msg}: task_id={task_id}, target_name={target_name}"
+            )
+            if update_status_callback:
+                update_status_callback(f"[Agent] ⚠️ {error_msg}")
+            return {
+                "success": False,
+                "message": error_msg,
+                "host_type": "agent",
+                "deploy_method": "websocket",
+                "host_id": self.host_id,
+            }
         except asyncio.TimeoutError:
             # 超时：取消Future
             connection_manager.cancel_deploy_result_future(future_key)

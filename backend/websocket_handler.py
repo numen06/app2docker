@@ -350,7 +350,7 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
 
                     logger.info(
                         f"[WebSocket] 📥 收到部署任务结果: host_id={host_id}, "
-                        f"task_id={task_id}, target={target_name}, status={deploy_status}"
+                        f"task_id={task_id}, target={target_name}, status={deploy_status}, message={deploy_message}"
                     )
                     logger.info(f"[WebSocket] 收到的完整消息: {message}")
                     # 计算future_key，用于调试
@@ -359,7 +359,7 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                         f"[WebSocket] 计算得到的future_key: {future_key_for_debug}"
                     )
                     print(
-                        f"📥 收到部署任务结果 ({host_id}): task_id={task_id}, target={target_name}, 状态: {deploy_status}"
+                        f"📥 收到部署任务结果 ({host_id}): task_id={task_id}, target={target_name}, 状态: {deploy_status}, 消息: {deploy_message}"
                     )
 
                     # 处理所有状态：running, completed, failed
@@ -438,7 +438,7 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     elif deploy_status == "running":
                         # running状态：只记录日志，不触发Future完成
                         logger.info(
-                            f"[WebSocket] 📥 部署任务进行中: task_id={task_id}, target={target_name}, message={deploy_message}"
+                            f"[WebSocket] 📥 收到running状态消息: task_id={task_id}, target={target_name}, message={deploy_message}"
                         )
                         print(
                             f"📥 部署任务进行中: task_id={task_id}, target={target_name}, message={deploy_message}"
@@ -451,9 +451,15 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                             from backend.handlers import BuildTaskManager
 
                             build_manager = BuildTaskManager()
+                            logger.info(
+                                f"[WebSocket] BuildTaskManager已创建，准备更新日志: task_id={task_id}"
+                            )
 
                             # 如果消息中没有target_name，尝试从任务配置中查找
                             if not target_name:
+                                logger.info(
+                                    f"[WebSocket] target_name为空，尝试从任务配置中查找: task_id={task_id}"
+                                )
                                 task = build_manager.get_task(task_id)
                                 if task and task.get("task_type") == "deploy":
                                     task_config = task.get("task_config", {})
@@ -480,9 +486,15 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
 
                             # 添加running状态的日志
                             if deploy_message:
+                                logger.info(
+                                    f"[WebSocket] 准备添加running日志: task_id={task_id}, message={deploy_message}"
+                                )
                                 build_manager.add_log(
                                     task_id,
                                     f"[Agent] {deploy_message}\n",
+                                )
+                                logger.info(
+                                    f"[WebSocket] ✅ running日志已添加: task_id={task_id}"
                                 )
 
                         except Exception as e:

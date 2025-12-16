@@ -4630,6 +4630,32 @@ class BuildTaskManager:
 
             db.commit()
             print(f"✅ 任务 {task_id[:8]} 已停止")
+
+            # 如果是部署任务，取消所有相关的Future
+            if task.task_type == "deploy":
+                try:
+                    from backend.websocket_handler import connection_manager
+                    from backend.deploy_task_manager import DeployTaskManager
+
+                    # 获取任务配置，找到所有目标
+                    deploy_manager = DeployTaskManager()
+                    task_config = task.task_config or {}
+                    config = task_config.get("config", {})
+                    targets = config.get("targets", [])
+
+                    # 取消所有目标的Future
+                    for target in targets:
+                        target_name = target.get("name", "")
+                        if target_name:
+                            future_key = f"{task_id}:{target_name}"
+                            connection_manager.cancel_deploy_result_future(future_key)
+                            print(f"✅ 已取消Future: {future_key}")
+                except Exception as e:
+                    print(f"⚠️ 取消Future失败: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+
             return True
         except Exception as e:
             db.rollback()

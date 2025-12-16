@@ -250,6 +250,8 @@ async def handle_deploy_task(message: Dict[str, Any]):
             return False
 
         await send_running_log("开始执行部署操作...")
+        # 短暂延迟，确保消息发送完成
+        await asyncio.sleep(0.2)
 
         result = deploy_executor.execute_deploy(
             deploy_config, context, deploy_mode=deploy_mode
@@ -262,10 +264,14 @@ async def handle_deploy_task(message: Dict[str, Any]):
             output = result.get("output", "").strip()
             if output:
                 await send_running_log(f"命令执行成功，输出: {output[:200]}")
+                # 短暂延迟，确保消息发送完成
+                await asyncio.sleep(0.2)
         else:
             error = result.get("error", "").strip()
             if error:
                 await send_running_log(f"命令执行失败: {error[:200]}")
+                # 短暂延迟，确保消息发送完成
+                await asyncio.sleep(0.2)
 
         # 发送执行结果（使用 task_id 匹配）
         deploy_status = "completed" if result.get("success") else "failed"
@@ -305,6 +311,8 @@ async def handle_deploy_task(message: Dict[str, Any]):
                 logger.info(
                     f"✅ 部署结果消息已发送: task_id={task_id}, target={target_name}, status={deploy_status}"
                 )
+                # 短暂延迟，确保消息发送完成
+                await asyncio.sleep(0.2)
                 break
             else:
                 if attempt < max_retries - 1:
