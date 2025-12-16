@@ -6543,12 +6543,32 @@ async def list_deploy_tasks(request: Request):
                 # 这是执行产生的任务，跳过
                 continue
 
+            # 查找该配置的最新执行任务，获取其状态
+            config_task_id = task.get("task_id")
+            latest_execution_task = None
+            latest_execution_status = task.get("status")  # 默认使用配置任务的状态
+
+            # 查找所有从该配置触发的执行任务
+            execution_tasks = [
+                t
+                for t in tasks
+                if t.get("task_config", {}).get("source_config_id") == config_task_id
+            ]
+
+            if execution_tasks:
+                # 按创建时间排序，获取最新的执行任务
+                execution_tasks.sort(
+                    key=lambda x: x.get("created_at", ""), reverse=True
+                )
+                latest_execution_task = execution_tasks[0]
+                latest_execution_status = latest_execution_task.get("status")
+
             formatted_tasks.append(
                 {
                     "task_id": task.get("task_id"),
                     "status": {
                         "task_id": task.get("task_id"),
-                        "status": task.get("status"),
+                        "status": latest_execution_status,  # 使用最新执行任务的状态
                         "created_at": task.get("created_at"),
                         "registry": task_config.get("registry"),
                         "tag": task_config.get("tag"),
@@ -6558,6 +6578,11 @@ async def list_deploy_tasks(request: Request):
                     "config_content": task_config.get("config_content", ""),
                     "execution_count": task_config.get("execution_count", 0),
                     "last_executed_at": task_config.get("last_executed_at"),
+                    "latest_execution_task_id": (
+                        latest_execution_task.get("task_id")
+                        if latest_execution_task
+                        else None
+                    ),
                 }
             )
 

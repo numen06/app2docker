@@ -173,15 +173,6 @@ def on_message(message: Dict[str, Any]):
         # 心跳确认
         pass
 
-    elif message_type == "deploy_result_ack":
-        # 部署结果确认
-        task_id = message.get("task_id")
-        logger.debug(f"收到部署结果确认: task_id={task_id}")
-
-    elif message_type == "host_info_ack":
-        # 主机信息确认
-        logger.debug(f"收到主机信息确认: {message.get('message')}")
-
     elif message_type == "error":
         logger.error(f"收到错误消息: {message.get('message')}")
 
@@ -191,29 +182,23 @@ def on_message(message: Dict[str, Any]):
 
 async def handle_deploy_task(message: Dict[str, Any]):
     """处理部署任务"""
-    task_id = message.get("task_id")
-    deploy_task_id = message.get(
-        "deploy_task_id", task_id
-    )  # 使用唯一的deploy_task_id，如果没有则使用task_id
-    target_name = message.get("target_name", "")
+    task_id = message.get("task_id")  # 任务ID（用于匹配）
+    target_name = message.get("target_name", "")  # 目标名称
     deploy_config = message.get("deploy_config", {})
     context = message.get("context", {})
 
-    logger.info(
-        f"开始执行部署任务: task_id={task_id}, deploy_task_id={deploy_task_id}, target={target_name}"
-    )
+    logger.info(f"开始执行部署任务: task_id={task_id}, target={target_name}")
 
     if not websocket_client:
         logger.error("WebSocket 客户端未初始化")
         return
 
-    # 发送任务开始消息
+    # 发送任务开始消息（使用 task_id 匹配）
     await websocket_client.send_message(
         {
             "type": "deploy_result",
-            "task_id": task_id,  # 保留原始task_id用于日志
-            "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID
-            "target_name": target_name,
+            "task_id": task_id,  # 任务ID（用于匹配）
+            "target_name": target_name,  # 目标名称（用于区分同一任务的多个目标）
             "status": "running",
             "message": "部署任务已开始",
         }
@@ -233,13 +218,12 @@ async def handle_deploy_task(message: Dict[str, Any]):
 
         logger.info(f"部署执行完成，结果: {result}")
 
-        # 发送执行结果（使用deploy_task_id）
+        # 发送执行结果（使用 task_id 匹配）
         deploy_status = "completed" if result.get("success") else "failed"
         deploy_message = {
             "type": "deploy_result",
-            "task_id": task_id,  # 保留原始task_id用于日志
-            "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID
-            "target_name": target_name,
+            "task_id": task_id,  # 任务ID（用于匹配）
+            "target_name": target_name,  # 目标名称（用于区分同一任务的多个目标）
             "status": deploy_status,
             "message": result.get("message"),
             "result": result,
@@ -251,20 +235,22 @@ async def handle_deploy_task(message: Dict[str, Any]):
                 "error", result.get("message", "部署失败")
             )
 
+        logger.info(
+            f"准备发送部署结果: task_id={task_id}, target={target_name}, status={deploy_status}"
+        )
         await websocket_client.send_message(deploy_message)
 
         logger.info(
-            f"部署任务完成: deploy_task_id={deploy_task_id}, 成功: {result.get('success')}, 消息: {result.get('message')}"
+            f"部署任务完成: task_id={task_id}, target={target_name}, 成功: {result.get('success')}, 消息: {result.get('message')}"
         )
 
     except Exception as e:
-        logger.exception(f"部署任务异常: deploy_task_id={deploy_task_id}")
+        logger.exception(f"部署任务异常: task_id={task_id}, target={target_name}")
         await websocket_client.send_message(
             {
                 "type": "deploy_result",
-                "task_id": task_id,  # 保留原始task_id用于日志
-                "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID
-                "target_name": target_name,
+                "task_id": task_id,  # 任务ID（用于匹配）
+                "target_name": target_name,  # 目标名称
                 "status": "failed",
                 "message": f"部署异常: {str(e)}",
                 "error": str(e),

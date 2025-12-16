@@ -96,7 +96,7 @@ class ConnectionManager:
         设置部署结果，通知等待的执行器
 
         Args:
-            task_id: 任务ID
+            task_id: 任务ID（可能是task_id或deploy_task_id）
             result: 部署结果字典
         """
         if task_id in deploy_result_futures:
@@ -104,13 +104,13 @@ class ConnectionManager:
             if not future.done():
                 future.set_result(result)
                 print(
-                    f"✅ 已设置部署结果并通知执行器: task_id={task_id}, success={result.get('success')}"
+                    f"✅ 已设置部署结果并通知执行器: task_id={task_id}, success={result.get('success')}, message={result.get('message', '')[:50]}"
                 )
             else:
                 print(f"⚠️ Future已完成，无法设置结果: task_id={task_id}")
         else:
             print(
-                f"⚠️ 未找到等待的Future: task_id={task_id}, 当前等待的Future: {list(deploy_result_futures.keys())}"
+                f"⚠️ 未找到等待的Future: task_id={task_id}, 当前等待的Future数量: {len(deploy_result_futures)}, 前5个: {list(deploy_result_futures.keys())[:5]}"
             )
 
     def cancel_deploy_result_future(self, task_id: str):
@@ -223,20 +223,19 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
 
                 elif message_type == "deploy_result":
                     # 部署任务执行结果
-                    task_id = message.get("task_id")
-                    deploy_task_id = message.get(
-                        "deploy_task_id", task_id
-                    )  # 使用唯一的deploy_task_id，如果没有则使用task_id
-                    target_name = message.get("target_name", "")
+                    task_id = message.get("task_id")  # 任务ID（用于匹配）
+                    target_name = message.get("target_name", "")  # 目标名称
                     deploy_status = message.get("status")
                     deploy_message = message.get("message")
                     deploy_result = message.get("result")
 
                     print(
-                        f"📥 收到部署任务结果 ({host_id}): task_id={task_id}, deploy_task_id={deploy_task_id}, target={target_name}, 状态: {deploy_status}"
+                        f"📥 收到部署任务结果 ({host_id}): task_id={task_id}, target={target_name}, 状态: {deploy_status}"
                     )
 
-                    # 只处理完成或失败的状态，忽略running状态
+                    # 处理所有状态：running, completed, failed
+                    # running状态：只记录日志，不触发Future完成
+                    # completed/failed状态：触发Future完成，结束等待
                     if deploy_status in ["completed", "failed"]:
                         # 构建统一的结果格式
                         # 优先使用消息顶层的error字段，如果没有则从result中获取
@@ -245,25 +244,43 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                             error_msg = deploy_result.get("error")
 
                         result_dict = {
-                            "success": deploy_status == "completed",
-                            "message": deploy_message,
+                            "success": bool(
+                                deploy_status == "completed"
+                            ),  # 确保是布尔值
+                            "message": deploy_message or "",
                             "status": deploy_status,
                             "result": deploy_result,
                             "error": error_msg,
                         }
 
+                        # 使用 task_id:target_name 作为 Future 的 key（因为同一任务可能有多个目标）
+                        future_key = f"{task_id}:{target_name}"
+
                         print(
-                            f"📥 通知等待的执行器: deploy_task_id={deploy_task_id}, success={result_dict.get('success')}, message={result_dict.get('message')}"
+                            f"📥 通知等待的执行器: task_id={task_id}, target={target_name}, future_key={future_key}, success={result_dict.get('success')} (type: {type(result_dict.get('success'))}), message={result_dict.get('message')}"
                         )
 
-                        # 通知等待的执行器（使用deploy_task_id）
-                        connection_manager.set_deploy_result(
-                            deploy_task_id, result_dict
+                        # 通知等待的执行器（使用 future_key）
+                        connection_manager.set_deploy_result(future_key, result_dict)
+
+                        print(
+                            f"✅ 已通知执行器: task_id={task_id}, target={target_name}, future_key={future_key}, result_dict keys: {list(result_dict.keys())}"
                         )
 
-                        print(f"✅ 已通知执行器: deploy_task_id={deploy_task_id}")
+                        # 验证Future是否存在
+                        if future_key not in deploy_result_futures:
+                            print(
+                                f"⚠️ 警告: future_key={future_key} 的Future不存在，可能已超时或已处理"
+                            )
+                    elif deploy_status == "running":
+                        # running状态：只记录日志，不触发Future完成
+                        print(
+                            f"📥 部署任务进行中: task_id={task_id}, target={target_name}"
+                        )
+                        # 不处理running状态，继续等待最终结果
 
                         # 更新部署任务状态（使用BuildTaskManager）
+                        # 注意：这里只更新日志，不更新任务状态（任务状态由DeployTaskManager统一管理）
                         try:
                             from backend.handlers import BuildTaskManager
 
@@ -315,13 +332,8 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                             import traceback
 
                             traceback.print_exc()
-                    elif deploy_status == "running":
-                        # running状态只记录日志，不触发Future完成
-                        print(
-                            f"📥 部署任务进行中: deploy_task_id={deploy_task_id}, target={target_name}"
-                        )
 
-                    # 回复确认
+                    # 回复确认（无论什么状态都回复）
                     await websocket.send_json(
                         {
                             "type": "deploy_result_ack",

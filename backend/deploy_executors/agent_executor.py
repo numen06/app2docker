@@ -112,19 +112,27 @@ class AgentExecutor(DeployExecutor):
             update_status_callback(f"[Agent] 正在发送部署任务到 {self.host_name}...")
 
         # 为每个目标创建唯一的部署任务ID（避免多个目标使用相同task_id导致Future冲突）
+        # 格式：{task_id}:{target_name}，确保每个目标有唯一的标识
         deploy_task_id = f"{task_id}:{target_name}"
-        
+
+        logger.info(
+            f"[Agent] 创建部署任务: task_id={task_id}, deploy_task_id={deploy_task_id}, target_name={target_name}"
+        )
+
         # 构建部署消息（推送给Agent的统一格式）
         deploy_message = {
             "type": "deploy",
             "task_id": task_id,  # 保留原始task_id用于日志记录
-            "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID
+            "deploy_task_id": deploy_task_id,  # 唯一的部署任务ID（Agent必须原样返回）
             "deploy_config": deploy_config,  # 统一的docker配置格式
             "context": context or {},  # 模板变量上下文
             "target_name": target_name,
         }
 
         # 发送部署任务到 Agent
+        logger.info(
+            f"[Agent] 发送部署消息: host_id={self.host_id}, deploy_task_id={deploy_task_id}"
+        )
         success = await connection_manager.send_message(self.host_id, deploy_message)
 
         if not success:
@@ -136,8 +144,14 @@ class AgentExecutor(DeployExecutor):
                 "host_id": self.host_id,
             }
 
-        # 创建等待结果的Future（使用唯一的deploy_task_id）
-        result_future = connection_manager.create_deploy_result_future(deploy_task_id)
+        # 创建等待结果的Future（使用 task_id + target_name 作为唯一标识）
+        # 因为同一个任务可能有多个目标，需要区分不同目标的结果
+        future_key = f"{task_id}:{target_name}"
+        result_future = connection_manager.create_deploy_result_future(future_key)
+
+        logger.info(
+            f"[Agent] 创建等待Future: task_id={task_id}, target_name={target_name}, future_key={future_key}"
+        )
 
         # 记录等待状态
         if update_status_callback:
@@ -145,7 +159,28 @@ class AgentExecutor(DeployExecutor):
 
         try:
             # 等待Agent返回执行结果（最多等待5分钟）
+            # Agent会持续反馈状态（running -> completed/failed），只有completed/failed才会触发Future完成
+            logger.info(
+                f"[Agent] 开始等待结果: task_id={task_id}, target_name={target_name}, future_key={future_key}"
+            )
             result = await asyncio.wait_for(result_future, timeout=300.0)
+            logger.info(
+                f"[Agent] 收到结果: task_id={task_id}, target_name={target_name}, success={result.get('success')}"
+            )
+
+            # 确保result是字典类型
+            if not isinstance(result, dict):
+                logger.error(
+                    f"[Agent] 收到非字典类型的结果: {type(result)}, value={result}"
+                )
+                result = {"success": False, "message": f"结果格式错误: {type(result)}"}
+
+            # 确保success字段存在且是布尔值
+            if "success" not in result:
+                logger.warning(f"[Agent] 结果中缺少success字段: {result}")
+                result["success"] = False
+            else:
+                result["success"] = bool(result["success"])
 
             # 添加主机类型和部署方法信息
             result.setdefault("host_type", "agent")
@@ -153,16 +188,18 @@ class AgentExecutor(DeployExecutor):
             result.setdefault("host_id", self.host_id)
 
             logger.info(
-                f"[Agent] 收到部署结果: task_id={task_id}, success={result.get('success')}, message={result.get('message')}"
+                f"[Agent] 收到部署结果: task_id={task_id}, target_name={target_name}, success={result.get('success')}, message={result.get('message')}, result_keys={list(result.keys())}"
             )
 
             return result
 
         except asyncio.TimeoutError:
             # 超时：取消Future
-            connection_manager.cancel_deploy_result_future(deploy_task_id)
+            connection_manager.cancel_deploy_result_future(future_key)
             error_msg = f"等待Agent执行结果超时（超过5分钟）"
-            logger.error(f"[Agent] {error_msg}: deploy_task_id={deploy_task_id}")
+            logger.error(
+                f"[Agent] {error_msg}: task_id={task_id}, target_name={target_name}"
+            )
             if update_status_callback:
                 update_status_callback(f"[Agent] ❌ {error_msg}")
             return {
@@ -174,9 +211,11 @@ class AgentExecutor(DeployExecutor):
             }
         except Exception as e:
             # 其他异常：取消Future
-            connection_manager.cancel_deploy_result_future(deploy_task_id)
+            connection_manager.cancel_deploy_result_future(future_key)
             error_msg = f"等待Agent执行结果时发生异常: {str(e)}"
-            logger.exception(f"[Agent] {error_msg}: deploy_task_id={deploy_task_id}")
+            logger.exception(
+                f"[Agent] {error_msg}: task_id={task_id}, target_name={target_name}"
+            )
             if update_status_callback:
                 update_status_callback(f"[Agent] ❌ {error_msg}")
             return {
