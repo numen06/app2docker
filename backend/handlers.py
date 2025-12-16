@@ -4538,14 +4538,16 @@ class BuildTaskManager:
 
                     pipeline_manager = PipelineManager()
                     pipeline_id = pipeline_manager.find_pipeline_by_task(task_id)
+                    
                     if pipeline_id:
                         pipeline_manager.unbind_task(pipeline_id)
                         print(
-                            f"✅ 任务 {task_id[:8]} 已结束，解绑流水线 {pipeline_id[:8]}"
+                            f"✅ 任务 {task_id[:8]} 已结束，解绑流水线 {pipeline_id[:8]}, 状态={status}"
                         )
 
                         # 如果任务成功完成，触发构建后webhook
                         if status == "completed":
+                            print(f"🔔 任务 {task_id[:8]} 已完成，准备触发构建后webhook: pipeline_id={pipeline_id[:8]}")
                             try:
                                 # 在后台线程中异步触发webhook
                                 import threading
@@ -4554,6 +4556,7 @@ class BuildTaskManager:
                                     import asyncio
 
                                     try:
+                                        print(f"🔔 开始异步触发构建后webhook: pipeline_id={pipeline_id[:8]}, task_id={task_id[:8]}")
                                         loop = asyncio.new_event_loop()
                                         asyncio.set_event_loop(loop)
                                         loop.run_until_complete(
@@ -4565,6 +4568,7 @@ class BuildTaskManager:
                                             )
                                         )
                                         loop.close()
+                                        print(f"✅ 构建后webhook触发完成: pipeline_id={pipeline_id[:8]}")
                                     except Exception as e:
                                         print(f"⚠️ 触发构建后webhook异常: {e}")
                                         import traceback
@@ -4575,13 +4579,17 @@ class BuildTaskManager:
                                     target=trigger_webhooks, daemon=True
                                 )
                                 thread.start()
+                                print(f"✅ 已启动构建后webhook触发线程: pipeline_id={pipeline_id[:8]}")
                             except Exception as webhook_error:
                                 print(f"⚠️ 触发构建后webhook失败: {webhook_error}")
                                 import traceback
 
                                 traceback.print_exc()
-
-                        # 处理队列中的下一个任务（相同流水线）
+                    else:
+                        print(f"ℹ️ 任务 {task_id[:8]} 未关联流水线，跳过构建后webhook触发")
+                    
+                    # 处理队列中的下一个任务（相同流水线）
+                    if pipeline_id:
                         _process_next_queued_task(pipeline_manager, pipeline_id)
                 except Exception as e:
                     print(f"⚠️ 解绑流水线失败: {e}")
@@ -5110,9 +5118,9 @@ class BuildTaskManager:
             source_config_id=task_id,  # 标记这是从配置触发的任务
             trigger_source=trigger_source,
             source=(
-                "部署配置执行（Webhook）"
+                "Webhook"
                 if trigger_source == "webhook"
-                else "部署配置执行"
+                else "手动"
             ),
         )
 

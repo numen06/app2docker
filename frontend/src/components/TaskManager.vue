@@ -542,6 +542,18 @@
               >
                 <i class="fas fa-rocket"></i> 手动部署
               </span>
+              <span
+                v-else-if="task.source === 'Webhook'"
+                class="badge bg-success"
+              >
+                <i class="fas fa-link"></i> Webhook
+              </span>
+              <span
+                v-else-if="task.source === '手动'"
+                class="badge bg-success"
+              >
+                <i class="fas fa-rocket"></i> 手动
+              </span>
               <span v-else class="badge bg-secondary">
                 <i class="fas fa-hammer"></i> {{ task.source || "手动构建" }}
               </span>
