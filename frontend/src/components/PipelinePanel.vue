@@ -3514,7 +3514,8 @@ const historyFilter = ref({
 });
 const historyPagination = ref({
   currentPage: 1,
-  pageSize: 20,
+  // 每页显示的历史构建条数（默认 10 条）
+  pageSize: 10,
   total: 0,
   hasMore: false,
 });

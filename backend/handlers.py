@@ -1396,14 +1396,14 @@ class BuildManager:
                     archive_size_str = f"{archive_size / 1024:.2f} KB"
                 else:
                     archive_size_str = f"{archive_size / (1024 * 1024):.2f} MB"
-                
+
                 log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 log(f"📦 开始解压压缩包\n")
                 log(f"  文件路径: {file_path}\n")
                 log(f"  文件大小: {archive_size_str}\n")
                 log(f"  解压目标: {extract_to}\n")
                 log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-                
+
                 if file_path.endswith(".zip"):
                     log("📦 检测到 ZIP 格式，开始解压...\n")
                     with zipfile.ZipFile(file_path, "r") as zip_ref:
@@ -1428,7 +1428,7 @@ class BuildManager:
                 else:
                     log(f"❌ 不支持的压缩格式: {file_path}\n")
                     return False
-                
+
                 log("✅ 解压操作完成\n")
                 log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
@@ -1436,7 +1436,7 @@ class BuildManager:
                 try:
                     log("📂 解压后构建根目录概况：\n")
                     log(f"  构建上下文路径: {extract_to}\n")
-                    
+
                     if os.path.exists(extract_to):
                         # 统计根目录下的直接内容
                         root_items = os.listdir(extract_to)
@@ -1482,7 +1482,9 @@ class BuildManager:
                                 dir_path = os.path.join(extract_to, d)
                                 if os.path.isdir(dir_path):
                                     # 统计目录下的文件数
-                                    dir_file_count = sum(len(files) for _, _, files in os.walk(dir_path))
+                                    dir_file_count = sum(
+                                        len(files) for _, _, files in os.walk(dir_path)
+                                    )
                                     log(f"    📂 {d}/ ({dir_file_count} 个文件)\n")
                             if len(dirs) > 20:
                                 log(f"    ... 还有 {len(dirs) - 20} 个目录\n")
@@ -1501,18 +1503,21 @@ class BuildManager:
                                     elif size < 1024 * 1024 * 1024:
                                         f_size_str = f"{size / (1024 * 1024):.2f} MB"
                                     else:
-                                        f_size_str = f"{size / (1024 * 1024 * 1024):.2f} GB"
+                                        f_size_str = (
+                                            f"{size / (1024 * 1024 * 1024):.2f} GB"
+                                        )
                                     log(f"    📄 {f} ({f_size_str})\n")
                             if len(files) > 30:
                                 log(f"    ... 还有 {len(files) - 30} 个文件\n")
                             log(f"\n")
-                        
+
                         log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                         log(f"✅ 解压完成，构建上下文已准备就绪\n")
                         log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 except Exception as e:
                     log(f"⚠️  无法列出目录内容: {str(e)}\n")
                     import traceback
+
                     log(f"    {traceback.format_exc()}\n")
 
                 return True
@@ -1520,6 +1525,7 @@ class BuildManager:
                 log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 log(f"❌ 解压失败: {str(e)}\n")
                 import traceback
+
                 log(f"    {traceback.format_exc()}\n")
                 log(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                 return False
@@ -1534,17 +1540,19 @@ class BuildManager:
             log(f"🧱 模板: {selected_template}\n")
             log(f"📂 项目类型: {project_type}\n")
             log(f"📁 构建上下文路径: {build_context}\n")
-            
+
             # 判断文件类型
             is_jar = original_filename.lower().endswith(".jar")
             is_archive = any(
                 original_filename.lower().endswith(ext)
                 for ext in [".zip", ".tar", ".tar.gz", ".tgz"]
             )
-            
+
             if is_archive:
                 log(f"📦 文件类型: 压缩包\n")
-                log(f"🔧 解压选项: {'已启用（将解压到构建根目录）' if extract_archive else '未启用（保持压缩包原样）'}\n")
+                log(
+                    f"🔧 解压选项: {'已启用（将解压到构建根目录）' if extract_archive else '未启用（保持压缩包原样）'}\n"
+                )
             elif is_jar:
                 log(f"📦 文件类型: JAR 文件\n")
             else:
@@ -1569,10 +1577,10 @@ class BuildManager:
                     log(f"🧪 模拟模式：保存压缩包文件...\n")
                     log(f"  构建上下文路径: {build_context}\n")
                     log(f"  压缩包文件路径: {file_path}\n")
-                    
+
                     with open(file_path, "wb") as f:
                         f.write(file_data)
-                    
+
                     file_size = os.path.getsize(file_path)
                     if file_size < 1024:
                         file_size_str = f"{file_size} B"
@@ -1669,10 +1677,10 @@ class BuildManager:
                 log(f"📦 保存压缩包文件到构建上下文...\n")
                 log(f"  构建上下文路径: {build_context}\n")
                 log(f"  压缩包文件路径: {file_path}\n")
-                
+
                 with open(file_path, "wb") as f:
                     f.write(file_data)
-                
+
                 file_size = os.path.getsize(file_path)
                 if file_size < 1024:
                     file_size_str = f"{file_size} B"
@@ -2368,36 +2376,58 @@ class BuildManager:
 
         try:
             log(f"🚀 开始从 Git 源码构建: {git_url}\n")
-            
+
             # 打印构建配置信息（过滤敏感信息）
             def sanitize_config(config_dict):
                 """过滤敏感信息"""
                 if not isinstance(config_dict, dict):
                     return config_dict
-                
-                sensitive_patterns = ['password', 'token', 'secret', 'credential', 'auth', 
-                                      'access_token', 'api_key', 'apikey', 'private_key', 
-                                      'privatekey', 'pwd', 'passwd']
+
+                sensitive_patterns = [
+                    "password",
+                    "token",
+                    "secret",
+                    "credential",
+                    "auth",
+                    "access_token",
+                    "api_key",
+                    "apikey",
+                    "private_key",
+                    "privatekey",
+                    "pwd",
+                    "passwd",
+                ]
                 sanitized = {}
                 for k, v in config_dict.items():
                     key_lower = k.lower()
                     # 检查键名是否包含敏感词（但排除一些安全的键，如 image_name, tag_name 等）
-                    is_sensitive = any(pattern in key_lower for pattern in sensitive_patterns)
+                    is_sensitive = any(
+                        pattern in key_lower for pattern in sensitive_patterns
+                    )
                     # 排除一些安全的键名（即使包含敏感词）
-                    safe_keys = ['image_name', 'tag', 'tag_name', 'dockerfile_name', 'template_name']
+                    safe_keys = [
+                        "image_name",
+                        "tag",
+                        "tag_name",
+                        "dockerfile_name",
+                        "template_name",
+                    ]
                     if k in safe_keys:
                         is_sensitive = False
-                    
+
                     if is_sensitive:
                         sanitized[k] = "***已隐藏***"
                     elif isinstance(v, dict):
                         sanitized[k] = sanitize_config(v)
                     elif isinstance(v, list):
-                        sanitized[k] = [sanitize_config(item) if isinstance(item, dict) else item for item in v]
+                        sanitized[k] = [
+                            sanitize_config(item) if isinstance(item, dict) else item
+                            for item in v
+                        ]
                     else:
                         sanitized[k] = v
                 return sanitized
-            
+
             build_config = {
                 "git_url": git_url,
                 "image_name": image_name,
@@ -2417,18 +2447,20 @@ class BuildManager:
                 "service_template_params": service_template_params or {},
                 "resource_package_ids": resource_package_ids or [],
             }
-            
+
             sanitized_config = sanitize_config(build_config)
-            
+
             # 判断构建模式
             is_multi_service = selected_services and len(selected_services) > 1
             build_mode = "多服务构建" if is_multi_service else "单服务构建"
             if is_multi_service:
                 build_mode += f" (共 {len(selected_services)} 个服务)"
-            
+
             log(f"📋 构建配置解析结果:\n")
             log(f"   构建模式: {build_mode}\n")
-            log(f"   配置详情:\n{json.dumps(sanitized_config, indent=4, ensure_ascii=False)}\n")
+            log(
+                f"   配置详情:\n{json.dumps(sanitized_config, indent=4, ensure_ascii=False)}\n"
+            )
 
             # 清理旧的构建上下文
             if os.path.exists(build_context):
@@ -3895,15 +3927,14 @@ def pipeline_to_task_config(
     # 替换标签中的动态日期占位符
     final_tag = replace_tag_date_placeholders(final_tag)
 
-    # 处理分支标签映射（webhook和manual触发时都应用）
-    if trigger_source in ["webhook", "manual"]:
+    # 处理分支标签映射：
+    # - manual 触发：在这里根据分支映射标签（支持单标签或多标签，但这里只取一个，用于单任务构建）
+    # - webhook 触发：已在路由层根据分支计算出 tags 列表，并通过 tag 参数逐个传入，这里不再重复做分支映射
+    if trigger_source in ["webhook", "manual"] and tag is None:
         mapping = branch_tag_mapping or pipeline.get("branch_tag_mapping", {})
-        # webhook触发时，优先使用webhook推送的分支；手动触发时，使用实际使用的分支
-        branch_for_mapping = (
-            webhook_branch
-            if (trigger_source == "webhook" and webhook_branch)
-            else final_branch
-        )
+        # 这里只处理手动触发或未显式指定 tag 的场景：
+        # - webhook 的多标签场景已在路由中展开为多个 tag，这里直接使用传入的 tag
+        branch_for_mapping = final_branch
         print(f"🔍 分支标签映射处理:")
         print(f"   - trigger_source: {trigger_source}")
         print(f"   - branch_for_mapping: {branch_for_mapping}")
@@ -3925,7 +3956,7 @@ def pipeline_to_task_config(
             if mapped_tag_value:
                 # 处理标签值（支持字符串、数组或逗号分隔的字符串）
                 if isinstance(mapped_tag_value, list):
-                    # 如果是数组，取第一个标签（webhook触发时会为每个标签单独调用此函数）
+                    # 如果是数组，取第一个标签（manual 模式下仍然是单任务构建）
                     final_tag = mapped_tag_value[0] if mapped_tag_value else final_tag
                 elif isinstance(mapped_tag_value, str):
                     # 如果是字符串，检查是否包含逗号
