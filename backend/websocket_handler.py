@@ -386,9 +386,6 @@ async def handle_agent_websocket(
 
         logger.info(f"[WebSocket] 密钥验证成功: {secret_key[:16]}...")
 
-        # 接受连接
-        await websocket.accept()
-
         is_pending = False
         host_id = None
         host_name = None
@@ -403,12 +400,12 @@ async def handle_agent_websocket(
                 host = manager.get_agent_host_by_unique_id(agent_token)
 
             if host:
-                # 主机已存在，正常连接
+                # 主机已存在，正常连接（connection_manager.connect 会调用 accept）
                 host_id = host["host_id"]
                 host_name = host.get("name")
                 agent_unique_id = host.get("agent_unique_id") or host.get("token")
 
-                # 连接
+                # 连接（这里会调用 websocket.accept()）
                 if not await connection_manager.connect(websocket, host.get("token")):
                     return
 
@@ -485,7 +482,8 @@ async def handle_agent_websocket(
                     f"⏳ 待加入主机已连接: agent_token={agent_token[:16] if agent_token else 'None'}...，等待主机信息"
                 )
         else:
-            # 没有提供agent_token，等待Agent发送主机信息
+            # 没有提供agent_token，等待Agent发送主机信息（需要先 accept 连接）
+            await websocket.accept()
             is_pending = True
             logger.info("[WebSocket] 等待Agent发送主机信息和唯一标识")
             print("⏳ 等待Agent发送主机信息和唯一标识")
