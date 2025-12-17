@@ -72,9 +72,10 @@ async def serve_favicon():
     vite_svg = "frontend/public/vite.svg"
     if os.path.exists(vite_svg):
         return FileResponse(vite_svg, media_type="image/svg+xml")
-    
+
     # 如果都不存在，返回 404
     from fastapi import HTTPException
+
     raise HTTPException(status_code=404, detail="Favicon not found")
 
 
@@ -96,6 +97,116 @@ async def health_check_api():
 _local_agent_client = None
 
 
+def get_local_host_info():
+    """获取本地主机信息（复用agent/main.py的逻辑）"""
+    import platform
+    from typing import Dict, Any
+
+    info: Dict[str, Any] = {
+        "hostname": platform.node(),
+        "os": platform.system(),
+        "os_version": platform.release(),
+        "arch": platform.machine(),
+    }
+
+    # 尝试获取详细的系统信息（需要 psutil）
+    try:
+        import psutil
+
+        info.update(
+            {
+                "cpu_count": psutil.cpu_count(),
+                "cpu_percent": psutil.cpu_percent(interval=1),
+                "memory_total": psutil.virtual_memory().total,
+                "memory_available": psutil.virtual_memory().available,
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_total": psutil.disk_usage("/").total,
+                "disk_free": psutil.disk_usage("/").free,
+                "disk_percent": psutil.disk_usage("/").percent,
+            }
+        )
+    except ImportError:
+        print("⚠️ psutil 未安装，无法获取详细的系统信息")
+    except Exception as e:
+        print(f"⚠️ 获取主机信息失败: {e}")
+
+    return info
+
+
+def get_local_docker_info():
+    """获取本地 Docker 信息（复用agent/main.py的逻辑）"""
+    import subprocess
+    from typing import Dict, Any
+
+    info: Dict[str, Any] = {}
+
+    try:
+        # Docker 版本
+        result = subprocess.run(
+            ["docker", "--version"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            info["version"] = result.stdout.strip()
+    except:
+        pass
+
+    try:
+        # 容器数量
+        result = subprocess.run(
+            ["docker", "ps", "-q"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            containers = [c for c in result.stdout.strip().split("\n") if c]
+            info["containers"] = len(containers)
+    except:
+        pass
+
+    try:
+        # 镜像数量
+        result = subprocess.run(
+            ["docker", "images", "-q"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            images = [i for i in result.stdout.strip().split("\n") if i]
+            info["images"] = len(images)
+    except:
+        pass
+
+    # 检测 docker-compose 支持
+    try:
+        result = subprocess.run(
+            ["docker-compose", "--version"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            info["compose_supported"] = True
+            info["compose_version"] = result.stdout.strip()
+        else:
+            info["compose_supported"] = False
+    except:
+        info["compose_supported"] = False
+
+    # 检测 docker stack 支持（需要 Swarm 模式）
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.Swarm.LocalNodeState}}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            swarm_state = result.stdout.strip()
+            info["swarm_mode"] = swarm_state
+            info["stack_supported"] = swarm_state == "active"
+        else:
+            info["stack_supported"] = False
+            info["swarm_mode"] = "unknown"
+    except:
+        info["stack_supported"] = False
+        info["swarm_mode"] = "unknown"
+
+    return info
+
+
 # 启动事件
 @app.on_event("startup")
 async def startup_event():
@@ -112,20 +223,21 @@ async def startup_event():
 
     # 确保必要的目录存在
     ensure_dirs()
-    
+
     # 初始化数据库（包括迁移）
     from backend.database import init_db
+
     init_db()
-    
+
     # 启动流水线调度器
     start_scheduler()
-    
+
     # 自动注册主程序为 Agent 并连接
     global _local_agent_client
     try:
         agent_manager = AgentHostManager()
         agent_hosts = agent_manager.list_agent_hosts()
-        
+
         # 检查是否已存在名为"本地主机"的 Agent
         local_agent = None
         for host in agent_hosts:
@@ -133,44 +245,127 @@ async def startup_event():
                 local_agent = host
                 print(f"✅ 本地 Agent 已存在: {host.get('host_id')}")
                 break
-        
+
         # 如果不存在，创建本地 Agent
         if not local_agent:
             local_agent = agent_manager.add_agent_host(
-                name="本地主机",
-                description="主程序自动注册的本地 Agent"
+                name="本地主机", description="主程序自动注册的本地 Agent"
             )
             print(f"✅ 已自动注册本地 Agent: {local_agent.get('host_id')}")
             print(f"   Token: {local_agent.get('token')}")
-        
+
+        # 立即获取并更新本地主机的host_info和docker_info
+        try:
+            host_info = get_local_host_info()
+            docker_info = get_local_docker_info()
+
+            # 更新主机状态和信息（设置为online，因为本地agent是直接连接的）
+            agent_manager.update_host_status(
+                local_agent.get("host_id"),
+                "online",
+                host_info=host_info,
+                docker_info=docker_info,
+            )
+            print(
+                f"✅ 已更新本地 Agent 主机信息: host_info={len(host_info)}项, docker_info={len(docker_info)}项"
+            )
+        except Exception as e:
+            print(f"⚠️ 更新本地 Agent 主机信息失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+
         # 启动本地 Agent WebSocket 客户端连接到自身
         try:
             config = load_config()
             server_config = config.get("server", {})
             host_addr = os.getenv("APP_HOST", server_config.get("host", "0.0.0.0"))
             port = int(os.getenv("APP_PORT", server_config.get("port", 8000)))
-            
+
             # 构建服务器 URL
             # 如果是 0.0.0.0，使用 localhost 或 127.0.0.1
             if host_addr == "0.0.0.0":
                 server_url = f"http://127.0.0.1:{port}"
             else:
                 server_url = f"http://{host_addr}:{port}"
-            
+
             # 创建 WebSocket 客户端
             def on_connect():
+                """连接成功回调 - 立即发送主机信息"""
                 print("✅ 本地 Agent 已连接到主程序")
-            
+
+                # 连接成功后，立即发送主机信息
+                if _local_agent_client:
+                    # 获取最新的主机信息
+                    try:
+                        host_info = get_local_host_info()
+                        docker_info = get_local_docker_info()
+
+                        # 发送host_info消息
+                        asyncio.create_task(
+                            _local_agent_client.send_message(
+                                {
+                                    "type": "host_info",
+                                    "host_info": host_info,
+                                    "docker_info": docker_info,
+                                }
+                            )
+                        )
+                        print("✅ 已发送本地 Agent 主机信息")
+
+                        # 同时更新数据库中的主机信息
+                        try:
+                            agent_manager.update_host_status(
+                                local_agent.get("host_id"),
+                                "online",
+                                host_info=host_info,
+                                docker_info=docker_info,
+                            )
+                            print("✅ 已更新本地 Agent 主机状态为 online")
+                        except Exception as update_error:
+                            print(f"⚠️ 更新本地 Agent 主机状态失败: {update_error}")
+                    except Exception as e:
+                        print(f"⚠️ 发送本地 Agent 主机信息失败: {e}")
+                        print(f"   错误类型: {type(e).__name__}")
+                        import traceback
+
+                        traceback.print_exc()
+
             def on_disconnect():
+                """断开连接回调"""
                 print("⚠️ 本地 Agent 与主程序断开连接")
-            
+                # 更新主机状态为offline
+                try:
+                    agent_manager.update_host_status(
+                        local_agent.get("host_id"), "offline"
+                    )
+                    print("✅ 已更新本地 Agent 主机状态为 offline")
+                except Exception as e:
+                    print(f"⚠️ 更新本地 Agent 状态失败: {e}")
+                    print(f"   错误类型: {type(e).__name__}")
+                    import traceback
+
+                    traceback.print_exc()
+
             def on_message(message):
+                """消息处理回调"""
                 # 处理来自主程序的消息（部署任务等）
                 message_type = message.get("type")
                 if message_type == "deploy":
                     # 部署任务会在主程序中处理，这里只是接收
                     pass
-            
+
+            def get_heartbeat_data():
+                """获取心跳数据（包含host_info和docker_info）"""
+                try:
+                    return {
+                        "host_info": get_local_host_info(),
+                        "docker_info": get_local_docker_info(),
+                    }
+                except Exception as e:
+                    print(f"⚠️ 获取心跳数据失败: {e}")
+                    return {}
+
             _local_agent_client = WebSocketClient(
                 server_url=server_url,
                 token=local_agent.get("token"),
@@ -179,20 +374,53 @@ async def startup_event():
                 on_disconnect=on_disconnect,
                 reconnect_interval=5,
                 heartbeat_interval=30,
+                heartbeat_data_callback=get_heartbeat_data,
             )
-            
+
             # 在后台任务中启动 WebSocket 客户端
             asyncio.create_task(_local_agent_client.start())
             print(f"✅ 本地 Agent WebSocket 客户端已启动，连接到: {server_url}")
-            
+
         except Exception as e:
             print(f"⚠️ 启动本地 Agent WebSocket 客户端失败: {e}")
+            print(f"   错误类型: {type(e).__name__}")
+            print(f"   错误详情: {str(e)}")
             import traceback
+
             traceback.print_exc()
-            
+
+            # 如果WebSocket连接失败，至少确保主机信息已更新
+            try:
+                # 再次尝试更新主机信息（即使连接失败，信息也应该可用）
+                host_info = get_local_host_info()
+                docker_info = get_local_docker_info()
+                agent_manager.update_host_status(
+                    local_agent.get("host_id"),
+                    "offline",  # 连接失败，状态为offline
+                    host_info=host_info,
+                    docker_info=docker_info,
+                )
+                print(f"✅ 本地 Agent 连接失败，但已保存主机信息（状态: offline）")
+                print(f"   提示: 本地 Agent 主机信息已保存，但 WebSocket 连接失败")
+                print(f"   可能原因:")
+                print(f"   1. 服务器 URL 配置错误")
+                print(f"   2. 端口被占用或防火墙阻止")
+                print(f"   3. WebSocket 服务未正确启动")
+                print(f"   建议: 检查服务器配置和网络连接")
+            except Exception as update_error:
+                print(f"❌ 更新本地 Agent 主机信息失败: {update_error}")
+                print(f"   错误类型: {type(update_error).__name__}")
+                import traceback
+
+                traceback.print_exc()
+
     except Exception as e:
-        print(f"⚠️ 自动注册本地 Agent 失败: {e}")
+        print(f"❌ 自动注册本地 Agent 失败: {e}")
+        print(f"   错误类型: {type(e).__name__}")
+        print(f"   错误详情: {str(e)}")
+        print(f"   提示: 本地 Agent 主机可能无法正常使用")
         import traceback
+
         traceback.print_exc()
 
     print("\n" + "=" * 60)
@@ -220,7 +448,7 @@ async def shutdown_event():
     """应用关闭时执行"""
     global _local_agent_client
     from backend.scheduler import stop_scheduler
-    
+
     # 停止本地 Agent WebSocket 客户端
     if _local_agent_client:
         try:
@@ -228,10 +456,10 @@ async def shutdown_event():
             print("✅ 本地 Agent WebSocket 客户端已停止")
         except Exception as e:
             print(f"⚠️ 停止本地 Agent WebSocket 客户端失败: {e}")
-    
+
     # 停止流水线调度器
     stop_scheduler()
-    
+
     print("\n👋 服务已停止")
 
 

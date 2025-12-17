@@ -132,6 +132,38 @@ def get_docker_info() -> Dict[str, Any]:
     except:
         pass
 
+    # 检测 docker-compose 支持
+    try:
+        result = subprocess.run(
+            ["docker-compose", "--version"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            info["compose_supported"] = True
+            info["compose_version"] = result.stdout.strip()
+        else:
+            info["compose_supported"] = False
+    except:
+        info["compose_supported"] = False
+
+    # 检测 docker stack 支持（需要 Swarm 模式）
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.Swarm.LocalNodeState}}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            swarm_state = result.stdout.strip()
+            info["swarm_mode"] = swarm_state
+            info["stack_supported"] = swarm_state == "active"
+        else:
+            info["stack_supported"] = False
+            info["swarm_mode"] = "unknown"
+    except:
+        info["stack_supported"] = False
+        info["swarm_mode"] = "unknown"
+
     return info
 
 
@@ -258,7 +290,9 @@ async def handle_deploy_task(message: Dict[str, Any]):
         )
 
         logger.info(f"部署执行完成，结果: {result}")
-        logger.info(f"部署结果详情: success={result.get('success')}, message={result.get('message')}, returncode={result.get('returncode', 'N/A')}")
+        logger.info(
+            f"部署结果详情: success={result.get('success')}, message={result.get('message')}, returncode={result.get('returncode', 'N/A')}"
+        )
 
         # 推送执行完成日志（包含命令输出）
         if result.get("success"):
@@ -383,6 +417,17 @@ async def main():
     deploy_executor = DeployExecutor()
 
     # 初始化 WebSocket 客户端
+    def get_heartbeat_data():
+        """获取心跳数据（包含host_info和docker_info）"""
+        try:
+            return {
+                "host_info": get_host_info(),
+                "docker_info": get_docker_info(),
+            }
+        except Exception as e:
+            logger.warning(f"获取心跳数据失败: {e}")
+            return {}
+
     websocket_client = WebSocketClient(
         server_url=server_url,
         token=agent_token,
@@ -391,6 +436,7 @@ async def main():
         on_disconnect=on_disconnect,
         reconnect_interval=5,
         heartbeat_interval=30,
+        heartbeat_data_callback=get_heartbeat_data,
     )
 
     # 注册信号处理器

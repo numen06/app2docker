@@ -26,6 +26,7 @@ class WebSocketClient:
         on_disconnect: Optional[Callable[[], None]] = None,
         reconnect_interval: int = 5,
         heartbeat_interval: int = 30,
+        heartbeat_data_callback: Optional[Callable[[], Dict[str, Any]]] = None,
     ):
         """
         初始化 WebSocket 客户端
@@ -38,6 +39,7 @@ class WebSocketClient:
             on_disconnect: 断开连接回调函数
             reconnect_interval: 重连间隔（秒）
             heartbeat_interval: 心跳间隔（秒）
+            heartbeat_data_callback: 心跳数据回调函数，返回要包含在心跳消息中的额外数据
         """
         self.server_url = server_url.rstrip("/")
         # 确保 URL 是 WebSocket 协议
@@ -60,6 +62,7 @@ class WebSocketClient:
         self.on_disconnect = on_disconnect
         self.reconnect_interval = reconnect_interval
         self.heartbeat_interval = heartbeat_interval
+        self.heartbeat_data_callback = heartbeat_data_callback
 
         self.websocket: Optional[WebSocketClientProtocol] = None
         self.connected = False
@@ -142,7 +145,7 @@ class WebSocketClient:
         # 重试机制：最多重试2次
         max_retries = 2
         last_error = None
-        
+
         for attempt in range(max_retries):
             try:
                 message_str = json.dumps(message)
@@ -168,16 +171,14 @@ class WebSocketClient:
                     logger.error(
                         f"❌ 发送消息失败（{max_retries}次尝试后）: type={message.get('type')}, error={e}"
                     )
-        
+
         # 所有重试都失败
         logger.error(
             f"❌ 发送消息最终失败: type={message.get('type')}, error={last_error}"
         )
         self.connected = False
         # 确保重连任务正在运行
-        if self.running and (
-            not self._reconnect_task or self._reconnect_task.done()
-        ):
+        if self.running and (not self._reconnect_task or self._reconnect_task.done()):
             self._reconnect_task = asyncio.create_task(self._reconnect_loop())
         return False
 
@@ -220,9 +221,18 @@ class WebSocketClient:
             try:
                 await asyncio.sleep(self.heartbeat_interval)
                 if self.connected:
-                    await self.send_message(
-                        {"type": "heartbeat", "timestamp": time.time()}
-                    )
+                    heartbeat_message = {"type": "heartbeat", "timestamp": time.time()}
+
+                    # 如果提供了心跳数据回调，获取额外数据并添加到心跳消息中
+                    if self.heartbeat_data_callback:
+                        try:
+                            extra_data = self.heartbeat_data_callback()
+                            if extra_data:
+                                heartbeat_message.update(extra_data)
+                        except Exception as e:
+                            logger.warning(f"获取心跳数据失败: {e}")
+
+                    await self.send_message(heartbeat_message)
             except asyncio.CancelledError:
                 break
             except Exception as e:
