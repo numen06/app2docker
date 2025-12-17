@@ -15,6 +15,7 @@ import os
 import asyncio
 import logging
 import signal
+import json
 from typing import Dict, Any, Optional
 
 # 先配置日志，确保启动错误能被看到
@@ -258,6 +259,19 @@ def on_connect():
         # 如果使用新方式且有agent_token，添加到消息中
         if websocket_client.agent_token:
             host_info_message["agent_token"] = websocket_client.agent_token
+
+        # 启动后统一打印一次 Agent 将上报的平台信息，方便与平台端对照审核
+        try:
+            pretty_info = json.dumps(
+                host_info_message,
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+            logger.info("Agent 启动信息（将上报到平台）:\n%s", pretty_info)
+        except Exception as e:
+            logger.debug(f"序列化 Agent 启动信息失败: {e}")
+
         asyncio.create_task(websocket_client.send_message(host_info_message))
 
 
