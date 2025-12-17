@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Dict, Any
 
 from backend.routes import router
 from backend.utils import ensure_dirs
@@ -294,6 +295,18 @@ async def startup_event():
                 """连接成功回调 - 立即发送主机信息"""
                 print("✅ 本地 Agent 已连接到主程序")
 
+                # 验证连接是否已注册到active_connections
+                from backend.websocket_handler import active_connections
+
+                host_id = local_agent.get("host_id")
+                if host_id in active_connections:
+                    print(f"✅ 本地 Agent 连接已注册到 active_connections: {host_id}")
+                else:
+                    print(f"⚠️ 本地 Agent 连接未注册到 active_connections: {host_id}")
+                    print(
+                        f"   当前 active_connections keys: {list(active_connections.keys())}"
+                    )
+
                 # 连接成功后，立即发送主机信息
                 if _local_agent_client:
                     # 获取最新的主机信息
@@ -352,8 +365,119 @@ async def startup_event():
                 # 处理来自主程序的消息（部署任务等）
                 message_type = message.get("type")
                 if message_type == "deploy":
-                    # 部署任务会在主程序中处理，这里只是接收
+                    # 部署任务 - 本地agent需要处理部署任务
+                    print(
+                        f"📥 本地 Agent 收到部署任务: task_id={message.get('task_id')}, target={message.get('target_name')}"
+                    )
+                    # 在后台任务中处理部署任务
+                    asyncio.create_task(handle_local_deploy_task(message))
+                elif message_type == "welcome":
+                    print(f"✅ 收到欢迎消息: {message.get('message')}")
+                elif message_type == "heartbeat_ack":
+                    # 心跳确认
                     pass
+                elif message_type == "host_info_ack":
+                    print(f"✅ 收到主机信息确认: {message.get('message')}")
+                elif message_type == "error":
+                    print(f"❌ 收到错误消息: {message.get('message')}")
+
+            async def handle_local_deploy_task(message: Dict[str, Any]):
+                """处理本地agent的部署任务"""
+                try:
+                    from backend.agent.deploy_executor import DeployExecutor
+                    import logging
+
+                    logger = logging.getLogger(__name__)
+
+                    task_id = message.get("task_id")
+                    target_name = message.get("target_name", "")
+                    deploy_config = message.get("deploy_config", {})
+                    context = message.get("context", {})
+                    deploy_task_id = message.get("deploy_task_id", task_id)
+
+                    logger.info(
+                        f"[本地Agent] 开始执行部署任务: task_id={task_id}, target={target_name}"
+                    )
+                    print(
+                        f"[本地Agent] 开始执行部署任务: task_id={task_id}, target={target_name}"
+                    )
+
+                    # 初始化部署执行器
+                    deploy_executor = DeployExecutor()
+
+                    # 发送任务开始消息
+                    if _local_agent_client:
+                        await _local_agent_client.send_message(
+                            {
+                                "type": "deploy_result",
+                                "task_id": task_id,
+                                "deploy_task_id": deploy_task_id,
+                                "target_name": target_name,
+                                "status": "running",
+                                "message": "部署任务已开始",
+                            }
+                        )
+
+                    # 执行部署
+                    deploy_mode = deploy_config.get("deploy_mode")
+                    result = deploy_executor.execute_deploy(
+                        deploy_config, context, deploy_mode=deploy_mode
+                    )
+
+                    logger.info(
+                        f"[本地Agent] 部署执行完成: task_id={task_id}, success={result.get('success')}"
+                    )
+                    print(
+                        f"[本地Agent] 部署执行完成: task_id={task_id}, success={result.get('success')}"
+                    )
+
+                    # 发送执行结果
+                    deploy_status = "completed" if result.get("success") else "failed"
+                    if _local_agent_client:
+                        await _local_agent_client.send_message(
+                            {
+                                "type": "deploy_result",
+                                "task_id": task_id,
+                                "deploy_task_id": deploy_task_id,
+                                "target_name": target_name,
+                                "status": deploy_status,
+                                "message": result.get("message", ""),
+                                "result": result,
+                                "error": result.get("error"),
+                            }
+                        )
+                        logger.info(
+                            f"[本地Agent] 部署结果已发送: task_id={task_id}, status={deploy_status}"
+                        )
+                        print(
+                            f"[本地Agent] 部署结果已发送: task_id={task_id}, status={deploy_status}"
+                        )
+
+                except Exception as e:
+                    import traceback
+
+                    logger.exception(f"[本地Agent] 部署任务异常: task_id={task_id}")
+                    print(f"❌ [本地Agent] 部署任务异常: {e}")
+                    traceback.print_exc()
+
+                    # 发送失败消息
+                    if _local_agent_client:
+                        try:
+                            await _local_agent_client.send_message(
+                                {
+                                    "type": "deploy_result",
+                                    "task_id": message.get("task_id"),
+                                    "deploy_task_id": message.get(
+                                        "deploy_task_id", message.get("task_id")
+                                    ),
+                                    "target_name": message.get("target_name", ""),
+                                    "status": "failed",
+                                    "message": f"部署异常: {str(e)}",
+                                    "error": str(e),
+                                }
+                            )
+                        except:
+                            pass
 
             def get_heartbeat_data():
                 """获取心跳数据（包含host_info和docker_info）"""
@@ -380,6 +504,24 @@ async def startup_event():
             # 在后台任务中启动 WebSocket 客户端
             asyncio.create_task(_local_agent_client.start())
             print(f"✅ 本地 Agent WebSocket 客户端已启动，连接到: {server_url}")
+            print(f"   本地 Agent host_id: {local_agent.get('host_id')}")
+            print(f"   本地 Agent token: {local_agent.get('token')[:8]}...")
+
+            # 等待一小段时间，让连接有机会建立
+            await asyncio.sleep(1)
+
+            # 检查连接状态
+            from backend.websocket_handler import active_connections
+
+            host_id = local_agent.get("host_id")
+            if host_id in active_connections:
+                print(f"✅ 本地 Agent 连接已建立并注册: {host_id}")
+            else:
+                print(f"⚠️ 本地 Agent 连接尚未建立: {host_id}")
+                print(
+                    f"   当前 active_connections keys: {list(active_connections.keys())}"
+                )
+                print(f"   提示: 连接可能在后台建立中，请稍候...")
 
         except Exception as e:
             print(f"⚠️ 启动本地 Agent WebSocket 客户端失败: {e}")

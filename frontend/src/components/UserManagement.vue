@@ -59,6 +59,7 @@
                   class="btn btn-outline-warning" 
                   @click="changePassword(user)"
                   title="修改密码"
+                  :disabled="user.username === 'admin'"
                 >
                   <i class="fas fa-key"></i>
                 </button>
@@ -66,6 +67,7 @@
                   class="btn btn-outline-secondary" 
                   @click="toggleEnable(user)"
                   :title="user.enabled ? '禁用' : '启用'"
+                  :disabled="user.username === 'admin'"
                 >
                   <i class="fas" :class="user.enabled ? 'fa-ban' : 'fa-check'"></i>
                 </button>
@@ -276,6 +278,12 @@ function editUser(user) {
 }
 
 function changePassword(user) {
+  // 不能修改超级管理员的密码
+  if (user.username === 'admin') {
+    alert('不能修改超级管理员的密码')
+    return
+  }
+  
   passwordForm.value = {
     user_id: user.user_id,
     username: user.username,
@@ -332,6 +340,12 @@ async function savePassword() {
 }
 
 async function toggleEnable(user) {
+  // 不能修改超级管理员的状态
+  if (user.username === 'admin') {
+    alert('不能修改超级管理员的状态')
+    return
+  }
+  
   if (!confirm(`确定要${user.enabled ? '禁用' : '启用'}用户 ${user.username} 吗？`)) {
     return
   }

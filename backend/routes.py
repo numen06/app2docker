@@ -560,6 +560,10 @@ async def change_user_password(
             if not user:
                 raise HTTPException(status_code=404, detail="用户不存在")
 
+            # 不能修改超级管理员（admin）的密码
+            if user.username == "admin":
+                raise HTTPException(status_code=400, detail="不能修改超级管理员的密码")
+
             # 验证新密码长度
             if len(request.new_password) < 6:
                 raise HTTPException(status_code=400, detail="新密码长度至少6位")
@@ -608,6 +612,10 @@ async def toggle_user_enable(
             user = db.query(User).filter(User.user_id == user_id).first()
             if not user:
                 raise HTTPException(status_code=404, detail="用户不存在")
+
+            # 不能修改超级管理员（admin）的状态
+            if user.username == "admin":
+                raise HTTPException(status_code=400, detail="不能修改超级管理员的状态")
 
             # 不能禁用自己
             if user.username == username and not request.enabled:
