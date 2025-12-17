@@ -20,7 +20,9 @@ class WebSocketClient:
     def __init__(
         self,
         server_url: str,
-        token: str,
+        token: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        agent_token: Optional[str] = None,
         on_message: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_connect: Optional[Callable[[], None]] = None,
         on_disconnect: Optional[Callable[[], None]] = None,
@@ -33,7 +35,9 @@ class WebSocketClient:
 
         Args:
             server_url: 服务器 WebSocket URL (ws://host:port 或 wss://host:port)
-            token: Agent 认证 token
+            token: Agent 认证 token（旧方式，向后兼容）
+            secret_key: Agent 认证密钥（新方式）
+            agent_token: Agent 唯一标识（新方式，可选）
             on_message: 消息处理回调函数
             on_connect: 连接成功回调函数
             on_disconnect: 断开连接回调函数
@@ -49,14 +53,28 @@ class WebSocketClient:
                 "https://", "wss://"
             )
 
-        # 构建完整的 WebSocket URL（包含 token 作为查询参数）
-        ws_path = f"/api/ws/agent?token={token}"
+        # 构建完整的 WebSocket URL
+        if secret_key:
+            # 新方式：使用 secret_key 和 agent_token
+            import urllib.parse
+
+            params = {"secret_key": secret_key}
+            if agent_token:
+                params["agent_token"] = agent_token
+            query_string = urllib.parse.urlencode(params)
+            ws_path = f"/api/ws/agent?{query_string}"
+        else:
+            # 旧方式：使用 token（向后兼容）
+            ws_path = f"/api/ws/agent?token={token}"
+
         if self.server_url.endswith("/"):
             self.ws_url = f"{self.server_url}{ws_path.lstrip('/')}"
         else:
             self.ws_url = f"{self.server_url}{ws_path}"
 
         self.token = token
+        self.secret_key = secret_key
+        self.agent_token = agent_token
         self.on_message = on_message
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
@@ -222,6 +240,10 @@ class WebSocketClient:
                 await asyncio.sleep(self.heartbeat_interval)
                 if self.connected:
                     heartbeat_message = {"type": "heartbeat", "timestamp": time.time()}
+
+                    # 如果使用新方式且有agent_token，添加到心跳消息中
+                    if self.agent_token:
+                        heartbeat_message["agent_token"] = self.agent_token
 
                     # 如果提供了心跳数据回调，获取额外数据并添加到心跳消息中
                     if self.heartbeat_data_callback:
