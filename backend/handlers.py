@@ -4003,6 +4003,9 @@ def pipeline_to_task_config(
     # 替换标签中的动态日期占位符
     final_tag = replace_tag_date_placeholders(final_tag)
 
+    # 标志变量：记录分支标签映射是否成功应用
+    tag_mapping_applied = False
+
     # 处理分支标签映射（webhook和manual触发时都应用）
     # 注意：即使传入了tag参数，我们仍然需要检查分支标签映射，确保多服务模式下的标签正确更新
     if trigger_source in ["webhook", "manual"]:
@@ -4032,6 +4035,8 @@ def pipeline_to_task_config(
                         break
 
             if mapped_tag_value:
+                # 标记分支标签映射已成功应用
+                tag_mapping_applied = True
                 # 处理标签值（支持字符串、数组或逗号分隔的字符串）
                 # 如果传入了tag参数，且该tag在映射值中，使用传入的tag；否则使用映射值的第一个
                 tag_list = []
@@ -4063,6 +4068,7 @@ def pipeline_to_task_config(
             # 替换映射标签中的动态日期占位符
             final_tag = replace_tag_date_placeholders(final_tag)
             print(f"   - 映射后的final_tag: {final_tag}")
+            print(f"   - 分支标签映射已应用: {tag_mapping_applied}")
 
     # 调试日志：确认传递给 build_task_config 的分支
     print(f"🔍 pipeline_to_task_config 准备调用 build_task_config:")
@@ -4076,8 +4082,9 @@ def pipeline_to_task_config(
     # 在多服务模式下，如果标签已被映射更新，需要同步到 service_push_config 中每个服务的 tag
     if push_mode == "multi" and trigger_source in ["webhook", "manual"]:
         # 使用流水线的原始标签作为基准，用于判断是否需要更新服务标签
-        # 如果final_tag与原始标签不同，说明标签已被映射更新，需要同步到多服务配置
-        if final_tag != pipeline_original_tag:
+        # 如果存在分支标签映射规则并且映射成功，或者final_tag与原始标签不同，需要同步到多服务配置
+        # 这样可以确保即使final_tag等于pipeline_original_tag，只要存在分支标签映射规则，也会更新服务配置中的tag
+        if tag_mapping_applied or final_tag != pipeline_original_tag:
             # 标签已被映射更新，需要同步到多服务配置中
             if selected_services and service_push_config:
                 # 深拷贝 service_push_config，避免修改原始 pipeline 数据
@@ -4538,7 +4545,7 @@ class BuildTaskManager:
 
                     pipeline_manager = PipelineManager()
                     pipeline_id = pipeline_manager.find_pipeline_by_task(task_id)
-                    
+
                     if pipeline_id:
                         pipeline_manager.unbind_task(pipeline_id)
                         print(
@@ -4547,7 +4554,9 @@ class BuildTaskManager:
 
                         # 如果任务成功完成，触发构建后webhook
                         if status == "completed":
-                            print(f"🔔 任务 {task_id[:8]} 已完成，准备触发构建后webhook: pipeline_id={pipeline_id[:8]}")
+                            print(
+                                f"🔔 任务 {task_id[:8]} 已完成，准备触发构建后webhook: pipeline_id={pipeline_id[:8]}"
+                            )
                             try:
                                 # 在后台线程中异步触发webhook
                                 import threading
@@ -4556,7 +4565,9 @@ class BuildTaskManager:
                                     import asyncio
 
                                     try:
-                                        print(f"🔔 开始异步触发构建后webhook: pipeline_id={pipeline_id[:8]}, task_id={task_id[:8]}")
+                                        print(
+                                            f"🔔 开始异步触发构建后webhook: pipeline_id={pipeline_id[:8]}, task_id={task_id[:8]}"
+                                        )
                                         loop = asyncio.new_event_loop()
                                         asyncio.set_event_loop(loop)
                                         loop.run_until_complete(
@@ -4568,7 +4579,9 @@ class BuildTaskManager:
                                             )
                                         )
                                         loop.close()
-                                        print(f"✅ 构建后webhook触发完成: pipeline_id={pipeline_id[:8]}")
+                                        print(
+                                            f"✅ 构建后webhook触发完成: pipeline_id={pipeline_id[:8]}"
+                                        )
                                     except Exception as e:
                                         print(f"⚠️ 触发构建后webhook异常: {e}")
                                         import traceback
@@ -4579,15 +4592,19 @@ class BuildTaskManager:
                                     target=trigger_webhooks, daemon=True
                                 )
                                 thread.start()
-                                print(f"✅ 已启动构建后webhook触发线程: pipeline_id={pipeline_id[:8]}")
+                                print(
+                                    f"✅ 已启动构建后webhook触发线程: pipeline_id={pipeline_id[:8]}"
+                                )
                             except Exception as webhook_error:
                                 print(f"⚠️ 触发构建后webhook失败: {webhook_error}")
                                 import traceback
 
                                 traceback.print_exc()
                     else:
-                        print(f"ℹ️ 任务 {task_id[:8]} 未关联流水线，跳过构建后webhook触发")
-                    
+                        print(
+                            f"ℹ️ 任务 {task_id[:8]} 未关联流水线，跳过构建后webhook触发"
+                        )
+
                     # 处理队列中的下一个任务（相同流水线）
                     if pipeline_id:
                         _process_next_queued_task(pipeline_manager, pipeline_id)
@@ -4869,34 +4886,58 @@ class BuildTaskManager:
             if app_name:
                 from backend.database import get_db_session
                 from backend.models import Task
-                
+
                 db = get_db_session()
                 try:
                     # 查询所有部署配置任务（task_type='deploy' 且没有 source_config_id）
-                    existing_tasks = db.query(Task).filter(
-                        Task.task_type == "deploy"
-                    ).all()
-                    
+                    existing_tasks = (
+                        db.query(Task).filter(Task.task_type == "deploy").all()
+                    )
+
                     for existing_task in existing_tasks:
-                        existing_config = existing_task.task_config.get("config", {}) if existing_task.task_config else {}
-                        existing_app_name = existing_config.get("app", {}).get("name", "")
-                        
+                        existing_config = (
+                            existing_task.task_config.get("config", {})
+                            if existing_task.task_config
+                            else {}
+                        )
+                        existing_app_name = existing_config.get("app", {}).get(
+                            "name", ""
+                        )
+
                         # 如果应用名称相同，且不是当前任务（编辑时），则报错
                         if existing_app_name == app_name:
                             # 如果是编辑操作（提供了 source_config_id），跳过自己
-                            if source_config_id and existing_task.task_id == source_config_id:
+                            if (
+                                source_config_id
+                                and existing_task.task_id == source_config_id
+                            ):
                                 continue
                             # 如果是创建新配置，检查是否有其他配置任务使用相同名称
                             if not source_config_id:
                                 # 检查是否是配置任务（没有 source_config_id）
-                                existing_source_config_id = existing_task.task_config.get("source_config_id") if existing_task.task_config else None
+                                existing_source_config_id = (
+                                    existing_task.task_config.get("source_config_id")
+                                    if existing_task.task_config
+                                    else None
+                                )
                                 if not existing_source_config_id:
-                                    raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+                                    raise ValueError(
+                                        f"应用名称 '{app_name}' 已存在，请使用其他名称"
+                                    )
                             else:
                                 # 编辑操作：检查是否有其他配置任务使用相同名称
-                                existing_source_config_id = existing_task.task_config.get("source_config_id") if existing_task.task_config else None
-                                if not existing_source_config_id and existing_task.task_id != source_config_id:
-                                    raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+                                existing_source_config_id = (
+                                    existing_task.task_config.get("source_config_id")
+                                    if existing_task.task_config
+                                    else None
+                                )
+                                if (
+                                    not existing_source_config_id
+                                    and existing_task.task_id != source_config_id
+                                ):
+                                    raise ValueError(
+                                        f"应用名称 '{app_name}' 已存在，请使用其他名称"
+                                    )
                 finally:
                     db.close()
 
@@ -5022,24 +5063,36 @@ class BuildTaskManager:
                 db_check = get_db_session()
                 try:
                     # 查询所有部署配置任务（task_type='deploy'）
-                    existing_tasks = db_check.query(Task).filter(
-                        Task.task_type == "deploy"
-                    ).all()
-                    
+                    existing_tasks = (
+                        db_check.query(Task).filter(Task.task_type == "deploy").all()
+                    )
+
                     for existing_task in existing_tasks:
                         # 跳过当前任务
                         if existing_task.task_id == task_id:
                             continue
-                        
-                        existing_config = existing_task.task_config.get("config", {}) if existing_task.task_config else {}
-                        existing_app_name = existing_config.get("app", {}).get("name", "")
-                        
+
+                        existing_config = (
+                            existing_task.task_config.get("config", {})
+                            if existing_task.task_config
+                            else {}
+                        )
+                        existing_app_name = existing_config.get("app", {}).get(
+                            "name", ""
+                        )
+
                         # 如果应用名称相同，检查是否是配置任务（没有 source_config_id）
                         if existing_app_name == app_name:
-                            existing_source_config_id = existing_task.task_config.get("source_config_id") if existing_task.task_config else None
+                            existing_source_config_id = (
+                                existing_task.task_config.get("source_config_id")
+                                if existing_task.task_config
+                                else None
+                            )
                             # 如果是配置任务（没有 source_config_id），则报错
                             if not existing_source_config_id:
-                                raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+                                raise ValueError(
+                                    f"应用名称 '{app_name}' 已存在，请使用其他名称"
+                                )
                 finally:
                     db_check.close()
 
@@ -5180,11 +5233,7 @@ class BuildTaskManager:
             tag=tag,
             source_config_id=task_id,  # 标记这是从配置触发的任务
             trigger_source=trigger_source,
-            source=(
-                "Webhook"
-                if trigger_source == "webhook"
-                else "手动"
-            ),
+            source=("Webhook" if trigger_source == "webhook" else "手动"),
         )
 
         # 更新原始配置的执行统计
@@ -6169,7 +6218,9 @@ async def _trigger_post_build_webhooks(
             print(f"ℹ️ 流水线 {pipeline.get('name')} 没有配置构建后Webhook")
             return
 
-        print(f"🔔 开始触发构建后Webhook: pipeline={pipeline.get('name')}, task_id={task_id[:8]}, webhook数量={len(post_build_webhooks)}")
+        print(
+            f"🔔 开始触发构建后Webhook: pipeline={pipeline.get('name')}, task_id={task_id[:8]}, webhook数量={len(post_build_webhooks)}"
+        )
 
         # 构建模板变量上下文
         task_config = task_obj.task_config or {}
@@ -6213,11 +6264,14 @@ async def _trigger_post_build_webhooks(
             except Exception as e:
                 print(f"⚠️ Webhook {idx + 1} 渲染模板失败: {e}")
                 import traceback
+
                 traceback.print_exc()
                 body = body_template
 
             # 发送webhook请求
-            print(f"🔔 触发构建后webhook {idx + 1}: pipeline={pipeline.get('name')}, url={url}, method={method}")
+            print(
+                f"🔔 触发构建后webhook {idx + 1}: pipeline={pipeline.get('name')}, url={url}, method={method}"
+            )
             try:
                 result = await trigger_webhook(url, method, headers, body)
 
@@ -6235,6 +6289,7 @@ async def _trigger_post_build_webhooks(
             except Exception as e:
                 print(f"❌ Webhook {idx + 1} 触发异常: url={url}, error={str(e)}")
                 import traceback
+
                 traceback.print_exc()
     except Exception as e:
         print(f"⚠️ 触发构建后webhook异常: {e}")

@@ -1,56 +1,74 @@
 <template>
   <div class="unified-host-manager">
-    <!-- 子标签导航 -->
-    <ul class="nav nav-tabs mb-3">
-      <li class="nav-item">
-        <button 
-          type="button" 
-          class="nav-link" 
-          :class="{ active: activeSubTab === 'ssh' }" 
-          @click="activeSubTab = 'ssh'"
-        >
-          <i class="fas fa-server me-1"></i> SSH主机
-        </button>
-      </li>
-      <li class="nav-item">
-        <button 
-          type="button" 
-          class="nav-link" 
-          :class="{ active: activeSubTab === 'agent' }" 
-          @click="activeSubTab = 'agent'"
-        >
-          <i class="fas fa-network-wired me-1"></i> Agent主机
-        </button>
-      </li>
-    </ul>
+    <!-- 顶部工具栏 -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0"><i class="fas fa-server"></i> 主机管理</h5>
+      <div class="d-flex gap-2 align-items-center">
+        <!-- 主机类型过滤 -->
+        <div class="btn-group" role="group">
+          <input
+            type="radio"
+            class="btn-check"
+            id="filter-all"
+            value="all"
+            v-model="filterType"
+          />
+          <label class="btn btn-outline-secondary btn-sm" for="filter-all">
+            <i class="fas fa-list me-1"></i> 全部
+          </label>
+
+          <input
+            type="radio"
+            class="btn-check"
+            id="filter-ssh"
+            value="ssh"
+            v-model="filterType"
+          />
+          <label class="btn btn-outline-secondary btn-sm" for="filter-ssh">
+            <i class="fas fa-server me-1"></i> SSH主机
+          </label>
+
+          <input
+            type="radio"
+            class="btn-check"
+            id="filter-agent"
+            value="agent"
+            v-model="filterType"
+          />
+          <label class="btn btn-outline-secondary btn-sm" for="filter-agent">
+            <i class="fas fa-network-wired me-1"></i> Agent主机
+          </label>
+        </div>
+      </div>
+    </div>
 
     <!-- SSH主机管理 -->
-    <HostManager v-if="activeSubTab === 'ssh'" />
+    <HostManager :filterType="filterType" />
 
     <!-- Agent主机管理 -->
-    <AgentHostManager v-if="activeSubTab === 'agent'" />
+    <AgentHostManager :filterType="filterType" />
   </div>
 </template>
 
 <script>
-import HostManager from './HostManager.vue'
-import AgentHostManager from './AgentHostManager.vue'
-import { ref } from 'vue'
+import HostManager from "./HostManager.vue";
+import AgentHostManager from "./AgentHostManager.vue";
+import { ref } from "vue";
 
 export default {
-  name: 'UnifiedHostManager',
+  name: "UnifiedHostManager",
   components: {
     HostManager,
-    AgentHostManager
+    AgentHostManager,
   },
   setup() {
-    const activeSubTab = ref('ssh')
-    
+    const filterType = ref("all");
+
     return {
-      activeSubTab
-    }
-  }
-}
+      filterType,
+    };
+  },
+};
 </script>
 
 <style scoped>
@@ -58,28 +76,9 @@ export default {
   padding: 0;
 }
 
-.nav-tabs {
-  border-bottom: 2px solid #dee2e6;
-}
-
-.nav-tabs .nav-link {
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #6c757d;
-  padding: 0.5rem 1rem;
-  transition: all 0.2s;
-}
-
-.nav-tabs .nav-link:hover {
-  border-bottom-color: #0d6efd;
-  color: #0d6efd;
-}
-
-.nav-tabs .nav-link.active {
-  color: #0d6efd;
-  border-bottom-color: #0d6efd;
-  background-color: transparent;
-  font-weight: 500;
+.btn-group .btn-check:checked + .btn {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: white;
 }
 </style>
-

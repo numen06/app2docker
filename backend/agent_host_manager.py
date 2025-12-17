@@ -274,8 +274,32 @@ class AgentHostManager:
             if result.get("success"):
                 # 获取 Docker 信息
                 try:
-                    docker_info = client.get_docker_info()
-                    result["docker_info"] = docker_info
+                    docker_info_raw = client.get_docker_info()
+
+                    # 构建结构化的 docker_info
+                    docker_info_structured = {
+                        "version": docker_info_raw.get("ServerVersion", ""),
+                        "containers": docker_info_raw.get("Containers", 0),
+                        "images": docker_info_raw.get("Images", 0),
+                    }
+
+                    # 从 Docker info 中提取 Swarm 状态
+                    swarm_info = docker_info_raw.get("Swarm", {})
+                    if isinstance(swarm_info, dict):
+                        swarm_state = swarm_info.get("LocalNodeState", "")
+                        docker_info_structured["stack_supported"] = (
+                            swarm_state == "active"
+                        )
+                        docker_info_structured["swarm_mode"] = swarm_state
+                    else:
+                        docker_info_structured["stack_supported"] = False
+                        docker_info_structured["swarm_mode"] = "unknown"
+
+                    # Portainer API 可能不支持直接检测 docker-compose，标记为未知
+                    docker_info_structured["compose_supported"] = None  # None 表示未知
+                    docker_info_structured["compose_version"] = None
+
+                    result["docker_info"] = docker_info_structured
                 except:
                     pass
 
@@ -331,11 +355,36 @@ class AgentHostManager:
                         # 获取 Docker 信息
                         try:
                             docker_info = client.get_docker_info()
-                            host_obj.docker_info = {
+
+                            # 构建完整的 docker_info 字典
+                            updated_docker_info = {
                                 "version": docker_info.get("ServerVersion", ""),
                                 "containers": docker_info.get("Containers", 0),
                                 "images": docker_info.get("Images", 0),
                             }
+
+                            # 从 Docker info 中提取 Swarm 状态
+                            swarm_info = docker_info.get("Swarm", {})
+                            if isinstance(swarm_info, dict):
+                                swarm_state = swarm_info.get("LocalNodeState", "")
+                                updated_docker_info["stack_supported"] = (
+                                    swarm_state == "active"
+                                )
+                                updated_docker_info["swarm_mode"] = swarm_state
+                            else:
+                                updated_docker_info["stack_supported"] = False
+                                updated_docker_info["swarm_mode"] = "unknown"
+
+                            # Portainer API 可能不支持直接检测 docker-compose，标记为未知
+                            updated_docker_info["compose_supported"] = (
+                                None  # None 表示未知
+                            )
+                            updated_docker_info["compose_version"] = None
+
+                            # 合并到现有的 docker_info 中（保留之前的 compose_supported 等字段）
+                            current_docker_info = host_obj.docker_info or {}
+                            current_docker_info.update(updated_docker_info)
+                            host_obj.docker_info = current_docker_info
                         except Exception as docker_e:
                             # Docker 信息获取失败不影响在线状态
                             logger.warning(f"获取 Docker 信息失败: {docker_e}")

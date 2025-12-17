@@ -57,6 +57,8 @@
               class="form-control" 
               :placeholder="imagePlaceholder" 
               required
+              @input="handleImageNameInput"
+              @paste="handleImageNamePaste"
             />
             <div class="form-text small">
               <i class="fas fa-info-circle"></i> 
@@ -380,6 +382,49 @@ function updateImageName() {
             form.value.image = form.value.image.substring(regPrefix.length + 1)
           }
         })
+      }
+    }
+  }
+}
+
+// 处理镜像名称输入，自动识别并分离标签
+function handleImageNameInput(event) {
+  const inputValue = event.target.value
+  parseImageNameAndTag(inputValue)
+}
+
+// 处理镜像名称粘贴，自动识别并分离标签
+function handleImageNamePaste(event) {
+  // 等待粘贴内容写入输入框（v-model 会更新 form.value.image）
+  setTimeout(() => {
+    parseImageNameAndTag(form.value.image)
+  }, 0)
+}
+
+// 解析镜像名称和标签
+function parseImageNameAndTag(inputValue) {
+  if (!inputValue || typeof inputValue !== 'string') {
+    return
+  }
+  
+  // 查找最后一个冒号（标签在最后一个冒号后面）
+  // 注意：镜像名称可能包含端口号（如 registry:5000/image:tag），所以需要找到最后一个冒号
+  const lastColonIndex = inputValue.lastIndexOf(':')
+  
+  if (lastColonIndex > 0 && lastColonIndex < inputValue.length - 1) {
+    // 检查冒号后面是否有斜杠（如果有，可能是端口号，不是标签）
+    const afterColon = inputValue.substring(lastColonIndex + 1)
+    
+    // 如果冒号后面没有斜杠，且不是纯数字（避免误判端口号），则认为是标签
+    if (!afterColon.includes('/') && !/^\d+$/.test(afterColon)) {
+      // 分离镜像名称和标签
+      const imageName = inputValue.substring(0, lastColonIndex)
+      const tag = afterColon.trim()
+      
+      // 更新表单
+      form.value.image = imageName
+      if (tag) {
+        form.value.tag = tag
       }
     }
   }

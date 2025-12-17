@@ -1,76 +1,132 @@
 <template>
-  <div class="agent-host-manager-panel">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h6 class="mb-0">
-        <i class="fas fa-network-wired"></i> Agent主机管理
-      </h6>
+  <div class="agent-host-manager-panel" v-show="shouldShow">
+    <!-- 添加主机按钮 -->
+    <div class="d-flex justify-content-end mb-3" v-if="filterType === 'all' || filterType === 'agent'">
       <button class="btn btn-primary btn-sm" @click="showAddModal = true">
         <i class="fas fa-plus"></i> 新建Agent主机
       </button>
     </div>
 
-    <!-- Agent主机列表 -->
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>主机名称</th>
-            <th>连接状态</th>
-            <th>主机信息</th>
-            <th>Docker信息</th>
-            <th>最后心跳</th>
-            <th>描述</th>
-            <th>创建时间</th>
-            <th class="text-end">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="8" class="text-center py-4">
-              <div class="spinner-border spinner-border-sm me-2"></div>
-              加载中...
-            </td>
-          </tr>
-          <tr v-else-if="hosts.length === 0">
-            <td colspan="8" class="text-center text-muted py-4">
-              <i class="fas fa-network-wired fa-2x mb-2 d-block"></i>
-              暂无Agent主机，请点击"新建Agent主机"添加
-            </td>
-          </tr>
-          <tr v-for="host in hosts" :key="host.host_id">
-            <td>
-              <strong>{{ host.name }}</strong>
-              <span class="badge bg-secondary ms-2">{{ host.host_type === 'portainer' ? 'Portainer' : 'Agent' }}</span>
-            </td>
-            <td>
-              <span :class="getStatusBadgeClass(host.status)" class="badge">
-                <i :class="getStatusIcon(host.status)"></i>
-                {{ getStatusText(host.status) }}
-              </span>
-            </td>
-            <td>
-              <div v-if="host.host_info && Object.keys(host.host_info).length > 0">
-                <div class="small">
-                  <span v-if="host.host_info.ip" class="me-2">
-                    <i class="fas fa-network-wired"></i> {{ host.host_info.ip }}
+    <!-- Agent主机列表 - 卡片式布局 -->
+    <div v-if="loading" class="text-center py-5">
+      <span class="spinner-border spinner-border-sm"></span> 加载中...
+    </div>
+    <div v-else-if="filteredHosts.length === 0" class="text-center py-5 text-muted">
+      <i class="fas fa-network-wired fa-3x mb-3"></i>
+      <p class="mb-0">暂无Agent主机</p>
+      <button class="btn btn-primary btn-sm mt-2" @click="showAddModal = true">
+        <i class="fas fa-plus"></i> 新建Agent主机
+      </button>
+    </div>
+    <div v-else class="row g-4">
+      <div
+        v-for="host in filteredHosts"
+        :key="host.host_id"
+        class="col-12 col-md-6 col-xl-4"
+      >
+        <div class="card h-100 shadow-sm">
+          <!-- 卡片头部 -->
+          <div class="card-header bg-white">
+            <div class="mb-2">
+              <h5 class="card-title mb-2">
+                <strong>{{ host.name }}</strong>
+              </h5>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <div>
+                  <span class="badge" :class="host.host_type === 'portainer' ? 'bg-primary' : 'bg-secondary'">
+                    <i class="fas fa-network-wired"></i> {{ host.host_type === 'portainer' ? 'Portainer' : 'Agent' }}
                   </span>
-                  <span v-if="host.host_info.os" class="me-2">
-                    <i class="fas fa-desktop"></i> {{ host.host_info.os }}
+                  <span :class="getStatusBadgeClass(host.status)" class="badge ms-1">
+                    <i :class="getStatusIcon(host.status)"></i>
+                    {{ getStatusText(host.status) }}
                   </span>
-                </div>
-                <div v-if="host.host_info.cpu_usage !== undefined" class="small text-muted">
-                  CPU: {{ host.host_info.cpu_usage }}% | 
-                  内存: {{ host.host_info.memory_usage }}% | 
-                  磁盘: {{ host.host_info.disk_usage }}%
                 </div>
               </div>
-              <span v-else class="text-muted small">未连接</span>
-            </td>
-            <td>
+              <p
+                class="text-muted mb-0 mt-1"
+                v-if="host.description"
+                style="font-size: 0.9rem"
+              >
+                {{ host.description }}
+              </p>
+            </div>
+            <!-- 操作按钮行 -->
+            <div class="btn-group btn-group-sm w-100">
+              <button
+                class="btn btn-outline-info"
+                @click="viewHost(host)"
+                title="查看详情"
+              >
+                <i class="fas fa-info-circle"></i>
+              </button>
+              <button
+                class="btn btn-outline-primary"
+                @click="showDeployCommand(host)"
+                title="部署命令"
+              >
+                <i class="fas fa-code"></i>
+              </button>
+              <button
+                class="btn btn-outline-success"
+                @click="refreshHostStatus(host)"
+                title="刷新状态"
+              >
+                <i class="fas fa-sync-alt"></i>
+              </button>
+              <button
+                class="btn btn-outline-primary"
+                @click="editHost(host)"
+                title="编辑"
+              >
+                <i class="fas fa-edit"></i>
+              </button>
+              <button
+                class="btn btn-outline-danger"
+                @click="deleteHost(host)"
+                title="删除"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 卡片内容 -->
+          <div class="card-body">
+            <!-- 主机信息 -->
+            <div class="mb-3">
+              <div v-if="host.host_info && Object.keys(host.host_info).length > 0">
+                <div class="d-flex align-items-center mb-2">
+                  <i class="fas fa-network-wired text-muted me-2" style="width: 18px;"></i>
+                  <div class="flex-grow-1">
+                    <div class="small" v-if="host.host_info.ip">
+                      <strong>{{ host.host_info.ip }}</strong>
+                    </div>
+                    <div class="small text-muted mt-1" v-if="host.host_info.os">
+                      <i class="fas fa-desktop me-1"></i>{{ host.host_info.os }}
+                    </div>
+                  </div>
+                </div>
+                <div v-if="host.host_info.cpu_usage !== undefined" class="small text-muted mt-2">
+                  <div class="d-flex justify-content-between mb-1">
+                    <span>CPU: {{ host.host_info.cpu_usage }}%</span>
+                    <span>内存: {{ host.host_info.memory_usage }}%</span>
+                  </div>
+                  <div>磁盘: {{ host.host_info.disk_usage }}%</div>
+                </div>
+              </div>
+              <div v-else class="text-muted small">
+                <i class="fas fa-exclamation-circle me-1"></i>未连接
+              </div>
+            </div>
+
+            <!-- Docker信息 -->
+            <div class="mb-3">
               <div v-if="host.docker_info && Object.keys(host.docker_info).length > 0">
-                <span v-if="host.docker_info.version" class="badge bg-info mb-1 d-inline-block">
-                  <i class="fab fa-docker me-1"></i>{{ host.docker_info.version }}
-                </span>
+                <div class="mb-2">
+                  <span v-if="host.docker_info.version" class="badge bg-info">
+                    <i class="fab fa-docker me-1"></i>{{ host.docker_info.version }}
+                  </span>
+                </div>
                 <div class="small text-muted">
                   <span v-if="host.docker_info.containers !== undefined">
                     容器: {{ host.docker_info.containers }}
@@ -80,60 +136,23 @@
                   </span>
                 </div>
               </div>
-              <span v-else class="text-muted small">未检测</span>
-            </td>
-            <td>
-              <span v-if="host.last_heartbeat" class="small">
-                {{ formatTime(host.last_heartbeat) }}
-              </span>
-              <span v-else class="text-muted small">-</span>
-            </td>
-            <td>
-              <span class="text-muted small">{{ host.description || '无描述' }}</span>
-            </td>
-            <td>{{ formatTime(host.created_at) }}</td>
-            <td class="text-end">
-              <div class="btn-group btn-group-sm">
-                <button 
-                  class="btn btn-outline-info" 
-                  @click="viewHost(host)"
-                  title="查看详情"
-                >
-                  <i class="fas fa-info-circle"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-primary" 
-                  @click="showDeployCommand(host)"
-                  title="部署命令"
-                >
-                  <i class="fas fa-code"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-success" 
-                  @click="refreshHostStatus(host)"
-                  title="刷新状态"
-                >
-                  <i class="fas fa-sync-alt"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-primary" 
-                  @click="editHost(host)"
-                  title="编辑"
-                >
-                  <i class="fas fa-edit"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-danger" 
-                  @click="deleteHost(host)"
-                  title="删除"
-                >
-                  <i class="fas fa-trash"></i>
-                </button>
+              <div v-else class="text-muted small">
+                <i class="fas fa-exclamation-circle me-1"></i>未检测
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+
+            <!-- 最后心跳和创建时间 -->
+            <div class="small text-muted border-top pt-2">
+              <div v-if="host.last_heartbeat" class="mb-1">
+                <i class="fas fa-heartbeat me-1"></i>最后心跳: {{ formatTime(host.last_heartbeat) }}
+              </div>
+              <div>
+                <i class="fas fa-clock me-1"></i>{{ formatTime(host.created_at) }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 添加/编辑主机模态框 -->
@@ -536,6 +555,12 @@ import axios from 'axios';
 
 export default {
   name: 'AgentHostManager',
+  props: {
+    filterType: {
+      type: String,
+      default: 'all'
+    }
+  },
   data() {
     return {
       hosts: [],
@@ -565,6 +590,15 @@ export default {
       availableEndpoints: [],
       wsConnections: {}, // WebSocket连接管理
       refreshInterval: null // 定期刷新定时器
+    }
+  },
+  computed: {
+    shouldShow() {
+      return this.filterType === 'all' || this.filterType === 'agent'
+    },
+    filteredHosts() {
+      if (!this.shouldShow) return []
+      return this.hosts
     }
   },
   mounted() {
@@ -905,6 +939,30 @@ export default {
 <style scoped>
 .agent-host-manager-panel {
   padding: 0;
+}
+
+.card {
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid #dee2e6;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+.card-header {
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem;
+}
+
+.card-title {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.card-body {
+  padding: 1rem;
 }
 
 .modal.show {

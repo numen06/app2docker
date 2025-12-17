@@ -305,6 +305,62 @@ class DeployTaskManager:
                 "host_name": host_name,
             }
 
+        # 验证 Compose 模式支持（如果是 Compose 模式）
+        deploy_type = deploy_config.get("type", "docker_run")
+        if deploy_type == "docker_compose":
+            compose_mode = deploy_config.get("compose_mode", "docker-compose")
+
+            # 获取主机信息
+            host_info = None
+            if host_type == "agent" or host_type == "portainer":
+                # 从列表中查找主机
+                agent_hosts = self.agent_manager.list_agent_hosts()
+                for host in agent_hosts:
+                    if host.get("name") == host_name:
+                        host_info = host
+                        break
+            elif host_type == "ssh":
+                from backend.host_manager import HostManager
+
+                host_manager = HostManager()
+                ssh_hosts = host_manager.list_hosts()
+                for host in ssh_hosts:
+                    if host.get("name") == host_name:
+                        host_info = host
+                        break
+
+            if host_info:
+                docker_info = host_info.get("docker_info", {})
+
+                if compose_mode == "docker-compose":
+                    compose_supported = docker_info.get("compose_supported")
+                    if compose_supported is False:
+                        if task_manager:
+                            task_manager.add_log(
+                                task_id,
+                                f"⚠️ 主机 {host_name} 不支持 docker-compose 模式，部署将失败\n",
+                            )
+                        return {
+                            "success": False,
+                            "message": f"主机 {host_name} 不支持 docker-compose 模式",
+                            "host_type": host_type,
+                            "host_name": host_name,
+                        }
+                elif compose_mode == "docker-stack":
+                    stack_supported = docker_info.get("stack_supported")
+                    if stack_supported is not True:
+                        if task_manager:
+                            task_manager.add_log(
+                                task_id,
+                                f"⚠️ 主机 {host_name} 不支持 docker stack 模式（需要 Docker Swarm 环境），部署将失败\n",
+                            )
+                        return {
+                            "success": False,
+                            "message": f"主机 {host_name} 不支持 docker stack 模式（需要 Docker Swarm 环境）",
+                            "host_type": host_type,
+                            "host_name": host_name,
+                        }
+
         # 检查是否为多步骤模式
         steps = deploy_config.get("steps")
         if steps and isinstance(steps, list):
@@ -331,8 +387,10 @@ class DeployTaskManager:
             if "compose_mode" in deploy_config:
                 enhanced_context["compose_mode"] = deploy_config["compose_mode"]
             if "redeploy_strategy" in deploy_config:
-                enhanced_context["redeploy_strategy"] = deploy_config["redeploy_strategy"]
-            
+                enhanced_context["redeploy_strategy"] = deploy_config[
+                    "redeploy_strategy"
+                ]
+
             try:
                 adapted_config = self.command_adapter.adapt_command(
                     command=command,
@@ -398,7 +456,11 @@ class DeployTaskManager:
 
                 if deploy_type == "docker_compose":
                     compose_mode = adapted_config.get("compose_mode", "docker-compose")
-                    mode_name = "Docker Stack" if compose_mode == "docker-stack" else "Docker Compose"
+                    mode_name = (
+                        "Docker Stack"
+                        if compose_mode == "docker-stack"
+                        else "Docker Compose"
+                    )
                     task_manager.add_log(
                         task_id, f"📋 部署配置（{mode_name} 模式）：\n"
                     )
