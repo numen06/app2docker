@@ -120,6 +120,12 @@ def init_db():
     # 迁移：添加用户系统表
     migrate_add_user_system()
 
+    # 迁移：创建agent_secrets表
+    migrate_add_agent_secrets_table()
+
+    # 迁移：添加agent_unique_id字段到agent_hosts表
+    migrate_add_agent_unique_id()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -660,7 +666,9 @@ def migrate_add_user_system():
 
                 # 分配admin角色
                 admin_role = role_map["admin"]
-                user_role = UserRole(user_id=admin_user.user_id, role_id=admin_role.role_id)
+                user_role = UserRole(
+                    user_id=admin_user.user_id, role_id=admin_role.role_id
+                )
                 db.add(user_role)
                 db.commit()
                 print("✅ 创建默认admin用户")
@@ -696,6 +704,103 @@ def migrate_add_user_system():
 
         traceback.print_exc()
         print(f"⚠️ 迁移用户系统失败: {e}")
+
+
+def migrate_add_agent_secrets_table():
+    """迁移：创建agent_secrets表"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 检查表是否已存在
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_secrets'"
+        )
+        if cursor.fetchone():
+            conn.close()
+            print("✅ agent_secrets 表已存在")
+            return
+
+        # 创建表
+        cursor.execute(
+            """
+            CREATE TABLE agent_secrets (
+                secret_id VARCHAR(36) PRIMARY KEY,
+                secret_key VARCHAR(64) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                enabled BOOLEAN DEFAULT 1,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """
+        )
+
+        # 创建索引
+        cursor.execute(
+            "CREATE UNIQUE INDEX idx_agent_secret_key ON agent_secrets(secret_key)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_agent_secret_enabled ON agent_secrets(enabled)"
+        )
+
+        conn.commit()
+        conn.close()
+        print("✅ agent_secrets 表创建成功")
+    except sqlite3.OperationalError as e:
+        if "already exists" in str(e).lower():
+            print("✅ agent_secrets 表已存在")
+        else:
+            print(f"⚠️ 创建agent_secrets表失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 创建agent_secrets表失败: {e}")
+
+
+def migrate_add_agent_unique_id():
+    """迁移：为agent_hosts表添加agent_unique_id字段"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 检查表是否存在
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_hosts'"
+        )
+        if not cursor.fetchone():
+            conn.close()
+            return
+
+        # 检查字段是否已存在
+        cursor.execute("PRAGMA table_info(agent_hosts)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if "agent_unique_id" not in columns:
+            print("🔄 添加 agent_unique_id 字段到 agent_hosts 表...")
+            cursor.execute(
+                "ALTER TABLE agent_hosts ADD COLUMN agent_unique_id VARCHAR(128)"
+            )
+            # 创建索引
+            cursor.execute(
+                "CREATE INDEX idx_agent_host_unique_id ON agent_hosts(agent_unique_id)"
+            )
+            conn.commit()
+            print("✅ agent_unique_id 字段添加成功")
+        else:
+            print("✅ agent_unique_id 字段已存在")
+
+        conn.close()
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e).lower():
+            print("✅ agent_unique_id 字段已存在")
+        else:
+            print(f"⚠️ 迁移agent_unique_id字段失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 迁移agent_unique_id字段失败: {e}")
 
 
 def close_db():

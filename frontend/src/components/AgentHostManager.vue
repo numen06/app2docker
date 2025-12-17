@@ -1,11 +1,71 @@
 <template>
   <div class="agent-host-manager-panel" v-show="shouldShow">
-    <!-- 添加主机按钮 -->
-    <div class="d-flex justify-content-end mb-3" v-if="filterType === 'all' || filterType === 'agent'">
-      <button class="btn btn-primary btn-sm" @click="showAddModal = true">
-        <i class="fas fa-plus"></i> 新建Agent主机
-      </button>
+    <!-- 标签页切换 -->
+    <div class="card mb-3">
+      <div class="card-body p-2">
+        <ul class="nav nav-tabs nav-tabs-custom mb-0" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button 
+              class="nav-link" 
+              :class="{ active: activeTab === 'hosts' }"
+              @click="activeTab = 'hosts'"
+              type="button"
+            >
+              <i class="fas fa-server me-1"></i> 主机列表
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button 
+              class="nav-link" 
+              :class="{ active: activeTab === 'secrets' }"
+              @click="activeTab = 'secrets'"
+              type="button"
+            >
+              <i class="fas fa-key me-1"></i> 密钥管理
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button 
+              class="nav-link" 
+              :class="{ active: activeTab === 'pending' }"
+              @click="activeTab = 'pending'"
+              type="button"
+            >
+              <i class="fas fa-clock me-1"></i> 待加入主机
+              <span v-if="pendingHostsCount > 0" class="badge bg-danger ms-1">{{ pendingHostsCount }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
     </div>
+
+    <!-- 主机列表标签页 -->
+    <div v-show="activeTab === 'hosts'">
+      <!-- 添加主机按钮 -->
+      <div class="d-flex justify-content-end mb-3" v-if="filterType === 'all' || filterType === 'agent'">
+        <div class="btn-group">
+          <button 
+            type="button" 
+            class="btn btn-primary btn-sm dropdown-toggle" 
+            data-bs-toggle="dropdown" 
+            aria-expanded="false"
+          >
+            <i class="fas fa-plus me-1"></i> 添加主机
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="openAddModal('agent')">
+                <i class="fas fa-network-wired me-2"></i> Agent主机
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" @click.prevent="openAddModal('portainer')">
+                <i class="fab fa-docker me-2"></i> Portainer主机
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
 
     <!-- Agent主机列表 - 卡片式布局 -->
     <div v-if="loading" class="text-center py-5">
@@ -14,9 +74,28 @@
     <div v-else-if="filteredHosts.length === 0" class="text-center py-5 text-muted">
       <i class="fas fa-network-wired fa-3x mb-3"></i>
       <p class="mb-0">暂无Agent主机</p>
-      <button class="btn btn-primary btn-sm mt-2" @click="showAddModal = true">
-        <i class="fas fa-plus"></i> 新建Agent主机
-      </button>
+      <div class="btn-group mt-2">
+        <button 
+          type="button" 
+          class="btn btn-primary btn-sm dropdown-toggle" 
+          data-bs-toggle="dropdown" 
+          aria-expanded="false"
+        >
+          <i class="fas fa-plus me-1"></i> 添加主机
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <a class="dropdown-item" href="#" @click.prevent="openAddModal('agent')">
+              <i class="fas fa-network-wired me-2"></i> Agent主机
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" @click.prevent="openAddModal('portainer')">
+              <i class="fab fa-docker me-2"></i> Portainer主机
+            </a>
+          </li>
+        </ul>
+      </div>
     </div>
     <div v-else class="row g-4">
       <div
@@ -154,33 +233,242 @@
         </div>
       </div>
     </div>
+    </div>
+
+    <!-- 密钥管理标签页 -->
+    <div v-show="activeTab === 'secrets'">
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-key me-2"></i>Agent连接密钥</h6>
+            <button class="btn btn-primary btn-sm" @click="showAddSecretModal = true">
+              <i class="fas fa-plus me-1"></i> 生成新密钥
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="loadingSecrets" class="text-center py-5">
+        <span class="spinner-border spinner-border-sm"></span> 加载中...
+      </div>
+      <div v-else-if="secrets.length === 0" class="text-center py-5 text-muted">
+        <i class="fas fa-key fa-3x mb-3"></i>
+        <p class="mb-0">暂无密钥</p>
+        <button class="btn btn-primary btn-sm mt-2" @click="showAddSecretModal = true">
+          <i class="fas fa-plus"></i> 生成新密钥
+        </button>
+      </div>
+      <div v-else class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 15%;">密钥名称</th>
+                  <th style="width: 35%;">密钥值</th>
+                  <th style="width: 10%;">状态</th>
+                  <th style="width: 20%;">创建时间</th>
+                  <th style="width: 20%;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="secret in secrets" :key="secret.secret_id">
+                  <td>
+                    <strong>{{ secret.name || '未命名' }}</strong>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <code class="small text-break me-2" style="max-width: 200px;">{{ secret.secret_key }}</code>
+                      <button class="btn btn-sm btn-outline-secondary" @click="copyToClipboard(secret.secret_key)" title="复制密钥">
+                        <i class="fas fa-copy"></i>
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <span :class="secret.enabled ? 'badge bg-success' : 'badge bg-secondary'">
+                      {{ secret.enabled ? '启用' : '禁用' }}
+                    </span>
+                  </td>
+                  <td class="small text-muted">{{ formatTime(secret.created_at) }}</td>
+                  <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button 
+                        class="btn btn-outline-primary" 
+                        @click="showSecretDeployCommand(secret)"
+                        title="生成部署命令"
+                      >
+                        <i class="fas fa-code me-1"></i>部署
+                      </button>
+                      <button 
+                        v-if="secret.enabled"
+                        class="btn btn-outline-warning" 
+                        @click="disableSecret(secret)"
+                        title="禁用"
+                      >
+                        <i class="fas fa-ban"></i>
+                      </button>
+                      <button 
+                        v-else
+                        class="btn btn-outline-success" 
+                        @click="enableSecret(secret)"
+                        title="启用"
+                      >
+                        <i class="fas fa-check"></i>
+                      </button>
+                      <button 
+                        class="btn btn-outline-danger" 
+                        @click="deleteSecret(secret)"
+                        title="删除"
+                      >
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待加入主机标签页 -->
+    <div v-show="activeTab === 'pending'">
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+              <i class="fas fa-clock me-2"></i>待加入主机
+              <span v-if="pendingHostsCount > 0" class="badge bg-danger ms-2">{{ pendingHostsCount }}</span>
+            </h6>
+            <button class="btn btn-sm btn-outline-secondary" @click="loadPendingHosts" title="刷新">
+              <i class="fas fa-sync-alt"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="loadingPendingHosts" class="card">
+        <div class="card-body text-center py-5">
+          <span class="spinner-border spinner-border-sm me-2"></span> 加载中...
+        </div>
+      </div>
+      <div v-else-if="pendingHosts.length === 0" class="card">
+        <div class="card-body text-center py-5 text-muted">
+          <i class="fas fa-clock fa-3x mb-3"></i>
+          <p class="mb-0">暂无待加入主机</p>
+          <small class="d-block mt-2">使用密钥部署Agent后，主机将自动出现在这里</small>
+        </div>
+      </div>
+      <div v-else class="row g-3">
+        <div
+          v-for="host in pendingHosts"
+          :key="host.agent_token"
+          class="col-12 col-md-6 col-xl-4"
+        >
+          <div class="card h-100 border-warning shadow-sm">
+            <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">
+                <i class="fas fa-clock me-2"></i>待加入主机
+              </h6>
+              <span class="badge bg-warning text-dark">待批准</span>
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="small text-muted d-block mb-1">唯一标识</label>
+                <div class="d-flex align-items-center">
+                  <code class="small text-break me-2 flex-grow-1">{{ host.agent_token || '生成中...' }}</code>
+                  <button class="btn btn-sm btn-outline-secondary" @click="copyToClipboard(host.agent_token)" title="复制">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              
+              <div v-if="host.host_info && Object.keys(host.host_info).length > 0" class="mb-3 border-top pt-3">
+                <h6 class="small text-muted mb-2">主机信息</h6>
+                <div v-if="host.host_info.ip" class="small mb-1">
+                  <i class="fas fa-network-wired me-1 text-primary"></i>
+                  <strong>IP:</strong> {{ host.host_info.ip }}
+                </div>
+                <div v-if="host.host_info.os" class="small text-muted mb-1">
+                  <i class="fas fa-desktop me-1"></i>{{ host.host_info.os }}
+                </div>
+                <div v-if="host.host_info.hostname" class="small text-muted">
+                  <i class="fas fa-server me-1"></i>{{ host.host_info.hostname }}
+                </div>
+              </div>
+              
+              <div v-if="host.docker_info && Object.keys(host.docker_info).length > 0" class="mb-3 border-top pt-3">
+                <h6 class="small text-muted mb-2">Docker信息</h6>
+                <div v-if="host.docker_info.version" class="small mb-1">
+                  <i class="fab fa-docker me-1 text-info"></i>
+                  <strong>版本:</strong> {{ host.docker_info.version }}
+                </div>
+                <div v-if="host.docker_info.containers !== undefined" class="small text-muted">
+                  <i class="fas fa-box me-1"></i>容器: {{ host.docker_info.containers }}
+                </div>
+              </div>
+              
+              <div class="small text-muted border-top pt-2">
+                <div class="mb-1">
+                  <i class="fas fa-clock me-1"></i>连接: {{ formatTime(host.connected_at) }}
+                </div>
+                <div>
+                  <i class="fas fa-heartbeat me-1"></i>心跳: {{ formatTime(host.last_heartbeat) }}
+                </div>
+              </div>
+            </div>
+            <div class="card-footer bg-white">
+              <div class="d-grid gap-2 d-md-flex">
+                <button 
+                  class="btn btn-success btn-sm flex-fill" 
+                  @click="approvePendingHost(host)"
+                  title="批准加入"
+                >
+                  <i class="fas fa-check me-1"></i>批准加入
+                </button>
+                <button 
+                  class="btn btn-danger btn-sm" 
+                  @click="rejectPendingHost(host)"
+                  title="拒绝"
+                >
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 添加/编辑主机模态框 -->
-    <div v-if="showAddModal || showEditModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-lg">
+    <div v-if="showAddModal || showEditModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="closeModal">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-network-wired me-2"></i> {{ editingHost ? '编辑Agent主机' : '新建Agent主机' }}
+              <i class="fas fa-network-wired me-2"></i> {{ editingHost ? '编辑主机' : (hostForm.host_type === 'agent' ? '新建Agent主机' : '新建Portainer主机') }}
             </h5>
             <button type="button" class="btn-close" @click="closeModal"></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <form @submit.prevent="saveHost" novalidate>
-              <div class="mb-3">
+              <div class="mb-3" v-if="!editingHost">
                 <label class="form-label">
                   主机类型 <span class="text-danger">*</span>
                 </label>
-                <div class="btn-group w-100" role="group">
-                  <input type="radio" class="btn-check" id="host-type-agent" v-model="hostForm.host_type" value="agent" :disabled="!!editingHost">
-                  <label class="btn btn-outline-primary" for="host-type-agent">
-                    <i class="fas fa-network-wired me-1"></i> Agent
-                  </label>
-                  
-                  <input type="radio" class="btn-check" id="host-type-portainer" v-model="hostForm.host_type" value="portainer" :disabled="!!editingHost">
-                  <label class="btn btn-outline-primary" for="host-type-portainer">
-                    <i class="fab fa-docker me-1"></i> Portainer
-                  </label>
+                <div class="alert alert-info py-2 mb-0">
+                  <i :class="hostForm.host_type === 'agent' ? 'fas fa-network-wired' : 'fab fa-docker'"></i>
+                  <strong class="ms-2">{{ hostForm.host_type === 'agent' ? 'Agent主机' : 'Portainer主机' }}</strong>
+                </div>
+              </div>
+              <div class="mb-3" v-else>
+                <label class="form-label">主机类型</label>
+                <div class="form-control-plaintext">
+                  <span class="badge" :class="hostForm.host_type === 'portainer' ? 'bg-primary' : 'bg-secondary'">
+                    <i :class="hostForm.host_type === 'agent' ? 'fas fa-network-wired' : 'fab fa-docker'"></i>
+                    {{ hostForm.host_type === 'portainer' ? 'Portainer' : 'Agent' }}
+                  </span>
                 </div>
               </div>
               <div class="mb-3">
@@ -314,8 +602,8 @@
     </div>
 
     <!-- 主机详情模态框 -->
-    <div v-if="showDetailModal && selectedHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-lg">
+    <div v-if="showDetailModal && selectedHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showDetailModal = false">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title mb-0">
@@ -323,7 +611,7 @@
             </h5>
             <button type="button" class="btn-close" @click="showDetailModal = false"></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div class="row">
               <div class="col-md-6">
                 <h6 class="border-bottom pb-2">基本信息</h6>
@@ -466,43 +754,55 @@
     </div>
 
     <!-- 部署命令模态框 -->
-    <div v-if="showDeployModal && selectedHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-xl">
+    <div v-if="showDeployModal && selectedHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showDeployModal = false">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-code me-2"></i> 部署命令 - {{ selectedHost.name }}
+              <i class="fas fa-code me-2"></i> {{ selectedHost.name }}
             </h5>
             <button type="button" class="btn-close" @click="showDeployModal = false"></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
             <div class="mb-3">
-              <label class="form-label">部署方式</label>
               <div class="btn-group w-100" role="group">
                 <input 
                   type="radio" 
                   class="btn-check" 
                   name="deployType" 
-                  id="deployRun"
-                  value="run"
+                  id="deployCompose"
+                  value="compose"
                   v-model="deployType"
                   @change="loadDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="deployRun">
-                  <i class="fas fa-play me-1"></i> Docker Run
+                <label class="btn btn-outline-primary" for="deployCompose">
+                  <i class="fab fa-docker me-1"></i> docker-compose
                 </label>
                 
                 <input 
                   type="radio" 
                   class="btn-check" 
                   name="deployType" 
-                  id="deployStack"
-                  value="stack"
+                  id="deploySingle"
+                  value="single"
                   v-model="deployType"
                   @change="loadDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="deployStack">
-                  <i class="fas fa-layer-group me-1"></i> Docker Stack
+                <label class="btn btn-outline-primary" for="deploySingle">
+                  <i class="fas fa-server me-1"></i> 单机
+                </label>
+                
+                <input 
+                  type="radio" 
+                  class="btn-check" 
+                  name="deployType" 
+                  id="deploySwarm"
+                  value="swarm"
+                  v-model="deployType"
+                  @change="loadDeployCommand"
+                />
+                <label class="btn btn-outline-primary" for="deploySwarm">
+                  <i class="fas fa-layer-group me-1"></i> Swarm
                 </label>
               </div>
             </div>
@@ -518,21 +818,16 @@
             </div>
             <div v-if="deployCommand" class="mb-3">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <label class="form-label mb-0">部署命令</label>
+                <label class="form-label mb-0">
+                  <span v-if="deployType === 'single'">Docker Run 命令</span>
+                  <span v-else-if="deployType === 'compose'">Docker Compose 命令</span>
+                  <span v-else-if="deployType === 'swarm'">Docker Stack 部署命令</span>
+                </label>
                 <button class="btn btn-sm btn-outline-primary" @click="copyDeployCommand">
-                  <i class="fas fa-copy me-1"></i> 复制命令
+                  <i class="fas fa-copy me-1"></i> 复制
                 </button>
               </div>
               <pre class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ deployCommand }}</code></pre>
-            </div>
-            <div v-if="deployComposeContent && deployType === 'stack'" class="mb-3">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <label class="form-label mb-0">docker-compose.yml 内容</label>
-                <button class="btn btn-sm btn-outline-primary" @click="copyComposeContent">
-                  <i class="fas fa-copy me-1"></i> 复制内容
-                </button>
-              </div>
-              <pre class="bg-dark text-light p-3 rounded" style="max-height: 300px; overflow-y: auto;"><code>{{ deployComposeContent }}</code></pre>
             </div>
             <div v-if="loadingDeployCommand" class="text-center py-3">
               <div class="spinner-border spinner-border-sm me-2"></div>
@@ -541,6 +836,211 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary btn-sm" @click="showDeployModal = false">
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 生成密钥模态框 -->
+    <div v-if="showAddSecretModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showAddSecretModal = false">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title mb-0">
+              <i class="fas fa-key me-2"></i> 生成新密钥
+            </h5>
+            <button type="button" class="btn-close" @click="showAddSecretModal = false"></button>
+          </div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="mb-3">
+              <label class="form-label">密钥名称（可选）</label>
+              <input 
+                type="text" 
+                class="form-control form-control-sm" 
+                v-model="secretForm.name"
+                placeholder="例如：生产环境密钥"
+              />
+            </div>
+            <div class="alert alert-info py-2 mb-0">
+              <i class="fas fa-info-circle me-2"></i>
+              密钥用于Agent连接认证，生成后请妥善保管。
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="showAddSecretModal = false">
+              取消
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-primary btn-sm" 
+              @click="createSecret"
+              :disabled="creatingSecret"
+            >
+              <span v-if="creatingSecret" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="fas fa-key me-1"></i>
+              {{ creatingSecret ? '生成中...' : '生成密钥' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批准待加入主机模态框 -->
+    <div v-if="showApproveModal && selectedPendingHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showApproveModal = false">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title mb-0">
+              <i class="fas fa-check-circle me-2"></i> 批准待加入主机
+            </h5>
+            <button type="button" class="btn-close" @click="showApproveModal = false"></button>
+          </div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="mb-3">
+              <label class="form-label">
+                主机名称 <span class="text-danger">*</span>
+              </label>
+              <input 
+                type="text" 
+                class="form-control form-control-sm" 
+                v-model="approveForm.name"
+                placeholder="例如：生产服务器-Agent"
+                required
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">描述（可选）</label>
+              <input 
+                type="text" 
+                class="form-control form-control-sm" 
+                v-model="approveForm.description"
+                placeholder="请输入主机描述信息..."
+              />
+            </div>
+            <div class="alert alert-info py-2 mb-0">
+              <i class="fas fa-info-circle me-2"></i>
+              唯一标识: <code>{{ selectedPendingHost.agent_token }}</code>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="showApproveModal = false">
+              取消
+            </button>
+            <button 
+              type="button" 
+              class="btn btn-success btn-sm" 
+              @click="confirmApprovePendingHost"
+              :disabled="approving"
+            >
+              <span v-if="approving" class="spinner-border spinner-border-sm me-1"></span>
+              <i v-else class="fas fa-check me-1"></i>
+              {{ approving ? '批准中...' : '批准加入' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 密钥部署命令模态框 -->
+    <div v-if="showSecretDeployModal && selectedSecret" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showSecretDeployModal = false">
+      <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title mb-0">
+              <i class="fas fa-code me-2"></i> {{ selectedSecret.name || '未命名密钥' }}
+            </h5>
+            <button type="button" class="btn-close" @click="showSecretDeployModal = false"></button>
+          </div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="alert alert-info py-2 mb-3">
+              <i class="fas fa-info-circle me-2"></i>
+              <strong>使用密钥部署Agent：</strong>部署后Agent会自动生成唯一标识并加入待加入列表，您可以在"待加入主机"标签页中批准加入。
+            </div>
+            <div class="mb-3">
+              <div class="btn-group w-100" role="group">
+                <input 
+                  type="radio" 
+                  class="btn-check" 
+                  name="secretDeployType" 
+                  id="secretDeployCompose"
+                  value="compose"
+                  v-model="secretDeployType"
+                  @change="loadSecretDeployCommand"
+                />
+                <label class="btn btn-outline-primary" for="secretDeployCompose">
+                  <i class="fab fa-docker me-1"></i> docker-compose
+                </label>
+                
+                <input 
+                  type="radio" 
+                  class="btn-check" 
+                  name="secretDeployType" 
+                  id="secretDeploySingle"
+                  value="single"
+                  v-model="secretDeployType"
+                  @change="loadSecretDeployCommand"
+                />
+                <label class="btn btn-outline-primary" for="secretDeploySingle">
+                  <i class="fas fa-server me-1"></i> 单机
+                </label>
+                
+                <input 
+                  type="radio" 
+                  class="btn-check" 
+                  name="secretDeployType" 
+                  id="secretDeploySwarm"
+                  value="swarm"
+                  v-model="secretDeployType"
+                  @change="loadSecretDeployCommand"
+                />
+                <label class="btn btn-outline-primary" for="secretDeploySwarm">
+                  <i class="fas fa-layer-group me-1"></i> Swarm
+                </label>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Agent镜像</label>
+              <input 
+                type="text" 
+                class="form-control form-control-sm" 
+                v-model="agentImage"
+                @change="loadSecretDeployCommand"
+                placeholder="registry.cn-shanghai.aliyuncs.com/51jbm/app2docker-agent:latest"
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">服务器地址（可选，留空自动检测）</label>
+              <input 
+                type="text" 
+                class="form-control form-control-sm" 
+                v-model="serverUrl"
+                @change="loadSecretDeployCommand"
+                placeholder="ws://192.168.1.100:8000"
+              />
+              <small class="text-muted">WebSocket地址，格式：ws://IP:端口 或 wss://域名:端口</small>
+            </div>
+            <div v-if="secretDeployCommand" class="mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label mb-0">
+                  <span v-if="secretDeployType === 'single'">Docker Run 命令</span>
+                  <span v-else-if="secretDeployType === 'compose'">Docker Compose 命令</span>
+                  <span v-else-if="secretDeployType === 'swarm'">Docker Stack 部署命令</span>
+                </label>
+                <button class="btn btn-sm btn-outline-primary" @click="copySecretDeployCommand">
+                  <i class="fas fa-copy me-1"></i> 复制
+                </button>
+              </div>
+              <pre class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ secretDeployCommand }}</code></pre>
+            </div>
+            <div v-if="loadingSecretDeployCommand" class="text-center py-3">
+              <div class="spinner-border spinner-border-sm me-2"></div>
+              加载中...
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" @click="showSecretDeployModal = false">
               关闭
             </button>
           </div>
@@ -563,6 +1063,7 @@ export default {
   },
   data() {
     return {
+      activeTab: 'hosts', // 当前标签页: hosts, secrets, pending
       hosts: [],
       loading: false,
       showAddModal: false,
@@ -572,7 +1073,7 @@ export default {
       editingHost: null,
       selectedHost: null,
       saving: false,
-      deployType: 'run',
+      deployType: 'compose',
       agentImage: 'registry.cn-shanghai.aliyuncs.com/51jbm/app2docker-agent:latest',
       deployCommand: null,
       deployComposeContent: null,
@@ -589,7 +1090,32 @@ export default {
       loadingEndpoints: false,
       availableEndpoints: [],
       wsConnections: {}, // WebSocket连接管理
-      refreshInterval: null // 定期刷新定时器
+      refreshInterval: null, // 定期刷新定时器
+      // 密钥管理
+      secrets: [],
+      loadingSecrets: false,
+      showAddSecretModal: false,
+      creatingSecret: false,
+      secretForm: {
+        name: ''
+      },
+      // 待加入主机
+      pendingHosts: [],
+      loadingPendingHosts: false,
+      showApproveModal: false,
+      selectedPendingHost: null,
+      approving: false,
+      approveForm: {
+        name: '',
+        description: ''
+      },
+      // 密钥部署命令
+      showSecretDeployModal: false,
+      selectedSecret: null,
+      secretDeployType: 'compose',
+      secretDeployCommand: null,
+      secretDeployComposeContent: null,
+      loadingSecretDeployCommand: false
     }
   },
   computed: {
@@ -599,15 +1125,23 @@ export default {
     filteredHosts() {
       if (!this.shouldShow) return []
       return this.hosts
+    },
+    pendingHostsCount() {
+      return this.pendingHosts.length
     }
   },
   mounted() {
     this.loadHosts()
+    this.loadSecrets()
+    this.loadPendingHosts()
     // 启动WebSocket连接以实时更新状态
     this.initWebSocketConnections()
     // 定期刷新主机列表（每30秒）
     this.refreshInterval = setInterval(() => {
       this.loadHosts()
+      if (this.activeTab === 'pending') {
+        this.loadPendingHosts()
+      }
     }, 30000)
   },
   beforeUnmount() {
@@ -858,16 +1392,54 @@ export default {
       this.deployComposeContent = null
       
       try {
+        // 映射前端类型到后端类型
+        let backendType = 'run'
+        if (this.deployType === 'compose' || this.deployType === 'swarm') {
+          backendType = 'stack'
+        } else if (this.deployType === 'single') {
+          backendType = 'run'
+        }
+        
         const res = await axios.get(`/api/agent-hosts/${this.selectedHost.host_id}/deploy-command`, {
           params: {
-            type: this.deployType,
+            type: backendType,
             agent_image: this.agentImage
           }
         })
         
-        this.deployCommand = res.data.command
-        if (res.data.compose_content) {
-          this.deployComposeContent = res.data.compose_content
+        // 根据部署类型生成主要命令
+        if (this.deployType === 'compose') {
+          // Compose模式：生成 docker-compose up -d 命令
+          if (res.data.compose_content) {
+            this.deployCommand = `# 1. 创建docker-compose.yml文件
+cat > docker-compose.yml << 'EOF'
+${res.data.compose_content}
+EOF
+
+# 2. 启动服务
+docker-compose up -d`
+          } else {
+            this.deployCommand = res.data.command
+          }
+          this.deployComposeContent = null
+        } else if (this.deployType === 'swarm') {
+          // Swarm模式：只显示stack deploy命令
+          if (res.data.compose_content) {
+            this.deployCommand = `# 1. 创建docker-compose.yml文件
+cat > docker-compose.yml << 'EOF'
+${res.data.compose_content}
+EOF
+
+# 2. 全局部署stack
+docker stack deploy -c docker-compose.yml app2docker-agent`
+          } else {
+            this.deployCommand = res.data.command
+          }
+          this.deployComposeContent = null
+        } else {
+          // 单机模式：只显示run命令
+          this.deployCommand = res.data.command
+          this.deployComposeContent = null
         }
       } catch (error) {
         console.error('加载部署命令失败:', error)
@@ -931,6 +1503,289 @@ export default {
       if (!timeStr) return '-'
       const date = new Date(timeStr)
       return date.toLocaleString('zh-CN')
+    },
+    // 密钥管理方法
+    async loadSecrets() {
+      this.loadingSecrets = true
+      try {
+        const res = await axios.get('/api/agent-secrets')
+        if (res.data.secrets) {
+          this.secrets = res.data.secrets || []
+        }
+      } catch (error) {
+        console.error('加载密钥列表失败:', error)
+        alert('加载密钥列表失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.loadingSecrets = false
+      }
+    },
+    async createSecret() {
+      if (!this.secretForm.name) {
+        if (!confirm('未填写密钥名称，是否继续生成？')) {
+          return
+        }
+      }
+
+      this.creatingSecret = true
+      try {
+        const res = await axios.post('/api/agent-secrets', {
+          name: this.secretForm.name || ''
+        })
+        if (res.data.success) {
+          alert('密钥生成成功！\n密钥值: ' + res.data.secret.secret_key + '\n\n请妥善保管，此密钥将不再显示。')
+          this.showAddSecretModal = false
+          this.secretForm.name = ''
+          this.loadSecrets()
+        }
+      } catch (error) {
+        console.error('生成密钥失败:', error)
+        alert('生成密钥失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.creatingSecret = false
+      }
+    },
+    async enableSecret(secret) {
+      try {
+        const res = await axios.put(`/api/agent-secrets/${secret.secret_id}/enable`)
+        if (res.data.success) {
+          alert('密钥已启用')
+          this.loadSecrets()
+        }
+      } catch (error) {
+        console.error('启用密钥失败:', error)
+        alert('启用密钥失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    async disableSecret(secret) {
+      if (!confirm(`确定要禁用密钥 "${secret.name || secret.secret_key}" 吗？`)) {
+        return
+      }
+      try {
+        const res = await axios.put(`/api/agent-secrets/${secret.secret_id}/disable`)
+        if (res.data.success) {
+          alert('密钥已禁用')
+          this.loadSecrets()
+        }
+      } catch (error) {
+        console.error('禁用密钥失败:', error)
+        alert('禁用密钥失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    async deleteSecret(secret) {
+      if (!confirm(`确定要删除密钥 "${secret.name || secret.secret_key}" 吗？\n此操作不可恢复！`)) {
+        return
+      }
+      try {
+        const res = await axios.delete(`/api/agent-secrets/${secret.secret_id}`)
+        if (res.data.success) {
+          alert('密钥已删除')
+          this.loadSecrets()
+        }
+      } catch (error) {
+        console.error('删除密钥失败:', error)
+        alert('删除密钥失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    // 待加入主机方法
+    async loadPendingHosts() {
+      this.loadingPendingHosts = true
+      try {
+        const res = await axios.get('/api/agent-hosts/pending')
+        if (res.data.hosts) {
+          this.pendingHosts = res.data.hosts || []
+        }
+      } catch (error) {
+        console.error('加载待加入主机列表失败:', error)
+        alert('加载待加入主机列表失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.loadingPendingHosts = false
+      }
+    },
+    approvePendingHost(host) {
+      this.selectedPendingHost = host
+      this.approveForm.name = ''
+      this.approveForm.description = ''
+      this.showApproveModal = true
+    },
+    async confirmApprovePendingHost() {
+      if (!this.approveForm.name) {
+        alert('请填写主机名称')
+        return
+      }
+
+      this.approving = true
+      try {
+        const res = await axios.post(`/api/agent-hosts/pending/${this.selectedPendingHost.agent_token}/approve`, {
+          name: this.approveForm.name,
+          description: this.approveForm.description || ''
+        })
+        if (res.data.success) {
+          alert('主机已批准加入系统')
+          this.showApproveModal = false
+          this.selectedPendingHost = null
+          this.loadPendingHosts()
+          this.loadHosts()
+        }
+      } catch (error) {
+        console.error('批准待加入主机失败:', error)
+        alert('批准待加入主机失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.approving = false
+      }
+    },
+    async rejectPendingHost(host) {
+      if (!confirm(`确定要拒绝待加入主机吗？\n唯一标识: ${host.agent_token}`)) {
+        return
+      }
+      try {
+        const res = await axios.delete(`/api/agent-hosts/pending/${host.agent_token}`)
+        if (res.data.success) {
+          alert('待加入主机已拒绝')
+          this.loadPendingHosts()
+        }
+      } catch (error) {
+        console.error('拒绝待加入主机失败:', error)
+        alert('拒绝待加入主机失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+    // 密钥部署命令方法
+    showSecretDeployCommand(secret) {
+      this.selectedSecret = secret
+      this.secretDeployType = 'compose'
+      this.serverUrl = ''
+      this.showSecretDeployModal = true
+      this.loadSecretDeployCommand()
+    },
+    async loadSecretDeployCommand() {
+      if (!this.selectedSecret) return
+      
+      this.loadingSecretDeployCommand = true
+      this.secretDeployCommand = null
+      this.secretDeployComposeContent = null
+      
+      try {
+        // 获取服务器URL
+        let serverUrl = this.serverUrl
+        if (!serverUrl) {
+          // 从当前页面URL获取
+          const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+          const host = window.location.hostname
+          const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+          // 如果端口是80或443，不显示端口
+          if (port === '80' || port === '443') {
+            serverUrl = `${protocol}://${host}`
+          } else {
+            serverUrl = `${protocol}://${host}:${port}`
+          }
+        }
+
+        const secretKey = this.selectedSecret.secret_key
+        
+        // 根据类型生成不同的命令
+        if (this.secretDeployType === 'single') {
+          // 单机模式：docker run
+          this.secretDeployCommand = `docker run -d \\
+  --name app2docker-agent \\
+  --restart=always \\
+  -e AGENT_SECRET_KEY=${secretKey} \\
+  -e SERVER_URL=${serverUrl} \\
+  -v /var/run/docker.sock:/var/run/docker.sock \\
+  -v /proc:/host/proc:ro \\
+  -v /sys:/host/sys:ro \\
+  ${this.agentImage}`
+          this.secretDeployComposeContent = null
+        } else if (this.secretDeployType === 'compose') {
+          // docker-compose模式：生成 docker-compose up -d 命令
+          const composeContent = `version: '3.8'
+
+services:
+  agent:
+    image: ${this.agentImage}
+    container_name: app2docker-agent
+    restart: always
+    environment:
+      - AGENT_SECRET_KEY=${secretKey}
+      - SERVER_URL=${serverUrl}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge`
+
+          this.secretDeployCommand = `# 1. 创建docker-compose.yml文件
+cat > docker-compose.yml << 'EOF'
+${composeContent}
+EOF
+
+# 2. 启动服务
+docker-compose up -d`
+          this.secretDeployComposeContent = null
+        } else if (this.secretDeployType === 'swarm') {
+          // Swarm模式：只显示docker stack deploy命令
+          const composeContent = `version: '3.8'
+
+services:
+  agent:
+    image: ${this.agentImage}
+    deploy:
+      mode: global
+      restart_policy:
+        condition: any
+    environment:
+      - AGENT_SECRET_KEY=${secretKey}
+      - SERVER_URL=${serverUrl}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: overlay`
+
+          this.secretDeployCommand = `# 1. 创建docker-compose.yml文件
+cat > docker-compose.yml << 'EOF'
+${composeContent}
+EOF
+
+# 2. 全局部署stack
+docker stack deploy -c docker-compose.yml app2docker-agent`
+          this.secretDeployComposeContent = null
+        }
+      } catch (error) {
+        console.error('生成部署命令失败:', error)
+        alert('生成部署命令失败: ' + (error.response?.data?.detail || error.message))
+      } finally {
+        this.loadingSecretDeployCommand = false
+      }
+    },
+    copySecretDeployCommand() {
+      if (this.secretDeployCommand) {
+        this.copyToClipboard(this.secretDeployCommand)
+        alert('部署命令已复制到剪贴板')
+      }
+    },
+    copySecretComposeContent() {
+      if (this.secretDeployComposeContent) {
+        this.copyToClipboard(this.secretDeployComposeContent)
+        alert('docker-compose.yml 内容已复制到剪贴板')
+      }
+    }
+  },
+  watch: {
+    activeTab(newTab) {
+      if (newTab === 'pending') {
+        this.loadPendingHosts()
+      } else if (newTab === 'secrets') {
+        this.loadSecrets()
+      }
     }
   }
 }
@@ -941,6 +1796,32 @@ export default {
   padding: 0;
 }
 
+/* 标签页样式优化 */
+.nav-tabs-custom {
+  border-bottom: none;
+}
+
+.nav-tabs-custom .nav-link {
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #6c757d;
+  padding: 0.5rem 1rem;
+  transition: all 0.2s;
+}
+
+.nav-tabs-custom .nav-link:hover {
+  border-bottom-color: #dee2e6;
+  color: #495057;
+}
+
+.nav-tabs-custom .nav-link.active {
+  border-bottom-color: #0d6efd;
+  color: #0d6efd;
+  font-weight: 500;
+  background-color: transparent;
+}
+
+/* 卡片样式 */
 .card {
   transition: transform 0.2s, box-shadow 0.2s;
   border: 1px solid #dee2e6;
@@ -965,35 +1846,98 @@ export default {
   padding: 1rem;
 }
 
-.modal.show {
-  display: block;
+/* 表格样式优化 */
+.table-sm th,
+.table-sm td {
+  padding: 0.5rem;
+  vertical-align: middle;
 }
 
-.progress {
-  min-width: 100px;
+.table thead th {
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
+/* 代码样式 */
 code {
   font-family: 'Courier New', Courier, monospace;
-  font-size: 0.9em;
+  font-size: 0.85em;
+  background-color: #f8f9fa;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  word-break: break-all;
 }
 
 pre code {
   font-size: 0.85em;
   white-space: pre-wrap;
   word-wrap: break-word;
+  background-color: transparent;
+  padding: 0;
 }
 
+/* 模态框 */
+.modal.show {
+  display: block;
+}
+
+.modal-dialog-scrollable .modal-body {
+  overflow-y: auto;
+}
+
+.modal.show .modal-dialog {
+  margin: 1.75rem auto;
+  max-height: calc(100vh - 3.5rem);
+}
+
+.modal.show .modal-content {
+  max-height: calc(100vh - 3.5rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal.show .modal-body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+/* 进度条 */
+.progress {
+  min-width: 100px;
+}
+
+/* 按钮组 */
 .btn-group .btn-check:checked + .btn {
   background-color: #0d6efd;
   border-color: #0d6efd;
   color: white;
 }
 
+/* 响应式 */
 @media (max-width: 768px) {
   .modal-dialog {
     margin: 0.5rem;
   }
+  
+  .nav-tabs-custom .nav-link {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+  }
+  
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+}
+
+/* 待加入主机卡片特殊样式 */
+.card.border-warning {
+  border-width: 2px;
+}
+
+.card.border-warning .card-header {
+  border-bottom: 2px solid #ffc107;
 }
 </style>
 

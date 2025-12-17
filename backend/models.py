@@ -301,7 +301,10 @@ class AgentHost(Base):
     )  # agent, portainer（Portainer 和 Portainer Agent 统一为 portainer）
     token = Column(
         String(64), unique=True, nullable=True
-    )  # 用于WebSocket连接认证（Agent模式）
+    )  # 用于WebSocket连接认证（Agent模式，存储Agent的唯一标识）
+    agent_unique_id = Column(
+        String(128), nullable=True
+    )  # Agent唯一标识（基于Docker socket生成，重启后不变）
     # Portainer 相关字段（Portainer 和 Portainer Agent 都通过 Portainer API 控制）
     portainer_url = Column(String(512))  # Portainer API URL
     portainer_api_key = Column(Text)  # Portainer API Key（加密存储）
@@ -319,9 +322,28 @@ class AgentHost(Base):
 
     __table_args__ = (
         Index("idx_agent_host_token", "token"),
+        Index("idx_agent_host_unique_id", "agent_unique_id"),
         Index("idx_agent_host_status", "status"),
         Index("idx_agent_host_name", "name"),
         Index("idx_agent_host_type", "host_type"),
+    )
+
+
+class AgentSecret(Base):
+    """Agent密钥表"""
+
+    __tablename__ = "agent_secrets"
+
+    secret_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    secret_key = Column(String(64), unique=True, nullable=False)  # 密钥值
+    name = Column(String(255))  # 密钥名称/描述
+    enabled = Column(Boolean, default=True)  # 是否启用
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_agent_secret_key", "secret_key"),
+        Index("idx_agent_secret_enabled", "enabled"),
     )
 
 

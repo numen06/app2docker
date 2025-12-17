@@ -99,72 +99,72 @@
           <!-- Tab 导航 -->
           <div class="card-header bg-white py-0 border-top-0">
             <ul class="nav nav-tabs border-0">
-              <li v-if="hasPermissionSync('menu.dashboard')" class="nav-item">
+              <li v-if="hasPermission('menu.dashboard')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'dashboard' }" @click="activeTab = 'dashboard'">
                   <i class="fas fa-chart-line"></i> 仪表盘
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.build')" class="nav-item">
+              <li v-if="hasPermission('menu.build')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'step-build' }" @click="activeTab = 'step-build'">
                   <i class="fas fa-list-ol"></i> 镜像构建
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.export')" class="nav-item">
+              <li v-if="hasPermission('menu.export')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'export' }" @click="activeTab = 'export'">
                   <i class="fas fa-file-export"></i> 导出镜像
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.tasks')" class="nav-item">
+              <li v-if="hasPermission('menu.tasks')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'tasks' }" @click="activeTab = 'tasks'">
                   <i class="fas fa-list-check"></i> 任务管理
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.pipeline')" class="nav-item">
+              <li v-if="hasPermission('menu.pipeline')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'pipeline' }" @click="activeTab = 'pipeline'">
                   <i class="fas fa-project-diagram"></i> 流水线
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.datasource')" class="nav-item">
+              <li v-if="hasPermission('menu.datasource')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'datasource' }" @click="activeTab = 'datasource'">
                   <i class="fas fa-database"></i> 数据源
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.registry')" class="nav-item">
+              <li v-if="hasPermission('menu.registry')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'registry' }" @click="activeTab = 'registry'">
                   <i class="fas fa-box"></i> 镜像仓库
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.template')" class="nav-item">
+              <li v-if="hasPermission('menu.template')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'template' }" @click="activeTab = 'template'">
                   <i class="fas fa-layer-group"></i> 模板管理
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.resource-package')" class="nav-item">
+              <li v-if="hasPermission('menu.resource-package')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'resource-package' }" @click="activeTab = 'resource-package'">
                   <i class="fas fa-archive"></i> 资源包
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.host')" class="nav-item">
+              <li v-if="hasPermission('menu.host')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'host' }" @click="activeTab = 'host'">
                   <i class="fas fa-server"></i> 主机管理
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.docker')" class="nav-item">
+              <li v-if="hasPermission('menu.docker')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'docker' }" @click="activeTab = 'docker'">
                   <i class="fas fa-server"></i> Docker 管理
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.deploy')" class="nav-item">
+              <li v-if="hasPermission('menu.deploy')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'deploy' }" @click="activeTab = 'deploy'">
                   <i class="fas fa-rocket"></i> 部署管理
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.users')" class="nav-item">
+              <li v-if="hasPermission('menu.users')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
                   <i class="fas fa-users"></i> 用户管理
                 </button>
               </li>
-              <li v-if="hasPermissionSync('menu.users')" class="nav-item">
+              <li v-if="hasPermission('menu.users')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'roles' }" @click="activeTab = 'roles'">
                   <i class="fas fa-user-shield"></i> 角色管理
                 </button>
@@ -174,21 +174,21 @@
 
           <!-- 标签页内容 -->
           <div class="card-body p-3">
-            <DashboardPanel v-if="activeTab === 'dashboard' && hasPermissionSync('menu.dashboard')" @navigate="handleNavigate" />
-            <StepBuildPanel v-if="activeTab === 'step-build' && hasPermissionSync('menu.build')" />
-            <ExportPanel v-if="activeTab === 'export' && hasPermissionSync('menu.export')" />
-            <TemplatePanel v-if="activeTab === 'template' && hasPermissionSync('menu.template')" />
+            <DashboardPanel v-if="activeTab === 'dashboard' && hasPermission('menu.dashboard')" @navigate="handleNavigate" />
+            <StepBuildPanel v-if="activeTab === 'step-build' && hasPermission('menu.build')" />
+            <ExportPanel v-if="activeTab === 'export' && hasPermission('menu.export')" />
+            <TemplatePanel v-if="activeTab === 'template' && hasPermission('menu.template')" />
             <OperationLogs v-if="activeTab === 'logs'" />
-            <DockerManager v-if="activeTab === 'docker' && hasPermissionSync('menu.docker')" />
-            <PipelinePanel v-if="activeTab === 'pipeline' && hasPermissionSync('menu.pipeline')" />
-            <DataSourcePanel v-if="activeTab === 'datasource' && hasPermissionSync('menu.datasource')" />
-            <RegistryPanel v-if="activeTab === 'registry' && hasPermissionSync('menu.registry')" />
-            <TaskManager v-if="activeTab === 'tasks' && hasPermissionSync('menu.tasks')" />
-            <ResourcePackagePanel v-if="activeTab === 'resource-package' && hasPermissionSync('menu.resource-package')" />
-            <UnifiedHostManager v-if="activeTab === 'host' && hasPermissionSync('menu.host')" />
-            <DeployTaskManager v-if="activeTab === 'deploy' && hasPermissionSync('menu.deploy')" />
-            <UserManagement v-if="activeTab === 'users'" />
-            <RoleManagement v-if="activeTab === 'roles'" />
+            <DockerManager v-if="activeTab === 'docker' && hasPermission('menu.docker')" />
+            <PipelinePanel v-if="activeTab === 'pipeline' && hasPermission('menu.pipeline')" />
+            <DataSourcePanel v-if="activeTab === 'datasource' && hasPermission('menu.datasource')" />
+            <RegistryPanel v-if="activeTab === 'registry' && hasPermission('menu.registry')" />
+            <TaskManager v-if="activeTab === 'tasks' && hasPermission('menu.tasks')" />
+            <ResourcePackagePanel v-if="activeTab === 'resource-package' && hasPermission('menu.resource-package')" />
+            <UnifiedHostManager v-if="activeTab === 'host' && hasPermission('menu.host')" />
+            <DeployTaskManager v-if="activeTab === 'deploy' && hasPermission('menu.deploy')" />
+            <UserManagement v-if="activeTab === 'users' && hasPermission('menu.users')" />
+            <RoleManagement v-if="activeTab === 'roles' && hasPermission('menu.users')" />
             <BuildConfigEditor 
               v-if="activeTab === 'build-config-editor'" 
               :initial-config="buildConfigToEdit"
@@ -245,7 +245,17 @@ const runningTasksCount = ref(0)
 const runningTasksList = ref([])
 const showRunningTasksPopup = ref(false)
 const buildConfigToEdit = ref({})
+const permissionsLoaded = ref(false)
 let runningTasksTimer = null
+
+// 权限检查函数（响应式）
+function hasPermission(permissionCode) {
+  if (!permissionsLoaded.value) {
+    // 权限未加载时，默认返回true（向后兼容，显示所有菜单）
+    return true
+  }
+  return hasPermissionSync(permissionCode)
+}
 
 function handleNavigate(tab, params) {
   activeTab.value = tab
@@ -339,8 +349,11 @@ async function handleLoginSuccess(data) {
   // 获取用户权限
   try {
     await getUserPermissions()
+    permissionsLoaded.value = true
   } catch (error) {
     console.error('获取用户权限失败:', error)
+    // 即使失败也标记为已加载，使用默认权限（显示所有菜单）
+    permissionsLoaded.value = true
   }
   
   // 登录后启动运行任务数量定时刷新
@@ -406,8 +419,11 @@ onMounted(async () => {
     // 获取用户权限
     try {
       await getUserPermissions()
+      permissionsLoaded.value = true
     } catch (error) {
       console.error('获取用户权限失败:', error)
+      // 即使失败也标记为已加载，使用默认权限（显示所有菜单）
+      permissionsLoaded.value = true
     }
     
     // 启动运行任务数量定时刷新

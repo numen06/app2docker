@@ -7,12 +7,15 @@ import os
 import uuid
 import hashlib
 import threading
+import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from backend.database import get_db_session, init_db
 from backend.models import AgentHost
 from backend.config import load_config
 from backend.portainer_client import PortainerClient
+
+logger = logging.getLogger(__name__)
 
 # 确保数据库已初始化
 try:
@@ -55,6 +58,7 @@ class AgentHostManager:
             "name": host.name,
             "host_type": host.host_type or "agent",
             "token": host.token,
+            "agent_unique_id": host.agent_unique_id,
             "portainer_url": host.portainer_url,
             "portainer_endpoint_id": host.portainer_endpoint_id,
             "status": host.status,
@@ -156,6 +160,19 @@ class AgentHostManager:
         db = get_db_session()
         try:
             host = db.query(AgentHost).filter(AgentHost.token == token).first()
+            return self._to_dict(host) if host else None
+        finally:
+            db.close()
+
+    def get_agent_host_by_unique_id(self, unique_id: str) -> Optional[Dict]:
+        """根据唯一标识查找主机"""
+        db = get_db_session()
+        try:
+            host = (
+                db.query(AgentHost)
+                .filter(AgentHost.agent_unique_id == unique_id)
+                .first()
+            )
             return self._to_dict(host) if host else None
         finally:
             db.close()
@@ -649,3 +666,97 @@ docker stack deploy -c docker-compose.yml app2docker-agent
                     logger.warning(f"检查 Portainer 主机 {host.name} 状态失败: {e}")
         finally:
             db.close()
+
+    def approve_pending_host(
+        self, agent_token: str, name: str, description: str = ""
+    ) -> Dict:
+        """
+        批准待加入主机，正式加入系统
+
+        Args:
+            agent_token: Agent唯一标识
+            name: 主机名称
+            description: 主机描述
+
+        Returns:
+            创建的主机信息字典，包含websocket信息用于后续处理
+
+        Raises:
+            ValueError: 如果待加入主机不存在或名称已存在
+        """
+        from backend.pending_host_manager import pending_host_manager
+
+        with self._lock:
+            # 获取待加入主机信息
+            pending_host = pending_host_manager.get_pending_host(agent_token)
+            if not pending_host:
+                raise ValueError(
+                    f"待加入主机不存在: agent_token={agent_token[:16] if agent_token else 'None'}..."
+                )
+
+            # 获取WebSocket连接（但不在这里处理，返回给调用者）
+            websocket = pending_host_manager.get_pending_connection(agent_token)
+            if not websocket:
+                raise ValueError(
+                    f"待加入主机的WebSocket连接不存在: agent_token={agent_token[:16] if agent_token else 'None'}..."
+                )
+
+            # 检查名称是否已存在
+            db = get_db_session()
+            try:
+                existing = db.query(AgentHost).filter(AgentHost.name == name).first()
+                if existing:
+                    raise ValueError(f"主机名称 '{name}' 已存在")
+
+                # 检查唯一标识是否已被使用
+                if agent_token:
+                    existing_by_unique_id = (
+                        db.query(AgentHost)
+                        .filter(AgentHost.agent_unique_id == agent_token)
+                        .first()
+                    )
+                    if existing_by_unique_id:
+                        raise ValueError(f"唯一标识 '{agent_token[:16]}...' 已被使用")
+
+                # 创建正式主机记录
+                host_id = str(uuid.uuid4())
+                host_info = pending_host.get("host_info", {})
+                docker_info = pending_host.get("docker_info", {})
+
+                # 生成token（用于向后兼容）
+                token = self._generate_token()
+                while db.query(AgentHost).filter(AgentHost.token == token).first():
+                    token = self._generate_token()
+
+                host_obj = AgentHost(
+                    host_id=host_id,
+                    name=name,
+                    host_type="agent",
+                    token=token,  # 生成新的token用于向后兼容
+                    agent_unique_id=agent_token,  # 使用唯一标识
+                    status="online",
+                    host_info=host_info,
+                    docker_info=docker_info,
+                    description=description,
+                )
+
+                db.add(host_obj)
+                db.commit()
+
+                # 从待加入列表中移除（但保留websocket引用，由调用者处理）
+                pending_host_manager.remove_pending_host(agent_token)
+
+                print(
+                    f"✅ 待加入主机已批准: agent_token={agent_token[:16] if agent_token else 'None'}... -> host_id={host_id}, name={name}"
+                )
+
+                host_dict = self._to_dict(host_obj)
+                # 在返回的字典中添加websocket引用，供调用者使用
+                # 注意：这里不能直接序列化websocket，所以返回一个标记
+                host_dict["_websocket_available"] = True
+                return host_dict
+            except Exception as e:
+                db.rollback()
+                raise
+            finally:
+                db.close()

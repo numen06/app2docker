@@ -5,9 +5,11 @@ WebSocket处理器
 """
 import json
 import asyncio
-from typing import Dict, Set, Any
+from typing import Dict, Set, Any, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from backend.agent_host_manager import AgentHostManager
+from backend.pending_host_manager import pending_host_manager
+from backend.agent_secret_manager import AgentSecretManager
 
 # 存储活跃的连接
 active_connections: Dict[str, WebSocket] = {}
@@ -43,6 +45,7 @@ class ConnectionManager:
             except Exception as e:
                 # 旧连接可能已经断开，忽略错误
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.debug(f"[WebSocket] 关闭旧连接时出错（可忽略）: {e}")
 
@@ -246,37 +249,220 @@ class ConnectionManager:
 connection_manager = ConnectionManager()
 
 
-async def handle_agent_websocket(websocket: WebSocket, token: str):
-    """处理Agent WebSocket连接"""
+async def handle_agent_websocket(
+    websocket: WebSocket,
+    secret_key: Optional[str] = None,
+    agent_token: Optional[str] = None,
+    token: Optional[str] = None,
+):
+    """
+    处理Agent WebSocket连接
+
+    Args:
+        websocket: WebSocket连接
+        secret_key: 密钥（新方式）
+        agent_token: Agent唯一标识（新方式，可选）
+        token: 旧token（向后兼容）
+    """
     manager = AgentHostManager()
+    secret_manager = AgentSecretManager()
+    import logging
 
-    # 验证token并连接
-    host = manager.get_agent_host_by_token(token)
-    if not host:
-        await websocket.close(code=1008, reason="Invalid token")
-        return
+    logger = logging.getLogger(__name__)
 
-    host_id = host["host_id"]
+    # 向后兼容：如果没有secret_key但有token，使用旧方式
+    if not secret_key and token:
+        # 旧方式：直接使用token验证
+        host = manager.get_agent_host_by_token(token)
+        is_pending = False
+        host_id = None
+        host_name = None
+        agent_unique_id = None
 
-    # 连接
-    if not await connection_manager.connect(websocket, token):
-        return
+        if not host:
+            # Token不存在，记录为待加入主机
+            logger.info(
+                f"[WebSocket] 未知token，记录为待加入主机: token={token[:16]}..."
+            )
+            print(f"⏳ 未知token，记录为待加入主机: token={token[:16]}...")
+
+            # 接受连接
+            await websocket.accept()
+
+            # 记录到待加入列表
+            pending_host_manager.add_pending_host(
+                agent_token=token,
+                websocket=websocket,
+                host_info={},
+                docker_info={},
+            )
+
+            # 发送待加入状态消息
+            try:
+                await websocket.send_json(
+                    {
+                        "type": "pending",
+                        "message": "主机已连接，等待管理员批准加入",
+                        "status": "pending",
+                    }
+                )
+            except WebSocketDisconnect:
+                logger.warning(
+                    f"[WebSocket] 客户端在发送待加入消息前断开: token={token[:16]}..."
+                )
+                pending_host_manager.remove_pending_host(token)
+                return
+            except Exception as e:
+                logger.warning(
+                    f"[WebSocket] 发送待加入消息失败: token={token[:16]}..., error={e}"
+                )
+                pending_host_manager.remove_pending_host(token)
+                return
+
+            is_pending = True
+            agent_unique_id = token
+            logger.info(
+                f"[WebSocket] 待加入主机已连接: token={token[:16]}...，等待主机信息"
+            )
+            print(f"⏳ 待加入主机已连接: token={token[:16]}...，等待主机信息")
+        else:
+            # Token存在，正常流程
+            host_id = host["host_id"]
+            host_name = host.get("name")
+            agent_unique_id = host.get("agent_unique_id") or host.get("token")
+
+            # 连接
+            if not await connection_manager.connect(websocket, token):
+                return
+
+            # 发送欢迎消息
+            try:
+                await websocket.send_json(
+                    {"type": "welcome", "message": "连接成功", "host_id": host_id}
+                )
+            except WebSocketDisconnect:
+                logger.warning(
+                    f"[WebSocket] 客户端在发送欢迎消息前断开: host_id={host_id}"
+                )
+                return
+            except Exception as e:
+                logger.warning(
+                    f"[WebSocket] 发送欢迎消息失败: host_id={host_id}, error={e}"
+                )
+                return
+
+            logger.info(
+                f"[WebSocket] 开始接收消息循环: host_id={host_id}, name={host_name}"
+            )
+            print(f"📡 开始接收消息循环: host_id={host_id}, name={host_name}")
+    else:
+        # 新方式：使用密钥验证
+        if not secret_key:
+            await websocket.close(code=1008, reason="Missing secret_key")
+            logger.warning("[WebSocket] 连接被拒绝：缺少secret_key")
+            return
+
+        # 验证密钥
+        if not secret_manager.validate_secret(secret_key):
+            await websocket.close(code=1008, reason="Invalid or disabled secret_key")
+            logger.warning(
+                f"[WebSocket] 连接被拒绝：无效或已禁用的密钥: {secret_key[:16]}..."
+            )
+            return
+
+        logger.info(f"[WebSocket] 密钥验证成功: {secret_key[:16]}...")
+
+        # 接受连接
+        await websocket.accept()
+
+        is_pending = False
+        host_id = None
+        host_name = None
+        agent_unique_id = agent_token
+
+        # 如果提供了agent_token，查找对应主机
+        if agent_token:
+            # 先通过token查找（向后兼容）
+            host = manager.get_agent_host_by_token(agent_token)
+            if not host:
+                # 通过唯一标识查找
+                host = manager.get_agent_host_by_unique_id(agent_token)
+
+            if host:
+                # 主机已存在，正常连接
+                host_id = host["host_id"]
+                host_name = host.get("name")
+                agent_unique_id = host.get("agent_unique_id") or host.get("token")
+
+                # 连接
+                if not await connection_manager.connect(websocket, host.get("token")):
+                    return
+
+                # 发送欢迎消息
+                try:
+                    await websocket.send_json(
+                        {"type": "welcome", "message": "连接成功", "host_id": host_id}
+                    )
+                except WebSocketDisconnect:
+                    logger.warning(
+                        f"[WebSocket] 客户端在发送欢迎消息前断开: host_id={host_id}"
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(
+                        f"[WebSocket] 发送欢迎消息失败: host_id={host_id}, error={e}"
+                    )
+                    return
+
+                logger.info(
+                    f"[WebSocket] 开始接收消息循环: host_id={host_id}, name={host_name}"
+                )
+                print(f"📡 开始接收消息循环: host_id={host_id}, name={host_name}")
+            else:
+                # 主机不存在，加入待加入列表
+                is_pending = True
+                pending_host_manager.add_pending_host(
+                    agent_token=agent_token,
+                    websocket=websocket,
+                    host_info={},
+                    docker_info={},
+                )
+
+                # 发送待加入状态消息
+                try:
+                    await websocket.send_json(
+                        {
+                            "type": "pending",
+                            "message": "主机已连接，等待管理员批准加入",
+                            "status": "pending",
+                        }
+                    )
+                except WebSocketDisconnect:
+                    logger.warning(
+                        f"[WebSocket] 客户端在发送待加入消息前断开: agent_token={agent_token[:16] if agent_token else 'None'}..."
+                    )
+                    pending_host_manager.remove_pending_host(agent_token)
+                    return
+                except Exception as e:
+                    logger.warning(
+                        f"[WebSocket] 发送待加入消息失败: agent_token={agent_token[:16] if agent_token else 'None'}..., error={e}"
+                    )
+                    pending_host_manager.remove_pending_host(agent_token)
+                    return
+
+                logger.info(
+                    f"[WebSocket] 待加入主机已连接: agent_token={agent_token[:16] if agent_token else 'None'}...，等待主机信息"
+                )
+                print(
+                    f"⏳ 待加入主机已连接: agent_token={agent_token[:16] if agent_token else 'None'}...，等待主机信息"
+                )
+        else:
+            # 没有提供agent_token，等待Agent发送主机信息
+            is_pending = True
+            logger.info("[WebSocket] 等待Agent发送主机信息和唯一标识")
+            print("⏳ 等待Agent发送主机信息和唯一标识")
 
     try:
-        # 发送欢迎消息
-        await websocket.send_json(
-            {"type": "welcome", "message": "连接成功", "host_id": host_id}
-        )
-
-        # 处理消息
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.info(
-            f"[WebSocket] 开始接收消息循环: host_id={host_id}, name={host.get('name')}"
-        )
-        print(f"📡 开始接收消息循环: host_id={host_id}, name={host.get('name')}")
-
         while True:
             try:
                 # 接收消息
@@ -304,7 +490,7 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
 
                 message_type = message.get("type")
                 logger.debug(
-                    f"[WebSocket] 开始处理消息: host_id={host_id}, type={message_type}"
+                    f"[WebSocket] 开始处理消息: {'pending' if is_pending else f'host_id={host_id}'}, type={message_type}"
                 )
 
                 if message_type == "heartbeat":
@@ -312,10 +498,57 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     host_info = message.get("host_info", {})
                     docker_info = message.get("docker_info", {})
 
-                    # 更新主机状态和信息
-                    manager.update_host_status(
-                        host_id, "online", host_info=host_info, docker_info=docker_info
-                    )
+                    # 如果待加入且没有agent_token，尝试从消息中获取唯一标识
+                    if is_pending and not agent_unique_id:
+                        # 尝试从host_info或docker_info中获取唯一标识
+                        unique_id_from_info = (
+                            host_info.get("unique_id")
+                            or docker_info.get("system_id")
+                            or docker_info.get("id")
+                        )
+                        if unique_id_from_info:
+                            agent_unique_id = unique_id_from_info
+                            # 更新待加入主机的唯一标识
+                            pending_host = (
+                                pending_host_manager.get_pending_host_by_agent_token(
+                                    None
+                                )
+                            )
+                            if pending_host:
+                                # 需要重新添加，使用新的唯一标识
+                                pending_host_manager.remove_pending_host_by_websocket(
+                                    websocket
+                                )
+                                pending_host_manager.add_pending_host(
+                                    agent_token=agent_unique_id,
+                                    websocket=websocket,
+                                    host_info=host_info,
+                                    docker_info=docker_info,
+                                )
+                                logger.info(
+                                    f"[WebSocket] 获取到唯一标识: {agent_unique_id[:16]}..."
+                                )
+
+                    if is_pending:
+                        # 待加入主机的心跳：更新待加入列表中的信息
+                        if agent_unique_id:
+                            pending_host_manager.update_pending_host_heartbeat(
+                                agent_token=agent_unique_id,
+                                host_info=host_info,
+                                docker_info=docker_info,
+                            )
+                            logger.debug(
+                                f"[WebSocket] 待加入主机心跳已更新: agent_token={agent_unique_id[:16] if agent_unique_id else 'None'}..."
+                            )
+                    else:
+                        # 已加入主机的心跳：正常更新状态
+                        if host_id:
+                            manager.update_host_status(
+                                host_id,
+                                "online",
+                                host_info=host_info,
+                                docker_info=docker_info,
+                            )
 
                     # 回复心跳
                     await websocket.send_json(
@@ -327,9 +560,53 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     host_info = message.get("host_info", {})
                     docker_info = message.get("docker_info", {})
 
-                    manager.update_host_status(
-                        host_id, "online", host_info=host_info, docker_info=docker_info
-                    )
+                    # 如果待加入且没有agent_token，尝试从消息中获取唯一标识
+                    if is_pending and not agent_unique_id:
+                        unique_id_from_info = (
+                            host_info.get("unique_id")
+                            or docker_info.get("system_id")
+                            or docker_info.get("id")
+                            or message.get("agent_token")
+                        )
+                        if unique_id_from_info:
+                            agent_unique_id = unique_id_from_info
+                            # 更新待加入主机的唯一标识
+                            pending_host_manager.remove_pending_host_by_websocket(
+                                websocket
+                            )
+                            pending_host_manager.add_pending_host(
+                                agent_token=agent_unique_id,
+                                websocket=websocket,
+                                host_info=host_info,
+                                docker_info=docker_info,
+                            )
+                            logger.info(
+                                f"[WebSocket] 获取到唯一标识: {agent_unique_id[:16]}..."
+                            )
+
+                    if is_pending:
+                        # 待加入主机信息上报：更新待加入列表
+                        if agent_unique_id:
+                            pending_host_manager.update_pending_host_heartbeat(
+                                agent_token=agent_unique_id,
+                                host_info=host_info,
+                                docker_info=docker_info,
+                            )
+                            logger.info(
+                                f"[WebSocket] 待加入主机信息已更新: agent_token={agent_unique_id[:16] if agent_unique_id else 'None'}..."
+                            )
+                            print(
+                                f"⏳ 待加入主机信息已更新: agent_token={agent_unique_id[:16] if agent_unique_id else 'None'}..."
+                            )
+                    else:
+                        # 已加入主机信息上报：正常更新
+                        if host_id:
+                            manager.update_host_status(
+                                host_id,
+                                "online",
+                                host_info=host_info,
+                                docker_info=docker_info,
+                            )
 
                     await websocket.send_json(
                         {"type": "host_info_ack", "message": "主机信息已更新"}
@@ -337,17 +614,33 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
 
                 elif message_type == "command_result":
                     # 命令执行结果
-                    command_id = message.get("command_id")
-                    result = message.get("result")
-                    # 这里可以处理命令执行结果
-                    print(f"📥 收到命令执行结果 ({host_id}): {command_id}")
+                    if is_pending:
+                        # 待加入主机不应该收到命令，忽略
+                        logger.warning(
+                            f"[WebSocket] 待加入主机收到命令结果，忽略: token={token[:16]}..."
+                        )
+                    else:
+                        command_id = message.get("command_id")
+                        result = message.get("result")
+                        # 这里可以处理命令执行结果
+                        print(f"📥 收到命令执行结果 ({host_id}): {command_id}")
 
                 elif message_type == "deploy_result":
                     # 部署任务执行结果
-                    import logging
+                    if is_pending:
+                        # 待加入主机不应该收到部署结果，忽略
+                        logger.warning(
+                            f"[WebSocket] 待加入主机收到部署结果，忽略: token={token[:16]}..."
+                        )
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": "主机尚未批准加入，无法处理部署任务",
+                            }
+                        )
+                        continue
 
-                    logger = logging.getLogger(__name__)
-
+                    # 已加入主机的部署结果处理
                     task_id = message.get("task_id")  # 任务ID（用于匹配）
                     target_name = message.get("target_name", "")  # 目标名称
                     deploy_status = message.get("status")
@@ -525,46 +818,58 @@ async def handle_agent_websocket(websocket: WebSocket, token: str):
                     )
 
             except WebSocketDisconnect:
-                import logging
-
-                logger = logging.getLogger(__name__)
-                logger.warning(f"[WebSocket] WebSocket断开连接: host_id={host_id}")
+                logger.warning(
+                    f"[WebSocket] WebSocket断开连接: {'pending' if is_pending else f'host_id={host_id}'}"
+                )
                 break
             except Exception as e:
-                import logging
                 import traceback
 
-                logger = logging.getLogger(__name__)
                 logger.exception(
-                    f"[WebSocket] 处理消息时出错: host_id={host_id}, error={e}"
+                    f"[WebSocket] 处理消息时出错: {'pending' if is_pending else f'host_id={host_id}'}, error={e}"
                 )
-                print(f"⚠️ 处理消息时出错 ({host_id}): {e}")
+                print(f"⚠️ 处理消息时出错 ({'pending' if is_pending else host_id}): {e}")
                 traceback.print_exc()
                 try:
                     await websocket.send_json(
                         {"type": "error", "message": f"处理消息失败: {str(e)}"}
                     )
                 except:
-                    logger.error(f"[WebSocket] 无法发送错误消息: host_id={host_id}")
+                    logger.error(
+                        f"[WebSocket] 无法发送错误消息: {'pending' if is_pending else f'host_id={host_id}'}"
+                    )
                     break
 
     except WebSocketDisconnect:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.info(f"[WebSocket] WebSocket断开连接: host_id={host_id}")
+        logger.info(
+            f"[WebSocket] WebSocket断开连接: {'pending' if is_pending else f'host_id={host_id}'}"
+        )
     except Exception as e:
-        import logging
         import traceback
 
-        logger = logging.getLogger(__name__)
-        logger.exception(f"[WebSocket] WebSocket连接错误: host_id={host_id}, error={e}")
-        print(f"⚠️ WebSocket连接错误 ({host_id}): {e}")
+        logger.exception(
+            f"[WebSocket] WebSocket连接错误: {'pending' if is_pending else f'host_id={host_id}'}, error={e}"
+        )
+        print(f"⚠️ WebSocket连接错误 ({'pending' if is_pending else host_id}): {e}")
         traceback.print_exc()
     finally:
         # 断开连接
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.info(f"[WebSocket] 清理连接: host_id={host_id}")
-        connection_manager.disconnect(host_id)
+        if is_pending:
+            # 待加入主机断开：从待加入列表中移除
+            if agent_unique_id:
+                pending_host_manager.remove_pending_host(agent_unique_id)
+                logger.info(
+                    f"[WebSocket] 待加入主机已断开: agent_token={agent_unique_id[:16] if agent_unique_id else 'None'}..."
+                )
+                print(
+                    f"⏳ 待加入主机已断开: agent_token={agent_unique_id[:16] if agent_unique_id else 'None'}..."
+                )
+            else:
+                # 通过websocket移除
+                pending_host_manager.remove_pending_host_by_websocket(websocket)
+                logger.info(f"[WebSocket] 待加入主机已断开（无唯一标识）")
+        else:
+            # 已加入主机断开：正常清理
+            if host_id:
+                logger.info(f"[WebSocket] 清理连接: host_id={host_id}")
+                connection_manager.disconnect(host_id)

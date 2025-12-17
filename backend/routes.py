@@ -45,7 +45,8 @@ from backend.handlers import (
 from backend.resource_package_manager import ResourcePackageManager
 from backend.host_manager import HostManager
 from backend.agent_host_manager import AgentHostManager
-from backend.websocket_handler import handle_agent_websocket
+from backend.websocket_handler import handle_agent_websocket, active_connections
+from backend.agent_secret_manager import AgentSecretManager
 from backend.deploy_task_manager import DeployTaskManager
 from backend.config import (
     load_config,
@@ -7131,6 +7132,15 @@ class AgentHostUpdateRequest(BaseModel):
     portainer_endpoint_id: Optional[int] = None
 
 
+class PendingHostApproveRequest(BaseModel):
+    name: str  # 主机名称（必需）
+    description: str = ""  # 描述（可选）
+
+
+class AgentSecretRequest(BaseModel):
+    name: str = ""  # 密钥名称/描述
+
+
 class PortainerTestRequest(BaseModel):
     portainer_url: str
     api_key: str
@@ -7267,6 +7277,157 @@ async def list_agent_hosts(request: Request):
         return JSONResponse({"hosts": hosts})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取Agent主机列表失败: {str(e)}")
+
+
+# ==================== 待加入主机管理 ====================
+# 注意：这些路由必须在 /agent-hosts/{host_id} 之前定义，避免路径参数冲突
+
+
+@router.get("/agent-hosts/pending")
+async def list_pending_hosts(request: Request):
+    """获取待加入主机列表"""
+    try:
+        username = get_current_username(request)
+        from backend.pending_host_manager import pending_host_manager
+
+        pending_hosts = pending_host_manager.list_pending_hosts()
+        return JSONResponse({"hosts": pending_hosts})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取待加入主机列表失败: {str(e)}")
+
+
+@router.post("/agent-hosts/pending/{agent_token}/approve")
+async def approve_pending_host(
+    request: Request, agent_token: str, host_req: PendingHostApproveRequest
+):
+    """批准待加入主机，正式加入系统"""
+    try:
+        username = require_auth(request)
+        manager = AgentHostManager()
+        from backend.pending_host_manager import pending_host_manager
+        from backend.websocket_handler import active_connections
+
+        # 获取待加入主机信息
+        pending_host = pending_host_manager.get_pending_host(agent_token)
+        if not pending_host:
+            raise HTTPException(status_code=404, detail="待加入主机不存在")
+
+        # 获取WebSocket连接
+        websocket = pending_host_manager.get_pending_connection(agent_token)
+        if not websocket:
+            raise HTTPException(
+                status_code=400, detail="待加入主机的WebSocket连接不存在"
+            )
+
+        # 批准主机（创建数据库记录）
+        host_info = manager.approve_pending_host(
+            agent_token=agent_token,
+            name=host_req.name,
+            description=host_req.description,
+        )
+
+        host_id = host_info["host_id"]
+
+        # 更新WebSocket连接关联
+        # 将连接从待加入列表转移到正式连接列表
+        if host_id in active_connections:
+            # 如果已有连接，先关闭旧连接
+            try:
+                old_ws = active_connections[host_id]
+                del active_connections[host_id]
+                await old_ws.close(code=1000, reason="Replaced by approved host")
+            except Exception as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"[Routes] 关闭旧连接时出错（可忽略）: {e}")
+
+        # 将WebSocket连接关联到新的host_id
+        active_connections[host_id] = websocket
+
+        # 发送批准消息给Agent
+        try:
+            await websocket.send_json(
+                {
+                    "type": "approved",
+                    "message": "主机已批准加入系统",
+                    "host_id": host_id,
+                    "name": host_req.name,
+                }
+            )
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[Routes] 发送批准消息失败: {e}，但主机已创建")
+
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "agent_host_approve",
+            {
+                "host_id": host_id,
+                "name": host_req.name,
+                "agent_token": agent_token[:16] + "..." if agent_token else "None",
+            },
+        )
+
+        return JSONResponse(
+            {
+                "success": True,
+                "message": "主机已批准加入系统",
+                "host": host_info,
+            }
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批准待加入主机失败: {str(e)}")
+
+
+@router.delete("/agent-hosts/pending/{agent_token}")
+async def reject_pending_host(request: Request, agent_token: str):
+    """拒绝待加入主机，关闭连接"""
+    try:
+        username = require_auth(request)
+        from backend.pending_host_manager import pending_host_manager
+
+        # 获取待加入主机信息
+        pending_host = pending_host_manager.get_pending_host(agent_token)
+        if not pending_host:
+            raise HTTPException(status_code=404, detail="待加入主机不存在")
+
+        # 获取WebSocket连接并关闭
+        websocket = pending_host_manager.get_pending_connection(agent_token)
+        if websocket:
+            try:
+                await websocket.close(code=1008, reason="Rejected by administrator")
+            except Exception as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"[Routes] 关闭连接时出错（可忽略）: {e}")
+
+        # 从待加入列表中移除
+        pending_host_manager.remove_pending_host(agent_token)
+
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "agent_host_reject",
+            {"agent_token": agent_token[:16] + "..." if agent_token else "None"},
+        )
+
+        return JSONResponse({"success": True, "message": "待加入主机已拒绝"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"拒绝待加入主机失败: {str(e)}")
+
+
+# ==================== Agent主机详情和管理 ====================
 
 
 @router.get("/agent-hosts/{host_id}")
@@ -7427,10 +7588,149 @@ async def get_deploy_command(
         raise HTTPException(status_code=500, detail=f"生成部署命令失败: {str(e)}")
 
 
+# ==================== Agent密钥管理 ====================
+
+
+@router.get("/agent-secrets")
+async def list_agent_secrets(request: Request):
+    """获取所有密钥列表"""
+    try:
+        username = get_current_username(request)
+        secret_manager = AgentSecretManager()
+        secrets = secret_manager.list_secrets()
+        return JSONResponse({"secrets": secrets})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取密钥列表失败: {str(e)}")
+
+
+@router.post("/agent-secrets")
+async def create_agent_secret(request: Request, secret_req: AgentSecretRequest):
+    """生成新密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.generate_secret(name=secret_req.name)
+
+        OperationLogger.log(
+            username,
+            "agent_secret_create",
+            {"secret_id": secret_info["secret_id"], "name": secret_req.name},
+        )
+
+        return JSONResponse(
+            {"success": True, "message": "密钥生成成功", "secret": secret_info}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成密钥失败: {str(e)}")
+
+
+@router.put("/agent-secrets/{secret_id}/enable")
+async def enable_agent_secret(request: Request, secret_id: str):
+    """启用密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.enable_secret(secret_id)
+        if not secret_info:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_enable", {"secret_id": secret_id})
+
+        return JSONResponse(
+            {"success": True, "message": "密钥已启用", "secret": secret_info}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启用密钥失败: {str(e)}")
+
+
+@router.put("/agent-secrets/{secret_id}/disable")
+async def disable_agent_secret(request: Request, secret_id: str):
+    """禁用密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.disable_secret(secret_id)
+        if not secret_info:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_disable", {"secret_id": secret_id})
+
+        return JSONResponse(
+            {"success": True, "message": "密钥已禁用", "secret": secret_info}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"禁用密钥失败: {str(e)}")
+
+
+@router.delete("/agent-secrets/{secret_id}")
+async def delete_agent_secret(request: Request, secret_id: str):
+    """删除密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        success = secret_manager.delete_secret(secret_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_delete", {"secret_id": secret_id})
+
+        return JSONResponse({"success": True, "message": "密钥已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除密钥失败: {str(e)}")
+
+
+@router.put("/agent-secrets/{secret_id}")
+async def update_agent_secret(
+    request: Request, secret_id: str, secret_req: AgentSecretRequest
+):
+    """更新密钥信息"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.update_secret(secret_id, name=secret_req.name)
+        if not secret_info:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_update", {"secret_id": secret_id})
+
+        return JSONResponse(
+            {"success": True, "message": "密钥已更新", "secret": secret_info}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新密钥失败: {str(e)}")
+
+
+# ==================== WebSocket连接 ====================
+
+
 @router.websocket("/ws/agent")
-async def websocket_agent_endpoint(websocket: WebSocket, token: str = Query(...)):
-    """Agent WebSocket连接端点（通过查询参数传递token）"""
-    await handle_agent_websocket(websocket, token)
+async def websocket_agent_endpoint(
+    websocket: WebSocket,
+    secret_key: Optional[str] = Query(None),
+    agent_token: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),  # 向后兼容
+):
+    """Agent WebSocket连接端点
+
+    新方式：通过查询参数传递 secret_key 和 agent_token（可选）
+    旧方式（向后兼容）：通过查询参数传递 token
+    """
+    await handle_agent_websocket(
+        websocket, secret_key=secret_key, agent_token=agent_token, token=token
+    )
 
 
 # ==================== 部署任务管理 ====================
