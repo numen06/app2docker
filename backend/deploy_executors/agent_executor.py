@@ -119,6 +119,11 @@ class AgentExecutor(DeployExecutor):
             f"[Agent] 创建部署任务: task_id={task_id}, deploy_task_id={deploy_task_id}, target_name={target_name}"
         )
 
+        # 从 context 中提取 registry_auth（如果存在）
+        registry_auth = None
+        if context:
+            registry_auth = context.get("registry_auth")
+
         # 构建部署消息（推送给Agent的统一格式）
         deploy_message = {
             "type": "deploy",
@@ -127,7 +132,13 @@ class AgentExecutor(DeployExecutor):
             "deploy_config": deploy_config,  # 统一的docker配置格式
             "context": context or {},  # 模板变量上下文
             "target_name": target_name,
+            "registry_auth": registry_auth,  # Registry 认证信息（如果存在）
         }
+
+        if registry_auth:
+            logger.info(
+                f"[Agent] 包含 registry 认证信息: registry={registry_auth.get('registry')}, username={registry_auth.get('username')}"
+            )
 
         # 发送部署任务到 Agent
         logger.info(

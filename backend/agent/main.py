@@ -336,6 +336,16 @@ async def handle_deploy_task(message: Dict[str, Any]):
     deploy_config = message.get("deploy_config", {})
     context = message.get("context", {})
 
+    # 从消息中提取 registry_auth（如果存在）
+    registry_auth = message.get("registry_auth")
+    if registry_auth:
+        if not context:
+            context = {}
+        context["registry_auth"] = registry_auth
+        logger.info(
+            f"收到 registry 认证信息: registry={registry_auth.get('registry')}, username={registry_auth.get('username')}"
+        )
+
     logger.info(f"开始执行部署任务: task_id={task_id}, target={target_name}")
 
     if not websocket_client:

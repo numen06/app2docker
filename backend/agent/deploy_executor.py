@@ -58,13 +58,15 @@ class DeployExecutor:
             if deploy_mode == "docker_compose":
                 # Docker Compose 模式：根据 compose_mode 和 redeploy_strategy 处理
                 compose_mode = docker_config.get("compose_mode", "docker-compose")
-                redeploy_strategy = docker_config.get("redeploy_strategy", "update_existing")
-                
+                redeploy_strategy = docker_config.get(
+                    "redeploy_strategy", "update_existing"
+                )
+
                 # 只有在 remove_and_redeploy 策略时才执行清理
                 if redeploy_strategy != "remove_and_redeploy":
                     logger.info(f"重新发布策略为 {redeploy_strategy}，跳过清理步骤")
                     return
-                
+
                 if "compose_content" in docker_config:
                     task_id = context.get("task_id", "default")
                     compose_file = os.path.join(
@@ -78,12 +80,17 @@ class DeployExecutor:
 
                     if compose_mode == "docker-stack":
                         # Docker Stack 模式：删除 Stack
-                        app_name = context.get("app", {}).get("name", "app") if isinstance(context.get("app"), dict) else "app"
+                        app_name = (
+                            context.get("app", {}).get("name", "app")
+                            if isinstance(context.get("app"), dict)
+                            else "app"
+                        )
                         stack_name = f"{app_name}-{task_id}"
                         # 确保 Stack 名称符合 Docker Stack 命名规范
                         import re
-                        stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
-                        
+
+                        stack_name = re.sub(r"[^a-z0-9-]", "-", stack_name.lower())
+
                         cmd = ["docker", "stack", "rm", stack_name]
                         logger.info(f"清理已有 Stack: {' '.join(cmd)}")
                         result = subprocess.run(
@@ -94,11 +101,10 @@ class DeployExecutor:
                         if result.returncode == 0:
                             logger.info(f"已删除 Stack: {stack_name}")
                         else:
-                            logger.warning(
-                                f"删除 Stack 时出现警告: {result.stderr}"
-                            )
+                            logger.warning(f"删除 Stack 时出现警告: {result.stderr}")
                         # 等待 Stack 完全删除
                         import time
+
                         time.sleep(2)
                     else:
                         # Docker Compose 模式：执行 down 命令
@@ -364,6 +370,64 @@ class DeployExecutor:
         if context is None:
             context = {}
 
+        # 检查是否有 registry 认证信息，如果有则先执行 docker login
+        registry_auth = context.get("registry_auth")
+        if registry_auth:
+            registry = registry_auth.get("registry")
+            username = registry_auth.get("username")
+            password = registry_auth.get("password")
+
+            if registry and username and password:
+                logger.info(
+                    f"执行 docker login: registry={registry}, username={username}"
+                )
+                try:
+                    login_cmd = [
+                        "docker",
+                        "login",
+                        "-u",
+                        username,
+                        "-p",
+                        password,
+                        registry,
+                    ]
+                    login_result = subprocess.run(
+                        login_cmd, capture_output=True, text=True, timeout=30
+                    )
+
+                    if login_result.returncode != 0:
+                        error_msg = (
+                            login_result.stderr
+                            or login_result.stdout
+                            or "Docker login 失败"
+                        )
+                        logger.error(f"Docker login 失败: {error_msg}")
+                        return {
+                            "success": False,
+                            "message": f"Docker login 失败: {error_msg}",
+                            "error": error_msg,
+                        }
+                    else:
+                        logger.info(f"Docker login 成功: {registry}")
+                except subprocess.TimeoutExpired:
+                    logger.error(f"Docker login 超时: {registry}")
+                    return {
+                        "success": False,
+                        "message": f"Docker login 超时（超过30秒）",
+                        "error": "Docker login 超时",
+                    }
+                except Exception as e:
+                    logger.error(f"Docker login 异常: {e}")
+                    return {
+                        "success": False,
+                        "message": f"Docker login 异常: {str(e)}",
+                        "error": str(e),
+                    }
+            else:
+                logger.warning(
+                    f"Registry 认证信息不完整: registry={registry}, username={username}, password={'已设置' if password else '未设置'}"
+                )
+
         # 兼容两种格式：
         # 1. 新格式：{"docker": {...}}
         # 2. 旧格式：{...} (直接就是docker配置)
@@ -382,7 +446,9 @@ class DeployExecutor:
         redeploy = docker_config.get("redeploy", False)
         redeploy_strategy = docker_config.get("redeploy_strategy", "update_existing")
 
-        logger.info(f"redeploy 配置: {redeploy}, redeploy_strategy: {redeploy_strategy}, deploy_mode: {deploy_mode}")
+        logger.info(
+            f"redeploy 配置: {redeploy}, redeploy_strategy: {redeploy_strategy}, deploy_mode: {deploy_mode}"
+        )
 
         try:
             # 如果需要重新发布且策略为 remove_and_redeploy，先停止并删除已有的容器/服务
@@ -401,7 +467,9 @@ class DeployExecutor:
                 if deploy_mode == "docker_compose":
                     # Docker Compose 模式：需要先创建 compose 文件
                     if "compose_content" in docker_config:
-                        compose_mode = docker_config.get("compose_mode", "docker-compose")
+                        compose_mode = docker_config.get(
+                            "compose_mode", "docker-compose"
+                        )
                         task_id = context.get("task_id", "default")
                         compose_file = os.path.join(
                             self.work_dir, f"docker-compose-{task_id}.yml"
@@ -415,14 +483,20 @@ class DeployExecutor:
 
                         if compose_mode == "docker-stack":
                             # Docker Stack 模式：使用 docker stack deploy
-                            app_name = context.get("app", {}).get("name", "app") if isinstance(context.get("app"), dict) else "app"
+                            app_name = (
+                                context.get("app", {}).get("name", "app")
+                                if isinstance(context.get("app"), dict)
+                                else "app"
+                            )
                             stack_name = f"{app_name}-{task_id}"
                             # 确保 Stack 名称符合 Docker Stack 命名规范
                             import re
-                            stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
-                            
+
+                            stack_name = re.sub(r"[^a-z0-9-]", "-", stack_name.lower())
+
                             # 解析命令（可能包含 -c 或 --compose-file 参数）
                             import shlex
+
                             cmd_parts = shlex.split(command_str) if command_str else []
 
                             # 构建 docker stack deploy 命令
@@ -430,12 +504,33 @@ class DeployExecutor:
                             if command_str:
                                 # 如果命令中包含 -c 或 --compose-file，使用用户提供的命令
                                 if "-c" in cmd_parts or "--compose-file" in cmd_parts:
-                                    cmd = ["docker", "stack", "deploy"] + cmd_parts + [stack_name]
+                                    cmd = (
+                                        ["docker", "stack", "deploy"]
+                                        + cmd_parts
+                                        + [stack_name]
+                                    )
                                 else:
                                     # 否则，将命令作为额外参数
-                                    cmd = ["docker", "stack", "deploy", "-c", compose_file] + cmd_parts + [stack_name]
+                                    cmd = (
+                                        [
+                                            "docker",
+                                            "stack",
+                                            "deploy",
+                                            "-c",
+                                            compose_file,
+                                        ]
+                                        + cmd_parts
+                                        + [stack_name]
+                                    )
                             else:
-                                cmd = ["docker", "stack", "deploy", "-c", compose_file, stack_name]
+                                cmd = [
+                                    "docker",
+                                    "stack",
+                                    "deploy",
+                                    "-c",
+                                    compose_file,
+                                    stack_name,
+                                ]
                         else:
                             # Docker Compose 模式：使用 docker-compose
                             # 解析命令（可能包含 -f 参数）
@@ -456,16 +551,28 @@ class DeployExecutor:
                                     cmd_parts.insert(f_idx + 1, compose_file)
 
                             # 添加项目名称参数（使用应用名称）
-                            app_name = context.get("app", {}).get("name", "") if isinstance(context.get("app"), dict) else ""
+                            app_name = (
+                                context.get("app", {}).get("name", "")
+                                if isinstance(context.get("app"), dict)
+                                else ""
+                            )
                             if app_name:
                                 # 确保项目名称符合 Docker Compose 命名规范（小写字母、数字、连字符）
                                 import re
-                                project_name = re.sub(r'[^a-z0-9-]', '-', app_name.lower())
+
+                                project_name = re.sub(
+                                    r"[^a-z0-9-]", "-", app_name.lower()
+                                )
                                 # 如果命令中没有 -p 或 --project-name 参数，添加它
-                                if "-p" not in cmd_parts and "--project-name" not in cmd_parts:
+                                if (
+                                    "-p" not in cmd_parts
+                                    and "--project-name" not in cmd_parts
+                                ):
                                     cmd_parts.insert(0, "-p")
                                     cmd_parts.insert(1, project_name)
-                                    logger.info(f"使用应用名称作为项目名称: {project_name}")
+                                    logger.info(
+                                        f"使用应用名称作为项目名称: {project_name}"
+                                    )
 
                             # 构建完整命令：docker-compose -p <project-name> -f <file> <command>
                             cmd = ["docker-compose"] + cmd_parts
@@ -505,20 +612,23 @@ class DeployExecutor:
                     logger.info(f"命令输出 (stdout): {result.stdout}")
                 if result.stderr:
                     logger.info(f"命令错误输出 (stderr): {result.stderr}")
-                
+
                 # 检查 stderr 中是否只是警告（Docker Compose 会将警告输出到 stderr）
                 is_warning_only = False
                 if result.stderr:
                     stderr_lower = result.stderr.lower()
                     # 常见的警告关键词
-                    is_warning_only = any(keyword in stderr_lower for keyword in [
-                        "level=warning",
-                        "warning:",
-                        "obsolete",
-                        "deprecated",
-                        "ignoring deprecated"
-                    ])
-                    
+                    is_warning_only = any(
+                        keyword in stderr_lower
+                        for keyword in [
+                            "level=warning",
+                            "warning:",
+                            "obsolete",
+                            "deprecated",
+                            "ignoring deprecated",
+                        ]
+                    )
+
                     if is_warning_only and result.returncode == 0:
                         # 只是警告，不影响成功
                         logger.warning(f"命令警告: {result.stderr}")
@@ -531,19 +641,35 @@ class DeployExecutor:
                     if result.stderr:
                         # 如果有警告信息，在消息中提及
                         stderr_lower = result.stderr.lower()
-                        if any(keyword in stderr_lower for keyword in [
-                            "level=warning", "warning:", "obsolete", "deprecated"
-                        ]):
+                        if any(
+                            keyword in stderr_lower
+                            for keyword in [
+                                "level=warning",
+                                "warning:",
+                                "obsolete",
+                                "deprecated",
+                            ]
+                        ):
                             message = "部署成功（有警告信息）"
-                    
+
                     return {
                         "success": True,
                         "message": message,
                         "output": result.stdout,
-                        "warning": result.stderr if result.stderr and any(
-                            keyword in result.stderr.lower() 
-                            for keyword in ["level=warning", "warning:", "obsolete", "deprecated"]
-                        ) else None,
+                        "warning": (
+                            result.stderr
+                            if result.stderr
+                            and any(
+                                keyword in result.stderr.lower()
+                                for keyword in [
+                                    "level=warning",
+                                    "warning:",
+                                    "obsolete",
+                                    "deprecated",
+                                ]
+                            )
+                            else None
+                        ),
                         "command": " ".join(cmd),
                         "returncode": result.returncode,
                     }
@@ -551,45 +677,63 @@ class DeployExecutor:
                     logger.error(f"命令执行失败 (返回码: {result.returncode})")
                     logger.info(f"错误信息 (stderr): {result.stderr}")
                     logger.info(f"输出信息 (stdout): {result.stdout}")
-                    
+
                     # 检查是否是容器名称冲突错误
                     error_text = (result.stderr or result.stdout or "").lower()
                     logger.info(f"检查错误文本: {error_text[:200]}")
-                    
-                    is_container_conflict = any(keyword in error_text for keyword in [
-                        "container name",
-                        "already in use",
-                        "conflict",
-                        "container.*already"
-                    ])
-                    
-                    logger.info(f"容器名称冲突检测结果: is_container_conflict={is_container_conflict}, deploy_mode={deploy_mode}")
-                    
+
+                    is_container_conflict = any(
+                        keyword in error_text
+                        for keyword in [
+                            "container name",
+                            "already in use",
+                            "conflict",
+                            "container.*already",
+                        ]
+                    )
+
+                    logger.info(
+                        f"容器名称冲突检测结果: is_container_conflict={is_container_conflict}, deploy_mode={deploy_mode}"
+                    )
+
                     # 如果是容器名称冲突，尝试自动清理（支持 docker_run 和 docker_compose）
                     if is_container_conflict:
                         logger.warning("检测到容器名称冲突，尝试自动清理...")
-                        
+
                         # 从错误信息中提取容器名称
                         import re
+
                         error_content = result.stderr or result.stdout or ""
-                        logger.info(f"尝试从错误信息中提取容器名称: {error_content[:300]}")
-                        
+                        logger.info(
+                            f"尝试从错误信息中提取容器名称: {error_content[:300]}"
+                        )
+
                         # 尝试多种格式匹配容器名称
                         container_name = None
-                        
+
                         # 格式1: container name "/test"
-                        container_name_match = re.search(r'container name\s+"([^"]+)"', error_content, re.IGNORECASE)
+                        container_name_match = re.search(
+                            r'container name\s+"([^"]+)"', error_content, re.IGNORECASE
+                        )
                         if container_name_match:
                             container_name = container_name_match.group(1).strip()
-                            logger.info(f"从错误信息中提取到容器名称 (格式1): {container_name}")
-                        
+                            logger.info(
+                                f"从错误信息中提取到容器名称 (格式1): {container_name}"
+                            )
+
                         # 格式2: The container name "/test" is already in use
                         if not container_name:
-                            container_name_match = re.search(r'the container name\s+"([^"]+)"', error_content, re.IGNORECASE)
+                            container_name_match = re.search(
+                                r'the container name\s+"([^"]+)"',
+                                error_content,
+                                re.IGNORECASE,
+                            )
                             if container_name_match:
                                 container_name = container_name_match.group(1).strip()
-                                logger.info(f"从错误信息中提取到容器名称 (格式2): {container_name}")
-                        
+                                logger.info(
+                                    f"从错误信息中提取到容器名称 (格式2): {container_name}"
+                                )
+
                         # 如果还是没找到，尝试从命令或配置中提取容器名称
                         if not container_name:
                             if deploy_mode == "docker_compose":
@@ -597,89 +741,149 @@ class DeployExecutor:
                                 if "compose_content" in docker_config:
                                     compose_content = docker_config["compose_content"]
                                     # 查找 container_name
-                                    container_match = re.search(r'container_name:\s*["\']?([^"\'\n\s]+)', compose_content, re.IGNORECASE)
+                                    container_match = re.search(
+                                        r'container_name:\s*["\']?([^"\'\n\s]+)',
+                                        compose_content,
+                                        re.IGNORECASE,
+                                    )
                                     if container_match:
-                                        container_name = container_match.group(1).strip()
-                                        logger.info(f"从 compose 文件中提取到容器名称: {container_name}")
+                                        container_name = container_match.group(
+                                            1
+                                        ).strip()
+                                        logger.info(
+                                            f"从 compose 文件中提取到容器名称: {container_name}"
+                                        )
                                     else:
-                                        logger.warning("无法从 compose 文件中提取容器名称")
+                                        logger.warning(
+                                            "无法从 compose 文件中提取容器名称"
+                                        )
                                 else:
-                                    logger.warning("compose_content 不存在，无法提取容器名称")
+                                    logger.warning(
+                                        "compose_content 不存在，无法提取容器名称"
+                                    )
                             else:
                                 # Docker Run 模式：从命令中提取 --name 参数
                                 command_str = docker_config.get("command", "")
                                 if command_str:
                                     # 查找 --name=value 或 --name value 格式
-                                    name_match = re.search(r'--name[=\s]+([^\s]+)', command_str, re.IGNORECASE)
+                                    name_match = re.search(
+                                        r"--name[=\s]+([^\s]+)",
+                                        command_str,
+                                        re.IGNORECASE,
+                                    )
                                     if name_match:
                                         container_name = name_match.group(1).strip()
-                                        logger.info(f"从命令中提取到容器名称: {container_name}")
+                                        logger.info(
+                                            f"从命令中提取到容器名称: {container_name}"
+                                        )
                                     else:
                                         logger.warning("无法从命令中提取容器名称")
                                 else:
                                     logger.warning("命令不存在，无法提取容器名称")
-                        
+
                         if container_name:
                             logger.info(f"尝试删除冲突的容器: {container_name}")
                             try:
                                 # 停止并删除容器
                                 stop_cmd = ["docker", "stop", container_name]
-                                stop_result = subprocess.run(stop_cmd, capture_output=True, text=True, timeout=30)
-                                
+                                stop_result = subprocess.run(
+                                    stop_cmd, capture_output=True, text=True, timeout=30
+                                )
+
                                 rm_cmd = ["docker", "rm", "-f", container_name]
-                                rm_result = subprocess.run(rm_cmd, capture_output=True, text=True, timeout=30)
-                                
-                                if rm_result.returncode == 0 or "no such container" in (rm_result.stderr or "").lower():
-                                    logger.info(f"已删除冲突容器: {container_name}，重新执行部署...")
+                                rm_result = subprocess.run(
+                                    rm_cmd, capture_output=True, text=True, timeout=30
+                                )
+
+                                if (
+                                    rm_result.returncode == 0
+                                    or "no such container"
+                                    in (rm_result.stderr or "").lower()
+                                ):
+                                    logger.info(
+                                        f"已删除冲突容器: {container_name}，重新执行部署..."
+                                    )
                                     # 重新执行部署命令
                                     retry_result = subprocess.run(
-                                        cmd, capture_output=True, text=True, timeout=300, shell=False
+                                        cmd,
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=300,
+                                        shell=False,
                                     )
-                                    
-                                    logger.info(f"重试命令执行完成: returncode={retry_result.returncode}")
+
+                                    logger.info(
+                                        f"重试命令执行完成: returncode={retry_result.returncode}"
+                                    )
                                     if retry_result.returncode == 0:
                                         # 重试成功
                                         message = "部署成功（已自动清理冲突容器）"
                                         if retry_result.stderr:
                                             stderr_lower = retry_result.stderr.lower()
-                                            if any(keyword in stderr_lower for keyword in [
-                                                "level=warning", "warning:", "obsolete", "deprecated"
-                                            ]):
+                                            if any(
+                                                keyword in stderr_lower
+                                                for keyword in [
+                                                    "level=warning",
+                                                    "warning:",
+                                                    "obsolete",
+                                                    "deprecated",
+                                                ]
+                                            ):
                                                 message = "部署成功（已自动清理冲突容器，有警告信息）"
-                                        
+
                                         return {
                                             "success": True,
                                             "message": message,
                                             "output": retry_result.stdout,
-                                            "warning": retry_result.stderr if retry_result.stderr and any(
-                                                keyword in retry_result.stderr.lower() 
-                                                for keyword in ["level=warning", "warning:", "obsolete", "deprecated"]
-                                            ) else None,
+                                            "warning": (
+                                                retry_result.stderr
+                                                if retry_result.stderr
+                                                and any(
+                                                    keyword
+                                                    in retry_result.stderr.lower()
+                                                    for keyword in [
+                                                        "level=warning",
+                                                        "warning:",
+                                                        "obsolete",
+                                                        "deprecated",
+                                                    ]
+                                                )
+                                                else None
+                                            ),
                                             "command": " ".join(cmd),
                                             "returncode": retry_result.returncode,
                                             "auto_cleaned": True,
                                             "cleaned_container": container_name,
                                         }
                                     else:
-                                        logger.error(f"重试后仍然失败: {retry_result.stderr}")
+                                        logger.error(
+                                            f"重试后仍然失败: {retry_result.stderr}"
+                                        )
                                 else:
                                     logger.warning(f"删除容器失败: {rm_result.stderr}")
                             except Exception as cleanup_error:
                                 logger.error(f"自动清理容器时发生异常: {cleanup_error}")
-                    
+
                     # 构建详细的错误消息
                     error_msg = "部署失败"
                     if result.stderr:
                         # 过滤掉警告信息，只保留真正的错误
                         error_lines = []
-                        for line in result.stderr.split('\n'):
+                        for line in result.stderr.split("\n"):
                             line_lower = line.lower()
                             # 跳过警告行
-                            if not any(keyword in line_lower for keyword in [
-                                "level=warning", "warning:", "obsolete", "deprecated", "ignoring deprecated"
-                            ]):
+                            if not any(
+                                keyword in line_lower
+                                for keyword in [
+                                    "level=warning",
+                                    "warning:",
+                                    "obsolete",
+                                    "deprecated",
+                                    "ignoring deprecated",
+                                ]
+                            ):
                                 error_lines.append(line)
-                        
+
                         if error_lines:
                             error_msg = f"部署失败: {' '.join(error_lines).strip()}"
                         else:
@@ -687,7 +891,7 @@ class DeployExecutor:
                             error_msg = f"部署失败: {result.stderr.strip()}"
                     elif result.stdout:
                         error_msg = f"部署失败: {result.stdout.strip()}"
-                    
+
                     return {
                         "success": False,
                         "message": error_msg,
@@ -708,18 +912,23 @@ class DeployExecutor:
 
                 if compose_mode == "docker-stack":
                     # Docker Stack 模式：使用 docker stack deploy
-                    app_name = context.get("app", {}).get("name", "app") if isinstance(context.get("app"), dict) else "app"
+                    app_name = (
+                        context.get("app", {}).get("name", "app")
+                        if isinstance(context.get("app"), dict)
+                        else "app"
+                    )
                     stack_name = f"{app_name}-{task_id}"
                     # 确保 Stack 名称符合 Docker Stack 命名规范
                     import re
-                    stack_name = re.sub(r'[^a-z0-9-]', '-', stack_name.lower())
-                    
+
+                    stack_name = re.sub(r"[^a-z0-9-]", "-", stack_name.lower())
+
                     # 执行 docker stack deploy
                     cmd = ["docker", "stack", "deploy", "-c", compose_file, stack_name]
                 else:
                     # Docker Compose 模式：执行 docker-compose up
                     cmd = ["docker-compose", "-f", compose_file, "up", "-d"]
-                
+
                 logger.info(f"执行命令: {' '.join(cmd)}")
                 result = subprocess.run(
                     cmd, capture_output=True, text=True, timeout=300
@@ -732,14 +941,17 @@ class DeployExecutor:
                     # 检查 stderr 中是否只是警告（Docker Compose 会将警告输出到 stderr）
                     stderr_lower = result.stderr.lower()
                     # 常见的警告关键词
-                    is_warning_only = any(keyword in stderr_lower for keyword in [
-                        "level=warning",
-                        "warning:",
-                        "obsolete",
-                        "deprecated",
-                        "ignoring deprecated"
-                    ])
-                    
+                    is_warning_only = any(
+                        keyword in stderr_lower
+                        for keyword in [
+                            "level=warning",
+                            "warning:",
+                            "obsolete",
+                            "deprecated",
+                            "ignoring deprecated",
+                        ]
+                    )
+
                     if is_warning_only and result.returncode == 0:
                         # 只是警告，不影响成功
                         logger.warning(f"命令警告: {result.stderr}")
@@ -752,59 +964,91 @@ class DeployExecutor:
                     if result.stderr:
                         # 如果有警告信息，在消息中提及
                         stderr_lower = result.stderr.lower()
-                        if any(keyword in stderr_lower for keyword in [
-                            "level=warning", "warning:", "obsolete", "deprecated"
-                        ]):
+                        if any(
+                            keyword in stderr_lower
+                            for keyword in [
+                                "level=warning",
+                                "warning:",
+                                "obsolete",
+                                "deprecated",
+                            ]
+                        ):
                             message = "部署成功（有警告信息）"
-                    
+
                     return {
                         "success": True,
                         "message": message,
                         "output": result.stdout,
-                        "warning": result.stderr if result.stderr and any(
-                            keyword in result.stderr.lower() 
-                            for keyword in ["level=warning", "warning:", "obsolete", "deprecated"]
-                        ) else None,
+                        "warning": (
+                            result.stderr
+                            if result.stderr
+                            and any(
+                                keyword in result.stderr.lower()
+                                for keyword in [
+                                    "level=warning",
+                                    "warning:",
+                                    "obsolete",
+                                    "deprecated",
+                                ]
+                            )
+                            else None
+                        ),
                         "compose_file": compose_file,
                         "returncode": result.returncode,
                     }
                 else:
                     logger.error(f"部署失败 (返回码: {result.returncode})")
-                    
+
                     # 检查是否是容器名称冲突错误
                     error_text = (result.stderr or result.stdout or "").lower()
-                    is_container_conflict = any(keyword in error_text for keyword in [
-                        "container name",
-                        "already in use",
-                        "conflict",
-                        "container.*already"
-                    ])
-                    
+                    is_container_conflict = any(
+                        keyword in error_text
+                        for keyword in [
+                            "container name",
+                            "already in use",
+                            "conflict",
+                            "container.*already",
+                        ]
+                    )
+
                     # 如果是容器名称冲突，尝试自动清理
                     if is_container_conflict:
                         logger.warning("检测到容器名称冲突，尝试自动清理...")
-                        
+
                         # 从错误信息中提取容器名称
                         import re
+
                         error_content = result.stderr or result.stdout or ""
-                        logger.info(f"尝试从错误信息中提取容器名称: {error_content[:300]}")
-                        
+                        logger.info(
+                            f"尝试从错误信息中提取容器名称: {error_content[:300]}"
+                        )
+
                         # 尝试多种格式匹配容器名称
                         container_name = None
-                        
+
                         # 格式1: container name "/test"
-                        container_name_match = re.search(r'container name\s+"([^"]+)"', error_content, re.IGNORECASE)
+                        container_name_match = re.search(
+                            r'container name\s+"([^"]+)"', error_content, re.IGNORECASE
+                        )
                         if container_name_match:
                             container_name = container_name_match.group(1).strip()
-                            logger.info(f"从错误信息中提取到容器名称 (格式1): {container_name}")
-                        
+                            logger.info(
+                                f"从错误信息中提取到容器名称 (格式1): {container_name}"
+                            )
+
                         # 格式2: The container name "/test" is already in use
                         if not container_name:
-                            container_name_match = re.search(r'the container name\s+"([^"]+)"', error_content, re.IGNORECASE)
+                            container_name_match = re.search(
+                                r'the container name\s+"([^"]+)"',
+                                error_content,
+                                re.IGNORECASE,
+                            )
                             if container_name_match:
                                 container_name = container_name_match.group(1).strip()
-                                logger.info(f"从错误信息中提取到容器名称 (格式2): {container_name}")
-                        
+                                logger.info(
+                                    f"从错误信息中提取到容器名称 (格式2): {container_name}"
+                                )
+
                         # 如果还是没找到，尝试从命令或配置中提取容器名称
                         if not container_name:
                             if deploy_mode == "docker_compose":
@@ -812,89 +1056,145 @@ class DeployExecutor:
                                 if "compose_content" in docker_config:
                                     compose_content = docker_config["compose_content"]
                                     # 查找 container_name
-                                    container_match = re.search(r'container_name:\s*["\']?([^"\'\n\s]+)', compose_content, re.IGNORECASE)
+                                    container_match = re.search(
+                                        r'container_name:\s*["\']?([^"\'\n\s]+)',
+                                        compose_content,
+                                        re.IGNORECASE,
+                                    )
                                     if container_match:
-                                        container_name = container_match.group(1).strip()
-                                        logger.info(f"从 compose 文件中提取到容器名称: {container_name}")
+                                        container_name = container_match.group(
+                                            1
+                                        ).strip()
+                                        logger.info(
+                                            f"从 compose 文件中提取到容器名称: {container_name}"
+                                        )
                                     else:
-                                        logger.warning("无法从 compose 文件中提取容器名称")
+                                        logger.warning(
+                                            "无法从 compose 文件中提取容器名称"
+                                        )
                                 else:
-                                    logger.warning("compose_content 不存在，无法提取容器名称")
+                                    logger.warning(
+                                        "compose_content 不存在，无法提取容器名称"
+                                    )
                             else:
                                 # Docker Run 模式：从命令中提取 --name 参数
                                 command_str = docker_config.get("command", "")
                                 if command_str:
                                     # 查找 --name=value 或 --name value 格式
-                                    name_match = re.search(r'--name[=\s]+([^\s]+)', command_str, re.IGNORECASE)
+                                    name_match = re.search(
+                                        r"--name[=\s]+([^\s]+)",
+                                        command_str,
+                                        re.IGNORECASE,
+                                    )
                                     if name_match:
                                         container_name = name_match.group(1).strip()
-                                        logger.info(f"从命令中提取到容器名称: {container_name}")
+                                        logger.info(
+                                            f"从命令中提取到容器名称: {container_name}"
+                                        )
                                     else:
                                         logger.warning("无法从命令中提取容器名称")
                                 else:
                                     logger.warning("命令不存在，无法提取容器名称")
-                        
+
                         if container_name:
                             logger.info(f"尝试删除冲突的容器: {container_name}")
                             try:
                                 # 停止并删除容器
                                 stop_cmd = ["docker", "stop", container_name]
-                                stop_result = subprocess.run(stop_cmd, capture_output=True, text=True, timeout=30)
-                                
+                                stop_result = subprocess.run(
+                                    stop_cmd, capture_output=True, text=True, timeout=30
+                                )
+
                                 rm_cmd = ["docker", "rm", "-f", container_name]
-                                rm_result = subprocess.run(rm_cmd, capture_output=True, text=True, timeout=30)
-                                
-                                if rm_result.returncode == 0 or "no such container" in (rm_result.stderr or "").lower():
-                                    logger.info(f"已删除冲突容器: {container_name}，重新执行部署...")
+                                rm_result = subprocess.run(
+                                    rm_cmd, capture_output=True, text=True, timeout=30
+                                )
+
+                                if (
+                                    rm_result.returncode == 0
+                                    or "no such container"
+                                    in (rm_result.stderr or "").lower()
+                                ):
+                                    logger.info(
+                                        f"已删除冲突容器: {container_name}，重新执行部署..."
+                                    )
                                     # 重新执行部署命令
                                     retry_result = subprocess.run(
                                         cmd, capture_output=True, text=True, timeout=300
                                     )
-                                    
-                                    logger.info(f"重试命令执行完成: returncode={retry_result.returncode}")
+
+                                    logger.info(
+                                        f"重试命令执行完成: returncode={retry_result.returncode}"
+                                    )
                                     if retry_result.returncode == 0:
                                         # 重试成功
                                         message = "部署成功（已自动清理冲突容器）"
                                         if retry_result.stderr:
                                             stderr_lower = retry_result.stderr.lower()
-                                            if any(keyword in stderr_lower for keyword in [
-                                                "level=warning", "warning:", "obsolete", "deprecated"
-                                            ]):
+                                            if any(
+                                                keyword in stderr_lower
+                                                for keyword in [
+                                                    "level=warning",
+                                                    "warning:",
+                                                    "obsolete",
+                                                    "deprecated",
+                                                ]
+                                            ):
                                                 message = "部署成功（已自动清理冲突容器，有警告信息）"
-                                        
+
                                         return {
                                             "success": True,
                                             "message": message,
                                             "output": retry_result.stdout,
-                                            "warning": retry_result.stderr if retry_result.stderr and any(
-                                                keyword in retry_result.stderr.lower() 
-                                                for keyword in ["level=warning", "warning:", "obsolete", "deprecated"]
-                                            ) else None,
+                                            "warning": (
+                                                retry_result.stderr
+                                                if retry_result.stderr
+                                                and any(
+                                                    keyword
+                                                    in retry_result.stderr.lower()
+                                                    for keyword in [
+                                                        "level=warning",
+                                                        "warning:",
+                                                        "obsolete",
+                                                        "deprecated",
+                                                    ]
+                                                )
+                                                else None
+                                            ),
                                             "compose_file": compose_file,
                                             "returncode": retry_result.returncode,
                                             "auto_cleaned": True,
                                             "cleaned_container": container_name,
                                         }
                                     else:
-                                        logger.error(f"重试后仍然失败: {retry_result.stderr}")
+                                        logger.error(
+                                            f"重试后仍然失败: {retry_result.stderr}"
+                                        )
                                 else:
                                     logger.warning(f"删除容器失败: {rm_result.stderr}")
                             except Exception as cleanup_error:
                                 logger.error(f"自动清理容器时发生异常: {cleanup_error}")
-                    
+
                     # 构建详细的错误消息
                     error_msg = "部署失败"
                     if result.stderr:
                         # 过滤掉警告信息，只保留真正的错误
                         error_lines = []
-                        for line in result.stderr.split('\n'):
+                        for line in result.stderr.split("\n"):
                             line_lower = line.lower()
                             # 跳过警告行
-                            if not any(keyword in line_lower for keyword in [
-                                "level=warning", "warning:", "obsolete", "deprecated", "ignoring deprecated"
-                            ]):
+                            if not any(
+                                keyword in line_lower
+                                for keyword in [
+                                    "level=warning",
+                                    "warning:",
+                                    "obsolete",
+                                    "deprecated",
+                                    "ignoring deprecated",
+                                ]
+                            ):
                                 error_lines.append(line)
-                        
+
                         if error_lines:
                             error_msg = f"部署失败: {' '.join(error_lines).strip()}"
                         else:
@@ -902,7 +1202,7 @@ class DeployExecutor:
                             error_msg = f"部署失败: {result.stderr.strip()}"
                     elif result.stdout:
                         error_msg = f"部署失败: {result.stdout.strip()}"
-                    
+
                     return {
                         "success": False,
                         "message": error_msg,
