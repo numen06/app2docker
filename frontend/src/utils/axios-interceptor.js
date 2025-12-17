@@ -2,7 +2,7 @@
  * Axios 拦截器配置
  */
 import axios from 'axios'
-import { getToken, clearAuth } from './auth'
+import { clearAuth, getToken } from './auth'
 
 /**
  * 设置 axios 拦截器
@@ -29,17 +29,25 @@ export function setupAxiosInterceptors() {
     },
     (error) => {
       if (error.response?.status === 401) {
-        // 如果是登录接口或测试仓库接口，不重新加载页面（让页面自己处理错误）
+        // 如果是登录接口，不处理（让页面自己处理错误）
         const url = error.config?.url || ''
         const isLoginRequest = url.includes('/api/login')
-        const isTestRegistryRequest = url.includes('/api/registries/test')
-        const isSaveRegistryRequest = url.includes('/api/registries') && error.config?.method === 'post' && !url.includes('/test')
         
-        // 只有真正的认证错误才清除 token（排除登录、测试仓库等接口）
-        // 测试仓库接口即使返回 401（没有 token 的情况），也不应该退出登录
-        if (!isLoginRequest && !isTestRegistryRequest) {
-          // Token 过期或无效，清除认证信息并重新加载页面
+        if (!isLoginRequest) {
+          // Token 过期或无效，清除认证信息
+          const errorMessage = error.response?.data?.detail || error.response?.data?.message || 'Token已过期，请重新登录'
+          
+          // 检查是否是token过期
+          if (errorMessage.includes('过期') || errorMessage.includes('expired')) {
+            console.warn('⚠️ Token已过期，正在退出登录...')
+          } else {
+            console.warn('⚠️ 认证失败，正在退出登录...')
+          }
+          
+          // 清除认证信息
           clearAuth()
+          
+          // 重新加载页面，跳转到登录页
           window.location.reload()
         }
       }

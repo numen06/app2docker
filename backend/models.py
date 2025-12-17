@@ -323,3 +323,113 @@ class AgentHost(Base):
         Index("idx_agent_host_name", "name"),
         Index("idx_agent_host_type", "host_type"),
     )
+
+
+class User(Base):
+    """用户表"""
+
+    __tablename__ = "users"
+
+    user_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    username = Column(String(255), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=False)
+    email = Column(String(255))
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # 关系
+    roles = relationship(
+        "UserRole", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("idx_user_username", "username"),)
+
+
+class Role(Base):
+    """角色表"""
+
+    __tablename__ = "roles"
+
+    role_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # 关系
+    users = relationship(
+        "UserRole", back_populates="role", cascade="all, delete-orphan"
+    )
+    permissions = relationship(
+        "RolePermission", back_populates="role", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("idx_role_name", "name"),)
+
+
+class Permission(Base):
+    """权限表"""
+
+    __tablename__ = "permissions"
+
+    permission_id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    code = Column(String(100), nullable=False, unique=True)
+    name = Column(String(255), nullable=False)
+    category = Column(String(50), default="menu")  # menu, action
+    description = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # 关系
+    roles = relationship(
+        "RolePermission", back_populates="permission", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("idx_permission_code", "code"),)
+
+
+class UserRole(Base):
+    """用户-角色关联表"""
+
+    __tablename__ = "user_roles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    role_id = Column(String(36), ForeignKey("roles.role_id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # 关系
+    user = relationship("User", back_populates="roles")
+    role = relationship("Role", back_populates="users")
+
+    __table_args__ = (
+        Index("idx_user_role_user", "user_id"),
+        Index("idx_user_role_role", "role_id"),
+        Index("idx_user_role_unique", "user_id", "role_id", unique=True),
+    )
+
+
+class RolePermission(Base):
+    """角色-权限关联表"""
+
+    __tablename__ = "role_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_id = Column(String(36), ForeignKey("roles.role_id"), nullable=False)
+    permission_id = Column(
+        String(36), ForeignKey("permissions.permission_id"), nullable=False
+    )
+    created_at = Column(DateTime, default=datetime.now)
+
+    # 关系
+    role = relationship("Role", back_populates="permissions")
+    permission = relationship("Permission", back_populates="roles")
+
+    __table_args__ = (
+        Index("idx_role_permission_role", "role_id"),
+        Index("idx_role_permission_permission", "permission_id"),
+        Index("idx_role_permission_unique", "role_id", "permission_id", unique=True),
+    )

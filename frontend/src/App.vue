@@ -99,64 +99,74 @@
           <!-- Tab 导航 -->
           <div class="card-header bg-white py-0 border-top-0">
             <ul class="nav nav-tabs border-0">
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.dashboard')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'dashboard' }" @click="activeTab = 'dashboard'">
                   <i class="fas fa-chart-line"></i> 仪表盘
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.build')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'step-build' }" @click="activeTab = 'step-build'">
                   <i class="fas fa-list-ol"></i> 镜像构建
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.export')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'export' }" @click="activeTab = 'export'">
                   <i class="fas fa-file-export"></i> 导出镜像
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.tasks')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'tasks' }" @click="activeTab = 'tasks'">
                   <i class="fas fa-list-check"></i> 任务管理
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.pipeline')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'pipeline' }" @click="activeTab = 'pipeline'">
                   <i class="fas fa-project-diagram"></i> 流水线
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.datasource')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'datasource' }" @click="activeTab = 'datasource'">
                   <i class="fas fa-database"></i> 数据源
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.registry')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'registry' }" @click="activeTab = 'registry'">
                   <i class="fas fa-box"></i> 镜像仓库
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.template')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'template' }" @click="activeTab = 'template'">
                   <i class="fas fa-layer-group"></i> 模板管理
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.resource-package')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'resource-package' }" @click="activeTab = 'resource-package'">
                   <i class="fas fa-archive"></i> 资源包
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.host')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'host' }" @click="activeTab = 'host'">
                   <i class="fas fa-server"></i> 主机管理
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.docker')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'docker' }" @click="activeTab = 'docker'">
                   <i class="fas fa-server"></i> Docker 管理
                 </button>
               </li>
-              <li class="nav-item">
+              <li v-if="hasPermissionSync('menu.deploy')" class="nav-item">
                 <button type="button" class="nav-link" :class="{ active: activeTab === 'deploy' }" @click="activeTab = 'deploy'">
                   <i class="fas fa-rocket"></i> 部署管理
+                </button>
+              </li>
+              <li v-if="hasPermissionSync('menu.users')" class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
+                  <i class="fas fa-users"></i> 用户管理
+                </button>
+              </li>
+              <li v-if="hasPermissionSync('menu.users')" class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeTab === 'roles' }" @click="activeTab = 'roles'">
+                  <i class="fas fa-user-shield"></i> 角色管理
                 </button>
               </li>
             </ul>
@@ -164,19 +174,21 @@
 
           <!-- 标签页内容 -->
           <div class="card-body p-3">
-            <DashboardPanel v-if="activeTab === 'dashboard'" @navigate="handleNavigate" />
-            <StepBuildPanel v-if="activeTab === 'step-build'" />
-            <ExportPanel v-if="activeTab === 'export'" />
-            <TemplatePanel v-if="activeTab === 'template'" />
+            <DashboardPanel v-if="activeTab === 'dashboard' && hasPermissionSync('menu.dashboard')" @navigate="handleNavigate" />
+            <StepBuildPanel v-if="activeTab === 'step-build' && hasPermissionSync('menu.build')" />
+            <ExportPanel v-if="activeTab === 'export' && hasPermissionSync('menu.export')" />
+            <TemplatePanel v-if="activeTab === 'template' && hasPermissionSync('menu.template')" />
             <OperationLogs v-if="activeTab === 'logs'" />
-            <DockerManager v-if="activeTab === 'docker'" />
-            <PipelinePanel v-if="activeTab === 'pipeline'" />
-            <DataSourcePanel v-if="activeTab === 'datasource'" />
-            <RegistryPanel v-if="activeTab === 'registry'" />
-            <TaskManager v-if="activeTab === 'tasks'" />
-            <ResourcePackagePanel v-if="activeTab === 'resource-package'" />
-            <UnifiedHostManager v-if="activeTab === 'host'" />
-            <DeployTaskManager v-if="activeTab === 'deploy'" />
+            <DockerManager v-if="activeTab === 'docker' && hasPermissionSync('menu.docker')" />
+            <PipelinePanel v-if="activeTab === 'pipeline' && hasPermissionSync('menu.pipeline')" />
+            <DataSourcePanel v-if="activeTab === 'datasource' && hasPermissionSync('menu.datasource')" />
+            <RegistryPanel v-if="activeTab === 'registry' && hasPermissionSync('menu.registry')" />
+            <TaskManager v-if="activeTab === 'tasks' && hasPermissionSync('menu.tasks')" />
+            <ResourcePackagePanel v-if="activeTab === 'resource-package' && hasPermissionSync('menu.resource-package')" />
+            <UnifiedHostManager v-if="activeTab === 'host' && hasPermissionSync('menu.host')" />
+            <DeployTaskManager v-if="activeTab === 'deploy' && hasPermissionSync('menu.deploy')" />
+            <UserManagement v-if="activeTab === 'users'" />
+            <RoleManagement v-if="activeTab === 'roles'" />
             <BuildConfigEditor 
               v-if="activeTab === 'build-config-editor'" 
               :initial-config="buildConfigToEdit"
@@ -215,11 +227,14 @@ import OperationLogs from './components/OperationLogs.vue'
 import PipelinePanel from './components/PipelinePanel.vue'
 import RegistryPanel from './components/RegistryPanel.vue'
 import ResourcePackagePanel from './components/ResourcePackagePanel.vue'
+import RoleManagement from './components/RoleManagement.vue'
 import StepBuildPanel from './components/StepBuildPanel.vue'
 import TaskManager from './components/TaskManager.vue'
 import TemplatePanel from './components/TemplatePanel.vue'
 import UnifiedHostManager from './components/UnifiedHostManager.vue'
 import UserCenterModal from './components/UserCenterModal.vue'
+import UserManagement from './components/UserManagement.vue'
+import { clearPermissionsCache, getUserPermissions, hasPermissionSync } from './utils/permissions'
 
 const authenticated = ref(false)
 const username = ref('')
@@ -316,10 +331,18 @@ function stopRunningTasksTimer() {
   }
 }
 
-function handleLoginSuccess(data) {
+async function handleLoginSuccess(data) {
   authenticated.value = true
   username.value = data.username
   console.log('✅ 登录成功:', data.username)
+  
+  // 获取用户权限
+  try {
+    await getUserPermissions()
+  } catch (error) {
+    console.error('获取用户权限失败:', error)
+  }
+  
   // 登录后启动运行任务数量定时刷新
   startRunningTasksTimer()
 }
@@ -333,6 +356,7 @@ async function handleLogout() {
     runningTasksList.value = []
     showRunningTasksPopup.value = false
     stopRunningTasksTimer()
+    clearPermissionsCache()
     console.log('👋 已登出')
   }
 }
@@ -365,7 +389,7 @@ function handleBuildConfigCancel() {
   activeTab.value = 'pipeline'
 }
 
-onMounted(() => {
+onMounted(async () => {
   console.log('🚀 App 组件挂载')
   
   // 检查是否已登录
@@ -377,6 +401,13 @@ onMounted(() => {
     const token = getToken()
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    }
+    
+    // 获取用户权限
+    try {
+      await getUserPermissions()
+    } catch (error) {
+      console.error('获取用户权限失败:', error)
     }
     
     // 启动运行任务数量定时刷新
