@@ -105,6 +105,7 @@ def generate_agent_unique_id() -> Optional[str]:
 def get_host_info() -> Dict[str, Any]:
     """获取主机信息"""
     import platform
+    import socket
 
     info = {
         "hostname": platform.node(),
@@ -133,6 +134,34 @@ def get_host_info() -> Dict[str, Any]:
         logger.warning("psutil 未安装，无法获取详细的系统信息")
     except Exception as e:
         logger.error(f"获取主机信息失败: {e}")
+
+    # 尝试获取主机 IP 地址（非 127.0.0.1）
+    try:
+        ip_address = None
+        try:
+            import psutil  # type: ignore
+
+            addrs = psutil.net_if_addrs()
+            for _, addr_list in addrs.items():
+                for addr in addr_list:
+                    if getattr(addr, "family", None) == socket.AF_INET:
+                        if addr.address and not addr.address.startswith("127."):
+                            ip_address = addr.address
+                            break
+                if ip_address:
+                    break
+        except Exception:
+            # 回退到简单方式
+            pass
+
+        if not ip_address:
+            # 简单回退：通过主机名解析
+            ip_address = socket.gethostbyname(socket.gethostname())
+
+        if ip_address:
+            info["ip"] = ip_address
+    except Exception as e:
+        logger.debug(f"获取主机 IP 失败: {e}")
 
     return info
 

@@ -583,7 +583,11 @@
                 <label class="small text-muted d-block mb-1">唯一标识</label>
                 <div class="d-flex align-items-center">
                   <code class="small text-break me-2 flex-grow-1">{{ host.agent_token || '生成中...' }}</code>
-                  <button class="btn btn-sm btn-outline-secondary" @click="copyToClipboard(host.agent_token)" title="复制">
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    @click="copyToClipboard(host.agent_token, '唯一标识已复制到剪贴板')"
+                    title="复制"
+                  >
                     <i class="fas fa-copy"></i>
                   </button>
                 </div>
@@ -591,6 +595,9 @@
               
               <div v-if="host.host_info && Object.keys(host.host_info).length > 0" class="mb-3 border-top pt-3">
                 <h6 class="small text-muted mb-2">主机信息</h6>
+                <div v-if="host.host_info.ip" class="small text-muted mb-1">
+                  <i class="fas fa-network-wired me-1"></i>IP: {{ host.host_info.ip }}
+                </div>
                 <div v-if="host.host_info.os" class="small text-muted mb-1">
                   <i class="fas fa-desktop me-1"></i>{{ host.host_info.os }}
                 </div>
@@ -1734,11 +1741,13 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         alert('docker-compose.yml 内容已复制到剪贴板')
       }
     },
-    copyToClipboard(text) {
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(text)
-      } else {
-        // 降级方案
+    copyToClipboard(text, message) {
+      if (!text) {
+        alert('暂无可复制内容')
+        return
+      }
+
+      const fallbackCopy = () => {
         const textarea = document.createElement('textarea')
         textarea.value = text
         textarea.style.position = 'fixed'
@@ -1747,6 +1756,25 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         textarea.select()
         document.execCommand('copy')
         document.body.removeChild(textarea)
+        if (message) {
+          alert(message)
+        }
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => {
+            if (message) {
+              alert(message)
+            }
+          })
+          .catch(() => {
+            // 无法使用 clipboard API 时，回退到旧方案
+            fallbackCopy()
+          })
+      } else {
+        // 降级方案
+        fallbackCopy()
       }
     },
     getStatusBadgeClass(status) {
