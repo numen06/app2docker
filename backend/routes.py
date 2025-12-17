@@ -4525,24 +4525,57 @@ async def webhook_trigger(webhook_token: str, request: Request):
 
         # 提取分支信息（不同平台格式不同）
         webhook_branch = None
-        # GitHub: ref = refs/heads/main
+
+        # 首先尝试从 ref 字段提取分支（最可靠的方式）
         if "ref" in payload:
             ref = payload["ref"]
             print(f"🔍 Webhook ref 字段: {ref}")
+
+            # 处理分支引用：refs/heads/branch_name
             if ref.startswith("refs/heads/"):
                 webhook_branch = ref.replace("refs/heads/", "")
                 print(f"✅ 从 refs/heads/ 提取分支: {webhook_branch}")
-        # GitLab: ref = main (可能已经是分支名)
-        if not webhook_branch and "ref" in payload:
-            ref = payload["ref"]
-            if not ref.startswith("refs/"):
+            # 处理标签引用：refs/tags/tag_name（应该忽略）
+            elif ref.startswith("refs/tags/"):
+                print(f"⚠️ 检测到标签推送 (refs/tags/)，忽略此 webhook 触发")
+                return JSONResponse(
+                    {
+                        "message": "标签推送事件，已忽略触发",
+                        "pipeline": pipeline.get("name"),
+                        "ref": ref,
+                        "ignored": True,
+                    }
+                )
+            # GitLab: ref = main (可能已经是分支名，不包含 refs/ 前缀)
+            elif not ref.startswith("refs/"):
                 webhook_branch = ref
-                print(f"✅ 从 ref 直接提取分支: {webhook_branch}")
-        # Gitee: ref = refs/heads/main (已在上面处理)
+                print(f"✅ 从 ref 直接提取分支（GitLab格式）: {webhook_branch}")
+
+        # 如果从 ref 字段提取失败，尝试从合并请求/拉取请求中提取目标分支
+        if not webhook_branch:
+            # Gitee/GitHub: 从 pull_request 字段提取目标分支
+            if "pull_request" in payload:
+                pr = payload["pull_request"]
+                # Gitee/GitHub: base.ref 是目标分支
+                if "base" in pr and "ref" in pr["base"]:
+                    webhook_branch = pr["base"]["ref"]
+                    print(f"✅ 从 pull_request.base.ref 提取目标分支: {webhook_branch}")
+            # GitLab: 从 merge_request 字段提取目标分支
+            elif "merge_request" in payload:
+                mr = payload["merge_request"]
+                # GitLab: target_branch 是目标分支
+                if "target_branch" in mr:
+                    webhook_branch = mr["target_branch"]
+                    print(
+                        f"✅ 从 merge_request.target_branch 提取目标分支: {webhook_branch}"
+                    )
+
+        # 记录提取结果
         if webhook_branch:
-            print(f"📌 提取的 webhook_branch: {webhook_branch}")
+            print(f"📌 成功提取的 webhook_branch: {webhook_branch}")
         else:
             print(f"⚠️ 未能从 payload 中提取分支信息")
+            print(f"   可用的 payload 字段: {list(payload.keys())}")
 
         # 统一分支策略处理（与手动触发保持一致）
         # 支持新的webhook_branch_strategy字段，同时兼容旧的webhook_branch_filter和webhook_use_push_branch字段
@@ -4571,7 +4604,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
         print(f"   - webhook_branch: {webhook_branch}")
 
         # 根据分支策略确定使用的分支（统一逻辑）
+        # 重要：对于 webhook 触发，如果成功提取了 webhook_branch，应该优先使用它
         branch = None
+
         if webhook_branch_strategy == "select_branches":
             # 选择分支触发策略：只允许匹配的分支触发
             if webhook_branch:
@@ -4619,18 +4654,37 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 branch = configured_branch
                 print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
         elif webhook_branch_strategy == "use_push":
-            # 使用推送分支构建：优先使用webhook推送的分支
+            # 使用推送分支构建：必须使用webhook推送的分支
             if webhook_branch:
                 branch = webhook_branch
                 print(f"✅ 使用推送分支构建: {branch}")
             else:
+                # Webhook未提供分支信息，对于 use_push 策略应该报错而不是回退
+                print(f"❌ use_push 策略要求 webhook 提供分支信息，但提取失败")
+                return JSONResponse(
+                    {
+                        "message": "无法触发构建：use_push 策略要求 webhook 提供分支信息，但未能从 payload 中提取分支",
+                        "pipeline": pipeline.get("name"),
+                        "error": "missing_webhook_branch",
+                        "strategy": "use_push",
+                    },
+                    status_code=400,
+                )
+        else:  # use_configured
+            # 使用配置分支构建：但如果 webhook 成功提取了分支，优先使用 webhook 分支
+            # 这样可以确保从 test 合并到 master 时，使用的是 master 而不是配置的 test
+            if webhook_branch:
+                branch = webhook_branch
+                print(
+                    f"✅ use_configured 策略：检测到 webhook 分支，优先使用推送分支: {branch}"
+                )
+                print(
+                    f"   配置的分支 ({configured_branch}) 将被忽略，因为 webhook 明确推送到了 {webhook_branch}"
+                )
+            else:
                 # Webhook未提供分支信息，使用配置的分支
                 branch = configured_branch
-                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
-        else:  # use_configured
-            # 使用配置分支构建：始终使用配置的分支
-            branch = configured_branch
-            print(f"✅ 使用配置分支构建: {branch}")
+                print(f"✅ 使用配置分支构建: {branch}")
 
         # 如果最终没有确定分支，报错
         if not branch:
@@ -4648,11 +4702,19 @@ async def webhook_trigger(webhook_token: str, request: Request):
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         default_tag = pipeline.get("tag", "latest")  # 默认标签
 
-        # 调试信息：输出最终确定的分支
-        print(f"🔍 最终确定的分支: {branch}")
-        print(f"   - webhook_branch: {webhook_branch}")
-        print(f"   - configured_branch: {configured_branch}")
+        # 调试信息：输出最终确定的分支（详细总结）
+        print(f"📊 分支确定总结:")
+        print(f"   - 原始 ref 字段: {payload.get('ref', 'N/A')}")
+        print(f"   - 提取的 webhook_branch: {webhook_branch}")
+        print(f"   - 配置的 configured_branch: {configured_branch}")
+        print(f"   - 分支策略: {webhook_branch_strategy}")
         print(f"   - 最终使用的 branch: {branch}")
+        if webhook_branch and branch != webhook_branch:
+            print(
+                f"   ⚠️ 警告：最终使用的分支 ({branch}) 与 webhook 推送的分支 ({webhook_branch}) 不一致！"
+            )
+        elif webhook_branch and branch == webhook_branch:
+            print(f"   ✅ 确认：最终使用的分支与 webhook 推送的分支一致")
 
         # 使用webhook推送的分支来查找标签映射（如果有的话）
         branch_for_tag_mapping = webhook_branch if webhook_branch else branch
@@ -4916,18 +4978,22 @@ async def deploy_webhook_trigger(webhook_token: str, request: Request):
 
         # 查找所有部署配置，找到匹配的webhook_token
         tasks = build_manager.list_tasks(task_type="deploy")
-        print(f"🔍 查找部署配置: webhook_token={webhook_token}, 共找到 {len(tasks)} 个部署任务")
-        
+        print(
+            f"🔍 查找部署配置: webhook_token={webhook_token}, 共找到 {len(tasks)} 个部署任务"
+        )
+
         for task in tasks:
             task_config = task.get("task_config") or {}
             task_id = task.get("task_id", "unknown")
-            
+
             # 检查是否是配置任务（没有source_config_id的任务）
             source_config_id = task_config.get("source_config_id")
             config_webhook_token = task_config.get("webhook_token")
-            
-            print(f"🔍 检查任务 {task_id[:8]}: source_config_id={source_config_id}, webhook_token={config_webhook_token[:8] + '...' if config_webhook_token else '(None)'}")
-            
+
+            print(
+                f"🔍 检查任务 {task_id[:8]}: source_config_id={source_config_id}, webhook_token={config_webhook_token[:8] + '...' if config_webhook_token else '(None)'}"
+            )
+
             # 只检查配置任务（没有source_config_id的任务）
             if source_config_id is None:
                 if config_webhook_token == webhook_token:
@@ -4939,11 +5005,17 @@ async def deploy_webhook_trigger(webhook_token: str, request: Request):
             print(f"❌ 未找到部署配置: webhook_token={webhook_token}")
             print(f"🔍 调试信息: 共检查了 {len(tasks)} 个任务")
             # 打印所有配置任务的webhook_token（用于调试）
-            config_tasks = [t for t in tasks if not (t.get("task_config") or {}).get("source_config_id")]
+            config_tasks = [
+                t
+                for t in tasks
+                if not (t.get("task_config") or {}).get("source_config_id")
+            ]
             print(f"🔍 配置任务数量: {len(config_tasks)}")
             for t in config_tasks[:5]:  # 只打印前5个
                 token = (t.get("task_config") or {}).get("webhook_token")
-                print(f"  - task_id={t.get('task_id', 'unknown')[:8]}, webhook_token={token[:8] + '...' if token else '(None)'}")
+                print(
+                    f"  - task_id={t.get('task_id', 'unknown')[:8]}, webhook_token={token[:8] + '...' if token else '(None)'}"
+                )
             raise HTTPException(status_code=404, detail="部署配置不存在")
 
         task_config = deploy_config.get("task_config", {})
