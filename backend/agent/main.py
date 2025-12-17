@@ -15,6 +15,7 @@ import os
 import asyncio
 import logging
 import signal
+import json
 from typing import Dict, Any, Optional
 
 # 先配置日志，确保启动错误能被看到
@@ -59,9 +60,53 @@ deploy_executor: Optional[DeployExecutor] = None
 running = True
 
 
+def generate_agent_unique_id() -> Optional[str]:
+    """生成Agent唯一标识
+    优先使用Docker的SystemID，如果不可用则使用/etc/machine-id
+    """
+    import subprocess
+    import hashlib
+
+    try:
+        # 方法1: 尝试从Docker获取SystemID
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.ID}}"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            system_id = result.stdout.strip()
+            if system_id:
+                # 使用SHA256生成固定长度的唯一标识
+                unique_id = hashlib.sha256(system_id.encode()).hexdigest()[:32]
+                logger.info(f"从Docker SystemID生成唯一标识")
+                return unique_id
+    except Exception as e:
+        logger.debug(f"无法从Docker获取SystemID: {e}")
+
+    try:
+        # 方法2: 使用/etc/machine-id
+        machine_id_path = "/etc/machine-id"
+        if os.path.exists(machine_id_path):
+            with open(machine_id_path, "r") as f:
+                machine_id = f.read().strip()
+                if machine_id:
+                    # 使用SHA256生成固定长度的唯一标识
+                    unique_id = hashlib.sha256(machine_id.encode()).hexdigest()[:32]
+                    logger.info(f"从/etc/machine-id生成唯一标识")
+                    return unique_id
+    except Exception as e:
+        logger.debug(f"无法读取/etc/machine-id: {e}")
+
+    logger.warning("无法生成唯一标识，将使用临时标识")
+    return None
+
+
 def get_host_info() -> Dict[str, Any]:
     """获取主机信息"""
     import platform
+    import socket
 
     info = {
         "hostname": platform.node(),
@@ -90,6 +135,39 @@ def get_host_info() -> Dict[str, Any]:
         logger.warning("psutil 未安装，无法获取详细的系统信息")
     except Exception as e:
         logger.error(f"获取主机信息失败: {e}")
+
+    # 尝试获取主机 IP 地址（非 127.0.0.1）
+    try:
+        ip_address = None
+        try:
+            import psutil  # type: ignore
+
+            addrs = psutil.net_if_addrs()
+            for _, addr_list in addrs.items():
+                for addr in addr_list:
+                    if getattr(addr, "family", None) == socket.AF_INET:
+                        if addr.address and not addr.address.startswith("127."):
+                            ip_address = addr.address
+                            break
+                if ip_address:
+                    break
+        except Exception:
+            # 回退到简单方式
+            pass
+
+        if not ip_address:
+            # 简单回退：通过主机名解析
+            ip_address = socket.gethostbyname(socket.gethostname())
+
+        if ip_address:
+            info["ip"] = ip_address
+            # 记录 IP，方便审核和排查（只打印一次关键信息）
+            try:
+                logger.info(f"检测到主机 IP 地址: {ip_address}")
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug(f"获取主机 IP 失败: {e}")
 
     return info
 
@@ -171,17 +249,38 @@ def on_connect():
     """连接成功回调"""
     logger.info("✅ 已连接到主程序")
 
-    # 发送主机信息
+    # 发送主机信息（延迟一小段时间，确保连接完全稳定）
+    async def send_host_info_delayed():
+        # 等待一小段时间，确保连接完全稳定
+        await asyncio.sleep(0.5)
+        if websocket_client and websocket_client.connected:
+            host_info_message = {
+                "type": "host_info",
+                "host_info": get_host_info(),
+                "docker_info": get_docker_info(),
+            }
+            # 如果使用新方式且有agent_token，添加到消息中
+            if websocket_client.agent_token:
+                host_info_message["agent_token"] = websocket_client.agent_token
+
+            # 启动后统一打印一次 Agent 将上报的平台信息，方便与平台端对照审核
+            try:
+                pretty_info = json.dumps(
+                    host_info_message,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                )
+                logger.info("Agent 启动信息（将上报到平台）:\n%s", pretty_info)
+            except Exception as e:
+                logger.debug(f"序列化 Agent 启动信息失败: {e}")
+
+            await websocket_client.send_message(host_info_message)
+        else:
+            logger.debug("连接已断开，取消发送 host_info")
+
     if websocket_client:
-        asyncio.create_task(
-            websocket_client.send_message(
-                {
-                    "type": "host_info",
-                    "host_info": get_host_info(),
-                    "docker_info": get_docker_info(),
-                }
-            )
-        )
+        asyncio.create_task(send_host_info_delayed())
 
 
 def on_disconnect():
@@ -195,6 +294,16 @@ def on_message(message: Dict[str, Any]):
 
     if message_type == "welcome":
         logger.info(f"收到欢迎消息: {message.get('message')}")
+
+    elif message_type == "pending":
+        # 待加入状态消息
+        status = message.get("status", "pending")
+        msg = message.get("message", "")
+        if status == "pending":
+            logger.info(f"⏳ Agent处于待加入状态: {msg}")
+            logger.info("   请在主程序的'待加入主机'标签页中批准加入")
+        else:
+            logger.info(f"收到状态消息: {msg}")
 
     elif message_type == "deploy":
         # 部署任务
@@ -226,6 +335,16 @@ async def handle_deploy_task(message: Dict[str, Any]):
     target_name = message.get("target_name", "")  # 目标名称
     deploy_config = message.get("deploy_config", {})
     context = message.get("context", {})
+
+    # 从消息中提取 registry_auth（如果存在）
+    registry_auth = message.get("registry_auth")
+    if registry_auth:
+        if not context:
+            context = {}
+        context["registry_auth"] = registry_auth
+        logger.info(
+            f"收到 registry 认证信息: registry={registry_auth.get('registry')}, username={registry_auth.get('username')}"
+        )
 
     logger.info(f"开始执行部署任务: task_id={task_id}, target={target_name}")
 
@@ -402,16 +521,34 @@ async def main():
     logger.info("=" * 60)
 
     # 从环境变量获取配置
-    agent_token = os.getenv("AGENT_TOKEN")
+    # 新方式：使用 AGENT_SECRET_KEY（必需）和可选的 AGENT_TOKEN（用于标识已知主机）
+    # 旧方式：使用 AGENT_TOKEN（向后兼容）
+    secret_key = os.getenv("AGENT_SECRET_KEY")
+    agent_token = os.getenv("AGENT_TOKEN")  # 可选，用于标识已知主机
     server_url = os.getenv("SERVER_URL", "http://localhost:8000")
 
-    if not agent_token:
-        logger.error("❌ 未设置 AGENT_TOKEN 环境变量")
-        logger.error("请设置环境变量: export AGENT_TOKEN=your-token")
+    # 如果没有设置新方式的密钥，检查旧方式的token
+    if not secret_key and not agent_token:
+        logger.error("❌ 未设置认证信息")
+        logger.error("新方式：请设置环境变量: export AGENT_SECRET_KEY=your-secret-key")
+        logger.error(
+            "旧方式（向后兼容）：请设置环境变量: export AGENT_TOKEN=your-token"
+        )
         sys.exit(1)
 
+    # 如果使用新方式但没有设置token，尝试生成唯一标识
+    if secret_key and not agent_token:
+        agent_token = generate_agent_unique_id()
+        if agent_token:
+            logger.info(f"已生成唯一标识: {agent_token[:16]}...")
+        else:
+            logger.warning("⚠️  无法生成唯一标识，将使用临时标识")
+
     logger.info(f"服务器地址: {server_url}")
-    logger.info(f"Token: {agent_token[:8]}...")
+    if secret_key:
+        logger.info(f"密钥: {secret_key[:8]}...")
+    if agent_token:
+        logger.info(f"标识: {agent_token[:16]}...")
 
     # 初始化部署执行器
     deploy_executor = DeployExecutor()
@@ -428,16 +565,32 @@ async def main():
             logger.warning(f"获取心跳数据失败: {e}")
             return {}
 
-    websocket_client = WebSocketClient(
-        server_url=server_url,
-        token=agent_token,
-        on_message=on_message,
-        on_connect=on_connect,
-        on_disconnect=on_disconnect,
-        reconnect_interval=5,
-        heartbeat_interval=30,
-        heartbeat_data_callback=get_heartbeat_data,
-    )
+    # 根据认证方式初始化WebSocket客户端
+    if secret_key:
+        # 新方式：使用secret_key和agent_token
+        websocket_client = WebSocketClient(
+            server_url=server_url,
+            secret_key=secret_key,
+            agent_token=agent_token,
+            on_message=on_message,
+            on_connect=on_connect,
+            on_disconnect=on_disconnect,
+            reconnect_interval=5,
+            heartbeat_interval=30,
+            heartbeat_data_callback=get_heartbeat_data,
+        )
+    else:
+        # 旧方式：使用token（向后兼容）
+        websocket_client = WebSocketClient(
+            server_url=server_url,
+            token=agent_token,
+            on_message=on_message,
+            on_connect=on_connect,
+            on_disconnect=on_disconnect,
+            reconnect_interval=5,
+            heartbeat_interval=30,
+            heartbeat_data_callback=get_heartbeat_data,
+        )
 
     # 注册信号处理器
     signal.signal(signal.SIGINT, signal_handler)

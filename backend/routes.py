@@ -45,7 +45,8 @@ from backend.handlers import (
 from backend.resource_package_manager import ResourcePackageManager
 from backend.host_manager import HostManager
 from backend.agent_host_manager import AgentHostManager
-from backend.websocket_handler import handle_agent_websocket
+from backend.websocket_handler import handle_agent_websocket, active_connections
+from backend.agent_secret_manager import AgentSecretManager
 from backend.deploy_task_manager import DeployTaskManager
 from backend.config import (
     load_config,
@@ -62,7 +63,7 @@ import jwt
 
 
 def get_current_username(request: Request) -> str:
-    """从请求中获取当前用户名"""
+    """从请求中获取当前用户名（兼容旧代码，返回unknown而不是抛出异常）"""
     try:
         # FastAPI/Starlette 会将 header 名称标准化为小写
         # 使用小写 'authorization' 是标准做法
@@ -77,9 +78,6 @@ def get_current_username(request: Request) -> str:
                     break
 
         if not auth_header:
-            # 调试：打印所有 header 键（仅用于调试，可以注释掉）
-            # header_keys = list(request.headers.keys())
-            # print(f"⚠️ 没有找到 Authorization header，可用 headers: {header_keys[:5]}")
             return "unknown"
 
         # 移除 Bearer 前缀（不区分大小写）
@@ -104,7 +102,7 @@ def get_current_username(request: Request) -> str:
                 print(f"⚠️ Token 有效但用户名为空")
                 return "unknown"
         else:
-            # Token 无效
+            # Token 无效或过期
             error_msg = result.get("error", "unknown error")
             # 调试信息：打印 token 验证失败的原因
             print(
@@ -125,6 +123,62 @@ def get_current_username(request: Request) -> str:
         traceback.print_exc()
 
     return "unknown"
+
+
+def require_auth(request: Request) -> str:
+    """要求认证，获取当前用户名，token过期时抛出401异常"""
+    try:
+        auth_header = request.headers.get("authorization", "")
+
+        if not auth_header:
+            # 尝试其他可能的名称
+            for key in request.headers.keys():
+                if key.lower() == "authorization":
+                    auth_header = request.headers[key]
+                    break
+
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="未授权，请重新登录")
+
+        # 移除 Bearer 前缀（不区分大小写）
+        auth_header_lower = auth_header.lower()
+        if auth_header_lower.startswith("bearer "):
+            token = auth_header[7:].strip()
+        else:
+            # 没有 Bearer 前缀，直接使用
+            token = auth_header.strip()
+
+        if not token:
+            raise HTTPException(status_code=401, detail="未授权，请重新登录")
+
+        # 验证 token
+        result = verify_token(token)
+        if result.get("valid"):
+            username = result.get("username")
+            if username:
+                return username
+            else:
+                # Token 有效但没有用户名，这不应该发生
+                raise HTTPException(status_code=401, detail="Token无效")
+        else:
+            # Token 无效或过期
+            error_msg = result.get("error", "Token无效")
+            if "过期" in error_msg or "expired" in error_msg.lower():
+                raise HTTPException(status_code=401, detail="Token已过期，请重新登录")
+            else:
+                raise HTTPException(status_code=401, detail="Token无效，请重新登录")
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token已过期，请重新登录")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token无效，请重新登录")
+    except Exception as e:
+        print(f"⚠️ 认证异常: {type(e).__name__}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=401, detail="认证失败，请重新登录")
 
 
 from backend.template_parser import parse_template_variables
@@ -186,7 +240,7 @@ async def login(request: LoginRequest):
 @router.post("/logout")
 async def logout(request: Request):
     """用户登出"""
-    username = get_current_username(request)
+    username = require_auth(request)
     OperationLogger.log(username, "logout", {})
     return JSONResponse({"success": True, "message": "已登出"})
 
@@ -197,37 +251,41 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/change-password")
-async def change_password(request: ChangePasswordRequest):
+async def change_password(request: ChangePasswordRequest, http_request: Request):
     """修改密码"""
     try:
-        from backend.auth import load_users, verify_password, hash_password
-        from backend.config import load_config, save_config
+        from backend.auth import verify_password, hash_password, get_user_from_db
+        from backend.database import get_db_session
+        from backend.models import User
 
-        users = load_users()
+        # 获取当前用户
+        username = require_auth(http_request)
 
-        # 获取当前用户（从token中）
-        # 这里简化处理，实际应该从token中获取用户名
-        # 暂时使用admin作为默认用户
-        username = "admin"
+        # 从数据库获取用户
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=400, detail="用户不存在")
 
-        if username not in users:
-            raise HTTPException(status_code=400, detail="用户不存在")
+            # 验证旧密码
+            if not verify_password(request.old_password, user.password_hash):
+                raise HTTPException(status_code=400, detail="旧密码错误")
 
-        # 验证旧密码
-        if not verify_password(request.old_password, users[username]):
-            raise HTTPException(status_code=400, detail="旧密码错误")
+            # 验证新密码长度
+            if len(request.new_password) < 6:
+                raise HTTPException(status_code=400, detail="新密码长度至少6位")
 
-        # 更新密码
-        config = load_config()
-        if "users" not in config:
-            config["users"] = {}
-        config["users"][username] = hash_password(request.new_password)
-        save_config(config)
+            # 更新密码
+            user.password_hash = hash_password(request.new_password)
+            db.commit()
 
-        # 记录操作日志
-        OperationLogger.log(username, "change_password", {"username": username})
+            # 记录操作日志
+            OperationLogger.log(username, "change_password", {"username": username})
 
-        return JSONResponse({"success": True, "message": "密码修改成功"})
+            return JSONResponse({"success": True, "message": "密码修改成功"})
+        finally:
+            db.close()
     except HTTPException:
         raise
     except Exception as e:
@@ -235,6 +293,660 @@ async def change_password(request: ChangePasswordRequest):
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"修改密码失败: {str(e)}")
+
+
+# === 用户管理 API ===
+@router.get("/users")
+async def get_users(request: Request):
+    """获取用户列表（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import User, UserRole, Role
+
+        username = require_auth(request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            users = db.query(User).all()
+            result = []
+            for user in users:
+                # 获取用户角色
+                user_roles = (
+                    db.query(UserRole)
+                    .join(Role)
+                    .filter(UserRole.user_id == user.user_id)
+                    .all()
+                )
+                roles = [ur.role.name for ur in user_roles]
+
+                result.append(
+                    {
+                        "user_id": user.user_id,
+                        "username": user.username,
+                        "email": user.email or "",
+                        "enabled": user.enabled,
+                        "roles": roles,
+                        "created_at": (
+                            user.created_at.isoformat() if user.created_at else None
+                        ),
+                        "updated_at": (
+                            user.updated_at.isoformat() if user.updated_at else None
+                        ),
+                    }
+                )
+
+            return JSONResponse({"users": result})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取用户列表失败: {str(e)}")
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+    roles: List[str] = []
+
+
+@router.post("/users")
+async def create_user(request: CreateUserRequest, http_request: Request):
+    """创建用户（需要管理员权限）"""
+    try:
+        from backend.auth import check_role, hash_password
+        from backend.database import get_db_session
+        from backend.models import User, UserRole, Role
+
+        username = require_auth(http_request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            # 检查用户名是否已存在
+            existing_user = (
+                db.query(User).filter(User.username == request.username).first()
+            )
+            if existing_user:
+                raise HTTPException(status_code=400, detail="用户名已存在")
+
+            # 验证密码长度
+            if len(request.password) < 6:
+                raise HTTPException(status_code=400, detail="密码长度至少6位")
+
+            # 创建用户
+            import uuid
+
+            new_user = User(
+                user_id=str(uuid.uuid4()),
+                username=request.username,
+                password_hash=hash_password(request.password),
+                email=request.email,
+                enabled=True,
+            )
+            db.add(new_user)
+            db.commit()
+
+            # 分配角色
+            if request.roles:
+                for role_name in request.roles:
+                    role = db.query(Role).filter(Role.name == role_name).first()
+                    if role:
+                        user_role = UserRole(
+                            user_id=new_user.user_id, role_id=role.role_id
+                        )
+                        db.add(user_role)
+                db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "create_user", {"username": request.username})
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": "用户创建成功",
+                    "user_id": new_user.user_id,
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建用户失败: {str(e)}")
+
+
+class UpdateUserRequest(BaseModel):
+    email: Optional[str] = None
+    enabled: Optional[bool] = None
+    roles: Optional[List[str]] = None
+
+
+@router.put("/users/{user_id}")
+async def update_user(user_id: str, request: UpdateUserRequest, http_request: Request):
+    """更新用户（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import User, UserRole, Role
+
+        username = require_auth(http_request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            # 更新用户信息
+            if request.email is not None:
+                user.email = request.email
+            if request.enabled is not None:
+                user.enabled = request.enabled
+
+            # 更新角色
+            if request.roles is not None:
+                # 删除现有角色
+                db.query(UserRole).filter(UserRole.user_id == user.user_id).delete()
+
+                # 添加新角色
+                for role_name in request.roles:
+                    role = db.query(Role).filter(Role.name == role_name).first()
+                    if role:
+                        user_role = UserRole(user_id=user.user_id, role_id=role.role_id)
+                        db.add(user_role)
+
+            db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "update_user", {"user_id": user_id})
+
+            return JSONResponse({"success": True, "message": "用户更新成功"})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新用户失败: {str(e)}")
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, request: Request):
+    """删除用户（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import User
+
+        username = require_auth(request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            # 不能删除自己
+            if user.username == username:
+                raise HTTPException(status_code=400, detail="不能删除当前登录用户")
+
+            # 删除用户（级联删除会删除关联的角色）
+            db.delete(user)
+            db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "delete_user", {"user_id": user_id})
+
+            return JSONResponse({"success": True, "message": "用户删除成功"})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除用户失败: {str(e)}")
+
+
+class ChangeUserPasswordRequest(BaseModel):
+    new_password: str
+
+
+@router.put("/users/{user_id}/password")
+async def change_user_password(
+    user_id: str, request: ChangeUserPasswordRequest, http_request: Request
+):
+    """修改用户密码（需要管理员权限）"""
+    try:
+        from backend.auth import check_role, hash_password
+        from backend.database import get_db_session
+        from backend.models import User
+
+        username = require_auth(http_request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            # 不能修改超级管理员（admin）的密码
+            if user.username == "admin":
+                raise HTTPException(status_code=400, detail="不能修改超级管理员的密码")
+
+            # 验证新密码长度
+            if len(request.new_password) < 6:
+                raise HTTPException(status_code=400, detail="新密码长度至少6位")
+
+            # 更新密码
+            user.password_hash = hash_password(request.new_password)
+            db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "change_user_password", {"user_id": user_id})
+
+            return JSONResponse({"success": True, "message": "密码修改成功"})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"修改密码失败: {str(e)}")
+
+
+class ToggleEnableRequest(BaseModel):
+    enabled: bool
+
+
+@router.put("/users/{user_id}/enable")
+async def toggle_user_enable(
+    user_id: str, request: ToggleEnableRequest, http_request: Request
+):
+    """启用/禁用用户（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import User
+
+        username = require_auth(http_request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            # 不能修改超级管理员（admin）的状态
+            if user.username == "admin":
+                raise HTTPException(status_code=400, detail="不能修改超级管理员的状态")
+
+            # 不能禁用自己
+            if user.username == username and not request.enabled:
+                raise HTTPException(status_code=400, detail="不能禁用当前登录用户")
+
+            # 更新状态
+            user.enabled = request.enabled
+            db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(
+                username,
+                "toggle_user_enable",
+                {"user_id": user_id, "enabled": request.enabled},
+            )
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": f"用户已{'启用' if request.enabled else '禁用'}",
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
+
+
+@router.get("/roles")
+async def get_roles(request: Request):
+    """获取角色列表（包含权限信息）"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import Role, RolePermission, Permission
+
+        require_auth(request)  # 需要登录
+
+        db = get_db_session()
+        try:
+            roles = db.query(Role).all()
+            result = []
+            for role in roles:
+                # 获取角色的权限
+                role_permissions = (
+                    db.query(RolePermission)
+                    .filter(RolePermission.role_id == role.role_id)
+                    .all()
+                )
+                permission_ids = [rp.permission_id for rp in role_permissions]
+
+                permissions = (
+                    db.query(Permission)
+                    .filter(Permission.permission_id.in_(permission_ids))
+                    .all()
+                    if permission_ids
+                    else []
+                )
+
+                result.append(
+                    {
+                        "role_id": role.role_id,
+                        "name": role.name,
+                        "description": role.description or "",
+                        "permissions": [perm.code for perm in permissions],
+                    }
+                )
+
+            return JSONResponse({"roles": result})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取角色列表失败: {str(e)}")
+
+
+class CreateRoleRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    permissions: List[str] = []
+
+
+@router.post("/roles")
+async def create_role(request: CreateRoleRequest, http_request: Request):
+    """创建角色（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import Role, RolePermission, Permission
+        import uuid
+
+        username = require_auth(http_request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            # 检查角色名是否已存在
+            existing_role = db.query(Role).filter(Role.name == request.name).first()
+            if existing_role:
+                raise HTTPException(status_code=400, detail="角色名已存在")
+
+            # 创建角色
+            new_role = Role(
+                role_id=str(uuid.uuid4()),
+                name=request.name,
+                description=request.description or "",
+            )
+            db.add(new_role)
+            db.commit()
+
+            # 分配权限
+            if request.permissions:
+                for permission_code in request.permissions:
+                    permission = (
+                        db.query(Permission)
+                        .filter(Permission.code == permission_code)
+                        .first()
+                    )
+                    if permission:
+                        role_permission = RolePermission(
+                            role_id=new_role.role_id,
+                            permission_id=permission.permission_id,
+                        )
+                        db.add(role_permission)
+                db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "create_role", {"role_name": request.name})
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": "角色创建成功",
+                    "role_id": new_role.role_id,
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建角色失败: {str(e)}")
+
+
+class UpdateRoleRequest(BaseModel):
+    description: Optional[str] = None
+    permissions: Optional[List[str]] = None
+
+
+@router.put("/roles/{role_id}")
+async def update_role(role_id: str, request: UpdateRoleRequest, http_request: Request):
+    """更新角色（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import Role, RolePermission, Permission
+
+        username = require_auth(http_request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            role = db.query(Role).filter(Role.role_id == role_id).first()
+            if not role:
+                raise HTTPException(status_code=404, detail="角色不存在")
+
+            # 系统默认角色可以更新描述和权限，但不能修改名称
+            # 这里允许更新，只是在前端限制名称字段
+
+            # 更新角色描述
+            if request.description is not None:
+                role.description = request.description
+
+            # 更新权限
+            if request.permissions is not None:
+                # 删除现有权限
+                db.query(RolePermission).filter(
+                    RolePermission.role_id == role_id
+                ).delete()
+
+                # 添加新权限
+                for permission_code in request.permissions:
+                    permission = (
+                        db.query(Permission)
+                        .filter(Permission.code == permission_code)
+                        .first()
+                    )
+                    if permission:
+                        role_permission = RolePermission(
+                            role_id=role_id, permission_id=permission.permission_id
+                        )
+                        db.add(role_permission)
+
+            db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "update_role", {"role_id": role_id})
+
+            return JSONResponse({"success": True, "message": "角色更新成功"})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新角色失败: {str(e)}")
+
+
+@router.delete("/roles/{role_id}")
+async def delete_role(role_id: str, request: Request):
+    """删除角色（需要管理员权限）"""
+    try:
+        from backend.auth import check_role
+        from backend.database import get_db_session
+        from backend.models import Role, UserRole
+
+        username = require_auth(request)
+
+        # 检查是否为管理员
+        if not check_role(username, "admin"):
+            raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+
+        db = get_db_session()
+        try:
+            role = db.query(Role).filter(Role.role_id == role_id).first()
+            if not role:
+                raise HTTPException(status_code=404, detail="角色不存在")
+
+            # 不能删除默认角色
+            if role.name in ["admin", "user", "readonly"]:
+                raise HTTPException(status_code=400, detail="不能删除系统默认角色")
+
+            # 检查是否有用户使用此角色
+            user_roles = db.query(UserRole).filter(UserRole.role_id == role_id).count()
+            if user_roles > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"无法删除：仍有 {user_roles} 个用户使用此角色",
+                )
+
+            # 删除角色（级联删除会删除关联的权限）
+            db.delete(role)
+            db.commit()
+
+            # 记录操作日志
+            OperationLogger.log(username, "delete_role", {"role_id": role_id})
+
+            return JSONResponse({"success": True, "message": "角色删除成功"})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"删除角色失败: {str(e)}")
+
+
+@router.get("/permissions")
+async def get_permissions(request: Request):
+    """获取权限列表"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import Permission
+
+        require_auth(request)  # 需要登录
+
+        db = get_db_session()
+        try:
+            permissions = db.query(Permission).all()
+            result = [
+                {
+                    "permission_id": perm.permission_id,
+                    "code": perm.code,
+                    "name": perm.name,
+                    "category": perm.category or "menu",
+                    "description": perm.description or "",
+                }
+                for perm in permissions
+            ]
+
+            return JSONResponse({"permissions": result})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取权限列表失败: {str(e)}")
+
+
+@router.get("/user/permissions")
+async def get_current_user_permissions(request: Request):
+    """获取当前用户的权限列表"""
+    try:
+        from backend.auth import get_user_permissions
+
+        username = require_auth(request)
+        permissions = get_user_permissions(username)
+
+        return JSONResponse({"permissions": list(permissions)})
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取用户权限失败: {str(e)}")
 
 
 @router.get("/operation-logs")
@@ -356,18 +1068,7 @@ async def get_registries():
 async def save_registries(request: SaveRegistriesRequest, http_request: Request):
     """保存仓库配置列表"""
     try:
-        username = get_current_username(http_request)
-        if username == "unknown":
-            # 检查是否有 Authorization header
-            auth_header = http_request.headers.get("authorization", "")
-            if not auth_header:
-                # 没有 token，返回 401（这是真正的认证错误）
-                raise HTTPException(status_code=401, detail="未授权，请重新登录")
-            else:
-                # 有 token 但验证失败（可能是过期），返回 400 避免前端退出登录
-                raise HTTPException(
-                    status_code=400, detail="Token 已过期或无效，请刷新页面后重试"
-                )
+        username = require_auth(http_request)
 
         config = load_config()
 
@@ -499,26 +1200,7 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
     """
     try:
         # 验证系统 token（需要系统认证才能使用此功能）
-        username = get_current_username(http_request)
-        if username == "unknown":
-            # 检查是否有 Authorization header
-            auth_header = http_request.headers.get("authorization", "")
-            if not auth_header:
-                # 没有 token，返回 401（这是真正的系统认证错误）
-                print(f"⚠️ 测试仓库接口：没有 Authorization header")
-                raise HTTPException(status_code=401, detail="未授权，请先登录系统")
-            else:
-                # 有 token 但验证失败（可能是过期），返回 400 避免前端退出登录
-                # 提取 token 用于调试
-                token_preview = (
-                    auth_header[:20] + "..." if len(auth_header) > 20 else auth_header
-                )
-                print(
-                    f"⚠️ 测试仓库接口：Token 验证失败，header 前20个字符: {token_preview}"
-                )
-                raise HTTPException(
-                    status_code=400, detail="系统 Token 已过期或无效，请刷新页面后重试"
-                )
+        username = require_auth(http_request)
 
         # 系统认证通过后，使用传入的仓库用户名和密码测试仓库连接
         # 注意：这里的 username 和 password 是仓库的认证信息，不是系统的
@@ -6450,6 +7132,15 @@ class AgentHostUpdateRequest(BaseModel):
     portainer_endpoint_id: Optional[int] = None
 
 
+class PendingHostApproveRequest(BaseModel):
+    name: str  # 主机名称（必需）
+    description: str = ""  # 描述（可选）
+
+
+class AgentSecretRequest(BaseModel):
+    name: str = ""  # 密钥名称/描述
+
+
 class PortainerTestRequest(BaseModel):
     portainer_url: str
     api_key: str
@@ -6586,6 +7277,157 @@ async def list_agent_hosts(request: Request):
         return JSONResponse({"hosts": hosts})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取Agent主机列表失败: {str(e)}")
+
+
+# ==================== 待加入主机管理 ====================
+# 注意：这些路由必须在 /agent-hosts/{host_id} 之前定义，避免路径参数冲突
+
+
+@router.get("/agent-hosts/pending")
+async def list_pending_hosts(request: Request):
+    """获取待加入主机列表"""
+    try:
+        username = get_current_username(request)
+        from backend.pending_host_manager import pending_host_manager
+
+        pending_hosts = pending_host_manager.list_pending_hosts()
+        return JSONResponse({"hosts": pending_hosts})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取待加入主机列表失败: {str(e)}")
+
+
+@router.post("/agent-hosts/pending/{agent_token}/approve")
+async def approve_pending_host(
+    request: Request, agent_token: str, host_req: PendingHostApproveRequest
+):
+    """批准待加入主机，正式加入系统"""
+    try:
+        username = require_auth(request)
+        manager = AgentHostManager()
+        from backend.pending_host_manager import pending_host_manager
+        from backend.websocket_handler import active_connections
+
+        # 获取待加入主机信息
+        pending_host = pending_host_manager.get_pending_host(agent_token)
+        if not pending_host:
+            raise HTTPException(status_code=404, detail="待加入主机不存在")
+
+        # 获取WebSocket连接
+        websocket = pending_host_manager.get_pending_connection(agent_token)
+        if not websocket:
+            raise HTTPException(
+                status_code=400, detail="待加入主机的WebSocket连接不存在"
+            )
+
+        # 批准主机（创建数据库记录）
+        host_info = manager.approve_pending_host(
+            agent_token=agent_token,
+            name=host_req.name,
+            description=host_req.description,
+        )
+
+        host_id = host_info["host_id"]
+
+        # 更新WebSocket连接关联
+        # 将连接从待加入列表转移到正式连接列表
+        if host_id in active_connections:
+            # 如果已有连接，先关闭旧连接
+            try:
+                old_ws = active_connections[host_id]
+                del active_connections[host_id]
+                await old_ws.close(code=1000, reason="Replaced by approved host")
+            except Exception as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"[Routes] 关闭旧连接时出错（可忽略）: {e}")
+
+        # 将WebSocket连接关联到新的host_id
+        active_connections[host_id] = websocket
+
+        # 发送批准消息给Agent
+        try:
+            await websocket.send_json(
+                {
+                    "type": "approved",
+                    "message": "主机已批准加入系统",
+                    "host_id": host_id,
+                    "name": host_req.name,
+                }
+            )
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[Routes] 发送批准消息失败: {e}，但主机已创建")
+
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "agent_host_approve",
+            {
+                "host_id": host_id,
+                "name": host_req.name,
+                "agent_token": agent_token[:16] + "..." if agent_token else "None",
+            },
+        )
+
+        return JSONResponse(
+            {
+                "success": True,
+                "message": "主机已批准加入系统",
+                "host": host_info,
+            }
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"批准待加入主机失败: {str(e)}")
+
+
+@router.delete("/agent-hosts/pending/{agent_token}")
+async def reject_pending_host(request: Request, agent_token: str):
+    """拒绝待加入主机，关闭连接"""
+    try:
+        username = require_auth(request)
+        from backend.pending_host_manager import pending_host_manager
+
+        # 获取待加入主机信息
+        pending_host = pending_host_manager.get_pending_host(agent_token)
+        if not pending_host:
+            raise HTTPException(status_code=404, detail="待加入主机不存在")
+
+        # 获取WebSocket连接并关闭
+        websocket = pending_host_manager.get_pending_connection(agent_token)
+        if websocket:
+            try:
+                await websocket.close(code=1008, reason="Rejected by administrator")
+            except Exception as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"[Routes] 关闭连接时出错（可忽略）: {e}")
+
+        # 从待加入列表中移除
+        pending_host_manager.remove_pending_host(agent_token)
+
+        # 记录操作日志
+        OperationLogger.log(
+            username,
+            "agent_host_reject",
+            {"agent_token": agent_token[:16] + "..." if agent_token else "None"},
+        )
+
+        return JSONResponse({"success": True, "message": "待加入主机已拒绝"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"拒绝待加入主机失败: {str(e)}")
+
+
+# ==================== Agent主机详情和管理 ====================
 
 
 @router.get("/agent-hosts/{host_id}")
@@ -6746,10 +7588,149 @@ async def get_deploy_command(
         raise HTTPException(status_code=500, detail=f"生成部署命令失败: {str(e)}")
 
 
+# ==================== Agent密钥管理 ====================
+
+
+@router.get("/agent-secrets")
+async def list_agent_secrets(request: Request):
+    """获取所有密钥列表"""
+    try:
+        username = get_current_username(request)
+        secret_manager = AgentSecretManager()
+        secrets = secret_manager.list_secrets()
+        return JSONResponse({"secrets": secrets})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取密钥列表失败: {str(e)}")
+
+
+@router.post("/agent-secrets")
+async def create_agent_secret(request: Request, secret_req: AgentSecretRequest):
+    """生成新密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.generate_secret(name=secret_req.name)
+
+        OperationLogger.log(
+            username,
+            "agent_secret_create",
+            {"secret_id": secret_info["secret_id"], "name": secret_req.name},
+        )
+
+        return JSONResponse(
+            {"success": True, "message": "密钥生成成功", "secret": secret_info}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成密钥失败: {str(e)}")
+
+
+@router.put("/agent-secrets/{secret_id}/enable")
+async def enable_agent_secret(request: Request, secret_id: str):
+    """启用密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.enable_secret(secret_id)
+        if not secret_info:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_enable", {"secret_id": secret_id})
+
+        return JSONResponse(
+            {"success": True, "message": "密钥已启用", "secret": secret_info}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启用密钥失败: {str(e)}")
+
+
+@router.put("/agent-secrets/{secret_id}/disable")
+async def disable_agent_secret(request: Request, secret_id: str):
+    """禁用密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.disable_secret(secret_id)
+        if not secret_info:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_disable", {"secret_id": secret_id})
+
+        return JSONResponse(
+            {"success": True, "message": "密钥已禁用", "secret": secret_info}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"禁用密钥失败: {str(e)}")
+
+
+@router.delete("/agent-secrets/{secret_id}")
+async def delete_agent_secret(request: Request, secret_id: str):
+    """删除密钥"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        success = secret_manager.delete_secret(secret_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_delete", {"secret_id": secret_id})
+
+        return JSONResponse({"success": True, "message": "密钥已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除密钥失败: {str(e)}")
+
+
+@router.put("/agent-secrets/{secret_id}")
+async def update_agent_secret(
+    request: Request, secret_id: str, secret_req: AgentSecretRequest
+):
+    """更新密钥信息"""
+    try:
+        username = require_auth(request)
+        secret_manager = AgentSecretManager()
+
+        secret_info = secret_manager.update_secret(secret_id, name=secret_req.name)
+        if not secret_info:
+            raise HTTPException(status_code=404, detail="密钥不存在")
+
+        OperationLogger.log(username, "agent_secret_update", {"secret_id": secret_id})
+
+        return JSONResponse(
+            {"success": True, "message": "密钥已更新", "secret": secret_info}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新密钥失败: {str(e)}")
+
+
+# ==================== WebSocket连接 ====================
+
+
 @router.websocket("/ws/agent")
-async def websocket_agent_endpoint(websocket: WebSocket, token: str = Query(...)):
-    """Agent WebSocket连接端点（通过查询参数传递token）"""
-    await handle_agent_websocket(websocket, token)
+async def websocket_agent_endpoint(
+    websocket: WebSocket,
+    secret_key: Optional[str] = Query(None),
+    agent_token: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),  # 向后兼容
+):
+    """Agent WebSocket连接端点
+
+    新方式：通过查询参数传递 secret_key 和 agent_token（可选）
+    旧方式（向后兼容）：通过查询参数传递 token
+    """
+    await handle_agent_websocket(
+        websocket, secret_key=secret_key, agent_token=agent_token, token=token
+    )
 
 
 # ==================== 部署任务管理 ====================

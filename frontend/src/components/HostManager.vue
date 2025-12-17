@@ -368,7 +368,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import axios from 'axios';
 
 export default {
   name: 'HostManager',
@@ -705,6 +705,8 @@ export default {
 <style scoped>
 .host-manager-panel {
   padding: 0;
+  min-height: 100%;
+  overflow: visible;
 }
 
 .card {

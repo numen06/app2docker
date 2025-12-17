@@ -7,6 +7,7 @@ import secrets
 import os
 from datetime import datetime, timedelta
 from functools import wraps
+from typing import List, Set, Optional
 
 # 配置
 TOKEN_EXPIRE_HOURS = 24
@@ -86,18 +87,33 @@ def verify_token(token: str) -> dict:
 
 def authenticate(username: str, password: str) -> dict:
     """用户认证"""
-    # 从配置或数据库获取用户（这里简化为硬编码）
-    users = load_users()
+    # 从数据库获取用户
+    user = get_user_from_db(username)
     
-    if username not in users:
-        return {'success': False, 'error': '用户名或密码错误'}
-    
-    if not verify_password(password, users[username]):
-        return {'success': False, 'error': '用户名或密码错误'}
-    
-    # 检查是否使用默认密码
-    default_password_hash = hash_password("admin")
-    is_default_password = verify_password("admin", users[username])
+    if not user:
+        # 向后兼容：尝试从配置文件加载
+        users = load_users()
+        if username not in users:
+            return {'success': False, 'error': '用户名或密码错误'}
+        
+        if not verify_password(password, users[username]):
+            return {'success': False, 'error': '用户名或密码错误'}
+        
+        # 检查是否使用默认密码
+        default_password_hash = hash_password("admin")
+        is_default_password = verify_password("admin", users[username])
+    else:
+        # 检查用户是否启用
+        if not user.enabled:
+            return {'success': False, 'error': '用户已被禁用'}
+        
+        # 验证密码
+        if not verify_password(password, user.password_hash):
+            return {'success': False, 'error': '用户名或密码错误'}
+        
+        # 检查是否使用默认密码
+        default_password_hash = hash_password("admin")
+        is_default_password = verify_password("admin", user.password_hash)
     
     token = create_token(username)
     return {
@@ -110,19 +126,204 @@ def authenticate(username: str, password: str) -> dict:
 
 
 def load_users():
-    """从配置加载用户（简化版）"""
+    """从数据库加载用户（兼容旧代码，返回字典格式）"""
     try:
-        from backend.config import load_config
-        config = load_config()
-        users = config.get('users', {})
+        from backend.database import get_db_session
+        from backend.models import User
         
-        # 如果配置中没有用户，使用默认用户
-        if not users:
-            users = DEFAULT_USERS
+        db = get_db_session()
+        try:
+            users = {}
+            db_users = db.query(User).filter(User.enabled == True).all()
+            for user in db_users:
+                users[user.username] = user.password_hash
+            
+            # 如果数据库中没有用户，尝试从配置文件加载（向后兼容）
+            if not users:
+                from backend.config import load_config
+                config = load_config()
+                users = config.get('users', {})
+                
+                # 如果配置中也没有用户，使用默认用户
+                if not users:
+                    users = DEFAULT_USERS
+            
+            return users
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ 从数据库加载用户失败: {e}，尝试从配置文件加载")
+        try:
+            from backend.config import load_config
+            config = load_config()
+            users = config.get('users', {})
+            if not users:
+                users = DEFAULT_USERS
+            return users
+        except Exception:
+            return DEFAULT_USERS
+
+
+def get_user_from_db(username: str):
+    """从数据库获取用户对象"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User
         
-        return users
-    except Exception:
-        return DEFAULT_USERS
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.username == username).first()
+            return user
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ 从数据库获取用户失败: {e}")
+        return None
+
+
+def get_user_permissions(username: str) -> Set[str]:
+    """获取用户的所有权限代码集合"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User, UserRole, RolePermission
+        
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.username == username, User.enabled == True).first()
+            if not user:
+                return set()
+            
+            # 获取用户的所有角色
+            user_roles = db.query(UserRole).filter(UserRole.user_id == user.user_id).all()
+            role_ids = [ur.role_id for ur in user_roles]
+            
+            if not role_ids:
+                return set()
+            
+            # 获取角色对应的所有权限
+            role_permissions = db.query(RolePermission).filter(
+                RolePermission.role_id.in_(role_ids)
+            ).all()
+            
+            permission_ids = [rp.permission_id for rp in role_permissions]
+            
+            if not permission_ids:
+                return set()
+            
+            # 获取权限代码
+            from backend.models import Permission
+            permissions = db.query(Permission).filter(
+                Permission.permission_id.in_(permission_ids)
+            ).all()
+            
+            return {perm.code for perm in permissions}
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ 获取用户权限失败: {e}")
+        return set()
+
+
+def check_permission(username: str, permission_code: str) -> bool:
+    """检查用户是否有指定权限"""
+    user_permissions = get_user_permissions(username)
+    return permission_code in user_permissions
+
+
+def check_role(username: str, role_name: str) -> bool:
+    """检查用户是否有指定角色"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User, UserRole, Role
+        
+        db = get_db_session()
+        try:
+            user = db.query(User).filter(User.username == username, User.enabled == True).first()
+            if not user:
+                return False
+            
+            # 获取用户的所有角色
+            user_roles = db.query(UserRole).join(Role).filter(
+                UserRole.user_id == user.user_id,
+                Role.name == role_name
+            ).first()
+            
+            return user_roles is not None
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ 检查用户角色失败: {e}")
+        return False
+
+
+def require_permission(permission_code: str):
+    """装饰器：要求指定权限"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # 从kwargs或args中获取request对象
+            request = None
+            for arg in args:
+                if hasattr(arg, 'headers'):
+                    request = arg
+                    break
+            if not request:
+                for key, value in kwargs.items():
+                    if hasattr(value, 'headers'):
+                        request = value
+                        break
+            
+            if not request:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=500, detail="无法获取请求对象")
+            
+            # 获取当前用户名
+            from backend.routes import require_auth
+            username = require_auth(request)
+            
+            # 检查权限
+            if not check_permission(username, permission_code):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail=f"权限不足：需要 {permission_code} 权限")
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def require_role(role_name: str):
+    """装饰器：要求指定角色"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # 从kwargs或args中获取request对象
+            request = None
+            for arg in args:
+                if hasattr(arg, 'headers'):
+                    request = arg
+                    break
+            if not request:
+                for key, value in kwargs.items():
+                    if hasattr(value, 'headers'):
+                        request = value
+                        break
+            
+            if not request:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=500, detail="无法获取请求对象")
+            
+            # 获取当前用户名
+            from backend.routes import require_auth
+            username = require_auth(request)
+            
+            # 检查角色
+            if not check_role(username, role_name):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail=f"权限不足：需要 {role_name} 角色")
+            
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def require_auth(handler_method):

@@ -25,6 +25,35 @@ from backend.command_adapter import CommandAdapter
 logger = logging.getLogger(__name__)
 
 
+def extract_registry_from_image(image_name: str) -> Optional[str]:
+    """
+    从镜像名称中提取 registry 地址
+
+    Args:
+        image_name: 镜像名称，例如:
+            - docker.jajachina.com/public/nginx
+            - registry.cn-hangzhou.aliyuncs.com/namespace/app:tag
+            - nginx (默认 docker.io)
+
+    Returns:
+        registry 地址，如果无法提取则返回 None（表示使用默认 docker.io）
+    """
+    if not image_name:
+        return None
+
+    # 移除 tag（如果有）
+    image_without_tag = image_name.split(":")[0]
+    parts = image_without_tag.split("/")
+
+    # 如果包含点或冒号，可能是 registry 地址
+    # 例如: docker.jajachina.com/public/nginx -> docker.jajachina.com
+    if len(parts) > 1 and ("." in parts[0] or ":" in parts[0]):
+        return parts[0]
+
+    # 默认是 docker.io（返回 None 表示使用默认）
+    return None
+
+
 class DeployTaskManager:
     """部署任务管理器（简化版，只负责执行逻辑）"""
 
@@ -490,6 +519,110 @@ class DeployTaskManager:
                     task_manager.add_log(task_id, f"📋 部署配置（Docker Run 模式）：\n")
                     if command:
                         task_manager.add_log(task_id, f"  命令: docker run {command}\n")
+
+        # 查找并添加 registry 认证信息
+        registry_auth_info = None
+        try:
+            # 从部署配置中提取镜像名称
+            image_name = None
+
+            # 尝试从 adapted_config 中获取镜像名称
+            if adapted_config.get("deploy_mode") == "docker_run":
+                # Docker Run 模式：从 image 字段获取
+                image_name = adapted_config.get("image")
+                # 如果没有，尝试从 command 中解析
+                if not image_name:
+                    command_str = adapted_config.get("command", "")
+                    if command_str:
+                        # 使用 command_adapter 的解析逻辑
+                        from backend.command_adapter import CommandAdapter
+
+                        parsed = CommandAdapter._parse_docker_run_command(command_str)
+                        image_name = parsed.get("image")
+            elif adapted_config.get("deploy_mode") == "docker_compose":
+                # Docker Compose 模式：从 compose_content 中解析
+                compose_content = adapted_config.get("compose_content", "")
+                if compose_content:
+                    try:
+                        import yaml
+
+                        compose_config = yaml.safe_load(compose_content)
+                        services = compose_config.get("services", {})
+                        # 查找第一个服务的镜像
+                        for service_name, service_config in services.items():
+                            if "image" in service_config:
+                                image_name = service_config["image"]
+                                break
+                    except Exception as e:
+                        logger.debug(f"解析 compose_content 失败: {e}")
+
+            # 如果还没有找到，尝试从 context 中构建
+            if not image_name and context:
+                registry = context.get("registry", "docker.io")
+                tag = context.get("tag", "latest")
+                app_name = ""
+                if isinstance(context.get("app"), dict):
+                    app_name = context.get("app", {}).get("name", "")
+                elif context.get("app_name"):
+                    app_name = context.get("app_name", "")
+
+                if app_name:
+                    if registry and registry != "docker.io":
+                        image_name = f"{registry}/{app_name}:{tag}"
+                    else:
+                        image_name = f"{app_name}:{tag}"
+
+            # 如果找到了镜像名称，提取 registry 并查找认证配置
+            if image_name:
+                registry_address = extract_registry_from_image(image_name)
+                if registry_address:
+                    # 查找匹配的 registry 配置
+                    from backend.config import get_all_registries
+
+                    registries = get_all_registries()
+
+                    for registry_config in registries:
+                        registry_host = registry_config.get("registry", "")
+                        username = registry_config.get("username", "")
+                        password = registry_config.get("password", "")
+
+                        # 匹配逻辑：检查 registry 地址是否匹配
+                        if (
+                            registry_host == registry_address
+                            or registry_address.startswith(registry_host)
+                            or registry_host.startswith(registry_address)
+                        ):
+                            if username and password:
+                                registry_auth_info = {
+                                    "registry": registry_address,
+                                    "username": username,
+                                    "password": password,
+                                }
+                                logger.info(
+                                    f"找到匹配的 registry 认证配置: {registry_address}, username: {username}"
+                                )
+                                if task_manager:
+                                    task_manager.add_log(
+                                        task_id,
+                                        f"🔐 找到 registry 认证配置: {registry_address}\n",
+                                    )
+                                break
+
+                    if not registry_auth_info:
+                        logger.debug(f"未找到 registry 认证配置: {registry_address}")
+                else:
+                    logger.debug(f"无法从镜像名称提取 registry: {image_name}")
+            else:
+                logger.debug("无法从部署配置中提取镜像名称")
+        except Exception as e:
+            logger.warning(f"查找 registry 认证配置时出错: {e}")
+            # 不阻止部署，继续执行
+
+        # 将认证信息添加到 context
+        if registry_auth_info:
+            if not context:
+                context = {}
+            context["registry_auth"] = registry_auth_info
 
         # 执行部署
         try:

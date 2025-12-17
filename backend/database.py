@@ -1,6 +1,7 @@
 # backend/database.py
 """数据库配置和会话管理"""
 import os
+import uuid
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.pool import StaticPool
@@ -115,6 +116,15 @@ def init_db():
 
     # 迁移：添加started_at字段到tasks表（如果不存在）
     migrate_add_started_at_field()
+
+    # 迁移：添加用户系统表
+    migrate_add_user_system()
+
+    # 迁移：创建agent_secrets表
+    migrate_add_agent_secrets_table()
+
+    # 迁移：添加agent_unique_id字段到agent_hosts表
+    migrate_add_agent_unique_id()
 
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
@@ -487,6 +497,310 @@ def migrate_fix_json_fields():
         conn.close()
     except Exception as e:
         print(f"⚠️ 修复JSON字段失败: {e}")
+
+
+def migrate_add_user_system():
+    """迁移：添加用户系统表并迁移现有用户数据"""
+    from backend.models import User, Role, Permission, UserRole, RolePermission, Base
+    from backend.config import load_config
+    from backend.auth import hash_password
+    import json
+
+    # 表已经通过Base.metadata.create_all创建，这里只需要迁移数据
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        db = get_db_session()
+        try:
+            # 检查users表是否存在数据
+            existing_users = db.query(User).count()
+            if existing_users > 0:
+                print("✅ 用户系统表已存在数据，跳过迁移")
+                return
+
+            print("🔄 开始迁移用户系统...")
+
+            # 1. 创建默认角色
+            default_roles = [
+                {"name": "admin", "description": "管理员，拥有所有权限"},
+                {"name": "user", "description": "普通用户，拥有基础功能权限"},
+                {"name": "readonly", "description": "只读用户，仅拥有查看权限"},
+            ]
+
+            role_map = {}
+            for role_data in default_roles:
+                role = db.query(Role).filter(Role.name == role_data["name"]).first()
+                if not role:
+                    role = Role(
+                        role_id=str(uuid.uuid4()),
+                        name=role_data["name"],
+                        description=role_data["description"],
+                    )
+                    db.add(role)
+                    db.commit()
+                    print(f"✅ 创建角色: {role_data['name']}")
+                role_map[role_data["name"]] = role
+
+            # 2. 创建默认权限
+            default_permissions = [
+                {"code": "menu.dashboard", "name": "仪表盘", "category": "menu"},
+                {"code": "menu.build", "name": "镜像构建", "category": "menu"},
+                {"code": "menu.export", "name": "导出镜像", "category": "menu"},
+                {"code": "menu.tasks", "name": "任务管理", "category": "menu"},
+                {"code": "menu.pipeline", "name": "流水线", "category": "menu"},
+                {"code": "menu.datasource", "name": "数据源", "category": "menu"},
+                {"code": "menu.registry", "name": "镜像仓库", "category": "menu"},
+                {"code": "menu.template", "name": "模板管理", "category": "menu"},
+                {"code": "menu.resource-package", "name": "资源包", "category": "menu"},
+                {"code": "menu.host", "name": "主机管理", "category": "menu"},
+                {"code": "menu.docker", "name": "Docker管理", "category": "menu"},
+                {"code": "menu.deploy", "name": "部署管理", "category": "menu"},
+                {"code": "menu.users", "name": "用户管理", "category": "menu"},
+            ]
+
+            permission_map = {}
+            for perm_data in default_permissions:
+                perm = (
+                    db.query(Permission)
+                    .filter(Permission.code == perm_data["code"])
+                    .first()
+                )
+                if not perm:
+                    perm = Permission(
+                        permission_id=str(uuid.uuid4()),
+                        code=perm_data["code"],
+                        name=perm_data["name"],
+                        category=perm_data["category"],
+                    )
+                    db.add(perm)
+                    db.commit()
+                    print(f"✅ 创建权限: {perm_data['code']}")
+                permission_map[perm_data["code"]] = perm
+
+            # 3. 分配角色权限
+            # 管理员：所有权限
+            admin_role = role_map["admin"]
+            for perm in permission_map.values():
+                existing = (
+                    db.query(RolePermission)
+                    .filter(
+                        RolePermission.role_id == admin_role.role_id,
+                        RolePermission.permission_id == perm.permission_id,
+                    )
+                    .first()
+                )
+                if not existing:
+                    rp = RolePermission(
+                        role_id=admin_role.role_id, permission_id=perm.permission_id
+                    )
+                    db.add(rp)
+
+            # 普通用户：除用户管理外的所有菜单权限
+            user_role = role_map["user"]
+            for code, perm in permission_map.items():
+                if code != "menu.users":
+                    existing = (
+                        db.query(RolePermission)
+                        .filter(
+                            RolePermission.role_id == user_role.role_id,
+                            RolePermission.permission_id == perm.permission_id,
+                        )
+                        .first()
+                    )
+                    if not existing:
+                        rp = RolePermission(
+                            role_id=user_role.role_id, permission_id=perm.permission_id
+                        )
+                        db.add(rp)
+
+            # 只读用户：仅查看类菜单
+            readonly_role = role_map["readonly"]
+            readonly_permissions = [
+                "menu.dashboard",
+                "menu.tasks",
+                "menu.pipeline",
+                "menu.datasource",
+                "menu.registry",
+                "menu.template",
+                "menu.resource-package",
+                "menu.host",
+                "menu.docker",
+            ]
+            for code in readonly_permissions:
+                if code in permission_map:
+                    perm = permission_map[code]
+                    existing = (
+                        db.query(RolePermission)
+                        .filter(
+                            RolePermission.role_id == readonly_role.role_id,
+                            RolePermission.permission_id == perm.permission_id,
+                        )
+                        .first()
+                    )
+                    if not existing:
+                        rp = RolePermission(
+                            role_id=readonly_role.role_id,
+                            permission_id=perm.permission_id,
+                        )
+                        db.add(rp)
+
+            db.commit()
+            print("✅ 角色权限分配完成")
+
+            # 4. 从config.yml迁移用户
+            config = load_config()
+            users_config = config.get("users", {})
+
+            # 如果没有配置用户，创建默认admin用户
+            if not users_config:
+                admin_password_hash = hash_password("admin")
+                admin_user = User(
+                    user_id=str(uuid.uuid4()),
+                    username="admin",
+                    password_hash=admin_password_hash,
+                    enabled=True,
+                )
+                db.add(admin_user)
+                db.commit()
+
+                # 分配admin角色
+                admin_role = role_map["admin"]
+                user_role = UserRole(
+                    user_id=admin_user.user_id, role_id=admin_role.role_id
+                )
+                db.add(user_role)
+                db.commit()
+                print("✅ 创建默认admin用户")
+            else:
+                # 迁移配置中的用户
+                for username, password_hash in users_config.items():
+                    user = db.query(User).filter(User.username == username).first()
+                    if not user:
+                        user = User(
+                            user_id=str(uuid.uuid4()),
+                            username=username,
+                            password_hash=password_hash,
+                            enabled=True,
+                        )
+                        db.add(user)
+                        db.commit()
+                        print(f"✅ 迁移用户: {username}")
+
+                        # 分配角色：admin用户分配admin角色，其他分配user角色
+                        if username == "admin":
+                            role = role_map["admin"]
+                        else:
+                            role = role_map["user"]
+                        user_role = UserRole(user_id=user.user_id, role_id=role.role_id)
+                        db.add(user_role)
+                        db.commit()
+
+            print("✅ 用户系统迁移完成")
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        print(f"⚠️ 迁移用户系统失败: {e}")
+
+
+def migrate_add_agent_secrets_table():
+    """迁移：创建agent_secrets表"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 检查表是否已存在
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_secrets'"
+        )
+        if cursor.fetchone():
+            conn.close()
+            print("✅ agent_secrets 表已存在")
+            return
+
+        # 创建表
+        cursor.execute(
+            """
+            CREATE TABLE agent_secrets (
+                secret_id VARCHAR(36) PRIMARY KEY,
+                secret_key VARCHAR(64) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                enabled BOOLEAN DEFAULT 1,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """
+        )
+
+        # 创建索引
+        cursor.execute(
+            "CREATE UNIQUE INDEX idx_agent_secret_key ON agent_secrets(secret_key)"
+        )
+        cursor.execute(
+            "CREATE INDEX idx_agent_secret_enabled ON agent_secrets(enabled)"
+        )
+
+        conn.commit()
+        conn.close()
+        print("✅ agent_secrets 表创建成功")
+    except sqlite3.OperationalError as e:
+        if "already exists" in str(e).lower():
+            print("✅ agent_secrets 表已存在")
+        else:
+            print(f"⚠️ 创建agent_secrets表失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 创建agent_secrets表失败: {e}")
+
+
+def migrate_add_agent_unique_id():
+    """迁移：为agent_hosts表添加agent_unique_id字段"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 检查表是否存在
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_hosts'"
+        )
+        if not cursor.fetchone():
+            conn.close()
+            return
+
+        # 检查字段是否已存在
+        cursor.execute("PRAGMA table_info(agent_hosts)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if "agent_unique_id" not in columns:
+            print("🔄 添加 agent_unique_id 字段到 agent_hosts 表...")
+            cursor.execute(
+                "ALTER TABLE agent_hosts ADD COLUMN agent_unique_id VARCHAR(128)"
+            )
+            # 创建索引
+            cursor.execute(
+                "CREATE INDEX idx_agent_host_unique_id ON agent_hosts(agent_unique_id)"
+            )
+            conn.commit()
+            print("✅ agent_unique_id 字段添加成功")
+        else:
+            print("✅ agent_unique_id 字段已存在")
+
+        conn.close()
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e).lower():
+            print("✅ agent_unique_id 字段已存在")
+        else:
+            print(f"⚠️ 迁移agent_unique_id字段失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 迁移agent_unique_id字段失败: {e}")
 
 
 def close_db():

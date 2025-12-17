@@ -20,7 +20,9 @@ class WebSocketClient:
     def __init__(
         self,
         server_url: str,
-        token: str,
+        token: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        agent_token: Optional[str] = None,
         on_message: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_connect: Optional[Callable[[], None]] = None,
         on_disconnect: Optional[Callable[[], None]] = None,
@@ -33,7 +35,9 @@ class WebSocketClient:
 
         Args:
             server_url: 服务器 WebSocket URL (ws://host:port 或 wss://host:port)
-            token: Agent 认证 token
+            token: Agent 认证 token（旧方式，向后兼容）
+            secret_key: Agent 认证密钥（新方式）
+            agent_token: Agent 唯一标识（新方式，可选）
             on_message: 消息处理回调函数
             on_connect: 连接成功回调函数
             on_disconnect: 断开连接回调函数
@@ -49,14 +53,28 @@ class WebSocketClient:
                 "https://", "wss://"
             )
 
-        # 构建完整的 WebSocket URL（包含 token 作为查询参数）
-        ws_path = f"/api/ws/agent?token={token}"
+        # 构建完整的 WebSocket URL
+        if secret_key:
+            # 新方式：使用 secret_key 和 agent_token
+            import urllib.parse
+
+            params = {"secret_key": secret_key}
+            if agent_token:
+                params["agent_token"] = agent_token
+            query_string = urllib.parse.urlencode(params)
+            ws_path = f"/api/ws/agent?{query_string}"
+        else:
+            # 旧方式：使用 token（向后兼容）
+            ws_path = f"/api/ws/agent?token={token}"
+
         if self.server_url.endswith("/"):
             self.ws_url = f"{self.server_url}{ws_path.lstrip('/')}"
         else:
             self.ws_url = f"{self.server_url}{ws_path}"
 
         self.token = token
+        self.secret_key = secret_key
+        self.agent_token = agent_token
         self.on_message = on_message
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
@@ -148,6 +166,11 @@ class WebSocketClient:
 
         for attempt in range(max_retries):
             try:
+                # 发送前再次检查连接状态
+                if not self.connected or not self.websocket:
+                    logger.debug(f"连接已断开，取消发送: type={message.get('type')}")
+                    return False
+
                 message_str = json.dumps(message)
                 await self.websocket.send(message_str)
                 if attempt > 0:
@@ -156,6 +179,13 @@ class WebSocketClient:
                     )
                 # 正常发送成功时不记录日志（减少日志量）
                 return True
+            except ConnectionClosed as e:
+                # 远端关闭连接（包括 no close frame 等情况），视为正常断连，走统一重连逻辑
+                logger.debug(
+                    f"WebSocket 已关闭，发送失败: type={message.get('type')}, code={getattr(e, 'code', None)}, reason={getattr(e, 'reason', '')}"
+                )
+                last_error = e
+                break
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:
@@ -163,7 +193,7 @@ class WebSocketClient:
                     await asyncio.sleep(0.1)
                     # 检查连接状态
                     if not self.connected or not self.websocket:
-                        logger.warning(
+                        logger.debug(
                             f"连接已断开，停止重试: type={message.get('type')}"
                         )
                         break
@@ -172,21 +202,38 @@ class WebSocketClient:
                         f"❌ 发送消息失败（{max_retries}次尝试后）: type={message.get('type')}, error={e}"
                     )
 
-        # 所有重试都失败
-        logger.error(
-            f"❌ 发送消息最终失败: type={message.get('type')}, error={last_error}"
-        )
-        self.connected = False
-        # 确保重连任务正在运行
-        if self.running and (not self._reconnect_task or self._reconnect_task.done()):
-            self._reconnect_task = asyncio.create_task(self._reconnect_loop())
+        # 所有重试都失败或连接已关闭
+        # 如果连接已关闭，不重复触发重连（重连循环已经在运行）
+        if last_error is not None:
+            if isinstance(last_error, ConnectionClosed):
+                # ConnectionClosed 说明连接已断开，_receive_loop 或重连循环会处理
+                logger.debug(
+                    f"连接已关闭，发送失败: type={message.get('type')}（重连循环将处理）"
+                )
+            else:
+                logger.warning(
+                    f"发送消息失败: type={message.get('type')}, error={last_error}"
+                )
+
+        # 只有在连接状态还是 True 时才标记为 False，避免重复操作
+        if self.connected:
+            self.connected = False
+            # 确保重连任务正在运行（但避免重复创建）
+            if self.running and (
+                not self._reconnect_task or self._reconnect_task.done()
+            ):
+                self._reconnect_task = asyncio.create_task(self._reconnect_loop())
         return False
 
     async def _receive_loop(self):
         """接收消息循环"""
+        # 给连接一点时间稳定，避免立即检测到关闭
+        await asyncio.sleep(0.1)
+
         while self.running and self.connected:
             try:
                 if not self.websocket:
+                    logger.debug("WebSocket 对象不存在，退出接收循环")
                     break
 
                 message = await self.websocket.recv()
@@ -198,18 +245,25 @@ class WebSocketClient:
                 except json.JSONDecodeError:
                     logger.warning(f"收到无效的 JSON 消息: {message}")
 
-            except ConnectionClosed:
-                logger.warning("WebSocket 连接已关闭")
-                self.connected = False
-                # 确保重连任务正在运行
-                if not self._reconnect_task or self._reconnect_task.done():
-                    self._reconnect_task = asyncio.create_task(self._reconnect_loop())
+            except ConnectionClosed as e:
+                # 连接已关闭，记录日志但不重复触发重连（重连循环已在运行）
+                logger.debug(
+                    f"WebSocket 连接已关闭: code={getattr(e, 'code', None)}, reason={getattr(e, 'reason', '')}"
+                )
+                # 只有在连接状态还是 True 时才标记为 False
+                if self.connected:
+                    self.connected = False
+                # 重连任务应该已经在运行，不需要重复创建
                 break
             except Exception as e:
                 logger.error(f"接收消息时出错: {e}")
-                self.connected = False
-                # 确保重连任务正在运行
-                if not self._reconnect_task or self._reconnect_task.done():
+                # 只有在连接状态还是 True 时才标记为 False
+                if self.connected:
+                    self.connected = False
+                # 确保重连任务正在运行（但避免重复创建）
+                if self.running and (
+                    not self._reconnect_task or self._reconnect_task.done()
+                ):
                     self._reconnect_task = asyncio.create_task(self._reconnect_loop())
                 break
 
@@ -222,6 +276,10 @@ class WebSocketClient:
                 await asyncio.sleep(self.heartbeat_interval)
                 if self.connected:
                     heartbeat_message = {"type": "heartbeat", "timestamp": time.time()}
+
+                    # 如果使用新方式且有agent_token，添加到心跳消息中
+                    if self.agent_token:
+                        heartbeat_message["agent_token"] = self.agent_token
 
                     # 如果提供了心跳数据回调，获取额外数据并添加到心跳消息中
                     if self.heartbeat_data_callback:
@@ -253,6 +311,11 @@ class WebSocketClient:
                 if not self.running:
                     break
 
+                # 再次检查连接状态（可能在等待期间已经连接成功）
+                if self.connected:
+                    logger.debug("连接已恢复，跳过重连")
+                    continue
+
                 if await self.connect():
                     # 重新启动接收和心跳任务
                     # 先取消旧的心跳任务（如果存在）
@@ -268,20 +331,23 @@ class WebSocketClient:
                     self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
                     logger.info("✅ 重连成功，已恢复接收和心跳")
             else:
+                # 连接正常，等待一段时间后再检查
                 await asyncio.sleep(1)
 
     async def start(self):
         """启动客户端"""
         self.running = True
 
-        # 启动重连任务（无论初始连接是否成功，都需要重连机制）
-        self._reconnect_task = asyncio.create_task(self._reconnect_loop())
-
-        # 初始连接
+        # 先尝试初始连接
         if await self.connect():
-            # 启动接收和心跳任务
+            # 连接成功，启动接收和心跳任务
             asyncio.create_task(self._receive_loop())
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+            # 连接成功后，再启动重连任务（作为保底机制，正常情况下不会触发）
+            self._reconnect_task = asyncio.create_task(self._reconnect_loop())
+        else:
+            # 初始连接失败，立即启动重连任务
+            self._reconnect_task = asyncio.create_task(self._reconnect_loop())
 
     async def stop(self):
         """停止客户端"""
