@@ -400,16 +400,14 @@ async def create_user(request: CreateUserRequest, http_request: Request):
             db.add(new_user)
             db.commit()
 
-            # 分配角色
-            if request.roles:
-                for role_name in request.roles:
-                    role = db.query(Role).filter(Role.name == role_name).first()
-                    if role:
-                        user_role = UserRole(
-                            user_id=new_user.user_id, role_id=role.role_id
-                        )
-                        db.add(user_role)
-                db.commit()
+            # 分配角色：如果没有指定角色，默认分配 "user" 角色
+            roles_to_assign = request.roles if request.roles else ["user"]
+            for role_name in roles_to_assign:
+                role = db.query(Role).filter(Role.name == role_name).first()
+                if role:
+                    user_role = UserRole(user_id=new_user.user_id, role_id=role.role_id)
+                    db.add(user_role)
+            db.commit()
 
             # 记录操作日志
             OperationLogger.log(username, "create_user", {"username": request.username})
@@ -469,8 +467,9 @@ async def update_user(user_id: str, request: UpdateUserRequest, http_request: Re
                 # 删除现有角色
                 db.query(UserRole).filter(UserRole.user_id == user.user_id).delete()
 
-                # 添加新角色
-                for role_name in request.roles:
+                # 添加新角色：如果角色列表为空，默认分配 "user" 角色
+                roles_to_assign = request.roles if request.roles else ["user"]
+                for role_name in roles_to_assign:
                     role = db.query(Role).filter(Role.name == role_name).first()
                     if role:
                         user_role = UserRole(user_id=user.user_id, role_id=role.role_id)
