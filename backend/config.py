@@ -2,6 +2,7 @@
 import os
 import yaml
 import base64
+from typing import Optional
 from backend.crypto_utils import encrypt_password, decrypt_password
 
 # 将配置文件放在data目录中，方便Docker映射
