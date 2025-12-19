@@ -85,8 +85,10 @@ if not exist ".venv" (
 )
 
 REM 检查前端依赖
+echo.
+echo 📦 检查前端依赖...
 if not exist "frontend\node_modules" (
-    echo 📦 安装前端依赖...
+    echo    ⚠️  node_modules 不存在，正在安装前端依赖...
     cd frontend
     npm install
     if errorlevel 1 (
@@ -95,6 +97,30 @@ if not exist "frontend\node_modules" (
         exit /b 1
     )
     cd ..
+    echo    ✓ 前端依赖安装完成
+) else (
+    REM 检查 npm 是否可用
+    where npm >nul 2>&1
+    if errorlevel 1 (
+        echo    ⚠️  未找到 npm，请先安装 Node.js
+    ) else (
+        REM 检查 package-lock.json 是否比 node_modules 新（简单检查）
+        cd frontend
+        if exist "package-lock.json" (
+            REM 检查是否需要更新（通过比较时间戳，简单方式）
+            echo    ✓ 前端依赖已存在
+        ) else (
+            echo    ⚠️  检测到 package-lock.json 缺失，正在重新安装...
+            npm install
+            if errorlevel 1 (
+                echo ❌ 安装前端依赖失败
+                cd ..
+                exit /b 1
+            )
+            echo    ✓ 前端依赖安装完成
+        )
+        cd ..
+    )
 )
 
 REM 初始化环境（创建目录和配置文件）

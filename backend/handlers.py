@@ -4532,12 +4532,14 @@ class BuildTaskManager:
 
             if deploy_config:
                 # 找到对应的Task记录
-                config_task = (
-                    db.query(Task)
-                    .filter(Task.task_type == "deploy")
-                    .filter(Task.task_config["config_id"].astext == task_id)
-                    .first()
-                )
+                # 在Python层面过滤，因为SQLite的JSON查询支持有限
+                config_tasks = db.query(Task).filter(Task.task_type == "deploy").all()
+                config_task = None
+                for t in config_tasks:
+                    task_config = t.task_config or {}
+                    if task_config.get("config_id") == task_id:
+                        config_task = t
+                        break
 
                 if config_task:
                     result = self._to_dict(config_task)
@@ -4673,14 +4675,16 @@ class BuildTaskManager:
                 result = []
                 for config in deploy_configs:
                     # 找到对应的Task记录（配置任务）
-                    config_task = (
-                        db.query(Task)
-                        .filter(Task.task_type == "deploy")
-                        .filter(
-                            Task.task_config["config_id"].astext == config.config_id
-                        )
-                        .first()
+                    # 在Python层面过滤，因为SQLite的JSON查询支持有限
+                    config_tasks = (
+                        db.query(Task).filter(Task.task_type == "deploy").all()
                     )
+                    config_task = None
+                    for t in config_tasks:
+                        task_config = t.task_config or {}
+                        if task_config.get("config_id") == config.config_id:
+                            config_task = t
+                            break
 
                     if config_task:
                         # 构建任务字典（保持兼容格式）
@@ -5033,12 +5037,14 @@ class BuildTaskManager:
             if deploy_config:
                 # 这是部署配置，删除DeployConfig和相关Task记录
                 # 查找配置对应的Task记录
-                config_task = (
-                    db.query(Task)
-                    .filter(Task.task_type == "deploy")
-                    .filter(Task.task_config["config_id"].astext == task_id)
-                    .first()
-                )
+                # 在Python层面过滤，因为SQLite的JSON查询支持有限
+                config_tasks = db.query(Task).filter(Task.task_type == "deploy").all()
+                config_task = None
+                for t in config_tasks:
+                    task_config = t.task_config or {}
+                    if task_config.get("config_id") == task_id:
+                        config_task = t
+                        break
 
                 # 删除DeployConfig
                 db.delete(deploy_config)
