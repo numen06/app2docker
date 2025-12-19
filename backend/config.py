@@ -229,13 +229,38 @@ def get_active_registry():
 
 
 def get_registry_by_name(name):
-    """根据名称获取仓库配置"""
+    """根据名称获取仓库配置（返回包含解密密码的配置）"""
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 
     for registry in registries:
         if registry.get("name") == name:
-            return registry
+            # 解密密码
+            registry_copy = registry.copy()
+            password = registry.get("password")
+            if password:
+                try:
+                    registry_copy["password"] = decrypt_password(password)
+                except (ValueError, Exception):
+                    # 如果解密失败，尝试迁移旧格式
+                    try:
+                        try:
+                            decoded = base64.b64decode(password.encode("utf-8"))
+                            plaintext = decoded.decode("utf-8")
+                        except Exception:
+                            plaintext = password
+
+                        # 加密后更新配置
+                        encrypted = encrypt_password(plaintext)
+                        registry["password"] = encrypted
+                        save_config(config)
+                        registry_copy["password"] = plaintext
+                    except Exception as e:
+                        print(f"⚠️ 解密Registry密码失败: {e}")
+                        registry_copy["password"] = ""
+            else:
+                registry_copy["password"] = ""
+            return registry_copy
 
     return None
 

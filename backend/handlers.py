@@ -1978,7 +1978,7 @@ class BuildManager:
 
                 # 根据镜像名找到对应的registry配置
                 def find_matching_registry_for_push(image_name):
-                    """根据镜像名找到匹配的registry配置"""
+                    """根据镜像名找到匹配的registry配置（返回包含解密密码的配置）"""
                     # 如果镜像名包含斜杠，提取registry部分
                     parts = image_name.split("/")
                     if len(parts) >= 2 and "." in parts[0]:
@@ -1992,6 +1992,16 @@ class BuildManager:
                                 or image_registry.startswith(reg_address)
                                 or reg_address.startswith(image_registry)
                             ):
+                                # 找到匹配的registry，需要获取解密后的密码
+                                from backend.config import get_registry_password
+
+                                reg_name = reg.get("name")
+                                if reg_name:
+                                    password = get_registry_password(reg_name)
+                                    # 返回包含解密密码的配置
+                                    reg_with_password = reg.copy()
+                                    reg_with_password["password"] = password
+                                    return reg_with_password
                                 return reg
                     return None
 
@@ -3091,7 +3101,7 @@ logs/
 
                                 # 根据镜像名找到对应的registry配置（与单服务构建逻辑一致）
                                 def find_matching_registry_for_push(img_name):
-                                    """根据镜像名找到匹配的registry配置，扫描所有仓库配置"""
+                                    """根据镜像名找到匹配的registry配置，扫描所有仓库配置（返回包含解密密码的配置）"""
                                     # 如果镜像名包含斜杠，提取registry部分
                                     parts = img_name.split("/")
                                     if len(parts) >= 2 and "." in parts[0]:
@@ -3116,7 +3126,22 @@ logs/
                                                 log(
                                                     f"✅ 找到完全匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
-                                                return reg
+                                                # 获取解密后的密码
+                                                from backend.config import (
+                                                    get_registry_password,
+                                                )
+
+                                                password = (
+                                                    get_registry_password(reg_name)
+                                                    if reg_name
+                                                    else None
+                                                )
+                                                reg_with_password = reg.copy()
+                                                if password is not None:
+                                                    reg_with_password["password"] = (
+                                                        password
+                                                    )
+                                                return reg_with_password
 
                                         # 次优匹配：包含关系
                                         for reg in all_registries:
@@ -3131,7 +3156,22 @@ logs/
                                                 log(
                                                     f"✅ 找到部分匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
-                                                return reg
+                                                # 获取解密后的密码
+                                                from backend.config import (
+                                                    get_registry_password,
+                                                )
+
+                                                password = (
+                                                    get_registry_password(reg_name)
+                                                    if reg_name
+                                                    else None
+                                                )
+                                                reg_with_password = reg.copy()
+                                                if password is not None:
+                                                    reg_with_password["password"] = (
+                                                        password
+                                                    )
+                                                return reg_with_password
 
                                         log(f"⚠️  未找到匹配的registry配置\n")
                                     return None
@@ -3145,7 +3185,17 @@ logs/
                                     registry_config = None
                                     for reg in all_registries:
                                         if reg.get("name") == service_registry:
-                                            registry_config = reg
+                                            # 获取解密后的密码
+                                            from backend.config import (
+                                                get_registry_password,
+                                            )
+
+                                            password = get_registry_password(
+                                                service_registry
+                                            )
+                                            registry_config = reg.copy()
+                                            if password is not None:
+                                                registry_config["password"] = password
                                             log(
                                                 f"✅ 找到指定的 registry 配置: {service_registry}\n"
                                             )
@@ -3287,7 +3337,7 @@ logs/
 
                 # 根据镜像名找到对应的registry配置
                 def find_matching_registry_for_push(image_name):
-                    """根据镜像名找到匹配的registry配置"""
+                    """根据镜像名找到匹配的registry配置（返回包含解密密码的配置）"""
                     # 如果镜像名包含斜杠，提取registry部分
                     parts = image_name.split("/")
                     if len(parts) >= 2 and "." in parts[0]:
@@ -3306,7 +3356,18 @@ logs/
                                 or reg_address.startswith(image_registry)
                             ):
                                 log(f"✅ 找到匹配的registry: {reg_name}\n")
-                                return reg
+                                # 获取解密后的密码
+                                from backend.config import get_registry_password
+
+                                password = (
+                                    get_registry_password(reg_name)
+                                    if reg_name
+                                    else None
+                                )
+                                reg_with_password = reg.copy()
+                                if password is not None:
+                                    reg_with_password["password"] = password
+                                return reg_with_password
                     return None
 
                 # 尝试根据镜像名找到匹配的registry
@@ -4547,12 +4608,13 @@ class BuildTaskManager:
                 # 异步更新构建目录统计缓存
                 try:
                     from backend.stats_cache import StatsCacheManager
+
                     cache_manager = StatsCacheManager(BUILD_DIR)
                     cache_manager.update_cache_async("build")
                     print(f"✅ 已触发构建目录统计缓存异步更新: task_id={task_id[:8]}")
                 except Exception as e:
                     print(f"⚠️ 触发构建目录统计缓存更新失败: {e}")
-                
+
                 try:
                     from backend.pipeline_manager import PipelineManager
 
@@ -5624,6 +5686,7 @@ class ExportTaskManager:
                 # 异步更新导出目录统计缓存
                 try:
                     from backend.stats_cache import StatsCacheManager
+
                     cache_manager = StatsCacheManager(EXPORT_DIR)
                     cache_manager.update_cache_async("export")
                     print(f"✅ 已触发导出目录统计缓存异步更新: task_id={task_id[:8]}")
@@ -5745,6 +5808,7 @@ class ExportTaskManager:
             if not registry_config:
                 # 尝试智能匹配仓库
                 def find_matching_registry_for_export(image_name):
+                    """根据镜像名找到匹配的registry配置（返回包含解密密码的配置）"""
                     parts = image_name.split("/")
                     if len(parts) >= 2 and "." in parts[0]:
                         image_registry = parts[0]
@@ -5756,6 +5820,16 @@ class ExportTaskManager:
                                 or image_registry.startswith(reg_address)
                                 or reg_address.startswith(image_registry)
                             ):
+                                # 获取解密后的密码
+                                from backend.config import get_registry_password
+
+                                reg_name = reg.get("name")
+                                if reg_name:
+                                    password = get_registry_password(reg_name)
+                                    reg_with_password = reg.copy()
+                                    if password is not None:
+                                        reg_with_password["password"] = password
+                                    return reg_with_password
                                 return reg
                     return None
 
