@@ -3615,6 +3615,16 @@ import {
   setGitCache,
 } from "../utils/gitCache.js";
 import { getServiceAnalysisWithCache } from "../utils/serviceAnalysisCache.js";
+import { 
+  getProjectTypes, 
+  getProjectTypesSync,
+  getProjectTypeLabel, 
+  getProjectTypeIcon,
+  getProjectTypeBadgeClass 
+} from '../utils/projectTypes.js';
+
+// 项目类型相关
+const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
 
 const pipelines = ref([]);
 const templates = ref([]);
@@ -3752,6 +3762,7 @@ const formData = ref({
 });
 
 onMounted(() => {
+  loadProjectTypes();
   loadPipelines();
   loadTemplates();
   loadRegistries();
@@ -6864,37 +6875,9 @@ function copyToClipboard(text, label) {
   }
 }
 
-function getProjectTypeIcon(type) {
-  const iconMap = {
-    jar: "fab fa-java",
-    nodejs: "fab fa-node-js",
-    python: "fab fa-python",
-    go: "fas fa-code",
-    web: "fas fa-globe",
-  };
-  return iconMap[type] || "fas fa-cube";
-}
-
-function getProjectTypeLabel(type) {
-  const labelMap = {
-    jar: "Java 应用（JAR）",
-    nodejs: "Node.js 应用",
-    python: "Python 应用",
-    go: "Go 应用",
-    web: "静态网站",
-  };
-  return labelMap[type] || type;
-}
-
-function getProjectTypeBadgeClass(type) {
-  const classes = {
-    jar: "bg-danger",
-    nodejs: "bg-success",
-    python: "bg-info",
-    go: "bg-primary",
-    web: "bg-secondary",
-  };
-  return classes[type] || "bg-secondary";
+// 项目类型处理（从缓存加载，如果没有则从API加载）
+async function loadProjectTypes() {
+  projectTypesList.value = await getProjectTypes();
 }
 
 function formatGitUrl(url) {

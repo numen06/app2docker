@@ -336,6 +336,15 @@ import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import TemplateEditorModal from "./TemplateEditorModal.vue";
 import TemplatePreviewModal from "./TemplatePreviewModal.vue";
+import { 
+  getProjectTypes, 
+  getProjectTypesSync,
+  getProjectTypeLabel, 
+  getProjectTypeBadgeClass 
+} from '../utils/projectTypes.js';
+
+// 项目类型相关
+const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
 
 const templates = ref([]);
 const loading = ref(false);
@@ -555,29 +564,13 @@ function formatTime(timeStr) {
   }
 }
 
-function getProjectTypeBadgeClass(type) {
-  const colorMap = {
-    jar: "bg-primary",
-    nodejs: "bg-success",
-    python: "bg-info",
-    go: "bg-warning",
-    rust: "bg-danger",
-  };
-  return colorMap[type] || "bg-secondary";
-}
-
-function getProjectTypeLabel(type) {
-  const labelMap = {
-    jar: "JAR",
-    nodejs: "Node.js",
-    python: "Python",
-    go: "Go",
-    rust: "Rust",
-  };
-  return labelMap[type] || type.toUpperCase();
+// 项目类型处理（从缓存加载，如果没有则从API加载）
+async function loadProjectTypes() {
+  projectTypesList.value = await getProjectTypes();
 }
 
 onMounted(() => {
+  loadProjectTypes();
   loadTemplates();
 });
 </script>

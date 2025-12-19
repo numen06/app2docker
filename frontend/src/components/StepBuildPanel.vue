@@ -1668,6 +1668,12 @@ import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 import { getGitInfoWithCache, getGitCache, clearGitCache } from '../utils/gitCache.js';
 import { getDockerfilesWithCache } from '../utils/dockerfileCache.js';
 import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js';
+import { 
+  getProjectTypes, 
+  getProjectTypesSync,
+  getProjectTypeLabel, 
+  getProjectTypeIcon 
+} from '../utils/projectTypes.js';
 
 const currentStep = ref(1);
 const building = ref(false);
@@ -1709,6 +1715,9 @@ const scanningDockerfiles = ref(false);
 const dockerfilesError = ref("");
 const refreshingBranches = ref(false);
 
+// 项目类型相关
+const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
+
 // 模板相关
 const templates = ref([]);
 const templateSearch = ref("");
@@ -1747,48 +1756,9 @@ const jsonEditorExtensions = [
   oneDark
 ]
 
+// 项目类型列表（从API获取）
 const projectTypes = computed(() => {
-  const types = new Set();
-  templates.value.forEach((t) => types.add(t.project_type));
-
-  const labelMap = {
-    jar: "Java 应用（JAR）",
-    nodejs: "Node.js 应用",
-    python: "Python 应用",
-    go: "Go 应用",
-    web: "静态网站",
-  };
-
-  const orderMap = {
-    jar: 1,
-    nodejs: 2,
-    python: 3,
-    go: 4,
-    web: 5,
-  };
-
-  const result = [];
-  types.forEach((type) => {
-    result.push({
-      value: type,
-      label:
-        labelMap[type] ||
-        `${type.charAt(0).toUpperCase()}${type.slice(1)} 应用`,
-      order: orderMap[type] || 999,
-    });
-  });
-
-  if (result.length === 0) {
-    return [
-      { value: "jar", label: "Java 应用（JAR）", order: 1 },
-      { value: "nodejs", label: "Node.js 应用", order: 2 },
-      { value: "python", label: "Python 应用", order: 3 },
-      { value: "go", label: "Go 应用", order: 4 },
-      { value: "web", label: "静态网站", order: 5 },
-    ];
-  }
-
-  return result.sort((a, b) => a.order - b.order);
+  return projectTypesList.value;
 });
 
 const filteredTemplates = computed(() => {
@@ -2089,6 +2059,11 @@ function onImagePrefixChange() {
   }
 }
 
+// 项目类型处理（从缓存加载，如果没有则从API加载）
+async function loadProjectTypes() {
+  projectTypesList.value = await getProjectTypes();
+}
+
 // 模板处理
 async function loadTemplates() {
   try {
@@ -2111,27 +2086,7 @@ function changeProjectType(type) {
   }
 }
 
-function getProjectTypeIcon(type) {
-  const iconMap = {
-    jar: "fab fa-java",
-    nodejs: "fab fa-node-js",
-    python: "fab fa-python",
-    go: "fas fa-code",
-    web: "fas fa-globe",
-  };
-  return iconMap[type] || "fas fa-cube";
-}
-
-function getProjectTypeLabel(type) {
-  const labelMap = {
-    jar: "Java",
-    nodejs: "Node.js",
-    python: "Python",
-    go: "Go",
-    web: "静态网站",
-  };
-  return labelMap[type] || type;
-}
+// getProjectTypeIcon 和 getProjectTypeLabel 已从 projectTypes.js 导入
 
 // 构建配置JSON（基于统一的任务配置结构）
 const buildConfigJson = computed(() => {
@@ -3499,6 +3454,7 @@ watch(
 );
 
 onMounted(() => {
+  loadProjectTypes();
   loadTemplates();
   loadGitSources();
   loadRegistries();

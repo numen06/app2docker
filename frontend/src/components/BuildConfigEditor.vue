@@ -94,11 +94,10 @@
             <div class="col-md-6">
               <label class="form-label">项目类型 <span class="text-danger">*</span></label>
               <select v-model="formData.project_type" class="form-select form-select-sm">
-                <option value="jar">Java 应用（JAR）</option>
-                <option value="nodejs">Node.js 应用</option>
-                <option value="python">Python 应用</option>
-                <option value="go">Go 应用</option>
-                <option value="web">静态网站</option>
+                <option value="">-- 请选择项目类型 --</option>
+                <option v-for="pt in projectTypesList" :key="pt.value" :value="pt.value">
+                  {{ pt.label }}
+                </option>
               </select>
             </div>
           </div>
@@ -443,6 +442,10 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { StreamLanguage } from '@codemirror/language'
 import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js'
+import { 
+  getProjectTypes, 
+  getProjectTypesSync 
+} from '../utils/projectTypes.js'
 
 const props = defineProps({
   initialConfig: {
@@ -462,6 +465,9 @@ const jsonEditorExtensions = [
   StreamLanguage.define(javascript),
   oneDark
 ]
+// 项目类型相关
+const projectTypesList = ref(getProjectTypesSync()) // 从缓存获取项目类型列表
+
 const gitSources = ref([])
 const templates = ref([])
 const templateParams = ref([])
@@ -575,7 +581,11 @@ const configJson = computed(() => {
   return JSON.stringify(config, null, 2)
 })
 
-// 加载数据
+// 项目类型处理（从缓存加载，如果没有则从API加载）
+async function loadProjectTypes() {
+  projectTypesList.value = await getProjectTypes()
+}
+
 async function loadGitSources() {
   try {
     const res = await axios.get('/api/git-sources')
@@ -848,6 +858,7 @@ watch(() => formData.value.project_type, () => {
 
 onMounted(() => {
   initFormData()
+  loadProjectTypes()
   loadGitSources()
   loadTemplates()
   loadResourcePackages()

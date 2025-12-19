@@ -50,6 +50,7 @@ from backend.agent_host_manager import AgentHostManager
 from backend.websocket_handler import handle_agent_websocket, active_connections
 from backend.agent_secret_manager import AgentSecretManager
 from backend.deploy_task_manager import DeployTaskManager
+from backend.project_types import get_project_types
 from backend.config import (
     load_config,
     save_config,
@@ -3760,6 +3761,16 @@ async def get_template_params(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析模板参数失败: {str(e)}")
+
+
+@router.get("/project-types")
+async def get_project_types_api():
+    """获取项目类型字典列表"""
+    try:
+        project_types = get_project_types()
+        return JSONResponse({"project_types": project_types})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取项目类型列表失败: {str(e)}")
 
 
 @router.get("/templates")
