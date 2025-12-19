@@ -126,6 +126,9 @@ def init_db():
     # 迁移：添加agent_unique_id字段到agent_hosts表
     migrate_add_agent_unique_id()
 
+    # 迁移：创建deploy_configs表
+    migrate_add_deploy_config_table()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -801,6 +804,33 @@ def migrate_add_agent_unique_id():
             print(f"⚠️ 迁移agent_unique_id字段失败: {e}")
     except Exception as e:
         print(f"⚠️ 迁移agent_unique_id字段失败: {e}")
+
+
+def migrate_add_deploy_config_table():
+    """迁移：创建deploy_configs表（如果不存在）"""
+    # 表已经通过Base.metadata.create_all创建，这里主要是确保表存在
+    # 如果需要迁移现有数据，可以在这里添加迁移逻辑
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 检查表是否已存在
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='deploy_configs'"
+        )
+        if cursor.fetchone():
+            conn.close()
+            print("✅ deploy_configs 表已存在")
+            return
+
+        # 表不存在时会通过Base.metadata.create_all创建，这里只做检查
+        conn.close()
+        print("✅ deploy_configs 表将在表创建时自动创建")
+    except Exception as e:
+        print(f"⚠️ 检查deploy_configs表失败: {e}")
 
 
 def close_db():

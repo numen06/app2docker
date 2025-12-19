@@ -2512,6 +2512,7 @@ export default {
       try {
         const res = await axios.get("/api/deploy-tasks");
         // 适配新的数据结构：后端返回的tasks已经是格式化后的
+        // 注意：task_id 实际对应 config_id（配置ID），配置存储在 DeployConfig 表中
         this.tasks = (res.data.tasks || []).map((task) => {
           // 确保数据结构一致
           return {
@@ -2614,6 +2615,7 @@ export default {
         return;
 
       try {
+        // 注意：task.task_id 实际是 config_id（配置ID），用于执行配置
         const res = await axios.post(
           `/api/deploy-tasks/${task.task_id}/execute`
         );
@@ -2642,9 +2644,10 @@ export default {
       window.location.href = "/#/tasks?deploy_config=" + configId;
     },
     async deleteTask(task) {
-      if (!confirm("确定要删除此部署任务吗？")) return;
+      if (!confirm("确定要删除此部署配置吗？")) return;
 
       try {
+        // 注意：task.task_id 实际是 config_id（配置ID），用于删除配置
         await axios.delete(`/api/deploy-tasks/${task.task_id}`);
         alert("删除成功");
         this.loadTasks();
@@ -3059,6 +3062,7 @@ export default {
     },
     async editTask(task) {
       try {
+        // 注意：task.task_id 实际是 config_id（配置ID），用于查询和更新配置
         const res = await axios.get(`/api/deploy-tasks/${task.task_id}`);
         const taskData = res.data.task;
         // 确保 editingTask 对象完整初始化，包括 registry 和 tag
@@ -3380,6 +3384,7 @@ export default {
           webhook_allowed_branches: webhook_allowed_branches,
         });
 
+        // 注意：this.editingTask.task_id 实际是 config_id（配置ID），用于更新配置
         await axios.put(`/api/deploy-tasks/${this.editingTask.task_id}`, {
           config_content: yamlContent,
           registry: registry,

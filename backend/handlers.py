@@ -4521,13 +4521,123 @@ class BuildTaskManager:
     def get_task(self, task_id: str) -> dict:
         """获取任务信息"""
         from backend.database import get_db_session
-        from backend.models import Task, TaskLog
+        from backend.models import Task, TaskLog, DeployConfig
 
         db = get_db_session()
         try:
+            # 先尝试作为config_id查询DeployConfig
+            deploy_config = (
+                db.query(DeployConfig).filter(DeployConfig.config_id == task_id).first()
+            )
+
+            if deploy_config:
+                # 找到对应的Task记录
+                config_task = (
+                    db.query(Task)
+                    .filter(Task.task_type == "deploy")
+                    .filter(Task.task_config["config_id"].astext == task_id)
+                    .first()
+                )
+
+                if config_task:
+                    result = self._to_dict(config_task)
+                    # 用DeployConfig的数据覆盖
+                    result["task_config"] = {
+                        "config_id": deploy_config.config_id,
+                        "config_content": deploy_config.config_content,
+                        "config": deploy_config.config_json,
+                        "registry": deploy_config.registry,
+                        "tag": deploy_config.tag,
+                        "targets": deploy_config.config_json.get("targets", []),
+                        "webhook_token": deploy_config.webhook_token,
+                        "webhook_secret": deploy_config.webhook_secret,
+                        "webhook_branch_strategy": deploy_config.webhook_branch_strategy,
+                        "webhook_allowed_branches": deploy_config.webhook_allowed_branches,
+                        "execution_count": deploy_config.execution_count or 0,
+                        "last_executed_at": (
+                            deploy_config.last_executed_at.isoformat()
+                            if deploy_config.last_executed_at
+                            else None
+                        ),
+                    }
+                    # 加载日志
+                    logs = (
+                        db.query(TaskLog)
+                        .filter(TaskLog.task_id == config_task.task_id)
+                        .order_by(TaskLog.log_time.asc())
+                        .all()
+                    )
+                    result["logs"] = [log.log_message for log in logs]
+                else:
+                    # 没有Task记录，创建虚拟格式
+                    result = {
+                        "task_id": deploy_config.config_id,
+                        "task_type": "deploy",
+                        "status": "pending",
+                        "created_at": deploy_config.created_at,
+                        "updated_at": deploy_config.updated_at,
+                        "started_at": None,
+                        "completed_at": None,
+                        "error": None,
+                        "task_config": {
+                            "config_id": deploy_config.config_id,
+                            "config_content": deploy_config.config_content,
+                            "config": deploy_config.config_json,
+                            "registry": deploy_config.registry,
+                            "tag": deploy_config.tag,
+                            "targets": deploy_config.config_json.get("targets", []),
+                            "webhook_token": deploy_config.webhook_token,
+                            "webhook_secret": deploy_config.webhook_secret,
+                            "webhook_branch_strategy": deploy_config.webhook_branch_strategy,
+                            "webhook_allowed_branches": deploy_config.webhook_allowed_branches,
+                            "execution_count": deploy_config.execution_count or 0,
+                            "last_executed_at": (
+                                deploy_config.last_executed_at.isoformat()
+                                if deploy_config.last_executed_at
+                                else None
+                            ),
+                        },
+                        "source": "手动部署",
+                        "pipeline_id": None,
+                        "logs": [],
+                    }
+                return result
+
+            # 如果不是config_id，尝试作为task_id查询Task
             task = db.query(Task).filter(Task.task_id == task_id).first()
             if not task:
                 return {}
+
+            # 如果是部署任务且有config_id，关联查询DeployConfig
+            if task.task_type == "deploy":
+                task_config = task.task_config or {}
+                config_id = task_config.get("config_id")
+                if config_id:
+                    deploy_config = (
+                        db.query(DeployConfig)
+                        .filter(DeployConfig.config_id == config_id)
+                        .first()
+                    )
+                    if deploy_config:
+                        # 用DeployConfig的数据覆盖
+                        task_config["config_content"] = deploy_config.config_content
+                        task_config["config"] = deploy_config.config_json
+                        task_config["webhook_token"] = deploy_config.webhook_token
+                        task_config["webhook_secret"] = deploy_config.webhook_secret
+                        task_config["webhook_branch_strategy"] = (
+                            deploy_config.webhook_branch_strategy
+                        )
+                        task_config["webhook_allowed_branches"] = (
+                            deploy_config.webhook_allowed_branches
+                        )
+                        task_config["execution_count"] = (
+                            deploy_config.execution_count or 0
+                        )
+                        task_config["last_executed_at"] = (
+                            deploy_config.last_executed_at.isoformat()
+                            if deploy_config.last_executed_at
+                            else None
+                        )
 
             # 获取日志（单个任务查询时加载日志）
             logs = (
@@ -4547,10 +4657,97 @@ class BuildTaskManager:
     def list_tasks(self, status: str = None, task_type: str = None) -> list:
         """列出所有任务"""
         from backend.database import get_db_session
-        from backend.models import Task
+        from backend.models import Task, DeployConfig
 
         db = get_db_session()
         try:
+            # 如果是部署配置任务，从DeployConfig表查询
+            if task_type == "deploy":
+                # 查询所有配置
+                deploy_configs = (
+                    db.query(DeployConfig)
+                    .order_by(DeployConfig.created_at.desc())
+                    .all()
+                )
+
+                result = []
+                for config in deploy_configs:
+                    # 找到对应的Task记录（配置任务）
+                    config_task = (
+                        db.query(Task)
+                        .filter(Task.task_type == "deploy")
+                        .filter(
+                            Task.task_config["config_id"].astext == config.config_id
+                        )
+                        .first()
+                    )
+
+                    if config_task:
+                        # 构建任务字典（保持兼容格式）
+                        task_dict = self._to_dict(config_task)
+                        # 用DeployConfig的数据覆盖Task中的配置数据
+                        task_dict["task_config"] = {
+                            "config_id": config.config_id,
+                            "config_content": config.config_content,
+                            "config": config.config_json,
+                            "registry": config.registry,
+                            "tag": config.tag,
+                            "targets": config.config_json.get("targets", []),
+                            "webhook_token": config.webhook_token,
+                            "webhook_secret": config.webhook_secret,
+                            "webhook_branch_strategy": config.webhook_branch_strategy,
+                            "webhook_allowed_branches": config.webhook_allowed_branches,
+                            "execution_count": config.execution_count or 0,
+                            "last_executed_at": (
+                                config.last_executed_at.isoformat()
+                                if config.last_executed_at
+                                else None
+                            ),
+                        }
+                        result.append(task_dict)
+                    else:
+                        # 如果没有Task记录，创建一个虚拟的Task记录格式
+                        result.append(
+                            {
+                                "task_id": config.config_id,
+                                "task_type": "deploy",
+                                "status": "pending",
+                                "created_at": config.created_at,
+                                "updated_at": config.updated_at,
+                                "started_at": None,
+                                "completed_at": None,
+                                "error": None,
+                                "task_config": {
+                                    "config_id": config.config_id,
+                                    "config_content": config.config_content,
+                                    "config": config.config_json,
+                                    "registry": config.registry,
+                                    "tag": config.tag,
+                                    "targets": config.config_json.get("targets", []),
+                                    "webhook_token": config.webhook_token,
+                                    "webhook_secret": config.webhook_secret,
+                                    "webhook_branch_strategy": config.webhook_branch_strategy,
+                                    "webhook_allowed_branches": config.webhook_allowed_branches,
+                                    "execution_count": config.execution_count or 0,
+                                    "last_executed_at": (
+                                        config.last_executed_at.isoformat()
+                                        if config.last_executed_at
+                                        else None
+                                    ),
+                                },
+                                "source": "手动部署",
+                                "pipeline_id": None,
+                                "logs": [],
+                            }
+                        )
+
+                # 如果指定了status，过滤结果
+                if status:
+                    result = [t for t in result if t.get("status") == status]
+
+                return result
+
+            # 其他类型的任务，使用原来的逻辑
             query = db.query(Task)
             if status:
                 query = query.filter(Task.status == status)
@@ -4824,13 +5021,53 @@ class BuildTaskManager:
     def delete_task(self, task_id: str) -> bool:
         """删除任务（只有停止、完成或失败的任务才能删除）"""
         from backend.database import get_db_session
-        from backend.models import Task, TaskLog
+        from backend.models import Task, TaskLog, DeployConfig
 
         db = get_db_session()
         try:
+            # 先尝试作为config_id查找DeployConfig（部署配置删除）
+            deploy_config = (
+                db.query(DeployConfig).filter(DeployConfig.config_id == task_id).first()
+            )
+
+            if deploy_config:
+                # 这是部署配置，删除DeployConfig和相关Task记录
+                # 查找配置对应的Task记录
+                config_task = (
+                    db.query(Task)
+                    .filter(Task.task_type == "deploy")
+                    .filter(Task.task_config["config_id"].astext == task_id)
+                    .first()
+                )
+
+                # 删除DeployConfig
+                db.delete(deploy_config)
+
+                # 删除配置Task记录（如果存在）
+                if config_task:
+                    # 删除配置任务的日志
+                    db.query(TaskLog).filter(
+                        TaskLog.task_id == config_task.task_id
+                    ).delete()
+                    db.delete(config_task)
+
+                # 注意：不删除执行任务，保留执行历史
+
+                db.commit()
+                print(f"✅ 部署配置已删除: config_id={task_id}")
+                return True
+
+            # 否则，作为普通Task删除
             task = db.query(Task).filter(Task.task_id == task_id).first()
             if not task:
                 return False
+
+            # 如果是部署执行任务，不能删除（通过delete_deploy_task删除配置）
+            if task.task_type == "deploy":
+                task_config = task.task_config or {}
+                if task_config.get("source_config_id"):
+                    # 这是执行任务，不能单独删除
+                    return False
 
             # 只有停止、完成或失败的任务才能删除
             if task.status not in ("stopped", "completed", "failed"):
@@ -4940,131 +5177,164 @@ class BuildTaskManager:
             config_content: YAML 配置内容
             registry: 镜像仓库地址（可选）
             tag: 镜像标签（可选）
-            source_config_id: 原始配置ID（如果提供，表示这是从配置触发的任务）
+            source_config_id: 原始配置ID（如果提供，表示这是从配置触发的执行任务）
             webhook_token: Webhook token（可选，如果为空则自动生成）
             webhook_secret: Webhook 密钥（可选）
             webhook_branch_strategy: 分支策略（可选）
             webhook_allowed_branches: 允许触发的分支列表（可选）
 
         Returns:
-            任务ID
+            任务ID（如果是配置任务返回config_id，如果是执行任务返回task_id）
         """
         from backend.deploy_config_parser import DeployConfigParser
+        from backend.database import get_db_session
+        from backend.models import Task, DeployConfig
 
         try:
             # 解析YAML配置
             parser = DeployConfigParser()
             config = parser.parse_yaml_content(config_content)
 
-            # 检查应用名称是否已存在（只检查配置任务，不包括执行产生的任务）
-            app_name = config.get("app", {}).get("name", "")
-            if app_name:
-                from backend.database import get_db_session
-                from backend.models import Task
-
+            # 如果提供了 source_config_id，说明这是执行任务，从DeployConfig读取配置创建Task
+            if source_config_id:
                 db = get_db_session()
                 try:
-                    # 查询所有部署配置任务（task_type='deploy' 且没有 source_config_id）
-                    existing_tasks = (
-                        db.query(Task).filter(Task.task_type == "deploy").all()
+                    # 从DeployConfig表获取配置
+                    deploy_config = (
+                        db.query(DeployConfig)
+                        .filter(DeployConfig.config_id == source_config_id)
+                        .first()
+                    )
+                    if not deploy_config:
+                        raise ValueError(f"部署配置不存在: {source_config_id}")
+
+                    # 使用配置中的内容（而不是传入的config_content，确保一致性）
+                    config_content = deploy_config.config_content
+                    config = deploy_config.config_json or parser.parse_yaml_content(
+                        config_content
+                    )
+                    registry = registry or deploy_config.registry
+                    tag = tag or deploy_config.tag
+
+                    # 创建执行任务（Task记录）
+                    task_id = str(uuid.uuid4())
+                    created_at = datetime.now()
+
+                    task_config = {
+                        "config_content": config_content,
+                        "config": config,
+                        "registry": registry,
+                        "tag": tag,
+                        "targets": config.get("targets", []),
+                        "source_config_id": source_config_id,  # 指向配置ID
+                    }
+
+                    task_obj = Task(
+                        task_id=task_id,
+                        task_type="deploy",
+                        image=None,
+                        tag=tag,
+                        status="pending",
+                        created_at=created_at,
+                        task_config=task_config,
+                        source=source or "部署配置（执行）",
+                        pipeline_id=None,
+                        git_url=None,
+                        branch=None,
+                        project_type=None,
+                        template=None,
+                        should_push=False,
+                        sub_path=None,
+                        use_project_dockerfile=False,
+                        dockerfile_name=None,
+                        trigger_source=trigger_source or "manual",
                     )
 
-                    for existing_task in existing_tasks:
-                        existing_config = (
-                            existing_task.task_config.get("config", {})
-                            if existing_task.task_config
-                            else {}
-                        )
-                        existing_app_name = existing_config.get("app", {}).get(
-                            "name", ""
-                        )
+                    db.add(task_obj)
 
-                        # 如果应用名称相同，且不是当前任务（编辑时），则报错
-                        if existing_app_name == app_name:
-                            # 如果是编辑操作（提供了 source_config_id），跳过自己
-                            if (
-                                source_config_id
-                                and existing_task.task_id == source_config_id
-                            ):
-                                continue
-                            # 如果是创建新配置，检查是否有其他配置任务使用相同名称
-                            if not source_config_id:
-                                # 检查是否是配置任务（没有 source_config_id）
-                                existing_source_config_id = (
-                                    existing_task.task_config.get("source_config_id")
-                                    if existing_task.task_config
-                                    else None
-                                )
-                                if not existing_source_config_id:
-                                    raise ValueError(
-                                        f"应用名称 '{app_name}' 已存在，请使用其他名称"
-                                    )
-                            else:
-                                # 编辑操作：检查是否有其他配置任务使用相同名称
-                                existing_source_config_id = (
-                                    existing_task.task_config.get("source_config_id")
-                                    if existing_task.task_config
-                                    else None
-                                )
-                                if (
-                                    not existing_source_config_id
-                                    and existing_task.task_id != source_config_id
-                                ):
-                                    raise ValueError(
-                                        f"应用名称 '{app_name}' 已存在，请使用其他名称"
-                                    )
+                    # 更新配置的执行统计
+                    deploy_config.execution_count = (
+                        deploy_config.execution_count or 0
+                    ) + 1
+                    deploy_config.last_executed_at = created_at
+
+                    db.commit()
+                    print(
+                        f"✅ 部署执行任务创建成功: task_id={task_id}, config_id={source_config_id}"
+                    )
+                    return task_id
+                except Exception as save_error:
+                    db.rollback()
+                    print(f"⚠️ 保存部署执行任务失败: {save_error}")
+                    raise
                 finally:
                     db.close()
 
-            # 生成任务ID
-            task_id = str(uuid.uuid4())
-            created_at = datetime.now()
-
-            # 生成 Webhook Token（如果没有提供）
-            if not webhook_token and not source_config_id:  # 只有配置任务才生成token
-                webhook_token = str(uuid.uuid4())
-
-            # 构建任务配置
-            task_config = {
-                "config_content": config_content,
-                "config": config,
-                "registry": registry,
-                "tag": tag,
-                "targets": config.get("targets", []),
-            }
-
-            # 添加webhook配置（只有配置任务才保存webhook信息）
-            if not source_config_id:
-                if webhook_token:
-                    task_config["webhook_token"] = webhook_token
-                if webhook_secret:
-                    task_config["webhook_secret"] = webhook_secret
-                if webhook_branch_strategy:
-                    task_config["webhook_branch_strategy"] = webhook_branch_strategy
-                if webhook_allowed_branches:
-                    task_config["webhook_allowed_branches"] = webhook_allowed_branches
-
-            # 如果提供了 source_config_id，说明这是从配置触发的任务
-            if source_config_id:
-                task_config["source_config_id"] = source_config_id
-
-            # 保存任务到数据库
-            from backend.database import get_db_session
-            from backend.models import Task
+            # 否则，这是创建/更新配置任务
+            app_name = config.get("app", {}).get("name", "")
+            if not app_name:
+                raise ValueError("配置中必须包含应用名称 (app.name)")
 
             db = get_db_session()
             try:
+                # 检查应用名称是否已存在（查询DeployConfig表）
+                existing_config = (
+                    db.query(DeployConfig)
+                    .filter(DeployConfig.app_name == app_name)
+                    .first()
+                )
+
+                if existing_config:
+                    raise ValueError(f"应用名称 '{app_name}' 已存在，请使用其他名称")
+
+                # 生成配置ID
+                config_id = str(uuid.uuid4())
+                created_at = datetime.now()
+
+                # 生成 Webhook Token（如果没有提供）
+                if not webhook_token:
+                    webhook_token = str(uuid.uuid4())
+
+                # 创建DeployConfig记录
+                deploy_config = DeployConfig(
+                    config_id=config_id,
+                    app_name=app_name,
+                    config_content=config_content,
+                    config_json=config,
+                    registry=registry,
+                    tag=tag,
+                    webhook_token=webhook_token,
+                    webhook_secret=webhook_secret,
+                    webhook_branch_strategy=webhook_branch_strategy,
+                    webhook_allowed_branches=webhook_allowed_branches,
+                    execution_count=0,
+                    last_executed_at=None,
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+
+                db.add(deploy_config)
+
+                # 创建Task记录（用于配置管理，status='pending'，不实际执行）
+                task_id = str(uuid.uuid4())
+                task_config = {
+                    "config_id": config_id,  # 存储config_id作为引用
+                    "config_content": config_content,
+                    "config": config,
+                    "registry": registry,
+                    "tag": tag,
+                    "targets": config.get("targets", []),
+                }
+
                 task_obj = Task(
                     task_id=task_id,
                     task_type="deploy",
-                    image=None,  # 部署任务可能没有镜像名称
+                    image=None,
                     tag=tag,
                     status="pending",
                     created_at=created_at,
                     task_config=task_config,
-                    # 任务来源文案：允许调用方自定义，否则根据是否有 source_config_id 给一个默认
-                    source=source
-                    or ("部署配置（执行）" if source_config_id else "手动部署"),
+                    source=source or "手动部署",
                     pipeline_id=None,
                     git_url=None,
                     branch=None,
@@ -5074,17 +5344,16 @@ class BuildTaskManager:
                     sub_path=None,
                     use_project_dockerfile=False,
                     dockerfile_name=None,
-                    # 触发来源：manual / webhook / cron / retry 等
                     trigger_source=trigger_source or "manual",
                 )
 
                 db.add(task_obj)
                 db.commit()
-                print(f"✅ 部署任务创建成功: task_id={task_id}")
-                return task_id
+                print(f"✅ 部署配置创建成功: config_id={config_id}, task_id={task_id}")
+                return config_id  # 返回config_id，作为配置标识
             except Exception as save_error:
                 db.rollback()
-                print(f"⚠️ 保存部署任务失败: {save_error}")
+                print(f"⚠️ 保存部署配置失败: {save_error}")
                 raise
             finally:
                 db.close()
@@ -5108,10 +5377,10 @@ class BuildTaskManager:
         webhook_allowed_branches: Optional[List[str]] = None,
     ) -> bool:
         """
-        更新部署任务配置
+        更新部署配置（task_id实际为config_id）
 
         Args:
-            task_id: 任务ID
+            task_id: 配置ID（在API层面使用task_id保持兼容）
             config_content: YAML 配置内容
             registry: 镜像仓库地址（可选）
             tag: 镜像标签（可选）
@@ -5125,73 +5394,68 @@ class BuildTaskManager:
         """
         from backend.deploy_config_parser import DeployConfigParser
         from backend.database import get_db_session
-        from backend.models import Task
+        from backend.models import Task, DeployConfig
 
         try:
             # 解析YAML配置
             parser = DeployConfigParser()
             config = parser.parse_yaml_content(config_content)
 
-            # 检查应用名称是否已存在（排除当前任务）
             app_name = config.get("app", {}).get("name", "")
-            if app_name:
-                db_check = get_db_session()
-                try:
-                    # 查询所有部署配置任务（task_type='deploy'）
-                    existing_tasks = (
-                        db_check.query(Task).filter(Task.task_type == "deploy").all()
-                    )
-
-                    for existing_task in existing_tasks:
-                        # 跳过当前任务
-                        if existing_task.task_id == task_id:
-                            continue
-
-                        existing_config = (
-                            existing_task.task_config.get("config", {})
-                            if existing_task.task_config
-                            else {}
-                        )
-                        existing_app_name = existing_config.get("app", {}).get(
-                            "name", ""
-                        )
-
-                        # 如果应用名称相同，检查是否是配置任务（没有 source_config_id）
-                        if existing_app_name == app_name:
-                            existing_source_config_id = (
-                                existing_task.task_config.get("source_config_id")
-                                if existing_task.task_config
-                                else None
-                            )
-                            # 如果是配置任务（没有 source_config_id），则报错
-                            if not existing_source_config_id:
-                                raise ValueError(
-                                    f"应用名称 '{app_name}' 已存在，请使用其他名称"
-                                )
-                finally:
-                    db_check.close()
+            if not app_name:
+                raise ValueError("配置中必须包含应用名称 (app.name)")
 
             db = get_db_session()
             try:
-                # 获取任务
+                # 通过task_id找到对应的Task记录，然后获取config_id
+                # 注意：task_id可能直接是config_id，也可能是Task的task_id
                 task = db.query(Task).filter(Task.task_id == task_id).first()
-                if not task or task.task_type != "deploy":
+                config_id = None
+
+                if task and task.task_type == "deploy":
+                    task_config = task.task_config or {}
+                    # 如果是配置任务，task_config中应该有config_id
+                    if "config_id" in task_config:
+                        config_id = task_config["config_id"]
+                    # 如果有source_config_id，说明这是执行任务，不能更新
+                    elif task_config.get("source_config_id"):
+                        return False
+                else:
+                    # 如果Task不存在，尝试直接作为config_id使用
+                    config_id = task_id
+
+                # 通过config_id查找DeployConfig
+                if not config_id:
                     return False
 
-                # 检查是否是配置任务（没有source_config_id的任务）
-                task_config = task.task_config or {}
-                if task_config.get("source_config_id"):
-                    # 这是执行产生的任务，不能更新
+                deploy_config = (
+                    db.query(DeployConfig)
+                    .filter(DeployConfig.config_id == config_id)
+                    .first()
+                )
+                if not deploy_config:
                     return False
 
-                # 更新任务配置
-                task_config["config_content"] = config_content
-                task_config["config"] = config
+                # 检查应用名称是否已存在（排除当前配置）
+                if app_name != deploy_config.app_name:
+                    existing_config = (
+                        db.query(DeployConfig)
+                        .filter(DeployConfig.app_name == app_name)
+                        .first()
+                    )
+                    if existing_config:
+                        raise ValueError(
+                            f"应用名称 '{app_name}' 已存在，请使用其他名称"
+                        )
+
+                # 更新DeployConfig记录
+                deploy_config.app_name = app_name
+                deploy_config.config_content = config_content
+                deploy_config.config_json = config
                 if registry is not None:
-                    task_config["registry"] = registry
+                    deploy_config.registry = registry
                 if tag is not None:
-                    task_config["tag"] = tag
-                task_config["targets"] = config.get("targets", [])
+                    deploy_config.tag = tag
 
                 # 更新webhook配置
                 print(f"🔍 接收到的webhook配置参数:")
@@ -5210,14 +5474,14 @@ class BuildTaskManager:
                     if webhook_token == "":
                         webhook_token = str(uuid.uuid4())
                         print(f"🔄 生成新的webhook_token: {webhook_token[:8]}...")
-                    task_config["webhook_token"] = webhook_token
+                    deploy_config.webhook_token = webhook_token
                     print(f"✅ 更新webhook_token: {webhook_token[:8]}...")
                 else:
                     print(f"⚠️ webhook_token为None，不更新")
 
                 # 如果提供了webhook_secret（包括空字符串），则更新
                 if webhook_secret is not None:
-                    task_config["webhook_secret"] = webhook_secret
+                    deploy_config.webhook_secret = webhook_secret
                     print(
                         f"✅ 更新webhook_secret: {'已设置' if webhook_secret else '已清空'}"
                     )
@@ -5226,36 +5490,44 @@ class BuildTaskManager:
 
                 # 如果提供了webhook_branch_strategy，则更新
                 if webhook_branch_strategy is not None:
-                    task_config["webhook_branch_strategy"] = webhook_branch_strategy
+                    deploy_config.webhook_branch_strategy = webhook_branch_strategy
                     print(f"✅ 更新webhook_branch_strategy: {webhook_branch_strategy}")
                 else:
                     print(f"⚠️ webhook_branch_strategy为None，不更新")
 
                 # 如果提供了webhook_allowed_branches，则更新（包括空列表）
                 if webhook_allowed_branches is not None:
-                    task_config["webhook_allowed_branches"] = webhook_allowed_branches
+                    deploy_config.webhook_allowed_branches = webhook_allowed_branches
                     print(
                         f"✅ 更新webhook_allowed_branches: {webhook_allowed_branches}"
                     )
                 else:
                     print(f"⚠️ webhook_allowed_branches为None，不更新")
 
-                # 更新任务的tag字段（向后兼容）
-                if tag is not None:
-                    task.tag = tag
+                deploy_config.updated_at = datetime.now()
 
-                # 保存更新
-                task.task_config = task_config
-                # 标记JSON字段已修改（SQLAlchemy需要这个来检测JSON字段的变化）
-                from sqlalchemy.orm.attributes import flag_modified
+                # 同时更新Task记录（如果存在）
+                if task:
+                    task_config = task.task_config or {}
+                    task_config["config_content"] = config_content
+                    task_config["config"] = config
+                    if registry is not None:
+                        task_config["registry"] = registry
+                    if tag is not None:
+                        task_config["tag"] = tag
+                        task.tag = tag
+                    task_config["targets"] = config.get("targets", [])
+                    task.task_config = task_config
+                    from sqlalchemy.orm.attributes import flag_modified
 
-                flag_modified(task, "task_config")
+                    flag_modified(task, "task_config")
+
                 db.commit()
-                print(f"✅ 部署任务更新成功: task_id={task_id}")
+                print(f"✅ 部署配置更新成功: config_id={config_id}")
                 return True
             except Exception as save_error:
                 db.rollback()
-                print(f"⚠️ 更新部署任务失败: {save_error}")
+                print(f"⚠️ 更新部署配置失败: {save_error}")
                 raise
             finally:
                 db.close()
@@ -5263,7 +5535,7 @@ class BuildTaskManager:
             import traceback
 
             error_trace = traceback.format_exc()
-            print(f"❌ 更新部署任务异常: {e}")
+            print(f"❌ 更新部署配置异常: {e}")
             print(f"错误堆栈:\n{error_trace}")
             raise
 
@@ -5274,70 +5546,65 @@ class BuildTaskManager:
         trigger_source: str = "manual",
     ) -> str:
         """
-        在后台线程中执行部署任务
+        在后台线程中执行部署配置
         每次执行都会创建一个新的任务，而不是重用原有任务
 
         Args:
-            task_id: 原始任务ID（用于获取配置）
+            task_id: 配置ID（在API层面使用task_id保持兼容，实际为config_id）
             target_names: 要执行的目标名称列表（如果为 None，则执行所有目标）
 
         Returns:
-            新创建的任务ID
+            新创建的执行任务ID
         """
-        # 检查原始任务是否存在
-        original_task = self.get_task(task_id)
-        if not original_task:
-            raise ValueError(f"部署任务不存在: {task_id}")
+        from backend.database import get_db_session
+        from backend.models import DeployConfig
 
-        if original_task.get("task_type") != "deploy":
-            raise ValueError(f"任务类型不是部署任务: {task_id}")
+        # 通过config_id（task_id）获取DeployConfig
+        db = get_db_session()
+        try:
+            # task_id可能是config_id，先尝试作为config_id查询
+            config_id = task_id
+            deploy_config = (
+                db.query(DeployConfig)
+                .filter(DeployConfig.config_id == config_id)
+                .first()
+            )
 
-        # 获取原始任务的配置
-        task_config = original_task.get("task_config", {})
-        config_content = task_config.get("config_content", "")
-        registry = task_config.get("registry")
-        tag = task_config.get("tag")
+            # 如果找不到，尝试通过Task表的task_id查找
+            if not deploy_config:
+                from backend.models import Task
 
-        if not config_content:
-            raise ValueError(f"部署任务配置内容为空，无法执行: {task_id}")
+                task = db.query(Task).filter(Task.task_id == task_id).first()
+                if task and task.task_type == "deploy":
+                    task_config = task.task_config or {}
+                    config_id_from_task = task_config.get("config_id")
+                    if config_id_from_task:
+                        deploy_config = (
+                            db.query(DeployConfig)
+                            .filter(DeployConfig.config_id == config_id_from_task)
+                            .first()
+                        )
+                        if deploy_config:
+                            config_id = config_id_from_task
+
+            if not deploy_config:
+                raise ValueError(f"部署配置不存在: {task_id}")
+        finally:
+            db.close()
 
         # 创建新任务（每次执行都创建新任务，并标记为从配置触发）
+        # 注意：这里传递的source_config_id是config_id
         new_task_id = self.create_deploy_task(
-            config_content=config_content,
-            registry=registry,
-            tag=tag,
-            source_config_id=task_id,  # 标记这是从配置触发的任务
+            config_content=deploy_config.config_content,
+            registry=deploy_config.registry,
+            tag=deploy_config.tag,
+            source_config_id=config_id,  # 标记这是从配置触发的任务
             trigger_source=trigger_source,
             source=("Webhook" if trigger_source == "webhook" else "手动"),
         )
 
-        # 更新原始配置的执行统计
-        from backend.database import get_db_session
-        from backend.models import Task
-
-        db = get_db_session()
-        try:
-            # 更新原始配置的执行统计
-            original_task_obj = db.query(Task).filter(Task.task_id == task_id).first()
-            if original_task_obj:
-                original_task_config = original_task_obj.task_config or {}
-                # 更新执行次数和最后执行时间
-                execution_count = original_task_config.get("execution_count", 0) + 1
-                original_task_config["execution_count"] = execution_count
-                original_task_config["last_executed_at"] = datetime.now().isoformat()
-                original_task_obj.task_config = original_task_config
-                db.commit()
-        except Exception as e:
-            db.rollback()
-            print(f"⚠️ 更新配置统计信息失败: {e}")
-            import traceback
-
-            traceback.print_exc()
-        finally:
-            db.close()
-
         print(
-            f"🆕 基于任务 {task_id[:8]} 创建新部署任务: {new_task_id[:8]}，trigger_source={trigger_source}"
+            f"🆕 基于配置 {config_id[:8]} 创建新部署任务: {new_task_id[:8]}，trigger_source={trigger_source}"
         )
 
         # 更新新任务状态为运行中

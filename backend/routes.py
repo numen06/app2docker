@@ -8154,22 +8154,50 @@ async def list_deploy_tasks(request: Request):
 
         # 转换为前端期望的格式
         formatted_tasks = []
+
+        # 查询所有执行任务（用于统计）
+        from backend.database import get_db_session
+        from backend.models import Task
+
+        db = get_db_session()
+        try:
+            all_execution_tasks = (
+                db.query(Task).filter(Task.task_type == "deploy").all()
+            )
+            execution_tasks_map = {}  # config_id -> [execution_tasks]
+            for exec_task in all_execution_tasks:
+                exec_task_config = exec_task.task_config or {}
+                source_config_id = exec_task_config.get("source_config_id")
+                if source_config_id:
+                    # source_config_id指向config_id
+                    if source_config_id not in execution_tasks_map:
+                        execution_tasks_map[source_config_id] = []
+                    # 转换为字典格式
+                    exec_task_dict = {
+                        "task_id": exec_task.task_id,
+                        "status": exec_task.status,
+                        "created_at": (
+                            exec_task.created_at.isoformat()
+                            if exec_task.created_at
+                            else None
+                        ),
+                        "trigger_source": exec_task.trigger_source,
+                    }
+                    execution_tasks_map[source_config_id].append(exec_task_dict)
+        finally:
+            db.close()
+
         for task in tasks:
             task_config = task.get("task_config", {}) or {}
 
-            # 只返回配置任务（没有source_config_id的任务），排除执行产生的任务
-            source_config_id = task_config.get("source_config_id")
-            if source_config_id:
+            # 只返回配置任务（有config_id的任务），排除执行产生的任务
+            config_id = task_config.get("config_id")
+            if not config_id:
                 # 这是执行产生的任务，跳过
                 continue
 
-            # 查找该配置的所有执行任务
-            config_task_id = task.get("task_id")
-            execution_tasks = [
-                t
-                for t in tasks
-                if t.get("task_config", {}).get("source_config_id") == config_task_id
-            ]
+            # 查找该配置的所有执行任务（从查询结果中获取）
+            execution_tasks = execution_tasks_map.get(config_id, [])
 
             # 计算触发次数（执行任务数量）
             execution_count = len(execution_tasks)

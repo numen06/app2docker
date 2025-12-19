@@ -455,3 +455,34 @@ class RolePermission(Base):
         Index("idx_role_permission_permission", "permission_id"),
         Index("idx_role_permission_unique", "role_id", "permission_id", unique=True),
     )
+
+
+class DeployConfig(Base):
+    """部署配置表"""
+
+    __tablename__ = "deploy_configs"
+
+    config_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    app_name = Column(
+        String(255), nullable=False, unique=True
+    )  # 应用名称（唯一性约束）
+    config_content = Column(Text, nullable=False)  # YAML 配置内容（原始格式）
+    config_json = Column(JSON, default=dict)  # 解析后的配置结构（便于查询和修改）
+    registry = Column(String(255), nullable=True)  # 镜像仓库地址
+    tag = Column(String(255), nullable=True)  # 镜像标签
+    webhook_token = Column(String(36), unique=True, nullable=True)  # Webhook token
+    webhook_secret = Column(String(255), nullable=True)  # Webhook 密钥
+    webhook_branch_strategy = Column(String(50), nullable=True)  # 分支策略
+    webhook_allowed_branches = Column(JSON, nullable=True)  # 允许触发的分支列表
+    execution_count = Column(Integer, default=0)  # 执行次数统计
+    last_executed_at = Column(DateTime, nullable=True)  # 最后执行时间
+    created_at = Column(DateTime, default=datetime.now)  # 创建时间
+    updated_at = Column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )  # 更新时间
+
+    __table_args__ = (
+        Index("idx_deploy_config_app_name", "app_name"),
+        Index("idx_deploy_config_webhook_token", "webhook_token"),
+        Index("idx_deploy_config_created", "created_at"),
+    )
