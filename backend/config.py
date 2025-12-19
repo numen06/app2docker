@@ -1,6 +1,9 @@
 # config.py
 import os
 import yaml
+import base64
+from typing import Optional
+from backend.crypto_utils import encrypt_password, decrypt_password
 
 # 将配置文件放在data目录中，方便Docker映射
 CONFIG_FILE = "data/config.yml"
@@ -137,7 +140,7 @@ def save_config(config):
             yaml.dump(
                 config, f, default_flow_style=False, allow_unicode=True, sort_keys=False
             )
-        
+
         # 原子性替换
         if os.path.exists(CONFIG_FILE):
             os.replace(temp_file, CONFIG_FILE)
@@ -155,18 +158,64 @@ def save_config(config):
 
 
 def get_active_registry():
-    """获取当前激活的仓库配置（用于推送）"""
+    """获取当前激活的仓库配置（用于推送，返回解密后的密码）"""
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 
     # 查找激活的仓库
     for registry in registries:
         if registry.get("active", False):
-            return registry
+            # 解密密码
+            registry_copy = registry.copy()
+            password = registry.get("password")
+            if password:
+                try:
+                    registry_copy["password"] = decrypt_password(password)
+                except (ValueError, Exception):
+                    # 如果解密失败，尝试迁移旧格式
+                    try:
+                        try:
+                            decoded = base64.b64decode(password.encode("utf-8"))
+                            plaintext = decoded.decode("utf-8")
+                        except Exception:
+                            plaintext = password
+
+                        # 加密后更新配置
+                        encrypted = encrypt_password(plaintext)
+                        registry["password"] = encrypted
+                        save_config(config)
+                        registry_copy["password"] = plaintext
+                    except Exception as e:
+                        print(f"⚠️ 解密Registry密码失败: {e}")
+                        registry_copy["password"] = ""
+            else:
+                registry_copy["password"] = ""
+            return registry_copy
 
     # 如果没有激活的仓库，返回第一个
     if registries:
-        return registries[0]
+        registry = registries[0].copy()
+        password = registries[0].get("password")
+        if password:
+            try:
+                registry["password"] = decrypt_password(password)
+            except (ValueError, Exception):
+                try:
+                    try:
+                        decoded = base64.b64decode(password.encode("utf-8"))
+                        plaintext = decoded.decode("utf-8")
+                    except Exception:
+                        plaintext = password
+                    encrypted = encrypt_password(plaintext)
+                    registries[0]["password"] = encrypted
+                    save_config(config)
+                    registry["password"] = plaintext
+                except Exception as e:
+                    print(f"⚠️ 解密Registry密码失败: {e}")
+                    registry["password"] = ""
+        else:
+            registry["password"] = ""
+        return registry
 
     # 如果没有任何仓库，返回默认值
     return {
@@ -180,21 +229,119 @@ def get_active_registry():
 
 
 def get_registry_by_name(name):
-    """根据名称获取仓库配置"""
+    """根据名称获取仓库配置（返回包含解密密码的配置）"""
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 
     for registry in registries:
         if registry.get("name") == name:
-            return registry
+            # 解密密码
+            registry_copy = registry.copy()
+            password = registry.get("password")
+            if password:
+                try:
+                    registry_copy["password"] = decrypt_password(password)
+                except (ValueError, Exception):
+                    # 如果解密失败，尝试迁移旧格式
+                    try:
+                        try:
+                            decoded = base64.b64decode(password.encode("utf-8"))
+                            plaintext = decoded.decode("utf-8")
+                        except Exception:
+                            plaintext = password
+
+                        # 加密后更新配置
+                        encrypted = encrypt_password(plaintext)
+                        registry["password"] = encrypted
+                        save_config(config)
+                        registry_copy["password"] = plaintext
+                    except Exception as e:
+                        print(f"⚠️ 解密Registry密码失败: {e}")
+                        registry_copy["password"] = ""
+            else:
+                registry_copy["password"] = ""
+            return registry_copy
 
     return None
 
 
 def get_all_registries():
-    """获取所有仓库配置"""
+    """获取所有仓库配置（不返回密码，只返回 has_password 标志）"""
     config = load_config()
-    return config.get("docker", {}).get("registries", [])
+    registries = config.get("docker", {}).get("registries", [])
+
+    # 移除密码字段，添加 has_password 标志
+    safe_registries = []
+    for registry in registries:
+        safe_registry = registry.copy()
+        safe_registry["has_password"] = bool(registry.get("password"))
+        # 移除密码字段
+        if "password" in safe_registry:
+            del safe_registry["password"]
+        safe_registries.append(safe_registry)
+
+    return safe_registries
+
+
+def get_registry_password(registry_name: str) -> Optional[str]:
+    """获取指定仓库的解密后的密码（用于Docker推送等操作）"""
+    config = load_config()
+    registries = config.get("docker", {}).get("registries", [])
+
+    for registry in registries:
+        if registry.get("name") == registry_name:
+            password = registry.get("password")
+            if not password:
+                return None
+
+            try:
+                # 尝试解密（AES加密格式）
+                return decrypt_password(password)
+            except (ValueError, Exception):
+                # 如果解密失败，尝试迁移旧格式（明文或base64）
+                try:
+                    # 尝试base64解码
+                    try:
+                        decoded = base64.b64decode(password.encode("utf-8"))
+                        plaintext = decoded.decode("utf-8")
+                    except Exception:
+                        # base64解码失败，当作明文处理
+                        plaintext = password
+
+                    # 加密后更新配置
+                    encrypted = encrypt_password(plaintext)
+                    registry["password"] = encrypted
+                    save_config(config)
+                    return plaintext
+                except Exception as e:
+                    print(f"⚠️ 解密Registry密码失败: {e}")
+                    return None
+
+    return None
+
+
+def encrypt_registry_passwords(registries: list) -> list:
+    """加密仓库配置中的密码"""
+    encrypted_registries = []
+    for registry in registries:
+        encrypted_registry = registry.copy()
+        password = registry.get("password")
+        if password:
+            # 如果密码不是加密格式，则加密它
+            try:
+                # 尝试解密，如果成功说明已经是加密格式
+                decrypt_password(password)
+                # 已经是加密格式，保持不变
+                encrypted_registry["password"] = password
+            except (ValueError, Exception):
+                # 不是加密格式，需要加密
+                # 如果密码是占位符，不更新
+                if password and password not in ["******", "***", ""]:
+                    encrypted_registry["password"] = encrypt_password(password)
+                elif password == "":
+                    encrypted_registry["password"] = ""
+        encrypted_registries.append(encrypted_registry)
+    return encrypted_registries
 
 
 def get_git_config():

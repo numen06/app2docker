@@ -159,21 +159,48 @@
           <label class="form-label">
             Git 数据源 <span class="text-danger">*</span>
           </label>
-          <select
-            v-model="buildConfig.sourceId"
-            class="form-select"
-            @change="onSourceSelected"
-            required
-          >
-            <option value="">-- 请选择数据源 --</option>
-            <option
-              v-for="source in gitSources"
-              :key="source.source_id"
-              :value="source.source_id"
+          <div class="position-relative">
+            <div class="input-group">
+              <input
+                v-model="gitSourceSearchQuery"
+                type="text"
+                class="form-control"
+                placeholder="搜索数据源..."
+                @input="searchGitSources($event.target.value)"
+                @focus="gitSourceDropdownOpen = true"
+                @blur="handleGitSourceBlur"
+                required
+              />
+              <span v-if="gitSourceSearchLoading" class="input-group-text">
+                <span class="spinner-border spinner-border-sm"></span>
+              </span>
+            </div>
+            <div
+              v-if="gitSourceDropdownOpen && gitSourceSearchResults.length > 0"
+              class="dropdown-menu show w-100"
+              style="max-height: 300px; overflow-y: auto;"
             >
-              {{ source.name }} ({{ formatGitUrl(source.git_url) }})
-            </option>
-          </select>
+              <a
+                v-for="source in gitSourceSearchResults"
+                :key="source.source_id"
+                href="#"
+                class="dropdown-item"
+                @click.prevent="selectGitSource(source)"
+              >
+                <div>
+                  <strong>{{ source.name }}</strong>
+                  <br />
+                  <small class="text-muted">{{ formatGitUrl(source.git_url) }}</small>
+                </div>
+              </a>
+            </div>
+            <div
+              v-if="gitSourceDropdownOpen && !gitSourceSearchLoading && gitSourceSearchResults.length === 0 && gitSourceSearchQuery"
+              class="dropdown-menu show w-100"
+            >
+              <div class="dropdown-item text-muted">无匹配结果</div>
+            </div>
+          </div>
           <div
             v-if="buildConfig.sourceId && repoVerified"
             class="alert alert-success alert-sm mt-2 mb-0"
@@ -406,36 +433,57 @@
                 <div v-if="buildConfig.template && buildConfig.template !== ''" class="alert alert-success alert-sm py-2 mb-2">
                   <i class="fas fa-check-circle me-2"></i>
                   <strong>当前选择：</strong>{{ buildConfig.template }}
-                  <span v-if="filteredTemplates.find(t => t.name === buildConfig.template)">
-                    ({{ getProjectTypeLabel(filteredTemplates.find(t => t.name === buildConfig.template).project_type) }})
+                  <span v-if="templateSearchResults.find(t => t.name === buildConfig.template) || templates.find(t => t.name === buildConfig.template)">
+                    ({{ getProjectTypeLabel((templateSearchResults.find(t => t.name === buildConfig.template) || templates.find(t => t.name === buildConfig.template)).project_type) }})
                   </span>
                 </div>
                 
-                <div class="input-group input-group-sm mb-1">
-                  <span class="input-group-text"><i class="fas fa-search"></i></span>
-                  <input
-                    v-model="templateSearch"
-                    type="text"
-                    class="form-control"
-                    placeholder="搜索模板..."
-                  />
-                </div>
-                <select
-                  v-model="buildConfig.template"
-                  class="form-select"
-                  @change="loadTemplateParams"
-                  required
-                >
-                  <option value="">-- 请选择模板 --</option>
-                  <option
-                    v-for="tpl in filteredTemplates"
-                    :key="tpl.name"
-                    :value="tpl.name"
+                <div class="position-relative">
+                  <div class="input-group input-group-sm mb-1">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input
+                      v-model="templateSearchQuery"
+                      type="text"
+                      class="form-control"
+                      placeholder="搜索模板..."
+                      @input="searchTemplates($event.target.value)"
+                      @focus="templateDropdownOpen = true"
+                      @blur="handleTemplateBlur"
+                      required
+                    />
+                    <span v-if="templateSearchLoading" class="input-group-text">
+                      <span class="spinner-border spinner-border-sm"></span>
+                    </span>
+                  </div>
+                  <div
+                    v-if="templateDropdownOpen && templateSearchResults.length > 0"
+                    class="dropdown-menu show w-100"
+                    style="max-height: 300px; overflow-y: auto;"
                   >
-                    {{ tpl.name }} ({{ getProjectTypeLabel(tpl.project_type)
-                    }}{{ tpl.type === "builtin" ? " · 内置" : "" }})
-                  </option>
-                </select>
+                    <a
+                      v-for="tpl in templateSearchResults.filter(t => t.project_type === buildConfig.projectType)"
+                      :key="tpl.name"
+                      href="#"
+                      class="dropdown-item"
+                      @click.prevent="selectTemplate(tpl)"
+                    >
+                      <div>
+                        <strong>{{ tpl.name }}</strong>
+                        <br />
+                        <small class="text-muted">
+                          {{ getProjectTypeLabel(tpl.project_type)
+                          }}{{ tpl.type === "builtin" ? " · 内置" : "" }}
+                        </small>
+                      </div>
+                    </a>
+                  </div>
+                  <div
+                    v-if="templateDropdownOpen && !templateSearchLoading && templateSearchResults.filter(t => t.project_type === buildConfig.projectType).length === 0 && templateSearchQuery"
+                    class="dropdown-menu show w-100"
+                  >
+                    <div class="dropdown-item text-muted">无匹配结果</div>
+                  </div>
+                </div>
                 <div class="form-text small text-muted mt-1">
                   <i class="fas fa-info-circle"></i> 已按项目类型过滤，可在模板管理中维护
                 </div>
@@ -626,22 +674,47 @@
                     <label class="form-label">
                       镜像前缀 <span class="text-danger">*</span>
                     </label>
-                    <select
-                      v-model="buildConfig.imagePrefix"
-                      class="form-select mb-2"
-                      @change="onImagePrefixChange"
-                    >
-                      <option value="">-- 选择仓库或手动输入 --</option>
-                      <option
-                        v-for="reg in registries"
-                        :key="reg.name"
-                        :value="reg.registry_prefix || reg.registry"
+                    <div class="position-relative">
+                      <div class="input-group mb-2">
+                        <input
+                          v-model="registrySearchQuery"
+                          type="text"
+                          class="form-control"
+                          placeholder="搜索仓库或手动输入..."
+                          @input="searchRegistries($event.target.value)"
+                          @focus="registryDropdownOpen = true"
+                          @blur="handleRegistryBlur"
+                        />
+                        <span v-if="registrySearchLoading" class="input-group-text">
+                          <span class="spinner-border spinner-border-sm"></span>
+                        </span>
+                      </div>
+                      <div
+                        v-if="registryDropdownOpen && registrySearchResults.length > 0"
+                        class="dropdown-menu show w-100"
+                        style="max-height: 300px; overflow-y: auto;"
                       >
-                        {{ reg.name }} ({{
-                          reg.registry_prefix || reg.registry
-                        }})
-                      </option>
-                    </select>
+                        <a
+                          v-for="reg in registrySearchResults"
+                          :key="reg.name"
+                          href="#"
+                          class="dropdown-item"
+                          @click.prevent="selectRegistry(reg)"
+                        >
+                          <div>
+                            <strong>{{ reg.name }}</strong>
+                            <br />
+                            <small class="text-muted">{{ reg.registry_prefix || reg.registry }}</small>
+                          </div>
+                        </a>
+                      </div>
+                      <div
+                        v-if="registryDropdownOpen && !registrySearchLoading && registrySearchResults.length === 0 && registrySearchQuery"
+                        class="dropdown-menu show w-100"
+                      >
+                        <div class="dropdown-item text-muted">无匹配结果</div>
+                      </div>
+                    </div>
                     <input
                       v-if="!isRegistrySelected(buildConfig.imagePrefix)"
                       v-model="buildConfig.imagePrefix"
@@ -783,22 +856,47 @@
                   <div class="row g-3">
                     <div class="col-md-4">
                       <label class="form-label">批量设置镜像前缀</label>
-                      <select
-                        v-model="batchImagePrefix"
-                        class="form-select form-select-sm mb-2"
-                        @change="onBatchPrefixChange"
-                      >
-                        <option value="">-- 选择仓库或手动输入 --</option>
-                        <option
-                          v-for="reg in registries"
-                          :key="reg.name"
-                          :value="reg.registry_prefix || reg.registry"
+                      <div class="position-relative">
+                        <div class="input-group input-group-sm mb-2">
+                          <input
+                            v-model="batchRegistrySearchQuery"
+                            type="text"
+                            class="form-control"
+                            placeholder="搜索仓库或手动输入..."
+                            @input="searchBatchRegistries($event.target.value)"
+                            @focus="batchRegistryDropdownOpen = true"
+                            @blur="handleBatchRegistryBlur"
+                          />
+                          <span v-if="batchRegistrySearchLoading" class="input-group-text">
+                            <span class="spinner-border spinner-border-sm"></span>
+                          </span>
+                        </div>
+                        <div
+                          v-if="batchRegistryDropdownOpen && batchRegistrySearchResults.length > 0"
+                          class="dropdown-menu show w-100"
+                          style="max-height: 300px; overflow-y: auto;"
                         >
-                          {{ reg.name }} ({{
-                            reg.registry_prefix || reg.registry
-                          }})
-                        </option>
-                      </select>
+                          <a
+                            v-for="reg in batchRegistrySearchResults"
+                            :key="reg.name"
+                            href="#"
+                            class="dropdown-item"
+                            @click.prevent="selectBatchRegistry(reg)"
+                          >
+                            <div>
+                              <strong>{{ reg.name }}</strong>
+                              <br />
+                              <small class="text-muted">{{ reg.registry_prefix || reg.registry }}</small>
+                            </div>
+                          </a>
+                        </div>
+                        <div
+                          v-if="batchRegistryDropdownOpen && !batchRegistrySearchLoading && batchRegistrySearchResults.length === 0 && batchRegistrySearchQuery"
+                          class="dropdown-menu show w-100"
+                        >
+                          <div class="dropdown-item text-muted">无匹配结果</div>
+                        </div>
+                      </div>
                       <div class="input-group input-group-sm">
                         <input
                           v-if="!isRegistrySelected(batchImagePrefix)"
@@ -1668,6 +1766,12 @@ import { javascript } from '@codemirror/legacy-modes/mode/javascript'
 import { getGitInfoWithCache, getGitCache, clearGitCache } from '../utils/gitCache.js';
 import { getDockerfilesWithCache } from '../utils/dockerfileCache.js';
 import { getServiceAnalysisWithCache } from '../utils/serviceAnalysisCache.js';
+import { 
+  getProjectTypes, 
+  getProjectTypesSync,
+  getProjectTypeLabel, 
+  getProjectTypeIcon 
+} from '../utils/projectTypes.js';
 
 const currentStep = ref(1);
 const building = ref(false);
@@ -1698,6 +1802,11 @@ const buildConfig = ref({
 
 // 数据源相关
 const gitSources = ref([]);
+const gitSourceSearchQuery = ref("");
+const gitSourceSearchResults = ref([]);
+const gitSourceSearchLoading = ref(false);
+const gitSourceDropdownOpen = ref(false);
+const selectedGitSourceDisplay = ref("");
 const repoVerified = ref(false);
 const branchesAndTags = ref({
   branches: [],
@@ -1709,9 +1818,17 @@ const scanningDockerfiles = ref(false);
 const dockerfilesError = ref("");
 const refreshingBranches = ref(false);
 
+// 项目类型相关
+const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
+
 // 模板相关
 const templates = ref([]);
 const templateSearch = ref("");
+const templateSearchQuery = ref("");
+const templateSearchResults = ref([]);
+const templateSearchLoading = ref(false);
+const templateDropdownOpen = ref(false);
+const selectedTemplateDisplay = ref("");
 const templateParams = ref([]);
 const services = ref([]);
 const selectedServices = ref([]);
@@ -1720,7 +1837,16 @@ const parsingServices = ref(false);
 const servicesError = ref("");
 const forceSingleAppMode = ref(false); // 强制单应用模式（即使解析出多服务）
 const registries = ref([]); // 仓库列表
+const registrySearchQuery = ref("");
+const registrySearchResults = ref([]);
+const registrySearchLoading = ref(false);
+const registryDropdownOpen = ref(false);
+const selectedRegistryDisplay = ref("");
 const batchImagePrefix = ref(""); // 批量设置镜像前缀
+const batchRegistrySearchQuery = ref("");
+const batchRegistrySearchResults = ref([]);
+const batchRegistrySearchLoading = ref(false);
+const batchRegistryDropdownOpen = ref(false);
 const batchTag = ref(""); // 批量设置标签
 // 批量设置相关变量已移除，使用全局配置
 
@@ -1747,48 +1873,9 @@ const jsonEditorExtensions = [
   oneDark
 ]
 
+// 项目类型列表（从API获取）
 const projectTypes = computed(() => {
-  const types = new Set();
-  templates.value.forEach((t) => types.add(t.project_type));
-
-  const labelMap = {
-    jar: "Java 应用（JAR）",
-    nodejs: "Node.js 应用",
-    python: "Python 应用",
-    go: "Go 应用",
-    web: "静态网站",
-  };
-
-  const orderMap = {
-    jar: 1,
-    nodejs: 2,
-    python: 3,
-    go: 4,
-    web: 5,
-  };
-
-  const result = [];
-  types.forEach((type) => {
-    result.push({
-      value: type,
-      label:
-        labelMap[type] ||
-        `${type.charAt(0).toUpperCase()}${type.slice(1)} 应用`,
-      order: orderMap[type] || 999,
-    });
-  });
-
-  if (result.length === 0) {
-    return [
-      { value: "jar", label: "Java 应用（JAR）", order: 1 },
-      { value: "nodejs", label: "Node.js 应用", order: 2 },
-      { value: "python", label: "Python 应用", order: 3 },
-      { value: "go", label: "Go 应用", order: 4 },
-      { value: "web", label: "静态网站", order: 5 },
-    ];
-  }
-
-  return result.sort((a, b) => a.order - b.order);
+  return projectTypesList.value;
 });
 
 const filteredTemplates = computed(() => {
@@ -1905,13 +1992,77 @@ function formatFileSize(bytes) {
 }
 
 // Git 数据源处理
-async function loadGitSources() {
+let gitSourceSearchTimeout = null;
+async function loadGitSources(query = "") {
   try {
-    const res = await axios.get("/api/git-sources");
-    gitSources.value = res.data.sources || [];
+    const params = query ? { query: query.trim() } : {};
+    const res = await axios.get("/api/git-sources", { params });
+    const sources = res.data.sources || [];
+    
+    if (query) {
+      gitSourceSearchResults.value = sources;
+    } else {
+      gitSources.value = sources;
+      gitSourceSearchResults.value = sources;
+    }
+    
+    // 如果当前选中的数据源不在搜索结果中，尝试更新显示文本
+    if (buildConfig.value.sourceId && !query) {
+      const selectedSource = sources.find(s => s.source_id === buildConfig.value.sourceId);
+      if (selectedSource) {
+        selectedGitSourceDisplay.value = `${selectedSource.name} (${formatGitUrl(selectedSource.git_url)})`;
+        gitSourceSearchQuery.value = selectedGitSourceDisplay.value;
+      }
+    }
   } catch (error) {
     console.error("加载数据源列表失败:", error);
+    gitSourceSearchResults.value = [];
+  } finally {
+    gitSourceSearchLoading.value = false;
   }
+}
+
+function searchGitSources(query) {
+  gitSourceSearchQuery.value = query;
+  gitSourceDropdownOpen.value = true;
+  
+  if (gitSourceSearchTimeout) {
+    clearTimeout(gitSourceSearchTimeout);
+  }
+  
+  gitSourceSearchLoading.value = true;
+  gitSourceSearchTimeout = setTimeout(() => {
+    loadGitSources(query);
+  }, 300);
+}
+
+// 辅助函数：查找数据源
+function findGitSource(sourceId) {
+  return [...gitSourceSearchResults.value, ...gitSources.value].find(
+    (s) => s.source_id === sourceId
+  );
+}
+
+function selectGitSource(source) {
+  if (!source) {
+    buildConfig.value.sourceId = "";
+    selectedGitSourceDisplay.value = "";
+    gitSourceSearchQuery.value = "";
+    gitSourceDropdownOpen.value = false;
+    return;
+  }
+  
+  buildConfig.value.sourceId = source.source_id;
+  selectedGitSourceDisplay.value = `${source.name} (${formatGitUrl(source.git_url)})`;
+  gitSourceSearchQuery.value = selectedGitSourceDisplay.value;
+  gitSourceDropdownOpen.value = false;
+  onSourceSelected();
+}
+
+function handleGitSourceBlur() {
+  setTimeout(() => {
+    gitSourceDropdownOpen.value = false;
+  }, 200);
 }
 
 async function onSourceSelected() {
@@ -1919,13 +2070,16 @@ async function onSourceSelected() {
     repoVerified.value = false;
     branchesAndTags.value = { branches: [], tags: [], default_branch: null };
     buildConfig.value.branch = "";
+    selectedGitSourceDisplay.value = "";
+    gitSourceSearchQuery.value = "";
     return;
   }
 
-  const source = gitSources.value.find(
-    (s) => s.source_id === buildConfig.value.sourceId
-  );
+  const source = findGitSource(buildConfig.value.sourceId);
   if (source) {
+    // 更新显示文本
+    selectedGitSourceDisplay.value = `${source.name} (${formatGitUrl(source.git_url)})`;
+    gitSourceSearchQuery.value = selectedGitSourceDisplay.value;
     // 先尝试从缓存获取
     const cached = getGitCache(source.git_url, source.source_id);
     if (cached) {
@@ -1952,9 +2106,7 @@ async function refreshBranches(forceRefresh = true) {
     return;
   }
 
-  const source = gitSources.value.find(
-    (s) => s.source_id === buildConfig.value.sourceId
-  );
+  const source = findGitSource(buildConfig.value.sourceId);
   if (!source) {
     return;
   }
@@ -2028,7 +2180,7 @@ function formatGitUrl(url) {
 }
 
 function getSourceName(sourceId) {
-  const source = gitSources.value.find((s) => s.source_id === sourceId);
+  const source = findGitSource(sourceId);
   return source ? source.name : "";
 }
 
@@ -2089,54 +2241,116 @@ function onImagePrefixChange() {
   }
 }
 
+// 项目类型处理（从缓存加载，如果没有则从API加载）
+async function loadProjectTypes() {
+  projectTypesList.value = await getProjectTypes();
+}
+
 // 模板处理
-async function loadTemplates() {
+let templateSearchTimeout = null;
+async function loadTemplates(query = "") {
   try {
-    const res = await axios.get("/api/templates");
-    templates.value = res.data.items || [];
-    if (filteredTemplates.value.length > 0) {
-      buildConfig.value.template = filteredTemplates.value[0].name;
+    const params = { page: 1, page_size: 50 };
+    if (query) {
+      params.query = query.trim();
+    }
+    const res = await axios.get("/api/templates", { params });
+    const items = res.data.items || [];
+    
+    if (query) {
+      templateSearchResults.value = items;
+    } else {
+      templates.value = items;
+      templateSearchResults.value = items;
+    }
+    
+    // 如果当前选中的模板不在搜索结果中，尝试更新显示文本
+    if (buildConfig.value.template && !query) {
+      const selectedTemplate = items.find(t => t.name === buildConfig.value.template);
+      if (selectedTemplate) {
+        selectedTemplateDisplay.value = `${selectedTemplate.name} (${getProjectTypeLabel(selectedTemplate.project_type)}${selectedTemplate.type === "builtin" ? " · 内置" : ""})`;
+        templateSearchQuery.value = selectedTemplateDisplay.value;
+      }
     }
   } catch (error) {
     console.error("加载模板失败:", error);
+    templateSearchResults.value = [];
+  } finally {
+    templateSearchLoading.value = false;
   }
+}
+
+// 监听模板变化，更新显示文本
+watch(() => buildConfig.value.template, (newTemplate) => {
+  if (newTemplate) {
+    const template = templateSearchResults.value.find(t => t.name === newTemplate) || 
+                     templates.value.find(t => t.name === newTemplate);
+    if (template) {
+      selectedTemplateDisplay.value = `${template.name} (${getProjectTypeLabel(template.project_type)}${template.type === "builtin" ? " · 内置" : ""})`;
+      templateSearchQuery.value = selectedTemplateDisplay.value;
+    }
+  } else {
+    selectedTemplateDisplay.value = "";
+    templateSearchQuery.value = "";
+  }
+});
+
+function searchTemplates(query) {
+  templateSearchQuery.value = query;
+  templateDropdownOpen.value = true;
+  
+  if (templateSearchTimeout) {
+    clearTimeout(templateSearchTimeout);
+  }
+  
+  templateSearchLoading.value = true;
+  templateSearchTimeout = setTimeout(() => {
+    loadTemplates(query);
+  }, 300);
+}
+
+function selectTemplate(template) {
+  if (!template) {
+    buildConfig.value.template = "";
+    selectedTemplateDisplay.value = "";
+    templateSearchQuery.value = "";
+    templateDropdownOpen.value = false;
+    return;
+  }
+  
+  buildConfig.value.template = template.name;
+  selectedTemplateDisplay.value = `${template.name} (${getProjectTypeLabel(template.project_type)}${template.type === "builtin" ? " · 内置" : ""})`;
+  templateSearchQuery.value = selectedTemplateDisplay.value;
+  templateDropdownOpen.value = false;
+  loadTemplateParams();
+}
+
+function handleTemplateBlur() {
+  setTimeout(() => {
+    templateDropdownOpen.value = false;
+  }, 200);
 }
 
 function changeProjectType(type) {
   buildConfig.value.projectType = type;
   templateSearch.value = "";
-  if (filteredTemplates.value.length > 0) {
-    buildConfig.value.template = filteredTemplates.value[0].name;
-    loadTemplateParams();
+  templateSearchQuery.value = "";
+  selectedTemplateDisplay.value = "";
+  buildConfig.value.template = "";
+  // 加载对应项目类型的模板
+  loadTemplates();
+  if (templateSearchResults.value.filter(t => t.project_type === type).length > 0) {
+    const firstTemplate = templateSearchResults.value.filter(t => t.project_type === type)[0];
+    selectTemplate(firstTemplate);
   }
 }
 
-function getProjectTypeIcon(type) {
-  const iconMap = {
-    jar: "fab fa-java",
-    nodejs: "fab fa-node-js",
-    python: "fab fa-python",
-    go: "fas fa-code",
-    web: "fas fa-globe",
-  };
-  return iconMap[type] || "fas fa-cube";
-}
-
-function getProjectTypeLabel(type) {
-  const labelMap = {
-    jar: "Java",
-    nodejs: "Node.js",
-    python: "Python",
-    go: "Go",
-    web: "静态网站",
-  };
-  return labelMap[type] || type;
-}
+// getProjectTypeIcon 和 getProjectTypeLabel 已从 projectTypes.js 导入
 
 // 构建配置JSON（基于统一的任务配置结构）
 const buildConfigJson = computed(() => {
   const source = buildConfig.value.sourceType === 'git' 
-    ? gitSources.value.find(s => s.source_id === buildConfig.value.sourceId)
+    ? findGitSource(buildConfig.value.sourceId)
     : null
   
   // 确定镜像名（单服务推送模式需要特殊处理）
@@ -3430,13 +3644,138 @@ function formatBytes(bytes) {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }
 
-async function loadRegistries() {
+let registrySearchTimeout = null;
+async function loadRegistries(query = "") {
   try {
-    const res = await axios.get("/api/registries");
-    registries.value = res.data.registries || [];
+    const params = query ? { query: query.trim() } : {};
+    const res = await axios.get("/api/registries", { params });
+    const registryList = res.data.registries || [];
+    
+    if (query) {
+      registrySearchResults.value = registryList;
+    } else {
+      registries.value = registryList;
+      registrySearchResults.value = registryList;
+    }
   } catch (error) {
     console.error("加载仓库列表失败:", error);
+    registrySearchResults.value = [];
+  } finally {
+    registrySearchLoading.value = false;
   }
+}
+
+function searchRegistries(query) {
+  registrySearchQuery.value = query;
+  registryDropdownOpen.value = true;
+  
+  // 检查是否是手动输入（不在下拉列表中）
+  const isManualInput = !registrySearchResults.value.some(reg => {
+    const prefix = reg.registry_prefix || reg.registry;
+    return query === `${reg.name} (${prefix})` || query === prefix;
+  });
+  
+  if (isManualInput && query && !query.includes('(')) {
+    // 用户手动输入，直接设置值
+    buildConfig.value.imagePrefix = query;
+    registryDropdownOpen.value = false;
+    return;
+  }
+  
+  if (registrySearchTimeout) {
+    clearTimeout(registrySearchTimeout);
+  }
+  
+  registrySearchLoading.value = true;
+  registrySearchTimeout = setTimeout(() => {
+    loadRegistries(query);
+  }, 300);
+}
+
+function selectRegistry(registry) {
+  if (!registry) {
+    buildConfig.value.imagePrefix = "";
+    selectedRegistryDisplay.value = "";
+    registrySearchQuery.value = "";
+    registryDropdownOpen.value = false;
+    return;
+  }
+  
+  const prefix = registry.registry_prefix || registry.registry;
+  buildConfig.value.imagePrefix = prefix;
+  selectedRegistryDisplay.value = `${registry.name} (${prefix})`;
+  registrySearchQuery.value = selectedRegistryDisplay.value;
+  registryDropdownOpen.value = false;
+  onImagePrefixChange();
+}
+
+function handleRegistryBlur() {
+  setTimeout(() => {
+    registryDropdownOpen.value = false;
+  }, 200);
+}
+
+// 批量设置仓库搜索
+let batchRegistrySearchTimeout = null;
+async function loadBatchRegistries(query = "") {
+  try {
+    const params = query ? { query: query.trim() } : {};
+    const res = await axios.get("/api/registries", { params });
+    batchRegistrySearchResults.value = res.data.registries || [];
+  } catch (error) {
+    console.error("加载仓库列表失败:", error);
+    batchRegistrySearchResults.value = [];
+  } finally {
+    batchRegistrySearchLoading.value = false;
+  }
+}
+
+function searchBatchRegistries(query) {
+  batchRegistrySearchQuery.value = query;
+  batchRegistryDropdownOpen.value = true;
+  
+  // 检查是否是手动输入（不在下拉列表中）
+  const isManualInput = !batchRegistrySearchResults.value.some(reg => {
+    const prefix = reg.registry_prefix || reg.registry;
+    return query === `${reg.name} (${prefix})` || query === prefix;
+  });
+  
+  if (isManualInput && query && !query.includes('(')) {
+    // 用户手动输入，直接设置值
+    batchImagePrefix.value = query;
+    batchRegistryDropdownOpen.value = false;
+    return;
+  }
+  
+  if (batchRegistrySearchTimeout) {
+    clearTimeout(batchRegistrySearchTimeout);
+  }
+  
+  batchRegistrySearchLoading.value = true;
+  batchRegistrySearchTimeout = setTimeout(() => {
+    loadBatchRegistries(query);
+  }, 300);
+}
+
+function selectBatchRegistry(registry) {
+  if (!registry) {
+    batchImagePrefix.value = "";
+    batchRegistrySearchQuery.value = "";
+    batchRegistryDropdownOpen.value = false;
+    return;
+  }
+  
+  const prefix = registry.registry_prefix || registry.registry;
+  batchImagePrefix.value = prefix;
+  batchRegistrySearchQuery.value = `${registry.name} (${prefix})`;
+  batchRegistryDropdownOpen.value = false;
+  onBatchPrefixChange();
+}
+
+function handleBatchRegistryBlur() {
+  setTimeout(() => {
+    batchRegistryDropdownOpen.value = false;
+  }, 200);
 }
 
 async function loadDockerInfo() {
@@ -3499,9 +3838,11 @@ watch(
 );
 
 onMounted(() => {
+  loadProjectTypes();
   loadTemplates();
   loadGitSources();
   loadRegistries();
+  loadBatchRegistries();
   loadDockerInfo();
 });
 </script>

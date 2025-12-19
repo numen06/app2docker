@@ -2,7 +2,7 @@
 # 适用于任何 Java 应用（不限于 Spring Boot）
 # 不会在构建时运行 JAR，只在容器启动时运行
 
-FROM dragonwell-registry.cn-hangzhou.cr.aliyuncs.com/dragonwell/dragonwell:8-anolis
+FROM dragonwell-registry.cn-hangzhou.cr.aliyuncs.com/dragonwell/dragonwell:17-anolis
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 VOLUME /tmp
@@ -29,4 +29,3 @@ EXPOSE {{EXPOSE_PORT:8080}}
 
 # 启动应用（仅在容器运行时执行，不会在构建时执行）
 ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
-

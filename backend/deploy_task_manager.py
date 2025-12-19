@@ -799,14 +799,23 @@ class DeployTaskManager:
                 if not host_obj:
                     return {"success": False, "message": f"SSH 主机不存在: {host_name}"}
 
-                # 构建 SSH 主机配置
+                # 使用 get_host_full 获取解密后的密码和密钥
+                from backend.host_manager import HostManager
+
+                host_manager = HostManager()
+                host_full = host_manager.get_host_full(host_obj.host_id)
+
+                if not host_full:
+                    return {"success": False, "message": f"SSH 主机不存在: {host_name}"}
+
+                # 构建 SSH 主机配置（使用解密后的密码）
                 host_config = {
                     "host": host_obj.host,
                     "port": host_obj.port or 22,
                     "username": host_obj.username,
-                    "password": host_obj.password,  # 已加密
-                    "private_key": host_obj.private_key,  # 已加密
-                    "key_password": host_obj.key_password,  # 已加密
+                    "password": host_full.get("password"),  # 已解密
+                    "private_key": host_full.get("private_key"),  # 已解密
+                    "key_password": host_full.get("key_password"),  # 已解密
                 }
             finally:
                 db.close()

@@ -5,8 +5,8 @@
       <h5 class="mb-0">
         <i class="fas fa-chart-line text-primary"></i> 系统仪表盘
       </h5>
-      <button 
-        class="btn btn-outline-secondary btn-sm" 
+      <button
+        class="btn btn-outline-secondary btn-sm"
         @click="loadDashboard"
         :disabled="loading"
         title="刷新数据"
@@ -30,24 +30,33 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-tasks fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">总任务数</div>
-                  <div class="stat-value h4 mb-0">{{ stats?.totalTasks || 0 }}</div>
+                  <div class="stat-value h4 mb-0">
+                    {{ stats?.totalTasks || 0 }}
+                  </div>
                 </div>
               </div>
               <div class="mt-2 pt-2 border-top">
                 <div class="row g-2 text-center">
                   <div class="col-6">
                     <small class="text-muted d-block">运行中</small>
-                    <strong class="text-warning">{{ stats?.runningTasks || 0 }}</strong>
+                    <strong class="text-warning">{{
+                      stats?.runningTasks || 0
+                    }}</strong>
                   </div>
                   <div class="col-6">
                     <small class="text-muted d-block">已完成</small>
-                    <strong class="text-success">{{ stats?.completedTasks || 0 }}</strong>
+                    <strong class="text-success">{{
+                      stats?.completedTasks || 0
+                    }}</strong>
                   </div>
                 </div>
               </div>
@@ -61,24 +70,33 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-info text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-project-diagram fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">流水线</div>
-                  <div class="stat-value h4 mb-0">{{ stats?.pipelines || 0 }}</div>
+                  <div class="stat-value h4 mb-0">
+                    {{ stats?.pipelines || 0 }}
+                  </div>
                 </div>
               </div>
               <div class="mt-2 pt-2 border-top">
                 <div class="row g-2 text-center">
                   <div class="col-6">
                     <small class="text-muted d-block">已启用</small>
-                    <strong class="text-success">{{ stats?.enabledPipelines || 0 }}</strong>
+                    <strong class="text-success">{{
+                      stats?.enabledPipelines || 0
+                    }}</strong>
                   </div>
                   <div class="col-6">
                     <small class="text-muted d-block">已禁用</small>
-                    <strong class="text-secondary">{{ stats?.disabledPipelines || 0 }}</strong>
+                    <strong class="text-secondary">{{
+                      stats?.disabledPipelines || 0
+                    }}</strong>
                   </div>
                 </div>
               </div>
@@ -92,13 +110,18 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-success text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-success text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-database fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">数据源</div>
-                  <div class="stat-value h4 mb-0">{{ stats?.datasources || 0 }}</div>
+                  <div class="stat-value h4 mb-0">
+                    {{ stats?.datasources || 0 }}
+                  </div>
                 </div>
               </div>
               <div class="mt-2 pt-2 border-top">
@@ -119,13 +142,18 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-warning text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-box fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">镜像仓库</div>
-                  <div class="stat-value h4 mb-0">{{ stats?.registries || 0 }}</div>
+                  <div class="stat-value h4 mb-0">
+                    {{ stats?.registries || 0 }}
+                  </div>
                 </div>
               </div>
               <div class="mt-2 pt-2 border-top">
@@ -149,13 +177,18 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-layer-group fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">模板</div>
-                  <div class="stat-value h4 mb-0">{{ stats?.templates || 0 }}</div>
+                  <div class="stat-value h4 mb-0">
+                    {{ stats?.templates || 0 }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -168,13 +201,18 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-dark text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-dark text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-archive fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">资源包</div>
-                  <div class="stat-value h4 mb-0">{{ stats?.resourcePackages || 0 }}</div>
+                  <div class="stat-value h4 mb-0">
+                    {{ stats?.resourcePackages || 0 }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -187,7 +225,10 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-danger text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-danger text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-server fa-lg"></i>
                   </div>
                 </div>
@@ -206,24 +247,33 @@
             <div class="card-body">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0">
-                  <div class="stat-icon bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                  <div
+                    class="stat-icon bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
+                    style="width: 48px; height: 48px"
+                  >
                     <i class="fas fa-hdd fa-lg"></i>
                   </div>
                 </div>
                 <div class="flex-grow-1 ms-3">
                   <div class="stat-label text-muted small">存储使用</div>
-                  <div class="stat-value h6 mb-0">{{ formatStorage(stats?.totalStorage || 0) }}</div>
+                  <div class="stat-value h6 mb-0">
+                    {{ formatStorage(stats?.totalStorage || 0) }}
+                  </div>
                 </div>
               </div>
               <div class="mt-2 pt-2 border-top">
                 <div class="row g-2">
                   <div class="col-12">
                     <small class="text-muted d-block">构建目录</small>
-                    <strong>{{ formatStorage(stats?.buildStorage || 0) }}</strong>
+                    <strong>{{
+                      formatStorage(stats?.buildStorage || 0)
+                    }}</strong>
                   </div>
                   <div class="col-12">
                     <small class="text-muted d-block">导出目录</small>
-                    <strong>{{ formatStorage(stats?.exportStorage || 0) }}</strong>
+                    <strong>{{
+                      formatStorage(stats?.exportStorage || 0)
+                    }}</strong>
                   </div>
                 </div>
               </div>
@@ -252,19 +302,39 @@
                         <strong>Docker 状态</strong>
                       </div>
                       <div class="mb-2">
-                        <span class="badge" :class="systemInfo.connected ? 'bg-success' : 'bg-danger'">
-                          {{ systemInfo.connected ? '已连接' : '未连接' }}
+                        <span
+                          class="badge"
+                          :class="
+                            systemInfo.connected ? 'bg-success' : 'bg-danger'
+                          "
+                        >
+                          {{ systemInfo.connected ? "已连接" : "未连接" }}
                         </span>
                       </div>
-                      <div v-if="systemInfo.builder_type" class="small text-muted">
-                        <div>类型: <strong>{{ systemInfo.builder_type === 'local' ? '本地' : systemInfo.builder_type === 'remote' ? '远程' : '模拟' }}</strong></div>
+                      <div
+                        v-if="systemInfo.builder_type"
+                        class="small text-muted"
+                      >
+                        <div>
+                          类型:
+                          <strong>{{
+                            systemInfo.builder_type === "local"
+                              ? "本地"
+                              : systemInfo.builder_type === "remote"
+                              ? "远程"
+                              : "模拟"
+                          }}</strong>
+                        </div>
                         <div v-if="systemInfo.remote_host" class="mt-1">
                           地址: <strong>{{ systemInfo.remote_host }}</strong>
                         </div>
                       </div>
                       <div v-if="systemInfo.connection_error" class="mt-2">
                         <div class="alert alert-danger alert-sm mb-0 py-1 px-2">
-                          <small><i class="fas fa-exclamation-triangle"></i> {{ systemInfo.connection_error }}</small>
+                          <small
+                            ><i class="fas fa-exclamation-triangle"></i>
+                            {{ systemInfo.connection_error }}</small
+                          >
                         </div>
                       </div>
                     </div>
@@ -274,7 +344,9 @@
                   <div class="col-12 col-md-6 col-lg-3">
                     <div class="border rounded p-3 h-100 bg-light">
                       <div class="d-flex align-items-center mb-2">
-                        <i class="fas fa-code-branch text-primary fa-lg me-2"></i>
+                        <i
+                          class="fas fa-code-branch text-primary fa-lg me-2"
+                        ></i>
                         <strong>版本信息</strong>
                       </div>
                       <div class="small">
@@ -284,7 +356,9 @@
                         </div>
                         <div v-if="systemInfo.api_version" class="mb-1">
                           <span class="text-muted">API:</span>
-                          <strong class="ms-1">{{ systemInfo.api_version }}</strong>
+                          <strong class="ms-1">{{
+                            systemInfo.api_version
+                          }}</strong>
                         </div>
                         <div v-if="systemInfo.runtime" class="mb-1">
                           <span class="text-muted">运行时:</span>
@@ -292,7 +366,10 @@
                         </div>
                         <div v-if="systemInfo.buildx_available" class="mb-1">
                           <span class="badge bg-success">Buildx 可用</span>
-                          <span v-if="systemInfo.buildx_version" class="text-muted small ms-1">
+                          <span
+                            v-if="systemInfo.buildx_version"
+                            class="text-muted small ms-1"
+                          >
                             (v{{ systemInfo.buildx_version }})
                           </span>
                         </div>
@@ -314,7 +391,9 @@
                         </div>
                         <div v-if="systemInfo.mem_total" class="mb-1">
                           <span class="text-muted">内存:</span>
-                          <strong class="ms-1">{{ formatStorage(systemInfo.mem_total) }}</strong>
+                          <strong class="ms-1">{{
+                            formatStorage(systemInfo.mem_total)
+                          }}</strong>
                         </div>
                         <div v-if="systemInfo.os_type" class="mb-1">
                           <span class="text-muted">系统:</span>
@@ -336,27 +415,53 @@
                         <strong>资源统计</strong>
                       </div>
                       <div class="small">
-                        <div v-if="systemInfo.images_count !== undefined" class="mb-1">
+                        <div
+                          v-if="systemInfo.images_count !== undefined"
+                          class="mb-1"
+                        >
                           <span class="text-muted">镜像:</span>
-                          <strong class="ms-1">{{ systemInfo.images_count }}</strong>
-                          <span v-if="systemInfo.images_size > 0" class="text-muted small ms-1">
+                          <strong class="ms-1">{{
+                            systemInfo.images_count
+                          }}</strong>
+                          <span
+                            v-if="systemInfo.images_size > 0"
+                            class="text-muted small ms-1"
+                          >
                             ({{ formatStorage(systemInfo.images_size) }})
                           </span>
                         </div>
-                        <div v-if="systemInfo.containers_total !== undefined" class="mb-1">
+                        <div
+                          v-if="systemInfo.containers_total !== undefined"
+                          class="mb-1"
+                        >
                           <span class="text-muted">容器:</span>
-                          <strong class="ms-1">{{ systemInfo.containers_total }}</strong>
-                          <span v-if="systemInfo.containers_running !== undefined" class="text-success small ms-1">
+                          <strong class="ms-1">{{
+                            systemInfo.containers_total
+                          }}</strong>
+                          <span
+                            v-if="systemInfo.containers_running !== undefined"
+                            class="text-success small ms-1"
+                          >
                             (运行: {{ systemInfo.containers_running }})
                           </span>
                         </div>
-                        <div v-if="systemInfo.volumes_count !== undefined" class="mb-1">
+                        <div
+                          v-if="systemInfo.volumes_count !== undefined"
+                          class="mb-1"
+                        >
                           <span class="text-muted">数据卷:</span>
-                          <strong class="ms-1">{{ systemInfo.volumes_count }}</strong>
+                          <strong class="ms-1">{{
+                            systemInfo.volumes_count
+                          }}</strong>
                         </div>
-                        <div v-if="systemInfo.networks_count !== undefined" class="mb-1">
+                        <div
+                          v-if="systemInfo.networks_count !== undefined"
+                          class="mb-1"
+                        >
                           <span class="text-muted">网络:</span>
-                          <strong class="ms-1">{{ systemInfo.networks_count }}</strong>
+                          <strong class="ms-1">{{
+                            systemInfo.networks_count
+                          }}</strong>
                         </div>
                       </div>
                     </div>
@@ -364,7 +469,14 @@
                 </div>
 
                 <!-- 其他系统信息 -->
-                <div v-if="systemInfo.storage_driver || systemInfo.docker_root || systemInfo.kernel_version" class="row g-3 mt-2">
+                <div
+                  v-if="
+                    systemInfo.storage_driver ||
+                    systemInfo.docker_root ||
+                    systemInfo.kernel_version
+                  "
+                  class="row g-3 mt-2"
+                >
                   <div class="col-12">
                     <div class="border rounded p-3 bg-light">
                       <div class="d-flex align-items-center mb-2">
@@ -372,17 +484,32 @@
                         <strong>系统配置</strong>
                       </div>
                       <div class="row g-2 small">
-                        <div v-if="systemInfo.storage_driver" class="col-12 col-md-4">
+                        <div
+                          v-if="systemInfo.storage_driver"
+                          class="col-12 col-md-4"
+                        >
                           <span class="text-muted">存储驱动:</span>
-                          <strong class="ms-1">{{ systemInfo.storage_driver }}</strong>
+                          <strong class="ms-1">{{
+                            systemInfo.storage_driver
+                          }}</strong>
                         </div>
-                        <div v-if="systemInfo.docker_root" class="col-12 col-md-4">
+                        <div
+                          v-if="systemInfo.docker_root"
+                          class="col-12 col-md-4"
+                        >
                           <span class="text-muted">Docker 根目录:</span>
-                          <strong class="ms-1 font-monospace small">{{ systemInfo.docker_root }}</strong>
+                          <strong class="ms-1 font-monospace small">{{
+                            systemInfo.docker_root
+                          }}</strong>
                         </div>
-                        <div v-if="systemInfo.kernel_version" class="col-12 col-md-4">
+                        <div
+                          v-if="systemInfo.kernel_version"
+                          class="col-12 col-md-4"
+                        >
                           <span class="text-muted">内核版本:</span>
-                          <strong class="ms-1">{{ systemInfo.kernel_version }}</strong>
+                          <strong class="ms-1">{{
+                            systemInfo.kernel_version
+                          }}</strong>
                         </div>
                       </div>
                     </div>
@@ -402,176 +529,158 @@
 </template>
 
 <script setup>
-import axios from 'axios'
-import { onMounted, onUnmounted, ref } from 'vue'
+import axios from "axios";
+import { onMounted, onUnmounted, ref } from "vue";
 
-const emit = defineEmits(['navigate'])
+const emit = defineEmits(["navigate"]);
 
-const loading = ref(false)
-const stats = ref(null)
-const systemInfo = ref(null)
+const loading = ref(false);
+const stats = ref(null);
+const systemInfo = ref(null);
 
 // 加载仪表盘数据
 async function loadDashboard() {
-  loading.value = true
+  loading.value = true;
   try {
-    // 并行加载所有统计数据
-    const [
-      tasksRes,
-      pipelinesRes,
-      datasourcesRes,
-      registriesRes,
-      templatesRes,
-      resourcePackagesRes,
-      hostsRes,
-      buildStatsRes,
-      exportStatsRes,
-      dockerInfoRes
-    ] = await Promise.all([
-      axios.get('/api/tasks'),
-      axios.get('/api/pipelines'),
-      axios.get('/api/git-sources'),
-      axios.get('/api/registries'),
-      axios.get('/api/list-templates'),
-      axios.get('/api/resource-packages'),
-      axios.get('/api/hosts'),
-      axios.get('/api/docker-build/stats'),
-      axios.get('/api/exports/stats'),
-      axios.get('/api/docker/info').catch(() => ({ data: null })) // Docker 信息可能加载失败，不影响其他数据
-    ])
+    // 并行加载仪表盘统计和 Docker 信息
+    const [dashboardRes, dockerInfoRes] = await Promise.all([
+      axios.get("/api/dashboard/stats"),
+      axios.get("/api/docker/info").catch(() => ({ data: null })), // Docker 信息可能加载失败，不影响其他数据
+    ]);
 
-    const tasks = tasksRes.data.tasks || []
-    const pipelines = pipelinesRes.data.pipelines || []
-    const datasources = datasourcesRes.data.sources || []
-    const registries = registriesRes.data.registries || []
-    const templates = Array.isArray(templatesRes.data) ? templatesRes.data : (templatesRes.data?.templates || [])
-    const resourcePackages = resourcePackagesRes.data.packages || []
-    const hosts = hostsRes.data.hosts || []
-    const buildStats = buildStatsRes.data || {}
-    const exportStats = exportStatsRes.data || {}
-
-    // 计算任务统计
-    const totalTasks = tasks.length
-    const runningTasks = tasks.filter(t => t.status === 'running').length
-    const completedTasks = tasks.filter(t => t.status === 'completed').length
-
-    // 计算流水线统计
-    const enabledPipelines = pipelines.filter(p => p.enabled).length
-    const disabledPipelines = pipelines.filter(p => !p.enabled).length
-
-    // 计算存储统计
-    const buildStorage = (buildStats.total_size_mb || 0) * 1024 * 1024 // MB to bytes
-    const exportStorage = (exportStats.total_size_mb || 0) * 1024 * 1024 // MB to bytes
-    const totalStorage = buildStorage + exportStorage
-
-    stats.value = {
-      totalTasks,
-      runningTasks,
-      completedTasks,
-      pipelines: pipelines.length,
-      enabledPipelines,
-      disabledPipelines,
-      datasources: datasources.length,
-      registries: registries.length,
-      templates: templates.length,
-      resourcePackages: resourcePackages.length,
-      hosts: hosts.length,
-      buildStorage,
-      exportStorage,
-      totalStorage
+    // 使用后台计算的统计数据
+    if (dashboardRes.data && dashboardRes.data.success) {
+      stats.value = dashboardRes.data.stats;
+    } else {
+      // 如果后台接口失败，使用默认值
+      stats.value = {
+        totalTasks: 0,
+        runningTasks: 0,
+        completedTasks: 0,
+        pipelines: 0,
+        enabledPipelines: 0,
+        disabledPipelines: 0,
+        datasources: 0,
+        registries: 0,
+        templates: 0,
+        resourcePackages: 0,
+        hosts: 0,
+        buildStorage: 0,
+        exportStorage: 0,
+        totalStorage: 0,
+      };
     }
-    
+
     // 加载系统信息
     if (dockerInfoRes && dockerInfoRes.data) {
-      systemInfo.value = dockerInfoRes.data
+      systemInfo.value = dockerInfoRes.data;
     }
   } catch (error) {
-    console.error('加载仪表盘数据失败:', error)
-    alert('加载仪表盘数据失败: ' + (error.response?.data?.detail || error.message))
+    console.error("加载仪表盘数据失败:", error);
+    alert(
+      "加载仪表盘数据失败: " + (error.response?.data?.detail || error.message)
+    );
+    // 发生错误时使用默认值
+    stats.value = {
+      totalTasks: 0,
+      runningTasks: 0,
+      completedTasks: 0,
+      pipelines: 0,
+      enabledPipelines: 0,
+      disabledPipelines: 0,
+      datasources: 0,
+      registries: 0,
+      templates: 0,
+      resourcePackages: 0,
+      hosts: 0,
+      buildStorage: 0,
+      exportStorage: 0,
+      totalStorage: 0,
+    };
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 // 格式化存储大小
 function formatStorage(bytes) {
-  if (!bytes || bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = bytes
-  let unitIndex = 0
+  if (!bytes || bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
+    size /= 1024;
+    unitIndex++;
   }
-  return `${size.toFixed(2)} ${units[unitIndex]}`
+  return `${size.toFixed(2)} ${units[unitIndex]}`;
 }
 
 // 格式化时间
 function formatTime(timeStr) {
-  if (!timeStr) return '-'
+  if (!timeStr) return "-";
   try {
-    const date = new Date(timeStr)
-    const now = new Date()
-    const diff = now - date
-    const minutes = Math.floor(diff / 60000)
-    const hours = Math.floor(diff / 3600000)
-    const days = Math.floor(diff / 86400000)
+    const date = new Date(timeStr);
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return '刚刚'
-    if (minutes < 60) return `${minutes} 分钟前`
-    if (hours < 24) return `${hours} 小时前`
-    if (days < 7) return `${days} 天前`
-    return date.toLocaleDateString('zh-CN')
+    if (minutes < 1) return "刚刚";
+    if (minutes < 60) return `${minutes} 分钟前`;
+    if (hours < 24) return `${hours} 小时前`;
+    if (days < 7) return `${days} 天前`;
+    return date.toLocaleDateString("zh-CN");
   } catch {
-    return timeStr
+    return timeStr;
   }
 }
 
 // 获取任务类型标签
 function getTaskTypeLabel(type) {
   const map = {
-    build: '构建',
-    export: '导出'
-  }
-  return map[type] || type
+    build: "构建",
+    export: "导出",
+  };
+  return map[type] || type;
 }
 
 // 获取任务类型徽章样式
 function getTaskTypeBadge(type) {
   const map = {
-    build: 'bg-primary',
-    export: 'bg-info'
-  }
-  return map[type] || 'bg-secondary'
+    build: "bg-primary",
+    export: "bg-info",
+  };
+  return map[type] || "bg-secondary";
 }
 
 // 获取状态标签
 function getStatusLabel(status) {
   const map = {
-    pending: '等待中',
-    running: '运行中',
-    completed: '已完成',
-    failed: '失败',
-    cancelled: '已取消'
-  }
-  return map[status] || status
+    pending: "等待中",
+    running: "运行中",
+    completed: "已完成",
+    failed: "失败",
+    cancelled: "已取消",
+  };
+  return map[status] || status;
 }
 
 // 获取状态徽章样式
 function getStatusBadge(status) {
   const map = {
-    pending: 'bg-secondary',
-    running: 'bg-warning',
-    completed: 'bg-success',
-    failed: 'bg-danger',
-    cancelled: 'bg-dark'
-  }
-  return map[status] || 'bg-secondary'
+    pending: "bg-secondary",
+    running: "bg-warning",
+    completed: "bg-success",
+    failed: "bg-danger",
+    cancelled: "bg-dark",
+  };
+  return map[status] || "bg-secondary";
 }
 
 onMounted(() => {
-  loadDashboard()
-})
+  loadDashboard();
+});
 </script>
 
 <style scoped>
@@ -631,5 +740,4 @@ code {
 .bg-light {
   background-color: #f8f9fa !important;
 }
-
 </style>

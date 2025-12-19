@@ -10,6 +10,11 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from backend.database import get_db_session, init_db
 from backend.models import Host
+from backend.crypto_utils import (
+    encrypt_password,
+    decrypt_password,
+    migrate_old_password,
+)
 
 # 确保数据库已初始化
 try:
@@ -56,18 +61,158 @@ class HostManager:
         }
 
         if include_secrets:
-            result["password"] = host.password
-            result["private_key"] = host.private_key
-            result["key_password"] = host.key_password
+            # 解密密码和密钥
+            if host.password:
+                try:
+                    result["password"] = decrypt_password(host.password)
+                except (ValueError, Exception):
+                    # 如果解密失败，尝试迁移旧格式（明文或base64）
+                    try:
+                        # migrate_old_password 会返回加密后的密码，但我们需要明文
+                        # 所以先尝试获取明文
+                        import base64
+
+                        try:
+                            # 尝试base64解码
+                            decoded = base64.b64decode(host.password.encode("utf-8"))
+                            plaintext = decoded.decode("utf-8")
+                            # 如果能解码，说明是base64编码的明文，加密后更新数据库
+                            encrypted = encrypt_password(plaintext)
+                            db = get_db_session()
+                            try:
+                                host_obj = (
+                                    db.query(Host)
+                                    .filter(Host.host_id == host.host_id)
+                                    .first()
+                                )
+                                if host_obj:
+                                    host_obj.password = encrypted
+                                    db.commit()
+                            finally:
+                                db.close()
+                            result["password"] = plaintext
+                        except Exception:
+                            # 如果base64解码失败，当作明文处理
+                            plaintext = host.password
+                            encrypted = encrypt_password(plaintext)
+                            db = get_db_session()
+                            try:
+                                host_obj = (
+                                    db.query(Host)
+                                    .filter(Host.host_id == host.host_id)
+                                    .first()
+                                )
+                                if host_obj:
+                                    host_obj.password = encrypted
+                                    db.commit()
+                            finally:
+                                db.close()
+                            result["password"] = plaintext
+                    except Exception as e:
+                        print(f"⚠️ 解密Host密码失败: {e}")
+                        result["password"] = None
+            else:
+                result["password"] = None
+
+            if host.private_key:
+                try:
+                    result["private_key"] = decrypt_password(host.private_key)
+                except (ValueError, Exception):
+                    try:
+                        # 尝试迁移旧格式
+                        import base64
+
+                        try:
+                            decoded = base64.b64decode(host.private_key.encode("utf-8"))
+                            plaintext = decoded.decode("utf-8")
+                            encrypted = encrypt_password(plaintext)
+                            db = get_db_session()
+                            try:
+                                host_obj = (
+                                    db.query(Host)
+                                    .filter(Host.host_id == host.host_id)
+                                    .first()
+                                )
+                                if host_obj:
+                                    host_obj.private_key = encrypted
+                                    db.commit()
+                            finally:
+                                db.close()
+                            result["private_key"] = plaintext
+                        except Exception:
+                            plaintext = host.private_key
+                            encrypted = encrypt_password(plaintext)
+                            db = get_db_session()
+                            try:
+                                host_obj = (
+                                    db.query(Host)
+                                    .filter(Host.host_id == host.host_id)
+                                    .first()
+                                )
+                                if host_obj:
+                                    host_obj.private_key = encrypted
+                                    db.commit()
+                            finally:
+                                db.close()
+                            result["private_key"] = plaintext
+                    except Exception as e:
+                        print(f"⚠️ 解密Host私钥失败: {e}")
+                        result["private_key"] = None
+            else:
+                result["private_key"] = None
+
+            if host.key_password:
+                try:
+                    result["key_password"] = decrypt_password(host.key_password)
+                except (ValueError, Exception):
+                    try:
+                        # 尝试迁移旧格式
+                        import base64
+
+                        try:
+                            decoded = base64.b64decode(
+                                host.key_password.encode("utf-8")
+                            )
+                            plaintext = decoded.decode("utf-8")
+                            encrypted = encrypt_password(plaintext)
+                            db = get_db_session()
+                            try:
+                                host_obj = (
+                                    db.query(Host)
+                                    .filter(Host.host_id == host.host_id)
+                                    .first()
+                                )
+                                if host_obj:
+                                    host_obj.key_password = encrypted
+                                    db.commit()
+                            finally:
+                                db.close()
+                            result["key_password"] = plaintext
+                        except Exception:
+                            plaintext = host.key_password
+                            encrypted = encrypt_password(plaintext)
+                            db = get_db_session()
+                            try:
+                                host_obj = (
+                                    db.query(Host)
+                                    .filter(Host.host_id == host.host_id)
+                                    .first()
+                                )
+                                if host_obj:
+                                    host_obj.key_password = encrypted
+                                    db.commit()
+                            finally:
+                                db.close()
+                            result["key_password"] = plaintext
+                    except Exception as e:
+                        print(f"⚠️ 解密Host密钥密码失败: {e}")
+                        result["key_password"] = None
+            else:
+                result["key_password"] = None
         else:
             result["has_password"] = bool(host.password)
             result["has_private_key"] = bool(host.private_key)
-            if host.password:
-                result["password"] = "***"
-            if host.private_key:
-                result["private_key"] = "***"
-            if host.key_password:
-                result["key_password"] = "***"
+            result["has_key_password"] = bool(host.key_password)
             result["docker_available"] = bool(host.docker_version)
 
         return result
@@ -252,15 +397,24 @@ class HostManager:
 
                 host_id = str(uuid.uuid4())
 
+                # 加密敏感信息
+                encrypted_password = encrypt_password(password) if password else None
+                encrypted_private_key = (
+                    encrypt_password(private_key) if private_key else None
+                )
+                encrypted_key_password = (
+                    encrypt_password(key_password) if key_password else None
+                )
+
                 host_obj = Host(
                     host_id=host_id,
                     name=name,
                     host=host,
                     port=port,
                     username=username,
-                    password=password,
-                    private_key=private_key,
-                    key_password=key_password,
+                    password=encrypted_password,
+                    private_key=encrypted_private_key,
+                    key_password=encrypted_key_password,
                     docker_enabled=docker_enabled,
                     docker_version=None,
                     description=description,
@@ -316,13 +470,20 @@ class HostManager:
                 if username is not None:
                     host_obj.username = username
                 if password is not None:
-                    host_obj.password = password if password else None
+                    # 加密密码后存储
+                    host_obj.password = encrypt_password(password) if password else None
                 if private_key is not None:
-                    host_obj.private_key = private_key if private_key else None
+                    # 加密私钥后存储
+                    host_obj.private_key = (
+                        encrypt_password(private_key) if private_key else None
+                    )
                     if not private_key:
                         host_obj.key_password = None
                 if key_password is not None:
-                    host_obj.key_password = key_password if key_password else None
+                    # 加密密钥密码后存储
+                    host_obj.key_password = (
+                        encrypt_password(key_password) if key_password else None
+                    )
                 if docker_enabled is not None:
                     host_obj.docker_enabled = docker_enabled
                 if docker_version is not None:

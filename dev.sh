@@ -36,11 +36,44 @@ else
 fi
 
 # 检查前端依赖
+echo ""
+echo "📦 检查前端依赖..."
 if [ ! -d "frontend/node_modules" ]; then
-    echo "📦 安装前端依赖..."
+    echo "   ⚠️  node_modules 不存在，正在安装前端依赖..."
     cd frontend
+    if ! command -v npm &> /dev/null; then
+        echo "❌ 未找到 npm，请先安装 Node.js"
+        exit 1
+    fi
     npm install
+    if [ $? -ne 0 ]; then
+        echo "❌ 安装前端依赖失败"
+        cd ..
+        exit 1
+    fi
     cd ..
+    echo "   ✓ 前端依赖安装完成"
+else
+    # 检查 npm 是否可用
+    if ! command -v npm &> /dev/null; then
+        echo "   ⚠️  未找到 npm，请先安装 Node.js"
+    else
+        # 检查 package-lock.json 是否存在
+        cd frontend
+        if [ ! -f "package-lock.json" ]; then
+            echo "   ⚠️  检测到 package-lock.json 缺失，正在重新安装..."
+            npm install
+            if [ $? -ne 0 ]; then
+                echo "❌ 安装前端依赖失败"
+                cd ..
+                exit 1
+            fi
+            echo "   ✓ 前端依赖安装完成"
+        else
+            echo "   ✓ 前端依赖已存在"
+        fi
+        cd ..
+    fi
 fi
 
 # 初始化环境（创建目录和配置文件）

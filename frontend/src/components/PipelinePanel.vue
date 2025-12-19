@@ -3615,6 +3615,16 @@ import {
   setGitCache,
 } from "../utils/gitCache.js";
 import { getServiceAnalysisWithCache } from "../utils/serviceAnalysisCache.js";
+import { 
+  getProjectTypes, 
+  getProjectTypesSync,
+  getProjectTypeLabel, 
+  getProjectTypeIcon,
+  getProjectTypeBadgeClass 
+} from '../utils/projectTypes.js';
+
+// 项目类型相关
+const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
 
 const pipelines = ref([]);
 const templates = ref([]);
@@ -3752,6 +3762,7 @@ const formData = ref({
 });
 
 onMounted(() => {
+  loadProjectTypes();
   loadPipelines();
   loadTemplates();
   loadRegistries();
@@ -6864,37 +6875,9 @@ function copyToClipboard(text, label) {
   }
 }
 
-function getProjectTypeIcon(type) {
-  const iconMap = {
-    jar: "fab fa-java",
-    nodejs: "fab fa-node-js",
-    python: "fab fa-python",
-    go: "fas fa-code",
-    web: "fas fa-globe",
-  };
-  return iconMap[type] || "fas fa-cube";
-}
-
-function getProjectTypeLabel(type) {
-  const labelMap = {
-    jar: "Java 应用（JAR）",
-    nodejs: "Node.js 应用",
-    python: "Python 应用",
-    go: "Go 应用",
-    web: "静态网站",
-  };
-  return labelMap[type] || type;
-}
-
-function getProjectTypeBadgeClass(type) {
-  const classes = {
-    jar: "bg-danger",
-    nodejs: "bg-success",
-    python: "bg-info",
-    go: "bg-primary",
-    web: "bg-secondary",
-  };
-  return classes[type] || "bg-secondary";
+// 项目类型处理（从缓存加载，如果没有则从API加载）
+async function loadProjectTypes() {
+  projectTypesList.value = await getProjectTypes();
 }
 
 function formatGitUrl(url) {
@@ -6989,11 +6972,8 @@ async function loadHistory(page = null) {
       params.append("status", historyFilter.value.status);
     }
 
-    const offset =
-      (historyPagination.value.currentPage - 1) *
-      historyPagination.value.pageSize;
-    params.append("limit", historyPagination.value.pageSize.toString());
-    params.append("offset", offset.toString());
+    params.append("page", historyPagination.value.currentPage.toString());
+    params.append("page_size", historyPagination.value.pageSize.toString());
 
     const url = `/api/pipelines/${pipelineId}/tasks?${params.toString()}`;
     const res = await axios.get(url);
@@ -7004,6 +6984,10 @@ async function loadHistory(page = null) {
       // 更新分页信息
       historyPagination.value.total = res.data.total || 0;
       historyPagination.value.hasMore = res.data.has_more || false;
+      // 如果后端返回了 total_pages，可以使用它来更新分页显示
+      if (res.data.total_pages !== undefined) {
+        // total_pages 已由后端计算，前端可以直接使用
+      }
     } else if (Array.isArray(res.data)) {
       // 兼容旧格式：如果直接返回数组
       historyTasks.value = res.data;

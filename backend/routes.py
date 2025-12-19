@@ -42,12 +42,15 @@ from backend.handlers import (
     parse_dockerfile_services,
     validate_and_clean_image_name,
 )
+from backend.stats_cache import StatsCacheManager
+from backend.dashboard_cache import dashboard_cache
 from backend.resource_package_manager import ResourcePackageManager
 from backend.host_manager import HostManager
 from backend.agent_host_manager import AgentHostManager
 from backend.websocket_handler import handle_agent_websocket, active_connections
 from backend.agent_secret_manager import AgentSecretManager
 from backend.deploy_task_manager import DeployTaskManager
+from backend.project_types import get_project_types
 from backend.config import (
     load_config,
     save_config,
@@ -399,16 +402,14 @@ async def create_user(request: CreateUserRequest, http_request: Request):
             db.add(new_user)
             db.commit()
 
-            # 分配角色
-            if request.roles:
-                for role_name in request.roles:
-                    role = db.query(Role).filter(Role.name == role_name).first()
-                    if role:
-                        user_role = UserRole(
-                            user_id=new_user.user_id, role_id=role.role_id
-                        )
-                        db.add(user_role)
-                db.commit()
+            # 分配角色：如果没有指定角色，默认分配 "user" 角色
+            roles_to_assign = request.roles if request.roles else ["user"]
+            for role_name in roles_to_assign:
+                role = db.query(Role).filter(Role.name == role_name).first()
+                if role:
+                    user_role = UserRole(user_id=new_user.user_id, role_id=role.role_id)
+                    db.add(user_role)
+            db.commit()
 
             # 记录操作日志
             OperationLogger.log(username, "create_user", {"username": request.username})
@@ -468,8 +469,9 @@ async def update_user(user_id: str, request: UpdateUserRequest, http_request: Re
                 # 删除现有角色
                 db.query(UserRole).filter(UserRole.user_id == user.user_id).delete()
 
-                # 添加新角色
-                for role_name in request.roles:
+                # 添加新角色：如果角色列表为空，默认分配 "user" 角色
+                roles_to_assign = request.roles if request.roles else ["user"]
+                for role_name in roles_to_assign:
                     role = db.query(Role).filter(Role.name == role_name).first()
                     if role:
                         user_role = UserRole(user_id=user.user_id, role_id=role.role_id)
@@ -951,15 +953,62 @@ async def get_current_user_permissions(request: Request):
 
 @router.get("/operation-logs")
 async def get_operation_logs(
-    limit: int = Query(100, description="返回日志数量"),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
     username: Optional[str] = Query(None, description="过滤用户名"),
     operation: Optional[str] = Query(None, description="过滤操作类型"),
 ):
-    """获取操作日志"""
+    """获取操作日志（支持分页）"""
     try:
-        logger = OperationLogger()
-        logs = logger.get_logs(limit=limit, username=username, operation=operation)
-        return JSONResponse({"logs": logs, "total": len(logs)})
+        from backend.database import get_db_session
+        from backend.models import OperationLog
+
+        db = get_db_session()
+        try:
+            # 构建查询
+            query = db.query(OperationLog)
+
+            if username:
+                query = query.filter(OperationLog.username == username)
+            if operation:
+                query = query.filter(OperationLog.action == operation)
+
+            # 获取总数
+            total = query.count()
+
+            # 计算分页
+            offset = (page - 1) * page_size
+            logs_query = (
+                query.order_by(OperationLog.timestamp.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+            logs = logs_query.all()
+
+            # 转换为字典列表
+            logs_list = [
+                {
+                    "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                    "username": log.username,
+                    "operation": log.action,
+                    "details": log.details or {},
+                }
+                for log in logs
+            ]
+
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+            return JSONResponse(
+                {
+                    "logs": logs_list,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                }
+            )
+        finally:
+            db.close()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取操作日志失败: {str(e)}")
 
@@ -1041,10 +1090,22 @@ async def save_git_config_route(
 # === 配置相关 ===
 @router.get("/get-config")
 async def get_config():
-    """获取配置"""
+    """获取配置（不返回密码）"""
     try:
         config = load_config()
-        docker_config = config.get("docker", {})
+        docker_config = config.get("docker", {}).copy()
+
+        # 移除 registries 中的密码字段
+        if "registries" in docker_config:
+            safe_registries = []
+            for registry in docker_config["registries"]:
+                safe_registry = registry.copy()
+                safe_registry["has_password"] = bool(registry.get("password"))
+                if "password" in safe_registry:
+                    del safe_registry["password"]
+                safe_registries.append(safe_registry)
+            docker_config["registries"] = safe_registries
+
         return JSONResponse({"docker": docker_config})
     except HTTPException:
         raise
@@ -1053,10 +1114,27 @@ async def get_config():
 
 
 @router.get("/registries")
-async def get_registries():
-    """获取所有仓库配置"""
+async def get_registries(
+    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配仓库名称、registry地址、前缀")
+):
+    """获取所有仓库配置，支持模糊查询"""
     try:
         registries = get_all_registries()
+        
+        # 如果提供了查询关键词，进行模糊搜索
+        if query:
+            query_lower = query.lower().strip()
+            registries = [
+                reg for reg in registries
+                if query_lower in reg.get("name", "").lower() or
+                   query_lower in reg.get("registry", "").lower() or
+                   query_lower in reg.get("registry_prefix", "").lower()
+            ]
+        
+        # 限制返回结果数量（最多50条）
+        if len(registries) > 50:
+            registries = registries[:50]
+        
         return JSONResponse({"registries": registries})
     except HTTPException:
         raise
@@ -1084,6 +1162,43 @@ async def save_registries(request: SaveRegistriesRequest, http_request: Request)
         has_active = any(reg.get("active", False) for reg in registries_data)
         if not has_active and registries_data:
             registries_data[0]["active"] = True
+
+        # 获取现有配置以处理密码占位符
+        from backend.config import get_all_registries as get_all_registries_safe
+
+        existing_registries = get_all_registries_safe()
+        existing_registry_map = {r.get("name"): r for r in existing_registries}
+
+        # 加载完整配置以获取现有密码
+        config_full = load_config()
+        existing_registries_full = config_full.get("docker", {}).get("registries", [])
+        existing_registry_full_map = {
+            r.get("name"): r for r in existing_registries_full
+        }
+
+        for registry in registries_data:
+            registry_name = registry.get("name")
+            password = registry.get("password", "")
+
+            # 如果密码是占位符或空，使用现有密码
+            if (
+                password in ["******", "***", ""]
+                and registry_name in existing_registry_full_map
+            ):
+                existing_password = existing_registry_full_map[registry_name].get(
+                    "password"
+                )
+                if existing_password:
+                    registry["password"] = existing_password
+                else:
+                    registry["password"] = ""
+            elif password and password not in ["******", "***"]:
+                # 新密码，需要加密
+                from backend.crypto_utils import encrypt_password
+
+                registry["password"] = encrypt_password(password)
+            else:
+                registry["password"] = ""
 
         # 更新配置（只更新 docker.registries，不影响其他配置如 server、git、users 等）
         if "docker" not in config:
@@ -1168,8 +1283,17 @@ async def save_registries(request: SaveRegistriesRequest, http_request: Request)
             print(f"⚠️ 记录操作日志失败: {log_error}")
             # 不抛出异常，因为主要操作已成功
 
+        # 返回时移除密码字段
+        safe_registries_data = []
+        for reg in registries_data:
+            safe_reg = reg.copy()
+            safe_reg["has_password"] = bool(reg.get("password"))
+            if "password" in safe_reg:
+                del safe_reg["password"]
+            safe_registries_data.append(safe_reg)
+
         return JSONResponse(
-            {"message": "仓库配置保存成功", "registries": registries_data}
+            {"message": "仓库配置保存成功", "registries": safe_registries_data}
         )
     except HTTPException:
         raise
@@ -1186,7 +1310,7 @@ class TestRegistryRequest(BaseModel):
     name: str
     registry: str
     username: str
-    password: str
+    password: Optional[str] = None  # 可选，如果不提供则从配置中获取
 
 
 @router.post("/registries/test")
@@ -1197,10 +1321,23 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
     - 需要系统 token 认证才能使用此功能（安全考虑）
     - 但测试的是仓库的登录信息（request.username 和 request.password），与系统用户无关
     - 如果系统 token 无效，返回 400 而不是 401，避免前端退出登录
+    - 如果未提供密码，则从配置中获取解密后的密码
     """
     try:
         # 验证系统 token（需要系统认证才能使用此功能）
         username = require_auth(http_request)
+
+        # 如果未提供密码，从配置中获取
+        test_password = request.password
+        if not test_password:
+            from backend.config import get_registry_password
+
+            test_password = get_registry_password(request.name)
+            if not test_password:
+                return JSONResponse(
+                    {"success": False, "message": "仓库密码未配置，请先配置密码"},
+                    status_code=400,
+                )
 
         # 系统认证通过后，使用传入的仓库用户名和密码测试仓库连接
         # 注意：这里的 username 和 password 是仓库的认证信息，不是系统的
@@ -1214,7 +1351,7 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
 
         registry_host = request.registry
         username = request.username
-        password = request.password
+        password = test_password  # 使用从配置获取的密码或传入的密码
 
         if not username or not password:
             return JSONResponse(
@@ -2063,8 +2200,10 @@ async def get_all_tasks(
     task_type: Optional[str] = Query(
         None, description="任务类型过滤: build, build_from_source, export, deploy"
     ),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
 ):
-    """获取所有任务（构建任务 + 导出任务 + 部署任务）"""
+    """获取所有任务（构建任务 + 导出任务 + 部署任务），支持后台分页"""
     try:
         all_tasks = []
 
@@ -2166,9 +2305,163 @@ async def get_all_tasks(
         # 按创建时间倒序排列
         all_tasks.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
-        return JSONResponse({"tasks": all_tasks})
+        # 计算总数
+        total = len(all_tasks)
+
+        # 后台分页
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_tasks = all_tasks[start:end]
+
+        return JSONResponse(
+            {
+                "tasks": paginated_tasks,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
+
+
+@router.get("/tasks/running")
+async def get_running_tasks():
+    """获取所有运行中的任务（running 或 pending 状态）"""
+    try:
+        all_running_tasks = []
+
+        # 获取构建任务和部署任务（running 或 pending）
+        build_manager = BuildTaskManager()
+
+        # 查询 running 状态的构建任务
+        running_build_tasks = build_manager.list_tasks(status="running")
+        for task in running_build_tasks:
+            # 排除部署任务
+            if task.get("task_type") != "deploy":
+                task["task_category"] = "build"
+                all_running_tasks.append(task)
+
+        # 查询 pending 状态的构建任务
+        pending_build_tasks = build_manager.list_tasks(status="pending")
+        for task in pending_build_tasks:
+            # 排除部署任务
+            if task.get("task_type") != "deploy":
+                task["task_category"] = "build"
+                # 避免重复添加
+                if not any(
+                    t.get("task_id") == task.get("task_id") for t in all_running_tasks
+                ):
+                    all_running_tasks.append(task)
+
+        # 查询部署任务（running 或 pending）
+        running_deploy_tasks = build_manager.list_tasks(
+            status="running", task_type="deploy"
+        )
+        for task in running_deploy_tasks:
+            task["task_category"] = "deploy"
+            # 为部署任务添加显示名称
+            try:
+                task_config = task.get("task_config", {})
+                if isinstance(task_config, str):
+                    try:
+                        task_config = json.loads(task_config)
+                    except (json.JSONDecodeError, TypeError):
+                        task_config = {}
+                if isinstance(task_config, dict):
+                    config = task_config.get("config", {})
+                    if isinstance(config, str):
+                        try:
+                            config = json.loads(config)
+                        except (json.JSONDecodeError, TypeError):
+                            config = {}
+                    if isinstance(config, dict):
+                        app = config.get("app", {})
+                        if isinstance(app, dict):
+                            app_name = app.get("name")
+                            if app_name:
+                                task["image"] = app_name
+            except Exception:
+                pass
+            all_running_tasks.append(task)
+
+        pending_deploy_tasks = build_manager.list_tasks(
+            status="pending", task_type="deploy"
+        )
+        for task in pending_deploy_tasks:
+            task["task_category"] = "deploy"
+            # 避免重复添加
+            if not any(
+                t.get("task_id") == task.get("task_id") for t in all_running_tasks
+            ):
+                # 为部署任务添加显示名称
+                try:
+                    task_config = task.get("task_config", {})
+                    if isinstance(task_config, str):
+                        try:
+                            task_config = json.loads(task_config)
+                        except (json.JSONDecodeError, TypeError):
+                            task_config = {}
+                    if isinstance(task_config, dict):
+                        config = task_config.get("config", {})
+                        if isinstance(config, str):
+                            try:
+                                config = json.loads(config)
+                            except (json.JSONDecodeError, TypeError):
+                                config = {}
+                        if isinstance(config, dict):
+                            app = config.get("app", {})
+                            if isinstance(app, dict):
+                                app_name = app.get("name")
+                                if app_name:
+                                    task["image"] = app_name
+                except Exception:
+                    pass
+                all_running_tasks.append(task)
+
+        # 获取导出任务（running 或 pending）
+        export_manager = ExportTaskManager()
+        running_export_tasks = export_manager.list_tasks(status="running")
+        for task in running_export_tasks:
+            task["task_category"] = "export"
+            all_running_tasks.append(task)
+
+        pending_export_tasks = export_manager.list_tasks(status="pending")
+        for task in pending_export_tasks:
+            task["task_category"] = "export"
+            # 避免重复添加
+            if not any(
+                t.get("task_id") == task.get("task_id") for t in all_running_tasks
+            ):
+                all_running_tasks.append(task)
+
+        # 只返回必要的字段以减少数据传输量
+        result_tasks = []
+        for task in all_running_tasks:
+            result_task = {
+                "task_id": task.get("task_id"),
+                "status": task.get("status"),
+                "task_category": task.get("task_category"),
+                "completed_at": task.get("completed_at"),
+                "error": task.get("error"),
+                "file_size": task.get("file_size"),
+                "created_at": task.get("created_at"),
+                "started_at": task.get("started_at"),
+            }
+            # 保留一些可能有用的字段
+            if task.get("image"):
+                result_task["image"] = task.get("image")
+            if task.get("tag"):
+                result_task["tag"] = task.get("tag")
+            result_tasks.append(result_task)
+
+        return JSONResponse({"tasks": result_tasks})
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取运行中任务列表失败: {str(e)}")
 
 
 @router.get("/build-tasks/{task_id}")
@@ -2500,45 +2793,8 @@ async def cleanup_tasks(
 async def get_docker_build_stats(request: Request):
     """获取 docker_build 目录的统计信息（容量、目录数量等）"""
     try:
-        if not os.path.exists(BUILD_DIR):
-            return {
-                "success": True,
-                "total_size_mb": 0,
-                "dir_count": 0,
-                "exists": False,
-            }
-
-        total_size = 0
-        dir_count = 0
-
-        # 遍历构建目录
-        for item in os.listdir(BUILD_DIR):
-            item_path = os.path.join(BUILD_DIR, item)
-            if not os.path.isdir(item_path):
-                continue
-
-            # 跳过 tasks 目录（任务元数据目录）
-            if item == "tasks":
-                continue
-
-            try:
-                # 计算目录大小
-                dir_size = sum(
-                    os.path.getsize(os.path.join(dirpath, filename))
-                    for dirpath, dirnames, filenames in os.walk(item_path)
-                    for filename in filenames
-                )
-                total_size += dir_size
-                dir_count += 1
-            except Exception as e:
-                print(f"⚠️ 计算目录大小失败 ({item_path}): {e}")
-
-        return {
-            "success": True,
-            "total_size_mb": round(total_size / 1024 / 1024, 2),
-            "dir_count": dir_count,
-            "exists": True,
-        }
+        cache_manager = StatsCacheManager(BUILD_DIR)
+        return cache_manager.get_build_dir_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取构建目录统计失败: {str(e)}")
 
@@ -2547,40 +2803,21 @@ async def get_docker_build_stats(request: Request):
 async def get_exports_stats(request: Request):
     """获取 exports 目录的统计信息（容量、文件数量等）"""
     try:
-        if not os.path.exists(EXPORT_DIR):
-            return {
-                "success": True,
-                "total_size_mb": 0,
-                "file_count": 0,
-                "exists": False,
-            }
-
-        total_size = 0
-        file_count = 0
-
-        # 遍历导出目录（包括所有子目录）
-        for root, dirs, files in os.walk(EXPORT_DIR):
-            # 跳过 tasks.json 元数据文件，但统计 tasks 子目录下的实际导出文件
-            for filename in files:
-                # 跳过 tasks.json 元数据文件
-                if filename == "tasks.json":
-                    continue
-                file_path = os.path.join(root, filename)
-                try:
-                    file_size = os.path.getsize(file_path)
-                    total_size += file_size
-                    file_count += 1
-                except Exception as e:
-                    print(f"⚠️ 计算文件大小失败 ({file_path}): {e}")
-
-        return {
-            "success": True,
-            "total_size_mb": round(total_size / 1024 / 1024, 2),
-            "file_count": file_count,
-            "exists": True,
-        }
+        cache_manager = StatsCacheManager(EXPORT_DIR)
+        return cache_manager.get_export_dir_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取导出目录统计失败: {str(e)}")
+
+
+@router.get("/dashboard/stats")
+async def get_dashboard_stats(
+    request: Request, force_refresh: bool = Query(False, description="是否强制刷新缓存")
+):
+    """获取仪表盘统计数据（带缓存）"""
+    try:
+        return dashboard_cache.get_stats(force_refresh=force_refresh)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取仪表盘统计失败: {str(e)}")
 
 
 @router.post("/exports/cleanup")
@@ -3543,9 +3780,24 @@ async def get_template_params(
         raise HTTPException(status_code=500, detail=f"解析模板参数失败: {str(e)}")
 
 
+@router.get("/project-types")
+async def get_project_types_api():
+    """获取项目类型字典列表"""
+    try:
+        project_types = get_project_types()
+        return JSONResponse({"project_types": project_types})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取项目类型列表失败: {str(e)}")
+
+
 @router.get("/templates")
-async def get_template(name: Optional[str] = Query(None)):
-    """获取模板详情或列表"""
+async def get_template(
+    name: Optional[str] = Query(None),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
+    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配模板名称、项目类型"),
+):
+    """获取模板详情或列表（支持分页和模糊查询）"""
     try:
         if name:
             # 获取单个模板内容
@@ -3569,7 +3821,7 @@ async def get_template(name: Optional[str] = Query(None)):
                 }
             )
         else:
-            # 返回模板列表（前端兼容格式）
+            # 返回模板列表（支持分页和模糊查询）
             templates = get_all_templates()
             details = []
 
@@ -3592,13 +3844,36 @@ async def get_template(name: Optional[str] = Query(None)):
                 except OSError:
                     continue
 
+            # 如果提供了查询关键词，进行模糊搜索
+            if query:
+                query_lower = query.lower().strip()
+                details = [
+                    item for item in details
+                    if query_lower in item["name"].lower() or 
+                       query_lower in item.get("project_type", "").lower()
+                ]
+
             details.sort(key=lambda item: natural_sort_key(item["name"]))
+
+            # 限制搜索结果数量（最多50条）
+            if len(details) > 50:
+                details = details[:50]
+
+            # 后端分页
+            total = len(details)
+            start = (page - 1) * page_size
+            end = start + page_size
+            paginated_items = details[start:end]
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 0
 
             # 返回前端期望的格式
             return JSONResponse(
                 {
-                    "items": details,
-                    "total": len(details),
+                    "items": paginated_items,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
                     "builtin": sum(1 for d in details if d["type"] == "builtin"),
                     "user": sum(1 for d in details if d["type"] == "user"),
                 }
@@ -3861,17 +4136,36 @@ async def refresh_docker_info(request: Request):
 
 @router.get("/docker/images")
 async def get_docker_images(
-    page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=1000)
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=1000),
+    search: Optional[str] = Query(None, description="搜索镜像名称或标签"),
+    tag_filter: Optional[str] = Query(None, description="过滤标签: latest, none"),
 ):
-    """获取 Docker 镜像列表（支持分页）"""
+    """获取 Docker 镜像列表（支持后台分页和过滤）"""
     try:
         from backend.handlers import docker_builder, DOCKER_AVAILABLE
 
         if not DOCKER_AVAILABLE or not docker_builder:
-            return JSONResponse({"images": [], "total": 0})
+            return JSONResponse(
+                {
+                    "images": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0,
+                }
+            )
 
         if not hasattr(docker_builder, "client") or not docker_builder.client:
-            return JSONResponse({"images": [], "total": 0})
+            return JSONResponse(
+                {
+                    "images": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0,
+                }
+            )
 
         # 获取镜像列表
         images_data = []
@@ -3880,11 +4174,31 @@ async def get_docker_images(
             for img in images:
                 tags = img.tags
                 if not tags:
+                    repository = "<none>"
+                    tag_name = "<none>"
+
+                    # 应用搜索过滤
+                    if search:
+                        search_lower = search.lower()
+                        if not (
+                            search_lower in repository.lower()
+                            or search_lower in tag_name.lower()
+                        ):
+                            continue
+
+                    # 应用标签过滤
+                    if tag_filter == "latest":
+                        continue  # <none> 标签不匹配 latest
+                    elif tag_filter == "none":
+                        pass  # <none> 标签匹配 none
+                    elif tag_filter:
+                        continue  # 其他过滤条件不匹配
+
                     images_data.append(
                         {
                             "id": img.id,
-                            "repository": "<none>",
-                            "tag": "<none>",
+                            "repository": repository,
+                            "tag": tag_name,
                             "size": img.attrs.get("Size", 0),
                             "created": img.attrs.get("Created", ""),
                         }
@@ -3895,6 +4209,26 @@ async def get_docker_images(
                             repo, tag_name = tag.rsplit(":", 1)
                         else:
                             repo, tag_name = tag, "latest"
+
+                        # 应用搜索过滤
+                        if search:
+                            search_lower = search.lower()
+                            if not (
+                                search_lower in repo.lower()
+                                or search_lower in tag_name.lower()
+                            ):
+                                continue
+
+                        # 应用标签过滤
+                        if tag_filter == "latest":
+                            if tag_name != "latest":
+                                continue
+                        elif tag_filter == "none":
+                            if tag_name != "<none>" and tag_name:
+                                continue
+                        elif tag_filter:
+                            continue  # 其他过滤条件不匹配
+
                         images_data.append(
                             {
                                 "id": img.id,
@@ -3907,10 +4241,25 @@ async def get_docker_images(
         except Exception as e:
             print(f"⚠️ 获取镜像列表失败: {e}")
 
+        # 按创建时间倒序排列
+        images_data.sort(key=lambda x: x.get("created", ""), reverse=True)
+
+        # 后台分页
         total = len(images_data)
         start = (page - 1) * page_size
         end = start + page_size
-        return JSONResponse({"images": images_data[start:end], "total": total})
+        paginated_images = images_data[start:end]
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+        return JSONResponse(
+            {
+                "images": paginated_images,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            }
+        )
     except Exception as e:
         import traceback
 
@@ -3972,17 +4321,38 @@ async def prune_docker_images(http_request: Request):
 # === 容器管理 ===
 @router.get("/docker/containers")
 async def get_docker_containers(
-    page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=1000)
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=1000),
+    search: Optional[str] = Query(None, description="搜索容器名称或镜像"),
+    state: Optional[str] = Query(
+        None, description="过滤容器状态: running, exited, paused"
+    ),
 ):
-    """获取容器列表（支持分页）"""
+    """获取容器列表（支持后台分页和过滤）"""
     try:
         from backend.handlers import docker_builder, DOCKER_AVAILABLE
 
         if not DOCKER_AVAILABLE or not docker_builder:
-            return JSONResponse({"containers": [], "total": 0})
+            return JSONResponse(
+                {
+                    "containers": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0,
+                }
+            )
 
         if not hasattr(docker_builder, "client") or not docker_builder.client:
-            return JSONResponse({"containers": [], "total": 0})
+            return JSONResponse(
+                {
+                    "containers": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0,
+                }
+            )
 
         containers_data = []
         try:
@@ -4007,13 +4377,30 @@ async def get_docker_containers(
                 except:
                     pass
 
+                container_name = c.name
+                container_image = c.image.tags[0] if c.image.tags else c.image.id[:12]
+                container_state = c.attrs.get("State", {}).get("Status", "unknown")
+
+                # 应用搜索过滤
+                if search:
+                    search_lower = search.lower()
+                    if not (
+                        search_lower in container_name.lower()
+                        or search_lower in container_image.lower()
+                    ):
+                        continue
+
+                # 应用状态过滤
+                if state and container_state != state:
+                    continue
+
                 containers_data.append(
                     {
                         "id": c.id,
-                        "name": c.name,
-                        "image": c.image.tags[0] if c.image.tags else c.image.id[:12],
+                        "name": container_name,
+                        "image": container_image,
                         "status": c.status,
-                        "state": c.attrs.get("State", {}).get("Status", "unknown"),
+                        "state": container_state,
                         "created": c.attrs.get("Created", ""),
                         "ports": ports_str,
                     }
@@ -4021,10 +4408,25 @@ async def get_docker_containers(
         except Exception as e:
             print(f"⚠️ 获取容器列表失败: {e}")
 
+        # 按创建时间倒序排列
+        containers_data.sort(key=lambda x: x.get("created", ""), reverse=True)
+
+        # 后台分页
         total = len(containers_data)
         start = (page - 1) * page_size
         end = start + page_size
-        return JSONResponse({"containers": containers_data[start:end], "total": total})
+        paginated_containers = containers_data[start:end]
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+        return JSONResponse(
+            {
+                "containers": paginated_containers,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取容器列表失败: {str(e)}")
 
@@ -4565,9 +4967,8 @@ async def get_pipeline(pipeline_id: str):
 async def get_pipeline_tasks(
     pipeline_id: str,
     status: Optional[str] = Query(None, description="过滤任务状态"),
-    # 默认每页返回 10 条历史记录
-    limit: Optional[int] = Query(10, description="每页任务数量", ge=1, le=200),
-    offset: Optional[int] = Query(0, description="偏移量（分页）", ge=0),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=200, description="每页数量"),
     trigger_source: Optional[str] = Query(
         None, description="过滤触发来源: webhook, manual, cron"
     ),
@@ -4706,15 +5107,18 @@ async def get_pipeline_tasks(
         total = len(tasks_with_details)
 
         # 应用分页
-        paginated_tasks = tasks_with_details[offset : offset + limit]
+        offset = (page - 1) * page_size
+        paginated_tasks = tasks_with_details[offset : offset + page_size]
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
 
         return JSONResponse(
             {
                 "tasks": paginated_tasks,
                 "total": total,
-                "limit": limit,
-                "offset": offset,
-                "has_more": offset + limit < total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_more": offset + page_size < total,
                 "pipeline_id": pipeline_id,
                 "pipeline_name": pipeline.get("name"),
             }
@@ -5856,12 +6260,15 @@ class UpdateGitSourceRequest(BaseModel):
 
 
 @router.get("/git-sources")
-async def list_git_sources(http_request: Request):
-    """获取所有 Git 数据源"""
+async def list_git_sources(
+    http_request: Request,
+    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配名称、URL、描述")
+):
+    """获取所有 Git 数据源，支持模糊查询"""
     try:
         get_current_username(http_request)  # 验证登录
         manager = GitSourceManager()
-        sources = manager.list_sources()
+        sources = manager.list_sources(query=query)
         return JSONResponse({"sources": sources, "total": len(sources)})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取数据源列表失败: {str(e)}")
@@ -7792,22 +8199,50 @@ async def list_deploy_tasks(request: Request):
 
         # 转换为前端期望的格式
         formatted_tasks = []
+
+        # 查询所有执行任务（用于统计）
+        from backend.database import get_db_session
+        from backend.models import Task
+
+        db = get_db_session()
+        try:
+            all_execution_tasks = (
+                db.query(Task).filter(Task.task_type == "deploy").all()
+            )
+            execution_tasks_map = {}  # config_id -> [execution_tasks]
+            for exec_task in all_execution_tasks:
+                exec_task_config = exec_task.task_config or {}
+                source_config_id = exec_task_config.get("source_config_id")
+                if source_config_id:
+                    # source_config_id指向config_id
+                    if source_config_id not in execution_tasks_map:
+                        execution_tasks_map[source_config_id] = []
+                    # 转换为字典格式
+                    exec_task_dict = {
+                        "task_id": exec_task.task_id,
+                        "status": exec_task.status,
+                        "created_at": (
+                            exec_task.created_at.isoformat()
+                            if exec_task.created_at
+                            else None
+                        ),
+                        "trigger_source": exec_task.trigger_source,
+                    }
+                    execution_tasks_map[source_config_id].append(exec_task_dict)
+        finally:
+            db.close()
+
         for task in tasks:
             task_config = task.get("task_config", {}) or {}
 
-            # 只返回配置任务（没有source_config_id的任务），排除执行产生的任务
-            source_config_id = task_config.get("source_config_id")
-            if source_config_id:
+            # 只返回配置任务（有config_id的任务），排除执行产生的任务
+            config_id = task_config.get("config_id")
+            if not config_id:
                 # 这是执行产生的任务，跳过
                 continue
 
-            # 查找该配置的所有执行任务
-            config_task_id = task.get("task_id")
-            execution_tasks = [
-                t
-                for t in tasks
-                if t.get("task_config", {}).get("source_config_id") == config_task_id
-            ]
+            # 查找该配置的所有执行任务（从查询结果中获取）
+            execution_tasks = execution_tasks_map.get(config_id, [])
 
             # 计算触发次数（执行任务数量）
             execution_count = len(execution_tasks)
@@ -7895,13 +8330,20 @@ async def list_deploy_tasks(request: Request):
 
 @router.get("/deploy-tasks/{task_id}")
 async def get_deploy_task(request: Request, task_id: str):
-    """获取部署任务详情"""
+    """获取部署任务详情（支持配置任务和执行任务）"""
     try:
         username = get_current_username(request)
         build_manager = BuildTaskManager()
 
         task = build_manager.get_task(task_id)
-        if not task or task.get("task_type") != "deploy":
+        
+        # 调试信息
+        if not task:
+            print(f"🔍 [get_deploy_task] 未找到任务: task_id={task_id}")
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+        
+        if task.get("task_type") != "deploy":
+            print(f"🔍 [get_deploy_task] 任务类型不匹配: task_id={task_id}, task_type={task.get('task_type')}")
             raise HTTPException(status_code=404, detail="部署任务不存在")
 
         task_config = task.get("task_config", {})
@@ -8168,9 +8610,33 @@ async def delete_deploy_task(request: Request, task_id: str):
         username = get_current_username(request)
         build_manager = BuildTaskManager()
 
+        # 先检查任务是否存在
+        task = build_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+        
+        # 检查任务类型
+        if task.get("task_type") != "deploy":
+            raise HTTPException(status_code=404, detail="部署任务不存在")
+
+        # 检查任务状态，如果是执行任务且正在运行，提供更友好的错误信息
+        task_config = task.get("task_config", {})
+        task_status = task.get("status")
+        if task_config.get("source_config_id"):
+            # 这是执行任务
+            if task_status not in ("stopped", "completed", "failed"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"无法删除正在运行的任务（当前状态: {task_status}）。请先停止任务或等待任务完成。"
+                )
+
         success = build_manager.delete_task(task_id)
         if not success:
-            raise HTTPException(status_code=404, detail="部署任务不存在")
+            # 如果删除失败，可能是状态不允许或其他原因
+            raise HTTPException(
+                status_code=400,
+                detail=f"无法删除任务（当前状态: {task_status}）。只有停止、完成或失败的任务才能删除。"
+            )
 
         # 记录操作日志
         OperationLogger.log(username, "deploy_task_delete", {"task_id": task_id})

@@ -29,4 +29,3 @@ EXPOSE {{EXPOSE_PORT:8080}}
 
 # 启动应用（仅在容器运行时执行，不会在构建时执行）
 ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
-

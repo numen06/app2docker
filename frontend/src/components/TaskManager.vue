@@ -548,10 +548,7 @@
               >
                 <i class="fas fa-link"></i> Webhook
               </span>
-              <span
-                v-else-if="task.source === '手动'"
-                class="badge bg-success"
-              >
+              <span v-else-if="task.source === '手动'" class="badge bg-success">
                 <i class="fas fa-rocket"></i> 手动
               </span>
               <span v-else class="badge bg-secondary">
@@ -825,11 +822,11 @@
       class="d-flex justify-content-between align-items-center mt-3"
     >
       <div class="text-muted small">
-        显示第 {{ (currentPage - 1) * pageSize + 1 }} -
+        显示第 {{ totalTasks > 0 ? (currentPage - 1) * pageSize + 1 : 0 }} -
         {{ Math.min(currentPage * pageSize, totalTasks) }} 条，共
         {{ totalTasks }} 条
       </div>
-      <nav v-if="totalPages > 1">
+      <nav v-if="totalPages > 1 && totalTasks > 0">
         <ul class="pagination pagination-sm mb-0">
           <li class="page-item" :class="{ disabled: currentPage === 1 }">
             <button
@@ -886,7 +883,9 @@
         </ul>
       </nav>
       <div v-else class="text-muted small">
-        <span v-if="totalTasks <= pageSize">全部显示</span>
+        <span v-if="totalTasks <= pageSize"
+          >全部显示（共 {{ totalTasks }} 条）</span
+        >
       </div>
     </div>
 
@@ -1048,7 +1047,9 @@ const showLogModal = ref(false);
 const selectedTask = ref(null);
 // 错误弹窗已移除，错误信息现在显示在日志顶部
 const currentPage = ref(1); // 当前页码
-const pageSize = ref(10); // 每页显示数量
+const pageSize = ref(10); // 每页显示数量（默认10）
+const totalTasks = ref(0); // 总任务数（从后台获取）
+const totalPages = ref(0); // 总页数（从后台获取）
 const cleaning = ref(false); // 清理中状态
 const buildDirSize = ref("0 MB"); // 编译目录容量
 const buildDirCount = ref(0); // 编译目录数量
@@ -1114,15 +1115,15 @@ function startRefreshInterval() {
   }
 }
 
-// 筛选已在后端完成，直接返回任务列表
-const filteredTasks = computed(() => {
+// 当前页的任务列表（后台已分页，直接使用）
+const paginatedTasks = computed(() => {
   return tasks.value;
 });
 
-// 任务统计信息
+// 任务统计信息（基于当前页的任务）
 const taskStats = computed(() => {
   const stats = {
-    total: tasks.value.length,
+    total: totalTasks.value, // 使用后台返回的总数
     pending: 0,
     running: 0,
     completed: 0,
@@ -1134,6 +1135,7 @@ const taskStats = computed(() => {
     successRate: 0,
   };
 
+  // 只统计当前页的任务（用于显示当前页的分布情况）
   tasks.value.forEach((task) => {
     // 统计状态
     const status = task.status || "pending";
@@ -1162,22 +1164,9 @@ const taskStats = computed(() => {
   return stats;
 });
 
-// 总任务数
-const totalTasks = computed(() => filteredTasks.value.length);
-
-// 总页数
-const totalPages = computed(() => Math.ceil(totalTasks.value / pageSize.value));
-
-// 当前页的任务列表
-const paginatedTasks = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  const end = start + pageSize.value;
-  return filteredTasks.value.slice(start, end);
-});
-
 // 可见的页码列表
 const visiblePages = computed(() => {
-  const total = totalPages.value;
+  const total = totalPages.value || 0;
   const current = currentPage.value;
   const pages = [];
 
@@ -1217,11 +1206,15 @@ const visiblePages = computed(() => {
 function changePage(page) {
   if (page < 1 || page > totalPages.value || page === currentPage.value) return;
   currentPage.value = page;
+  // 切换页码时重新加载数据
+  loadTasks(false);
 }
 
 // 重置到第1页（切换过滤条件时）
 function resetPage() {
-  currentPage.value = 1;
+  if (currentPage.value !== 1) {
+    currentPage.value = 1;
+  }
 }
 
 // handleLogsOrError 函数已移除，统一使用 viewLogs 函数
@@ -1314,8 +1307,11 @@ async function loadTasks(includeStats = true) {
   error.value = null;
 
   try {
-    // 构建请求参数，在后端进行筛选（更快速）
-    const params = {};
+    // 构建请求参数，在后端进行筛选和分页
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+    };
     if (statusFilter.value) params.status = statusFilter.value;
     if (categoryFilter.value) params.task_type = categoryFilter.value;
 
@@ -1327,6 +1323,8 @@ async function loadTasks(includeStats = true) {
 
     const res = await axios.get("/api/tasks", { params });
     tasks.value = res.data.tasks || [];
+    totalTasks.value = res.data.total || 0;
+    totalPages.value = res.data.total_pages || 0;
 
     // 加载任务后，检查是否需要启动定时刷新
     startRefreshInterval();
@@ -1334,6 +1332,9 @@ async function loadTasks(includeStats = true) {
     error.value =
       err.response?.data?.error || err.message || "加载任务列表失败";
     console.error("加载任务列表失败:", err);
+    tasks.value = [];
+    totalTasks.value = 0;
+    totalPages.value = 0;
   } finally {
     loading.value = false;
     filtering.value = false;
@@ -1362,13 +1363,22 @@ function handleFilterChange() {
 // 只刷新运行中任务的状态（不刷新整个页面）
 async function refreshRunningTasks() {
   try {
-    // 获取所有运行中的任务ID
-    const runningTaskIds = tasks.value
-      .filter((t) => t.status === "running" || t.status === "pending")
-      .map((t) => ({ id: t.task_id, category: t.task_category }));
+    // 使用新接口一次性获取所有运行中的任务
+    const res = await axios.get("/api/tasks/running");
+    const runningTasks = res.data.tasks || [];
 
     // 如果没有运行中的任务，停止定时器
-    if (runningTaskIds.length === 0) {
+    if (runningTasks.length === 0) {
+      // 检查当前任务列表中是否还有运行中的任务，如果有则更新状态
+      const localRunningTasks = tasks.value.filter(
+        (t) => t.status === "running" || t.status === "pending"
+      );
+      if (localRunningTasks.length > 0) {
+        // 如果本地有运行中任务但接口返回为空，说明任务已完成，需要更新状态
+        // 这种情况应该很少，因为任务完成后会自动更新状态
+        // 这里我们不做处理，等待下次完整加载时更新
+      }
+
       if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -1376,71 +1386,40 @@ async function refreshRunningTasks() {
       return;
     }
 
-    // 逐个更新运行中任务的状态
-    for (const { id, category } of runningTaskIds) {
-      try {
-        let updatedTask = null;
-        if (category === "build") {
-          const res = await axios.get(`/api/build-tasks/${id}`);
-          updatedTask = res.data;
-        } else if (category === "deploy") {
-          // 部署任务使用部署任务API
-          const res = await axios.get(`/api/deploy-tasks/${id}`);
-          const taskData = res.data.task || res.data;
-          // 部署任务的状态已经是扁平化的，直接使用
-          if (taskData) {
-            updatedTask = {
-              status:
-                typeof taskData.status === "string"
-                  ? taskData.status
-                  : taskData.status?.status || "pending",
-              completed_at:
-                taskData.completed_at || taskData.status?.completed_at,
-              error: taskData.error || taskData.status?.error,
-              file_size: taskData.file_size,
-            };
-          }
-        } else if (category === "export") {
-          const res = await axios.get(`/api/export-tasks/${id}`);
-          updatedTask = res.data.task;
+    // 创建一个映射，方便快速查找
+    const runningTasksMap = new Map();
+    runningTasks.forEach((task) => {
+      runningTasksMap.set(task.task_id, task);
+    });
+
+    // 更新本地任务列表中对应任务的状态
+    tasks.value.forEach((task, index) => {
+      const taskId = task.task_id;
+      const updatedTask = runningTasksMap.get(taskId);
+
+      if (updatedTask) {
+        // 任务仍在运行中，更新状态相关字段
+        tasks.value[index].status = updatedTask.status;
+        if (updatedTask.completed_at !== undefined) {
+          tasks.value[index].completed_at = updatedTask.completed_at;
         }
-
-        if (updatedTask) {
-          // 更新对应任务的状态
-          const index = tasks.value.findIndex((t) => t.task_id === id);
-          if (index !== -1) {
-            const oldStatus = tasks.value[index].status;
-            const newStatus = updatedTask.status;
-
-            // 只更新状态相关字段，保留其他字段（不刷新整个列表）
-            tasks.value[index].status = newStatus;
-            tasks.value[index].completed_at = updatedTask.completed_at;
-            tasks.value[index].error = updatedTask.error;
-            tasks.value[index].file_size = updatedTask.file_size;
-
-            // 如果任务完成，更新其他可能变化的字段
-            if (
-              newStatus === "completed" ||
-              newStatus === "failed" ||
-              newStatus === "stopped"
-            ) {
-              // 更新所有可能变化的字段，确保数据完整
-              Object.assign(tasks.value[index], {
-                status: newStatus,
-                completed_at: updatedTask.completed_at,
-                error: updatedTask.error,
-                file_size: updatedTask.file_size,
-              });
-            }
-          }
+        if (updatedTask.error !== undefined) {
+          tasks.value[index].error = updatedTask.error;
         }
-      } catch (err) {
-        // 单个任务更新失败不影响其他任务
-        console.error(`更新任务 ${id} 状态失败:`, err);
+        if (updatedTask.file_size !== undefined) {
+          tasks.value[index].file_size = updatedTask.file_size;
+        }
+        if (updatedTask.started_at !== undefined) {
+          tasks.value[index].started_at = updatedTask.started_at;
+        }
+      } else if (task.status === "running" || task.status === "pending") {
+        // 如果任务之前在运行中，但现在不在返回列表中，说明任务已完成或失败
+        // 这种情况需要从完整接口获取最新状态，但为了性能，我们暂时不做处理
+        // 等待下次完整加载时更新，或者用户手动刷新
       }
-    }
+    });
 
-    // 再次检查是否还有运行中的任务，如果没有则停止定时器
+    // 检查是否还有运行中的任务，如果没有则停止定时器
     const stillRunning = tasks.value.some(
       (t) => t.status === "running" || t.status === "pending"
     );
@@ -1448,9 +1427,9 @@ async function refreshRunningTasks() {
       clearInterval(refreshInterval);
       refreshInterval = null;
     }
-    // 不再调用 loadTasks()，避免刷新整个页面
   } catch (err) {
     console.error("刷新运行中任务状态失败:", err);
+    // 如果接口调用失败，不影响其他功能
   }
 }
 
