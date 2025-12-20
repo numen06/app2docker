@@ -23,6 +23,9 @@ class PipelineManager:
 
     def __init__(self):
         self.lock = threading.RLock()
+        # 存储每个流水线最后一次触发的配置信息（用于防抖检查）
+        # 格式: {pipeline_id: {"config_hash": str, "timestamp": datetime}}
+        self._last_trigger_configs = {}
 
     def _safe_get_json_field(self, pipeline, field_name, default_value):
         """安全地获取 JSON 字段，如果解码失败返回默认值"""
@@ -1016,7 +1019,7 @@ class PipelineManager:
         finally:
             db.close()
 
-    def check_debounce(self, pipeline_id: str, debounce_seconds: int = 5) -> bool:
+    def check_debounce(self, pipeline_id: str, debounce_seconds: int = 3) -> bool:
         """检查是否在防抖时间内"""
         db = get_db_session()
         try:
@@ -1030,6 +1033,74 @@ class PipelineManager:
             return elapsed < debounce_seconds
         finally:
             db.close()
+
+    def _generate_config_hash(self, task_config: dict) -> str:
+        """生成任务配置的哈希值（用于判断是否为相同信息）"""
+        import hashlib
+        import json
+
+        # 提取关键字段进行比较
+        key_fields = {
+            "pipeline_id": task_config.get("pipeline_id"),
+            "branch": task_config.get("branch"),
+            "tag": task_config.get("tag"),
+            "selected_services": sorted(task_config.get("selected_services", []))
+            if task_config.get("selected_services")
+            else None,
+        }
+
+        # 生成哈希值
+        config_str = json.dumps(key_fields, sort_keys=True, ensure_ascii=False)
+        return hashlib.md5(config_str.encode("utf-8")).hexdigest()
+
+    def check_same_trigger_info(
+        self, pipeline_id: str, task_config: dict, debounce_seconds: int = 3
+    ) -> bool:
+        """
+        检查是否为相同信息的触发（用于防抖）
+
+        Args:
+            pipeline_id: 流水线ID
+            task_config: 任务配置字典
+            debounce_seconds: 防抖时间（秒）
+
+        Returns:
+            True 如果是相同信息且在防抖时间内，False 否则
+        """
+        with self.lock:
+            # 生成当前配置的哈希值
+            current_hash = self._generate_config_hash(task_config)
+
+            # 获取最后一次触发的配置信息
+            last_config = self._last_trigger_configs.get(pipeline_id)
+
+            if not last_config:
+                # 没有历史记录，不是相同信息
+                return False
+
+            # 检查时间间隔
+            elapsed = (datetime.now() - last_config["timestamp"]).total_seconds()
+            if elapsed >= debounce_seconds:
+                # 超过防抖时间，不是相同信息
+                return False
+
+            # 检查配置哈希值是否相同
+            return last_config["config_hash"] == current_hash
+
+    def update_last_trigger_config(self, pipeline_id: str, task_config: dict):
+        """
+        更新最后一次触发的配置信息
+
+        Args:
+            pipeline_id: 流水线ID
+            task_config: 任务配置字典
+        """
+        with self.lock:
+            config_hash = self._generate_config_hash(task_config)
+            self._last_trigger_configs[pipeline_id] = {
+                "config_hash": config_hash,
+                "timestamp": datetime.now(),
+            }
 
     def verify_webhook_signature(
         self,

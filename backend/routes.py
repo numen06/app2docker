@@ -5843,61 +5843,41 @@ async def webhook_trigger(webhook_token: str, request: Request):
 
         build_manager = BuildManager()
         pipeline_id = pipeline["pipeline_id"]
-        task_ids = []
 
-        # 检查防抖（5秒内重复触发直接创建任务，状态为 pending）
-        is_debounced = manager.check_debounce(pipeline_id, debounce_seconds=5)
-
-        for tag in tags:
-            print(f"🔍 调用 pipeline_to_task_config:")
-            print(f"   - branch 参数: {branch}")
-            print(f"   - webhook_branch 参数: {webhook_branch}")
-            print(f"   - tag 参数: {tag}")
-            task_config = pipeline_to_task_config(
+        # 生成第一个标签的任务配置（用于防抖检查）
+        # 如果多个标签，使用第一个标签的配置进行防抖检查
+        first_tag = tags[0] if tags else None
+        if first_tag:
+            first_task_config = pipeline_to_task_config(
                 pipeline,
                 trigger_source="webhook",
                 branch=branch,
-                tag=tag,
+                tag=first_tag,
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
             )
-            print(
-                f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
+
+            # 检查防抖和相同信息（3秒内相同信息要屏蔽）
+            is_same_trigger = manager.check_same_trigger_info(
+                pipeline_id, first_task_config, debounce_seconds=3
             )
-
-            if is_debounced:
-                task_id = build_manager._trigger_task_from_config(task_config)
-                task_ids.append(task_id)
-
-        queue_length = manager.get_queue_length(pipeline_id)
-
-        # 检查防抖（5秒内重复触发直接创建任务，状态为 pending）
-        if is_debounced:
-            if len(tags) > 1:
+            if is_same_trigger:
+                # 3秒内相同信息，屏蔽
                 print(
-                    f"⚠️ 流水线 {pipeline.get('name')} 触发过于频繁（防抖），已创建 {len(task_ids)} 个任务（pending）"
+                    f"🚫 流水线 {pipeline.get('name')} 触发被屏蔽（3秒内相同信息）: branch={branch}, tag={first_tag}"
                 )
-            else:
-                print(
-                    f"⚠️ 流水线 {pipeline.get('name')} 触发过于频繁（防抖），已创建任务（pending）"
+                return JSONResponse(
+                    {
+                        "message": "触发过于频繁，相同信息的触发已被屏蔽（3秒内）",
+                        "status": "debounced",
+                        "pipeline": pipeline.get("name"),
+                        "branch": branch,
+                        "tag": first_tag,
+                    }
                 )
-
-            return JSONResponse(
-                {
-                    "message": (
-                        f"触发过于频繁，已创建 {len(task_ids)} 个任务并加入队列"
-                        if len(tags) > 1
-                        else "触发过于频繁，任务已创建并加入队列"
-                    ),
-                    "status": "queued",
-                    "task_id": task_ids[0] if task_ids else None,
-                    "task_ids": task_ids if len(task_ids) > 1 else None,
-                    "queue_length": queue_length,
-                    "pipeline": pipeline.get("name"),
-                }
-            )
 
         # 检查是否有正在运行的任务
+
         current_task_id = manager.get_pipeline_running_task(pipeline_id)
         if current_task_id:
             # 检查任务是否真的在运行
@@ -5906,6 +5886,10 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 # 有任务正在运行，为每个标签创建新任务（状态为 pending，等待执行）
                 queued_task_ids = []
                 for tag in tags:
+                    print(f"🔍 调用 pipeline_to_task_config:")
+                    print(f"   - branch 参数: {branch}")
+                    print(f"   - webhook_branch 参数: {webhook_branch}")
+                    print(f"   - tag 参数: {tag}")
                     task_config = pipeline_to_task_config(
                         pipeline,
                         trigger_source="webhook",
@@ -5914,10 +5898,15 @@ async def webhook_trigger(webhook_token: str, request: Request):
                         webhook_branch=webhook_branch,
                         branch_tag_mapping=branch_tag_mapping,
                     )
+                    print(
+                        f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
+                    )
                     queued_task_id = build_manager._trigger_task_from_config(
                         task_config
                     )
                     queued_task_ids.append(queued_task_id)
+                    # 更新最后一次触发的配置信息
+                    manager.update_last_trigger_config(pipeline_id, task_config)
 
                 queue_length = manager.get_queue_length(pipeline_id)
 
@@ -5954,6 +5943,10 @@ async def webhook_trigger(webhook_token: str, request: Request):
         # 没有运行中的任务，为每个标签立即启动构建任务
         started_task_ids = []
         for tag in tags:
+            print(f"🔍 调用 pipeline_to_task_config:")
+            print(f"   - branch 参数: {branch}")
+            print(f"   - webhook_branch 参数: {webhook_branch}")
+            print(f"   - tag 参数: {tag}")
             task_config = pipeline_to_task_config(
                 pipeline,
                 trigger_source="webhook",
@@ -5962,8 +5955,13 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
             )
+            print(
+                f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
+            )
             started_task_id = build_manager._trigger_task_from_config(task_config)
             started_task_ids.append(started_task_id)
+            # 更新最后一次触发的配置信息
+            manager.update_last_trigger_config(pipeline_id, task_config)
 
         task_id = started_task_ids[0] if started_task_ids else None
 
