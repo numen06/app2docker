@@ -83,13 +83,10 @@
         </div>
       </div>
 
-      <!-- 主机列表标题和添加按钮 -->
+      <!-- 添加主机按钮 -->
       <div class="card mb-3">
         <div class="card-body py-2">
-          <div class="d-flex justify-content-between align-items-center">
-            <h6 class="mb-0">
-              <i class="fas fa-server me-2"></i> 主机列表
-            </h6>
+          <div class="d-flex justify-content-end">
             <div class="btn-group">
               <button 
                 type="button" 
