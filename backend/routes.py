@@ -5844,10 +5844,13 @@ async def webhook_trigger(webhook_token: str, request: Request):
         build_manager = BuildManager()
         pipeline_id = pipeline["pipeline_id"]
 
-        # 生成第一个标签的任务配置（用于防抖检查）
-        # 如果多个标签，使用第一个标签的配置进行防抖检查
+        # 生成第一个标签的任务配置（用于综合检查）
+        # 如果多个标签，使用第一个标签的配置进行检查
         first_tag = tags[0] if tags else None
         if first_tag:
+            print(
+                f"🔍 [Webhook触发] 开始综合检查: pipeline={pipeline.get('name')}, branch={branch}, tag={first_tag}"
+            )
             first_task_config = pipeline_to_task_config(
                 pipeline,
                 trigger_source="webhook",
@@ -5856,13 +5859,17 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
             )
+            print(
+                f"🔍 [Webhook触发] 任务配置已生成: pipeline_id={pipeline_id[:8]}..., branch={first_task_config.get('branch')}, tag={first_task_config.get('tag')}"
+            )
 
-            # 检查防抖和相同信息（3秒内相同信息要屏蔽）
-            is_same_trigger = manager.check_same_trigger_info(
+            # 使用综合检查方法统一检查防抖、运行中任务和队列
+            duplicate_result = manager.check_duplicate_task(
                 pipeline_id, first_task_config, debounce_seconds=3
             )
-            if is_same_trigger:
-                # 3秒内相同信息，屏蔽
+
+            if duplicate_result == "debounced":
+                # 防抖时间内的相同配置，直接屏蔽
                 print(
                     f"🚫 流水线 {pipeline.get('name')} 触发被屏蔽（3秒内相同信息）: branch={branch}, tag={first_tag}"
                 )
@@ -5875,15 +5882,54 @@ async def webhook_trigger(webhook_token: str, request: Request):
                         "tag": first_tag,
                     }
                 )
+            elif duplicate_result == "running_same_config":
+                # 运行中的任务也是相同配置，直接返回排队状态，不创建新任务
+                current_task_id = manager.get_pipeline_running_task(pipeline_id)
+                queue_length = manager.get_queue_length(pipeline_id)
+                print(
+                    f"🚫 流水线 {pipeline.get('name')} 触发被屏蔽（运行中的任务也是相同配置）: branch={branch}, tag={first_tag}, current_task_id={current_task_id[:8] if current_task_id else 'None'}..."
+                )
+                return JSONResponse(
+                    {
+                        "message": "运行中的任务也是相同配置，已忽略重复触发",
+                        "status": "running_same_config",
+                        "pipeline": pipeline.get("name"),
+                        "branch": branch,
+                        "tag": first_tag,
+                        "current_task_id": current_task_id,
+                        "queue_length": queue_length,
+                    }
+                )
+            elif duplicate_result == "queued_same_config":
+                # 队列中已有相同配置的任务，直接返回，不创建新任务
+                queue_length = manager.get_queue_length(pipeline_id)
+                print(
+                    f"🚫 流水线 {pipeline.get('name')} 触发被屏蔽（队列中已有相同配置的任务）: branch={branch}, tag={first_tag}"
+                )
+                return JSONResponse(
+                    {
+                        "message": "队列中已有相同配置的任务，已忽略重复触发",
+                        "status": "queued_same_config",
+                        "pipeline": pipeline.get("name"),
+                        "branch": branch,
+                        "tag": first_tag,
+                        "queue_length": queue_length,
+                    }
+                )
 
-        # 检查是否有正在运行的任务
-
+        # 检查是否有正在运行的任务（不同配置的任务）
+        print(
+            f"🔍 [Webhook触发] 检查运行中的任务: pipeline={pipeline.get('name')}, pipeline_id={pipeline_id[:8]}..."
+        )
         current_task_id = manager.get_pipeline_running_task(pipeline_id)
         if current_task_id:
+            print(
+                f"🔍 [Webhook触发] 发现运行中的任务（不同配置）: task_id={current_task_id[:8]}..."
+            )
             # 检查任务是否真的在运行
             task = build_manager.task_manager.get_task(current_task_id)
             if task and task.get("status") in ["pending", "running"]:
-                # 有任务正在运行，为每个标签创建新任务（状态为 pending，等待执行）
+                # 有任务正在运行（且配置不同），为每个标签创建新任务（状态为 pending，等待执行）
                 queued_task_ids = []
                 for tag in tags:
                     print(f"🔍 调用 pipeline_to_task_config:")
@@ -5905,18 +5951,20 @@ async def webhook_trigger(webhook_token: str, request: Request):
                         task_config
                     )
                     queued_task_ids.append(queued_task_id)
-                    # 更新最后一次触发的配置信息
-                    manager.update_last_trigger_config(pipeline_id, task_config)
+                    # 注意：防抖记录已在 check_duplicate_task -> check_same_trigger_info 中通过预占机制更新，此处不再需要更新
+                    print(
+                        f"✅ [任务创建] 已创建排队任务: task_id={queued_task_id[:8]}..., branch={branch}, tag={tag}"
+                    )
 
                 queue_length = manager.get_queue_length(pipeline_id)
 
                 if len(tags) > 1:
                     print(
-                        f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务 {current_task_id[:8]}，已创建 {len(queued_task_ids)} 个新任务（pending）"
+                        f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务（不同配置） {current_task_id[:8]}，已创建 {len(queued_task_ids)} 个新任务（pending）"
                     )
                 else:
                     print(
-                        f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务 {current_task_id[:8]}，已创建新任务（pending）"
+                        f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务（不同配置） {current_task_id[:8]}，已创建新任务（pending）"
                     )
 
                 return JSONResponse(
@@ -5941,6 +5989,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 manager.unbind_task(pipeline_id)
 
         # 没有运行中的任务，为每个标签立即启动构建任务
+        print(
+            f"🔍 [Webhook触发] 没有运行中的任务，开始创建任务: pipeline={pipeline.get('name')}, tags={tags}"
+        )
         started_task_ids = []
         for tag in tags:
             print(f"🔍 调用 pipeline_to_task_config:")
@@ -5960,8 +6011,10 @@ async def webhook_trigger(webhook_token: str, request: Request):
             )
             started_task_id = build_manager._trigger_task_from_config(task_config)
             started_task_ids.append(started_task_id)
-            # 更新最后一次触发的配置信息
-            manager.update_last_trigger_config(pipeline_id, task_config)
+            # 注意：防抖记录已在 check_same_trigger_info 中通过预占机制更新，此处不再需要更新
+            print(
+                f"✅ [任务创建] 已创建并启动任务: task_id={started_task_id[:8]}..., branch={branch}, tag={tag}"
+            )
 
         task_id = started_task_ids[0] if started_task_ids else None
 

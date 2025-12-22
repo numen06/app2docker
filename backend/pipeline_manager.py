@@ -1044,9 +1044,11 @@ class PipelineManager:
             "pipeline_id": task_config.get("pipeline_id"),
             "branch": task_config.get("branch"),
             "tag": task_config.get("tag"),
-            "selected_services": sorted(task_config.get("selected_services", []))
-            if task_config.get("selected_services")
-            else None,
+            "selected_services": (
+                sorted(task_config.get("selected_services", []))
+                if task_config.get("selected_services")
+                else None
+            ),
         }
 
         # 生成哈希值
@@ -1058,6 +1060,7 @@ class PipelineManager:
     ) -> bool:
         """
         检查是否为相同信息的触发（用于防抖）
+        使用预占机制避免并发竞态条件：如果通过检查，立即更新记录（预占）
 
         Args:
             pipeline_id: 流水线ID
@@ -1070,22 +1073,51 @@ class PipelineManager:
         with self.lock:
             # 生成当前配置的哈希值
             current_hash = self._generate_config_hash(task_config)
+            current_time = datetime.now()
 
             # 获取最后一次触发的配置信息
             last_config = self._last_trigger_configs.get(pipeline_id)
 
             if not last_config:
-                # 没有历史记录，不是相同信息
+                # 没有历史记录，不是相同信息，立即预占（更新记录）
+                print(
+                    f"🔍 [防抖检查] 流水线 {pipeline_id[:8]} 没有历史记录，预占记录: hash={current_hash[:8]}..."
+                )
+                self._last_trigger_configs[pipeline_id] = {
+                    "config_hash": current_hash,
+                    "timestamp": current_time,
+                }
                 return False
 
             # 检查时间间隔
-            elapsed = (datetime.now() - last_config["timestamp"]).total_seconds()
+            elapsed = (current_time - last_config["timestamp"]).total_seconds()
             if elapsed >= debounce_seconds:
-                # 超过防抖时间，不是相同信息
+                # 超过防抖时间，不是相同信息，立即预占（更新记录）
+                print(
+                    f"🔍 [防抖检查] 流水线 {pipeline_id[:8]} 超过防抖时间 ({elapsed:.2f}s >= {debounce_seconds}s)，预占记录: hash={current_hash[:8]}..."
+                )
+                self._last_trigger_configs[pipeline_id] = {
+                    "config_hash": current_hash,
+                    "timestamp": current_time,
+                }
                 return False
 
             # 检查配置哈希值是否相同
-            return last_config["config_hash"] == current_hash
+            is_same = last_config["config_hash"] == current_hash
+            if is_same:
+                print(
+                    f"🚫 [防抖检查] 流水线 {pipeline_id[:8]} 检测到相同信息（{elapsed:.2f}s内）: hash={current_hash[:8]}..."
+                )
+            else:
+                # 配置不同，但仍在防抖时间内，预占记录（使用新的配置）
+                print(
+                    f"🔍 [防抖检查] 流水线 {pipeline_id[:8]} 配置不同但仍在防抖时间内，预占新记录: old_hash={last_config['config_hash'][:8]}..., new_hash={current_hash[:8]}..."
+                )
+                self._last_trigger_configs[pipeline_id] = {
+                    "config_hash": current_hash,
+                    "timestamp": current_time,
+                }
+            return is_same
 
     def update_last_trigger_config(self, pipeline_id: str, task_config: dict):
         """
@@ -1101,6 +1133,177 @@ class PipelineManager:
                 "config_hash": config_hash,
                 "timestamp": datetime.now(),
             }
+
+    def check_running_task_config(self, pipeline_id: str, task_config: dict) -> bool:
+        """
+        检查运行中的任务是否是相同配置
+
+        Args:
+            pipeline_id: 流水线ID
+            task_config: 任务配置字典
+
+        Returns:
+            True 如果运行中的任务也是相同配置，False 否则
+        """
+        try:
+            # 获取运行中的任务ID
+            current_task_id = self.get_pipeline_running_task(pipeline_id)
+            if not current_task_id:
+                print(f"🔍 [运行中任务检查] 流水线 {pipeline_id[:8]} 没有运行中的任务")
+                return False
+
+            # 获取任务信息
+            from backend.handlers import BuildManager
+
+            build_manager = BuildManager()
+            task = build_manager.task_manager.get_task(current_task_id)
+            if not task:
+                print(
+                    f"🔍 [运行中任务检查] 流水线 {pipeline_id[:8]} 运行中的任务 {current_task_id[:8]}... 不存在"
+                )
+                return False
+
+            # 检查任务状态
+            task_status = task.get("status")
+            if task_status not in ["pending", "running"]:
+                print(
+                    f"🔍 [运行中任务检查] 流水线 {pipeline_id[:8]} 任务 {current_task_id[:8]}... 状态为 {task_status}，不在运行中"
+                )
+                return False
+
+            # 获取任务配置
+            task_config_data = task.get("task_config", {})
+            if not task_config_data:
+                print(
+                    f"🔍 [运行中任务检查] 流水线 {pipeline_id[:8]} 任务 {current_task_id[:8]}... 没有配置信息"
+                )
+                return False
+
+            # 生成配置哈希值
+            current_hash = self._generate_config_hash(task_config)
+            task_hash = self._generate_config_hash(task_config_data)
+
+            # 比较哈希值
+            if task_hash == current_hash:
+                print(
+                    f"🔍 [运行中任务检查] 流水线 {pipeline_id[:8]} 运行中的任务 {current_task_id[:8]}... 是相同配置: hash={current_hash[:8]}..."
+                )
+                return True
+            else:
+                print(
+                    f"🔍 [运行中任务检查] 流水线 {pipeline_id[:8]} 运行中的任务 {current_task_id[:8]}... 配置不同: task_hash={task_hash[:8]}..., current_hash={current_hash[:8]}..."
+                )
+                return False
+        except Exception as e:
+            print(f"⚠️ [运行中任务检查] 检查运行中任务失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+            # 出错时返回 False，允许创建任务（避免阻塞）
+            return False
+
+    def check_queued_task_exists(self, pipeline_id: str, task_config: dict) -> bool:
+        """
+        检查队列中是否已有相同配置的待执行任务
+
+        Args:
+            pipeline_id: 流水线ID
+            task_config: 任务配置字典
+
+        Returns:
+            True 如果队列中已有相同配置的任务，False 否则
+        """
+        try:
+            from backend.handlers import BuildManager
+
+            build_manager = BuildManager()
+            # 获取所有待执行的任务（pending 状态）
+            pending_tasks = build_manager.task_manager.list_tasks(status="pending")
+
+            # 生成当前配置的哈希值
+            current_hash = self._generate_config_hash(task_config)
+
+            # 检查是否有相同配置的任务
+            for task in pending_tasks:
+                task_config_data = task.get("task_config", {})
+                task_pipeline_id = task_config_data.get("pipeline_id")
+
+                # 只检查同一流水线的任务
+                if task_pipeline_id == pipeline_id:
+                    task_hash = self._generate_config_hash(task_config_data)
+                    if task_hash == current_hash:
+                        task_id = task.get("task_id", "unknown")
+                        print(
+                            f"🔍 [队列检查] 流水线 {pipeline_id[:8]} 队列中已存在相同配置的任务: task_id={task_id[:8]}..., hash={current_hash[:8]}..."
+                        )
+                        return True
+
+            print(
+                f"🔍 [队列检查] 流水线 {pipeline_id[:8]} 队列中未找到相同配置的任务: hash={current_hash[:8]}..."
+            )
+            return False
+        except Exception as e:
+            print(f"⚠️ [队列检查] 检查队列失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+            # 出错时返回 False，允许创建任务（避免阻塞）
+            return False
+
+    def check_duplicate_task(
+        self, pipeline_id: str, task_config: dict, debounce_seconds: int = 3
+    ) -> Optional[str]:
+        """
+        综合检查是否有重复任务（防抖、运行中任务、队列）
+
+        Args:
+            pipeline_id: 流水线ID
+            task_config: 任务配置字典
+            debounce_seconds: 防抖时间（秒）
+
+        Returns:
+            "debounced" - 防抖时间内的相同配置（直接屏蔽）
+            "running_same_config" - 运行中的任务也是相同配置（需要排队）
+            "queued_same_config" - 队列中已有相同配置的任务（需要排队）
+            None - 没有重复，可以创建新任务
+        """
+        print(
+            f"🔍 [综合检查] 开始检查重复任务: pipeline_id={pipeline_id[:8]}..., debounce_seconds={debounce_seconds}"
+        )
+
+        # 1. 检查防抖时间内的相同配置
+        is_same_trigger = self.check_same_trigger_info(
+            pipeline_id, task_config, debounce_seconds
+        )
+        if is_same_trigger:
+            print(
+                f"🚫 [综合检查] 防抖时间内的相同配置，直接屏蔽: pipeline_id={pipeline_id[:8]}..."
+            )
+            return "debounced"
+
+        # 2. 检查运行中的任务是否是相同配置
+        is_running_same_config = self.check_running_task_config(
+            pipeline_id, task_config
+        )
+        if is_running_same_config:
+            print(
+                f"🔍 [综合检查] 运行中的任务也是相同配置，需要排队: pipeline_id={pipeline_id[:8]}..."
+            )
+            return "running_same_config"
+
+        # 3. 检查队列中是否有相同配置的任务
+        is_queued_same_config = self.check_queued_task_exists(pipeline_id, task_config)
+        if is_queued_same_config:
+            print(
+                f"🔍 [综合检查] 队列中已有相同配置的任务，需要排队: pipeline_id={pipeline_id[:8]}..."
+            )
+            return "queued_same_config"
+
+        # 4. 没有重复，可以创建新任务
+        print(
+            f"✅ [综合检查] 没有重复任务，可以创建新任务: pipeline_id={pipeline_id[:8]}..."
+        )
+        return None
 
     def verify_webhook_signature(
         self,
