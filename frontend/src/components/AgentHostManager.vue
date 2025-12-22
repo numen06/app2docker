@@ -79,46 +79,43 @@
                 <i class="fas fa-network-wired me-1"></i> Agent主机
               </label>
             </div>
-            
-            <!-- 添加主机按钮 -->
-            <div class="d-flex gap-2" v-if="filterType === 'all' || filterType === 'agent'">
-              <div class="btn-group" v-if="filterType === 'all'">
-                <button class="btn btn-primary btn-sm" @click="showSshAddModal">
-                  <i class="fas fa-plus me-1"></i> 添加SSH主机
-                </button>
-              </div>
-              <div class="btn-group">
-                <button 
-                  type="button" 
-                  class="btn btn-primary btn-sm dropdown-toggle" 
-                  data-bs-toggle="dropdown" 
-                  aria-expanded="false"
-                >
-                  <i class="fas fa-plus me-1"></i> 添加主机
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                  <li v-if="filterType === 'all'">
-                    <a class="dropdown-item" href="#" @click.prevent="showSshAddModal">
-                      <i class="fas fa-server me-2"></i> SSH主机
-                    </a>
-                  </li>
-                  <li>
-                    <a class="dropdown-item" href="#" @click.prevent="openAddModal('agent')">
-                      <i class="fas fa-network-wired me-2"></i> Agent主机
-                    </a>
-                  </li>
-                  <li>
-                    <a class="dropdown-item" href="#" @click.prevent="openAddModal('portainer')">
-                      <i class="fab fa-docker me-2"></i> Portainer主机
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            <div class="d-flex gap-2" v-else-if="filterType === 'ssh'">
-              <button class="btn btn-primary btn-sm" @click="showSshAddModal">
-                <i class="fas fa-plus me-1"></i> 添加SSH主机
+          </div>
+        </div>
+      </div>
+
+      <!-- 主机列表标题和添加按钮 -->
+      <div class="card mb-3">
+        <div class="card-body py-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+              <i class="fas fa-server me-2"></i> 主机列表
+            </h6>
+            <div class="btn-group">
+              <button 
+                type="button" 
+                class="btn btn-primary btn-sm dropdown-toggle" 
+                data-bs-toggle="dropdown" 
+                aria-expanded="false"
+              >
+                <i class="fas fa-plus me-1"></i> 添加主机
               </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                  <a class="dropdown-item" href="#" @click.prevent="showSshAddModal">
+                    <i class="fas fa-server me-2"></i> SSH主机
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="#" @click.prevent="openAddModal('agent')">
+                    <i class="fas fa-network-wired me-2"></i> Agent主机
+                  </a>
+                </li>
+                <li>
+                  <a class="dropdown-item" href="#" @click.prevent="openAddModal('portainer')">
+                    <i class="fab fa-docker me-2"></i> Portainer主机
+                  </a>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
@@ -271,28 +268,6 @@
           <div v-else-if="filteredHosts.length === 0" class="text-center py-5 text-muted">
             <i class="fas fa-network-wired fa-3x mb-3"></i>
             <p class="mb-0">暂无Agent主机</p>
-            <div class="btn-group mt-2">
-              <button 
-                type="button" 
-                class="btn btn-primary btn-sm dropdown-toggle" 
-                data-bs-toggle="dropdown" 
-                aria-expanded="false"
-              >
-                <i class="fas fa-plus me-1"></i> 添加主机
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li>
-                  <a class="dropdown-item" href="#" @click.prevent="openAddModal('agent')">
-                    <i class="fas fa-network-wired me-2"></i> Agent主机
-                  </a>
-                </li>
-                <li>
-                  <a class="dropdown-item" href="#" @click.prevent="openAddModal('portainer')">
-                    <i class="fab fa-docker me-2"></i> Portainer主机
-                  </a>
-                </li>
-              </ul>
-            </div>
           </div>
           <div v-else class="row g-4">
             <div
@@ -1469,6 +1444,22 @@ export default {
           }
         })
       }
+    },
+    openAddModal(type) {
+      // 设置主机类型并打开添加模态框
+      this.hostForm.host_type = type
+      this.showAddModal = true
+      this.editingHost = null
+      // 重置表单
+      this.hostForm = {
+        host_type: type,
+        name: '',
+        description: '',
+        portainer_url: '',
+        portainer_api_key: '',
+        portainer_endpoint_id: null
+      }
+      this.availableEndpoints = []
     },
     handleSshHostAction(action, host) {
       // 切换到SSH模式并执行操作
