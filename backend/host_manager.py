@@ -424,6 +424,9 @@ class HostManager:
                 db.commit()
 
                 print(f"✅ 主机添加成功: {host_id} ({name})")
+                # 在关闭会话之前，先访问所有需要的属性，确保它们被加载
+                _ = host_obj.created_at
+                _ = host_obj.updated_at
                 return self._to_dict(host_obj)
             except Exception as e:
                 db.rollback()
@@ -495,6 +498,9 @@ class HostManager:
                 db.commit()
 
                 print(f"✅ 主机更新成功: {host_id}")
+                # 在关闭会话之前，先访问所有需要的属性，确保它们被加载
+                _ = host_obj.created_at
+                _ = host_obj.updated_at
                 return self._to_dict(host_obj)
             except Exception as e:
                 db.rollback()
@@ -507,6 +513,10 @@ class HostManager:
         db = get_db_session()
         try:
             hosts = db.query(Host).order_by(Host.created_at.desc()).all()
+            # 在关闭会话之前，先访问所有需要的属性，确保它们被加载
+            for host in hosts:
+                _ = host.created_at
+                _ = host.updated_at
             return [self._to_dict(h) for h in hosts]
         finally:
             db.close()
@@ -516,6 +526,11 @@ class HostManager:
         db = get_db_session()
         try:
             host = db.query(Host).filter(Host.host_id == host_id).first()
+            if not host:
+                return None
+            # 在关闭会话之前，先访问所有需要的属性，确保它们被加载
+            _ = host.created_at
+            _ = host.updated_at
             return self._to_dict(host)
         finally:
             db.close()
@@ -525,7 +540,14 @@ class HostManager:
         db = get_db_session()
         try:
             host = db.query(Host).filter(Host.host_id == host_id).first()
-            return self._to_dict(host, include_secrets=True)
+            if not host:
+                return None
+            # 在关闭会话之前，先访问所有需要的属性，确保它们被加载
+            # 这样可以避免在 _to_dict 中访问属性时出现会话已关闭的错误
+            _ = host.created_at
+            _ = host.updated_at
+            result = self._to_dict(host, include_secrets=True)
+            return result
         finally:
             db.close()
 
