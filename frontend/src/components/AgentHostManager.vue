@@ -1,8 +1,8 @@
 <template>
   <div class="agent-host-manager-panel">
     <!-- 标签页切换 -->
-    <div class="card mb-3">
-      <div class="card-body p-2">
+    <div class="card mb-3 tabs-header-card">
+      <div class="card-body p-2 tabs-header-body">
         <div class="d-flex justify-content-between align-items-center">
           <ul class="nav nav-tabs nav-tabs-custom mb-0" role="tablist">
             <li class="nav-item" role="presentation">
@@ -37,7 +37,7 @@
               </button>
             </li>
           </ul>
-          <div class="btn-group">
+          <div class="btn-group dropdown-wrapper">
             <button 
               type="button" 
               class="btn btn-primary btn-sm dropdown-toggle" 
@@ -2272,14 +2272,28 @@ pre code {
   color: white;
 }
 
-/* 下拉菜单层级 */
-.agent-host-manager-panel .btn-group {
+/* 下拉菜单层级 - 确保标签页头部的下拉菜单正确显示 */
+.tabs-header-card {
+  overflow: visible !important;
   position: relative;
 }
 
-.agent-host-manager-panel .dropdown-menu {
+.tabs-header-body {
+  overflow: visible !important;
+  position: relative;
+}
+
+.dropdown-wrapper {
+  position: relative;
+  z-index: 1000;
+}
+
+.dropdown-wrapper .dropdown-menu {
   z-index: 1050 !important;
   position: absolute !important;
+  top: 100% !important;
+  right: 0 !important;
+  margin-top: 0.125rem !important;
 }
 
 /* 响应式 */
@@ -2307,4 +2321,5 @@ pre code {
   border-bottom: 2px solid #ffc107;
 }
 </style>
+
 
