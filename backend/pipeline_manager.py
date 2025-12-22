@@ -1343,3 +1343,59 @@ class PipelineManager:
 
             traceback.print_exc()
             return False
+
+    def check_same_branch_task_running_or_queued(
+        self, pipeline_id: str, branch: str
+    ) -> bool:
+        """
+        检查是否有相同分支的任务正在运行或排队
+        
+        Args:
+            pipeline_id: 流水线ID
+            branch: 分支名称
+            
+        Returns:
+            True 如果有相同分支的任务在运行或排队，False 否则
+        """
+        try:
+            from backend.handlers import BuildManager
+
+            build_manager = BuildManager()
+            
+            # 获取所有运行中或待执行的任务
+            running_tasks = build_manager.task_manager.list_tasks(status="running")
+            pending_tasks = build_manager.task_manager.list_tasks(status="pending")
+            
+            # 合并所有活跃任务
+            active_tasks = running_tasks + pending_tasks
+            
+            # 检查是否有相同流水线和相同分支的任务
+            for task in active_tasks:
+                task_config = task.get("task_config", {})
+                task_pipeline_id = task_config.get("pipeline_id")
+                task_branch = task_config.get("branch")
+                
+                # 也检查任务对象本身的 branch 字段（向后兼容）
+                if not task_branch:
+                    task_branch = task.get("branch")
+                
+                # 检查是否是同一流水线和同一分支
+                if task_pipeline_id == pipeline_id and task_branch == branch:
+                    task_id = task.get("task_id", "unknown")
+                    task_status = task.get("status", "unknown")
+                    print(
+                        f"🔍 [分支检查] 流水线 {pipeline_id[:8]}... 分支 {branch} 已有任务在 {task_status}: task_id={task_id[:8]}..."
+                    )
+                    return True
+            
+            print(
+                f"🔍 [分支检查] 流水线 {pipeline_id[:8]}... 分支 {branch} 没有运行中或排队的任务，可以立即执行"
+            )
+            return False
+        except Exception as e:
+            print(f"⚠️ [分支检查] 检查相同分支任务失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+            # 出错时返回 False，允许创建任务（避免阻塞）
+            return False

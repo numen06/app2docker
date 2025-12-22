@@ -192,18 +192,6 @@ import json
 
 router = APIRouter()
 
-# Webhook 并发控制：为每个流水线创建独立的锁
-_webhook_locks: dict[str, asyncio.Lock] = {}
-_webhook_locks_lock = asyncio.Lock()
-
-
-async def _get_webhook_lock(pipeline_id: str) -> asyncio.Lock:
-    """获取指定流水线的 Webhook 锁（线程安全）"""
-    async with _webhook_locks_lock:
-        if pipeline_id not in _webhook_locks:
-            _webhook_locks[pipeline_id] = asyncio.Lock()
-        return _webhook_locks[pipeline_id]
-
 
 # === Pydantic 模型 ===
 class LoginRequest(BaseModel):
@@ -5930,138 +5918,86 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     }
                 )
 
-        # 获取该流水线的锁，防止并发创建任务
-        webhook_lock = await _get_webhook_lock(pipeline_id)
+        # 基于分支的任务创建逻辑：相同分支需要排队，不同分支可以并发
+        print(
+            f"🔍 [Webhook触发] 开始基于分支的任务创建: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
+        )
         
-        # 使用锁保护任务创建过程
-        async with webhook_lock:
-            # 检查是否有正在运行的任务（不同配置的任务）
-            print(
-                f"🔍 [Webhook触发] 检查运行中的任务: pipeline={pipeline.get('name')}, pipeline_id={pipeline_id[:8]}..."
+        # 检查是否有相同分支的任务在运行或排队
+        has_same_branch_task = manager.check_same_branch_task_running_or_queued(
+            pipeline_id, branch
+        )
+        
+        queued_task_ids = []
+        started_task_ids = []
+        
+        # 为每个标签创建任务
+        for tag in tags:
+            print(f"🔍 调用 pipeline_to_task_config:")
+            print(f"   - branch 参数: {branch}")
+            print(f"   - webhook_branch 参数: {webhook_branch}")
+            print(f"   - tag 参数: {tag}")
+            task_config = pipeline_to_task_config(
+                pipeline,
+                trigger_source="webhook",
+                branch=branch,
+                tag=tag,
+                webhook_branch=webhook_branch,
+                branch_tag_mapping=branch_tag_mapping,
             )
-            current_task_id = manager.get_pipeline_running_task(pipeline_id)
-            if current_task_id:
-                print(
-                    f"🔍 [Webhook触发] 发现运行中的任务（不同配置）: task_id={current_task_id[:8]}..."
-                )
-                # 检查任务是否真的在运行
-                task = build_manager.task_manager.get_task(current_task_id)
-                if task and task.get("status") in ["pending", "running"]:
-                    # 有任务正在运行（且配置不同），为每个标签创建新任务（状态为 pending，等待执行）
-                    queued_task_ids = []
-                    for tag in tags:
-                        print(f"🔍 调用 pipeline_to_task_config:")
-                        print(f"   - branch 参数: {branch}")
-                        print(f"   - webhook_branch 参数: {webhook_branch}")
-                        print(f"   - tag 参数: {tag}")
-                        task_config = pipeline_to_task_config(
-                            pipeline,
-                            trigger_source="webhook",
-                            branch=branch,
-                            tag=tag,
-                            webhook_branch=webhook_branch,
-                            branch_tag_mapping=branch_tag_mapping,
-                        )
-                        print(
-                            f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
-                        )
-                        queued_task_id = build_manager._trigger_task_from_config(
-                            task_config
-                        )
-                        queued_task_ids.append(queued_task_id)
-                        # 注意：防抖记录已在 check_duplicate_task -> check_same_trigger_info 中通过预占机制更新，此处不再需要更新
-                        print(
-                            f"✅ [任务创建] 已创建排队任务: task_id={queued_task_id[:8]}..., branch={branch}, tag={tag}"
-                        )
-
-                    queue_length = manager.get_queue_length(pipeline_id)
-
-                    if len(tags) > 1:
-                        print(
-                            f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务（不同配置） {current_task_id[:8]}，已创建 {len(queued_task_ids)} 个新任务（pending）"
-                        )
-                    else:
-                        print(
-                            f"⚠️ 流水线 {pipeline.get('name')} 已有正在执行的任务（不同配置） {current_task_id[:8]}，已创建新任务（pending）"
-                        )
-
-                    return JSONResponse(
-                        {
-                            "message": (
-                                f"流水线已有正在执行的任务，已创建 {len(queued_task_ids)} 个任务并加入队列"
-                                if len(tags) > 1
-                                else "流水线已有正在执行的任务，任务已创建并加入队列"
-                            ),
-                            "status": "queued",
-                            "task_id": queued_task_ids[0] if queued_task_ids else None,
-                            "task_ids": (
-                                queued_task_ids if len(queued_task_ids) > 1 else None
-                            ),
-                            "queue_length": queue_length,
-                            "current_task_id": current_task_id,
-                            "pipeline": pipeline.get("name"),
-                        }
-                    )
-                else:
-                    # 任务已完成或不存在，解绑
-                    manager.unbind_task(pipeline_id)
-
-            # 没有运行中的任务，为每个标签立即启动构建任务
             print(
-                f"🔍 [Webhook触发] 没有运行中的任务，开始创建任务: pipeline={pipeline.get('name')}, tags={tags}"
+                f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
             )
-            started_task_ids = []
-            for tag in tags:
-                print(f"🔍 调用 pipeline_to_task_config:")
-                print(f"   - branch 参数: {branch}")
-                print(f"   - webhook_branch 参数: {webhook_branch}")
-                print(f"   - tag 参数: {tag}")
-                task_config = pipeline_to_task_config(
-                    pipeline,
-                    trigger_source="webhook",
-                    branch=branch,
-                    tag=tag,
-                    webhook_branch=webhook_branch,
-                    branch_tag_mapping=branch_tag_mapping,
-                )
+            
+            # 创建任务（_trigger_task_from_config 会创建 pending 状态的任务）
+            task_id = build_manager._trigger_task_from_config(task_config)
+            
+            # 根据是否有相同分支的任务来决定是否立即启动
+            if has_same_branch_task:
+                # 有相同分支的任务在运行或排队，新任务加入队列（保持 pending 状态）
+                queued_task_ids.append(task_id)
                 print(
-                    f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
+                    f"✅ [任务创建] 已创建排队任务: task_id={task_id[:8]}..., branch={branch}, tag={tag}"
                 )
-                started_task_id = build_manager._trigger_task_from_config(task_config)
-                started_task_ids.append(started_task_id)
-                # 注意：防抖记录已在 check_same_trigger_info 中通过预占机制更新，此处不再需要更新
+            else:
+                # 没有相同分支的任务，立即启动（任务会自动从 pending 转为 running）
+                started_task_ids.append(task_id)
                 print(
-                    f"✅ [任务创建] 已创建并启动任务: task_id={started_task_id[:8]}..., branch={branch}, tag={tag}"
+                    f"✅ [任务创建] 已创建并启动任务: task_id={task_id[:8]}..., branch={branch}, tag={tag}"
                 )
+        
+        # 提取 webhook 相关信息
+        webhook_info = {
+            "branch": branch,
+            "tags": tags,  # 添加标签列表信息
+            "event": request.headers.get("x-gitee-event")
+            or request.headers.get("x-gitlab-event")
+            or request.headers.get("x-github-event", "unknown"),
+            "platform": (
+                "gitee"
+                if "x-gitee-event" in request.headers
+                else ("gitlab" if "x-gitlab-event" in request.headers else "github")
+            ),
+        }
 
-            task_id = started_task_ids[0] if started_task_ids else None
+        # 尝试从 payload 中提取更多信息
+        if payload:
+            if "commits" in payload and payload["commits"]:
+                webhook_info["commit_count"] = len(payload["commits"])
+                webhook_info["last_commit"] = (
+                    payload["commits"][0].get("message", "")[:100]
+                    if payload["commits"]
+                    else ""
+                )
+            if "repository" in payload:
+                webhook_info["repository"] = payload["repository"].get("name", "")
 
-            # 提取 webhook 相关信息
-            webhook_info = {
-                "branch": branch,
-                "tags": tags,  # 添加标签列表信息
-                "event": request.headers.get("x-gitee-event")
-                or request.headers.get("x-gitlab-event")
-                or request.headers.get("x-github-event", "unknown"),
-                "platform": (
-                    "gitee"
-                    if "x-gitee-event" in request.headers
-                    else ("gitlab" if "x-gitlab-event" in request.headers else "github")
-                ),
-            }
-
-            # 尝试从 payload 中提取更多信息
-            if payload:
-                if "commits" in payload and payload["commits"]:
-                    webhook_info["commit_count"] = len(payload["commits"])
-                    webhook_info["last_commit"] = (
-                        payload["commits"][0].get("message", "")[:100]
-                        if payload["commits"]
-                        else ""
-                    )
-                if "repository" in payload:
-                    webhook_info["repository"] = payload["repository"].get("name", "")
-
+        # 根据任务状态返回不同的响应
+        if queued_task_ids:
+            # 有排队任务
+            task_id = queued_task_ids[0]
+            queue_length = manager.get_queue_length(pipeline_id)
+            
             # 记录触发并绑定任务（webhook 触发，只绑定第一个任务）
             manager.record_trigger(
                 pipeline["pipeline_id"],
@@ -6070,7 +6006,60 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 trigger_info=webhook_info,
             )
 
-            # 记录操作日志（记录所有任务）
+            # 记录操作日志
+            OperationLogger.log(
+                "webhook",
+                "pipeline_trigger",
+                {
+                    "pipeline_id": pipeline["pipeline_id"],
+                    "pipeline_name": pipeline.get("name"),
+                    "task_id": task_id,
+                    "task_ids": queued_task_ids if len(queued_task_ids) > 1 else None,
+                    "tags": tags,
+                    "branch": branch,
+                    "trigger_source": "webhook",
+                    "webhook_info": webhook_info,
+                },
+            )
+            
+            if len(tags) > 1:
+                print(
+                    f"🔔 Webhook 触发，已创建 {len(queued_task_ids)} 个任务并加入队列: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
+                )
+            else:
+                print(
+                    f"🔔 Webhook 触发，已创建任务并加入队列: pipeline={pipeline.get('name')}, branch={branch}, tag={tags[0]}"
+                )
+            
+            return JSONResponse(
+                {
+                    "message": (
+                        f"已创建 {len(queued_task_ids)} 个任务并加入队列（相同分支任务正在执行）"
+                        if len(tags) > 1
+                        else "任务已创建并加入队列（相同分支任务正在执行）"
+                    ),
+                    "status": "queued",
+                    "task_id": task_id,
+                    "task_ids": queued_task_ids if len(queued_task_ids) > 1 else None,
+                    "queue_length": queue_length,
+                    "pipeline": pipeline.get("name"),
+                    "branch": branch,
+                    "tags": tags,
+                }
+            )
+        else:
+            # 所有任务都立即启动
+            task_id = started_task_ids[0] if started_task_ids else None
+            
+            # 记录触发并绑定任务（webhook 触发，只绑定第一个任务）
+            manager.record_trigger(
+                pipeline["pipeline_id"],
+                task_id,
+                trigger_source="webhook",
+                trigger_info=webhook_info,
+            )
+
+            # 记录操作日志
             OperationLogger.log(
                 "webhook",
                 "pipeline_trigger",
@@ -6085,7 +6074,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     "webhook_info": webhook_info,
                 },
             )
-
+            
             if len(tags) > 1:
                 print(
                     f"🔔 Webhook 触发，已启动 {len(started_task_ids)} 个构建任务: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
@@ -6105,11 +6094,11 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     "status": "started",
                     "task_id": task_id,
                     "task_ids": started_task_ids if len(started_task_ids) > 1 else None,
-                "tags": tags,
-                "pipeline": pipeline.get("name"),
-                "branch": branch,
-            }
-        )
+                    "tags": tags,
+                    "pipeline": pipeline.get("name"),
+                    "branch": branch,
+                }
+            )
     except HTTPException:
         raise
     except Exception as e:
