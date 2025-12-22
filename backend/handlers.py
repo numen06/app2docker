@@ -1335,6 +1335,58 @@ class App2DockerHandler(BaseHTTPRequestHandler):
         return  # 静音日志
 
 
+def _retry_login_and_push(
+    docker_builder,
+    repository: str,
+    tag: str,
+    auth_config: dict,
+    username: str = None,
+    password: str = None,
+    registry_host: str = None,
+    log_func=None,
+):
+    """
+    在推送失败时尝试重新登录并重试推送
+
+    Args:
+        docker_builder: Docker构建器实例
+        repository: 镜像仓库名称
+        tag: 镜像标签
+        auth_config: 认证配置字典
+        username: 用户名（用于重试登录）
+        password: 密码（用于重试登录）
+        registry_host: Registry地址（用于重试登录）
+        log_func: 日志函数
+
+    Returns:
+        bool: 是否成功重新登录
+    """
+    if log_func is None:
+        log_func = print
+
+    if not (username and password):
+        return False
+
+    try:
+        if hasattr(docker_builder, "client") and docker_builder.client:
+            login_registry = (
+                registry_host
+                if registry_host and registry_host != "docker.io"
+                else None
+            )
+            log_func(f"🔑 重新登录到registry: {login_registry or 'docker.io'}\n")
+            login_result = docker_builder.client.login(
+                username=username,
+                password=password,
+                registry=login_registry,
+            )
+            log_func(f"✅ 重新登录成功\n")
+            return True
+    except Exception as e:
+        log_func(f"❌ 重新登录失败: {str(e)}\n")
+    return False
+
+
 class BuildManager:
     _instance_lock = threading.Lock()
     _instance = None
@@ -1972,7 +2024,11 @@ class BuildManager:
 
             if should_push:
                 # 推送时直接使用构建好的镜像名，根据镜像名找到对应的registry获取认证信息
-                from backend.config import get_active_registry, get_all_registries
+                from backend.config import (
+                    get_active_registry,
+                    get_all_registries,
+                    get_registry_by_name,
+                )
 
                 # 根据镜像名找到对应的registry配置
                 def find_matching_registry_for_push(image_name):
@@ -1990,7 +2046,8 @@ class BuildManager:
                                 or image_registry.startswith(reg_address)
                                 or reg_address.startswith(image_registry)
                             ):
-                                return reg
+                                # 使用get_registry_by_name获取包含解密密码的完整配置
+                                return get_registry_by_name(reg.get("name"))
                     return None
 
                 # 尝试根据镜像名找到匹配的registry
@@ -3112,7 +3169,8 @@ logs/
                                                 log(
                                                     f"✅ 找到完全匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
-                                                return reg
+                                                # 使用 get_registry_by_name 获取包含解密密码的配置
+                                                return get_registry_by_name(reg_name)
 
                                         # 次优匹配：包含关系
                                         for reg in all_registries:
@@ -3127,7 +3185,8 @@ logs/
                                                 log(
                                                     f"✅ 找到部分匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
-                                                return reg
+                                                # 使用 get_registry_by_name 获取包含解密密码的配置
+                                                return get_registry_by_name(reg_name)
 
                                         log(f"⚠️  未找到匹配的registry配置\n")
                                     return None
@@ -3137,16 +3196,15 @@ logs/
                                     log(
                                         f"🔍 使用服务指定的 registry: {service_registry}\n"
                                     )
-                                    all_registries = get_all_registries()
-                                    registry_config = None
-                                    for reg in all_registries:
-                                        if reg.get("name") == service_registry:
-                                            registry_config = reg
-                                            log(
-                                                f"✅ 找到指定的 registry 配置: {service_registry}\n"
-                                            )
-                                            break
-                                    if not registry_config:
+                                    # 使用 get_registry_by_name 获取包含解密密码的配置
+                                    registry_config = get_registry_by_name(
+                                        service_registry
+                                    )
+                                    if registry_config:
+                                        log(
+                                            f"✅ 找到指定的 registry 配置: {service_registry}\n"
+                                        )
+                                    else:
                                         log(
                                             f"⚠️  未找到指定的 registry: {service_registry}，将尝试从镜像名匹配\n"
                                         )
@@ -3190,23 +3248,175 @@ logs/
                                 # service_image_name 格式: image_name-service_name (可能包含 registry 前缀)
                                 push_repository = service_image_name
                                 push_tag = service_tag_value  # 使用服务配置的 tag
-                                push_stream = docker_builder.push_image(
-                                    push_repository, push_tag, auth_config=auth_config
-                                )
-                                for chunk in push_stream:
-                                    if isinstance(chunk, dict):
-                                        if "status" in chunk:
-                                            log(f"[{service_name}] {chunk['status']}\n")
-                                        elif "error" in chunk:
-                                            error_msg = chunk["error"]
-                                            log(
-                                                f"[{service_name}] ❌ 推送错误: {error_msg}\n"
-                                            )
-                                            raise RuntimeError(
-                                                f"服务 {service_name} 推送失败: {error_msg}"
-                                            )
 
-                                log(f"✅ 服务 {service_name} 推送完成\n")
+                                # 推送并处理错误（支持重试）
+                                push_retried = False
+
+                                try:
+                                    push_stream = docker_builder.push_image(
+                                        push_repository,
+                                        push_tag,
+                                        auth_config=auth_config,
+                                    )
+
+                                    for chunk in push_stream:
+                                        if isinstance(chunk, dict):
+                                            if "status" in chunk:
+                                                log(
+                                                    f"[{service_name}] {chunk['status']}\n"
+                                                )
+                                            elif "error" in chunk:
+                                                error_msg = chunk["error"]
+                                                error_detail = chunk.get(
+                                                    "errorDetail", {}
+                                                )
+                                                log(
+                                                    f"[{service_name}] ❌ 推送错误: {error_msg}\n"
+                                                )
+
+                                                # 检查是否是认证错误
+                                                is_auth_error = (
+                                                    "denied" in error_msg.lower()
+                                                    or "unauthorized"
+                                                    in error_msg.lower()
+                                                    or "401"
+                                                    in str(error_detail).lower()
+                                                    or "authentication required"
+                                                    in error_msg.lower()
+                                                )
+
+                                                if is_auth_error and not push_retried:
+                                                    # 尝试重新登录并重试
+                                                    log(
+                                                        f"[{service_name}] 🔄 检测到认证错误，尝试重新登录...\n"
+                                                    )
+                                                    if _retry_login_and_push(
+                                                        docker_builder,
+                                                        push_repository,
+                                                        push_tag,
+                                                        auth_config,
+                                                        username,
+                                                        password,
+                                                        registry_host,
+                                                        log,
+                                                    ):
+                                                        # 重新登录成功，重试推送
+                                                        log(
+                                                            f"[{service_name}] 🔄 重新登录成功，重试推送...\n"
+                                                        )
+                                                        push_retried = True
+                                                        push_stream = (
+                                                            docker_builder.push_image(
+                                                                push_repository,
+                                                                push_tag,
+                                                                auth_config=auth_config,
+                                                            )
+                                                        )
+                                                        for retry_chunk in push_stream:
+                                                            if isinstance(
+                                                                retry_chunk, dict
+                                                            ):
+                                                                if (
+                                                                    "status"
+                                                                    in retry_chunk
+                                                                ):
+                                                                    log(
+                                                                        f"[{service_name}] {retry_chunk['status']}\n"
+                                                                    )
+                                                                elif (
+                                                                    "error"
+                                                                    in retry_chunk
+                                                                ):
+                                                                    retry_error_msg = (
+                                                                        retry_chunk[
+                                                                            "error"
+                                                                        ]
+                                                                    )
+                                                                    log(
+                                                                        f"[{service_name}] ❌ 重试推送仍然失败: {retry_error_msg}\n"
+                                                                    )
+                                                                    raise RuntimeError(
+                                                                        f"服务 {service_name} 推送失败（已重试）: {retry_error_msg}"
+                                                                    )
+                                                        # 重试成功，跳出外层循环
+                                                        break
+                                                    else:
+                                                        raise RuntimeError(
+                                                            f"服务 {service_name} 推送失败: {error_msg}（重新登录失败）"
+                                                        )
+                                                else:
+                                                    raise RuntimeError(
+                                                        f"服务 {service_name} 推送失败: {error_msg}"
+                                                    )
+
+                                    log(f"✅ 服务 {service_name} 推送完成\n")
+
+                                except RuntimeError:
+                                    raise
+                                except Exception as e:
+                                    error_str = str(e)
+                                    # 检查是否是认证错误
+                                    is_auth_error = (
+                                        "denied" in error_str.lower()
+                                        or "unauthorized" in error_str.lower()
+                                        or "401" in error_str
+                                        or "authentication required"
+                                        in error_str.lower()
+                                    )
+
+                                    if is_auth_error and not push_retried:
+                                        log(
+                                            f"[{service_name}] 🔄 检测到认证错误，尝试重新登录...\n"
+                                        )
+                                        if _retry_login_and_push(
+                                            docker_builder,
+                                            push_repository,
+                                            push_tag,
+                                            auth_config,
+                                            username,
+                                            password,
+                                            registry_host,
+                                            log,
+                                        ):
+                                            # 重新登录成功，重试推送
+                                            log(
+                                                f"[{service_name}] 🔄 重新登录成功，重试推送...\n"
+                                            )
+                                            try:
+                                                push_stream = docker_builder.push_image(
+                                                    push_repository,
+                                                    push_tag,
+                                                    auth_config=auth_config,
+                                                )
+                                                for retry_chunk in push_stream:
+                                                    if isinstance(retry_chunk, dict):
+                                                        if "status" in retry_chunk:
+                                                            log(
+                                                                f"[{service_name}] {retry_chunk['status']}\n"
+                                                            )
+                                                        elif "error" in retry_chunk:
+                                                            retry_error_msg = (
+                                                                retry_chunk["error"]
+                                                            )
+                                                            log(
+                                                                f"[{service_name}] ❌ 重试推送仍然失败: {retry_error_msg}\n"
+                                                            )
+                                                            raise RuntimeError(
+                                                                f"服务 {service_name} 推送失败（已重试）: {retry_error_msg}"
+                                                            )
+                                                log(
+                                                    f"✅ 服务 {service_name} 推送完成（重试成功）\n"
+                                                )
+                                            except Exception as retry_error:
+                                                raise RuntimeError(
+                                                    f"服务 {service_name} 推送失败（已重试）: {str(retry_error)}"
+                                                )
+                                        else:
+                                            raise RuntimeError(
+                                                f"服务 {service_name} 推送失败: {error_str}（重新登录失败）"
+                                            )
+                                    else:
+                                        raise
                             except Exception as e:
                                 log(f"❌ 服务 {service_name} 推送失败: {str(e)}\n")
                                 # 推送失败不影响构建成功
@@ -3302,7 +3512,8 @@ logs/
                                 or reg_address.startswith(image_registry)
                             ):
                                 log(f"✅ 找到匹配的registry: {reg_name}\n")
-                                return reg
+                                # 使用get_registry_by_name获取包含解密密码的完整配置
+                                return get_registry_by_name(reg_name)
                     return None
 
                 # 尝试根据镜像名找到匹配的registry
@@ -3411,6 +3622,8 @@ logs/
                 else:
                     log(f"⚠️  registry未配置认证信息，推送可能失败\n")
 
+                # 推送并处理错误（支持重试）
+                push_retried = False
                 try:
                     # 直接推送构建好的镜像
                     log(f"🚀 开始推送，repository: {push_repository}, tag: {tag}\n")
@@ -3420,7 +3633,6 @@ logs/
                         )
                     else:
                         log(f"⚠️  未使用认证信息\n")
-
                     push_stream = docker_builder.push_image(
                         push_repository, tag, auth_config=auth_config
                     )
@@ -3434,32 +3646,158 @@ logs/
                                 log(f"❌ 推送错误: {error_msg}\n")
                                 if error_detail:
                                     log(f"❌ 错误详情: {error_detail}\n")
-                                raise RuntimeError(chunk["error"])
+
+                                # 检查是否是认证错误
+                                is_auth_error = (
+                                    "denied" in error_msg.lower()
+                                    or "unauthorized" in error_msg.lower()
+                                    or "401" in str(error_detail).lower()
+                                    or "authentication required" in error_msg.lower()
+                                )
+
+                                if is_auth_error and not push_retried:
+                                    # 尝试重新登录并重试
+                                    log(f"🔄 检测到认证错误，尝试重新登录...\n")
+                                    if _retry_login_and_push(
+                                        docker_builder,
+                                        push_repository,
+                                        tag,
+                                        auth_config,
+                                        username,
+                                        password,
+                                        registry_host,
+                                        log,
+                                    ):
+                                        # 重新登录成功，重试推送
+                                        log(f"🔄 重新登录成功，重试推送...\n")
+                                        push_retried = True
+                                        push_stream = docker_builder.push_image(
+                                            push_repository,
+                                            tag,
+                                            auth_config=auth_config,
+                                        )
+                                        for retry_chunk in push_stream:
+                                            if isinstance(retry_chunk, dict):
+                                                if "status" in retry_chunk:
+                                                    log(retry_chunk["status"] + "\n")
+                                                elif "error" in retry_chunk:
+                                                    retry_error_detail = (
+                                                        retry_chunk.get(
+                                                            "errorDetail", {}
+                                                        )
+                                                    )
+                                                    retry_error_msg = retry_chunk[
+                                                        "error"
+                                                    ]
+                                                    log(
+                                                        f"❌ 重试推送仍然失败: {retry_error_msg}\n"
+                                                    )
+                                                    if retry_error_detail:
+                                                        log(
+                                                            f"❌ 错误详情: {retry_error_detail}\n"
+                                                        )
+                                                    raise RuntimeError(
+                                                        f"推送失败（已重试）: {retry_error_msg}"
+                                                    )
+                                        # 重试成功，跳出外层循环
+                                        break
+                                    else:
+                                        raise RuntimeError(
+                                            f"推送失败: {error_msg}（重新登录失败）"
+                                        )
+                                else:
+                                    raise RuntimeError(chunk["error"])
                         else:
                             log(str(chunk))
 
                     log(f"✅ 推送完成: {full_tag}\n")
+                except RuntimeError:
+                    raise
                 except Exception as e:
                     error_str = str(e)
                     log(f"❌ 推送异常: {error_str}\n")
 
-                    # 如果是认证错误，提供更详细的提示
-                    if (
+                    # 检查是否是认证错误
+                    is_auth_error = (
                         "denied" in error_str.lower()
                         or "unauthorized" in error_str.lower()
                         or "401" in error_str
-                    ):
-                        log(f"💡 推送认证失败，建议：\n")
-                        log(f"   1. 确认registry配置中的用户名和密码正确\n")
-                        log(f"   2. 对于阿里云registry，请使用独立的Registry登录密码\n")
-                        log(f"   3. 可以尝试手动执行以下命令测试：\n")
-                        log(
-                            f"      docker login --username={username} {registry_host}\n"
-                        )
-                        log(f"      docker push {full_tag}\n")
-                        log(
-                            f"   4. 如果手动命令成功，说明配置有问题；如果也失败，说明认证信息不正确\n"
-                        )
+                        or "authentication required" in error_str.lower()
+                    )
+
+                    if is_auth_error:
+                        # 如果还没有重试过，尝试重新登录并重试
+                        if username and password and not push_retried:
+                            log(f"🔄 检测到认证错误，尝试重新登录...\n")
+                            if _retry_login_and_push(
+                                docker_builder,
+                                push_repository,
+                                tag,
+                                auth_config,
+                                username,
+                                password,
+                                registry_host,
+                                log,
+                            ):
+                                # 重新登录成功，重试推送
+                                log(f"🔄 重新登录成功，重试推送...\n")
+                                try:
+                                    push_stream = docker_builder.push_image(
+                                        push_repository, tag, auth_config=auth_config
+                                    )
+                                    for retry_chunk in push_stream:
+                                        if isinstance(retry_chunk, dict):
+                                            if "status" in retry_chunk:
+                                                log(retry_chunk["status"] + "\n")
+                                            elif "error" in retry_chunk:
+                                                retry_error_msg = retry_chunk["error"]
+                                                log(
+                                                    f"❌ 重试推送仍然失败: {retry_error_msg}\n"
+                                                )
+                                                raise RuntimeError(
+                                                    f"推送失败（已重试）: {retry_error_msg}"
+                                                )
+                                    log(f"✅ 推送完成（重试成功）: {full_tag}\n")
+                                except Exception as retry_error:
+                                    raise RuntimeError(
+                                        f"推送失败（已重试）: {str(retry_error)}"
+                                    )
+                            else:
+                                # 重新登录失败，提供详细提示
+                                log(f"💡 推送认证失败，建议：\n")
+                                log(f"   1. 确认registry配置中的用户名和密码正确\n")
+                                log(
+                                    f"   2. 对于阿里云registry，请使用独立的Registry登录密码\n"
+                                )
+                                log(f"   3. 检查认证信息是否过期（如访问令牌）\n")
+                                log(f"   4. 可以尝试手动执行以下命令测试：\n")
+                                log(
+                                    f"      docker login --username={username} {registry_host or ''}\n"
+                                )
+                                log(f"      docker push {full_tag}\n")
+                                log(
+                                    f"   5. 如果手动命令成功，说明配置有问题；如果也失败，说明认证信息不正确\n"
+                                )
+                                raise RuntimeError(
+                                    f"推送失败: {error_str}（重新登录失败）"
+                                )
+                        else:
+                            # 已经重试过或没有认证信息，提供详细提示
+                            log(f"💡 推送认证失败，建议：\n")
+                            log(f"   1. 确认registry配置中的用户名和密码正确\n")
+                            log(
+                                f"   2. 对于阿里云registry，请使用独立的Registry登录密码\n"
+                            )
+                            log(f"   3. 检查认证信息是否过期（如访问令牌）\n")
+                            log(f"   4. 可以尝试手动执行以下命令测试：\n")
+                            log(
+                                f"      docker login --username={username or 'YOUR_USERNAME'} {registry_host or ''}\n"
+                            )
+                            log(f"      docker push {full_tag}\n")
+                            log(
+                                f"   5. 如果手动命令成功，说明配置有问题；如果也失败，说明认证信息不正确\n"
+                            )
+                            raise
 
                     # 推送失败不影响构建成功，记录错误但继续完成任务
                     log(f"⚠️ 推送失败，但构建已完成，任务将继续完成\n")
@@ -4538,7 +4876,7 @@ class BuildTaskManager:
 
                     pipeline_manager = PipelineManager()
                     pipeline_id = pipeline_manager.find_pipeline_by_task(task_id)
-                    
+
                     if pipeline_id:
                         pipeline_manager.unbind_task(pipeline_id)
                         print(
@@ -4547,7 +4885,9 @@ class BuildTaskManager:
 
                         # 如果任务成功完成，触发构建后webhook
                         if status == "completed":
-                            print(f"🔔 任务 {task_id[:8]} 已完成，准备触发构建后webhook: pipeline_id={pipeline_id[:8]}")
+                            print(
+                                f"🔔 任务 {task_id[:8]} 已完成，准备触发构建后webhook: pipeline_id={pipeline_id[:8]}"
+                            )
                             try:
                                 # 在后台线程中异步触发webhook
                                 import threading
@@ -4556,7 +4896,9 @@ class BuildTaskManager:
                                     import asyncio
 
                                     try:
-                                        print(f"🔔 开始异步触发构建后webhook: pipeline_id={pipeline_id[:8]}, task_id={task_id[:8]}")
+                                        print(
+                                            f"🔔 开始异步触发构建后webhook: pipeline_id={pipeline_id[:8]}, task_id={task_id[:8]}"
+                                        )
                                         loop = asyncio.new_event_loop()
                                         asyncio.set_event_loop(loop)
                                         loop.run_until_complete(
@@ -4568,7 +4910,9 @@ class BuildTaskManager:
                                             )
                                         )
                                         loop.close()
-                                        print(f"✅ 构建后webhook触发完成: pipeline_id={pipeline_id[:8]}")
+                                        print(
+                                            f"✅ 构建后webhook触发完成: pipeline_id={pipeline_id[:8]}"
+                                        )
                                     except Exception as e:
                                         print(f"⚠️ 触发构建后webhook异常: {e}")
                                         import traceback
@@ -4579,15 +4923,19 @@ class BuildTaskManager:
                                     target=trigger_webhooks, daemon=True
                                 )
                                 thread.start()
-                                print(f"✅ 已启动构建后webhook触发线程: pipeline_id={pipeline_id[:8]}")
+                                print(
+                                    f"✅ 已启动构建后webhook触发线程: pipeline_id={pipeline_id[:8]}"
+                                )
                             except Exception as webhook_error:
                                 print(f"⚠️ 触发构建后webhook失败: {webhook_error}")
                                 import traceback
 
                                 traceback.print_exc()
                     else:
-                        print(f"ℹ️ 任务 {task_id[:8]} 未关联流水线，跳过构建后webhook触发")
-                    
+                        print(
+                            f"ℹ️ 任务 {task_id[:8]} 未关联流水线，跳过构建后webhook触发"
+                        )
+
                     # 处理队列中的下一个任务（相同流水线）
                     if pipeline_id:
                         _process_next_queued_task(pipeline_manager, pipeline_id)
@@ -5164,11 +5512,7 @@ class BuildTaskManager:
             tag=tag,
             source_config_id=task_id,  # 标记这是从配置触发的任务
             trigger_source=trigger_source,
-            source=(
-                "Webhook"
-                if trigger_source == "webhook"
-                else "手动"
-            ),
+            source=("Webhook" if trigger_source == "webhook" else "手动"),
         )
 
         # 更新原始配置的执行统计
@@ -6153,7 +6497,9 @@ async def _trigger_post_build_webhooks(
             print(f"ℹ️ 流水线 {pipeline.get('name')} 没有配置构建后Webhook")
             return
 
-        print(f"🔔 开始触发构建后Webhook: pipeline={pipeline.get('name')}, task_id={task_id[:8]}, webhook数量={len(post_build_webhooks)}")
+        print(
+            f"🔔 开始触发构建后Webhook: pipeline={pipeline.get('name')}, task_id={task_id[:8]}, webhook数量={len(post_build_webhooks)}"
+        )
 
         # 构建模板变量上下文
         task_config = task_obj.task_config or {}
@@ -6197,11 +6543,14 @@ async def _trigger_post_build_webhooks(
             except Exception as e:
                 print(f"⚠️ Webhook {idx + 1} 渲染模板失败: {e}")
                 import traceback
+
                 traceback.print_exc()
                 body = body_template
 
             # 发送webhook请求
-            print(f"🔔 触发构建后webhook {idx + 1}: pipeline={pipeline.get('name')}, url={url}, method={method}")
+            print(
+                f"🔔 触发构建后webhook {idx + 1}: pipeline={pipeline.get('name')}, url={url}, method={method}"
+            )
             try:
                 result = await trigger_webhook(url, method, headers, body)
 
@@ -6219,6 +6568,7 @@ async def _trigger_post_build_webhooks(
             except Exception as e:
                 print(f"❌ Webhook {idx + 1} 触发异常: url={url}, error={str(e)}")
                 import traceback
+
                 traceback.print_exc()
     except Exception as e:
         print(f"⚠️ 触发构建后webhook异常: {e}")

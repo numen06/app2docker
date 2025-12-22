@@ -147,13 +147,15 @@ class PipelineScheduler:
             from backend.handlers import pipeline_to_task_config
             task_config = pipeline_to_task_config(pipeline, trigger_source="cron")
             
-            # 检查防抖（5秒内重复触发直接创建任务，状态为 pending）
-            if self.pipeline_manager.check_debounce(pipeline_id, debounce_seconds=5):
-                if self.build_manager is None:
-                    self.build_manager = BuildManager()
-                task_id = self.build_manager._trigger_task_from_config(task_config)
-                queue_length = self.pipeline_manager.get_queue_length(pipeline_id)
-                print(f"⚠️ 流水线 {pipeline_name} 触发过于频繁（防抖），已创建任务（pending），队列长度: {queue_length}")
+            # 检查防抖和相同信息（3秒内相同信息要屏蔽）
+            is_same_trigger = self.pipeline_manager.check_same_trigger_info(
+                pipeline_id, task_config, debounce_seconds=3
+            )
+            if is_same_trigger:
+                # 3秒内相同信息，屏蔽
+                print(
+                    f"🚫 流水线 {pipeline_name} 触发被屏蔽（3秒内相同信息）"
+                )
                 return
             
             # 检查是否有正在运行的任务
@@ -167,6 +169,8 @@ class PipelineScheduler:
                 if task and task.get("status") in ["pending", "running"]:
                     # 有任务正在运行，立即创建新任务（状态为 pending，等待执行）
                     task_id = self.build_manager._trigger_task_from_config(task_config)
+                    # 更新最后一次触发的配置信息
+                    self.pipeline_manager.update_last_trigger_config(pipeline_id, task_config)
                     queue_length = self.pipeline_manager.get_queue_length(pipeline_id)
                     print(f"⚠️ 流水线 {pipeline_name} 已有正在执行的任务 {current_task_id[:8]}，已创建新任务（pending），队列长度: {queue_length}")
                     return
@@ -180,6 +184,8 @@ class PipelineScheduler:
             
             # 没有运行中的任务，立即启动构建任务
             task_id = self.build_manager._trigger_task_from_config(task_config)
+            # 更新最后一次触发的配置信息
+            self.pipeline_manager.update_last_trigger_config(pipeline_id, task_config)
             
             print(f"✅ 定时触发流水线: {pipeline_name}, 任务ID: {task_id[:8]}")
             

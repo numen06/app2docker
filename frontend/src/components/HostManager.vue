@@ -1,12 +1,5 @@
 <template>
   <div class="host-manager-panel" v-show="shouldShow">
-    <!-- 添加主机按钮 -->
-    <div class="d-flex justify-content-end mb-3" v-if="filterType === 'all' || filterType === 'ssh'">
-      <button class="btn btn-primary btn-sm" @click="showAddModal = true">
-        <i class="fas fa-plus"></i> 添加SSH主机
-      </button>
-    </div>
-
     <!-- 主机列表 - 卡片式布局 -->
     <div v-if="loading" class="text-center py-5">
       <span class="spinner-border spinner-border-sm"></span> 加载中...
@@ -14,9 +7,6 @@
     <div v-else-if="filteredHosts.length === 0" class="text-center py-5 text-muted">
       <i class="fas fa-server fa-3x mb-3"></i>
       <p class="mb-0">暂无SSH主机</p>
-      <button class="btn btn-primary btn-sm mt-2" @click="showAddModal = true">
-        <i class="fas fa-plus"></i> 添加主机
-      </button>
     </div>
     <div v-else class="row g-4">
       <div
