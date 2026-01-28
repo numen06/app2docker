@@ -114,6 +114,7 @@ class Task(Base):
     # 任务来源
     source = Column(String(50), default="手动构建")
     pipeline_id = Column(String(36), ForeignKey("pipelines.pipeline_id"), nullable=True)
+    deploy_config_id = Column(String(36), ForeignKey("deploy_configs.config_id"), nullable=True)  # 关联到部署配置
 
     # 向后兼容字段（从 task_config 中提取）
     git_url = Column(String(512))
@@ -128,10 +129,12 @@ class Task(Base):
 
     # 关系
     pipeline = relationship("Pipeline", foreign_keys=[pipeline_id])
+    deploy_config = relationship("DeployConfig", foreign_keys=[deploy_config_id])
 
     __table_args__ = (
         Index("idx_task_status", "status"),
         Index("idx_task_pipeline", "pipeline_id"),
+        Index("idx_task_deploy_config", "deploy_config_id"),
         Index("idx_task_created", "created_at"),
     )
 

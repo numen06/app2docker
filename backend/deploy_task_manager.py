@@ -101,6 +101,18 @@ class DeployTaskManager:
 
         # 获取部署配置（统一格式）
         deploy_config = self.parser.get_deploy_config(config)
+        
+        # #region agent log
+        try:
+            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                import json, time
+                compose_content_debug = deploy_config.get("compose_content", "")
+                # 检查 config 中 deploy 部分的 compose_content
+                deploy_section = config.get("deploy", {})
+                deploy_compose_content = deploy_section.get("compose_content", "") if isinstance(deploy_section, dict) else ""
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"deploy_task_manager.py:execute_task_with_manager:GET_DEPLOY_CONFIG","message":"获取部署配置","data":{"deploy_type":deploy_config.get("type"),"compose_content_length":len(compose_content_debug) if compose_content_debug else 0,"compose_content_preview":compose_content_debug[:200] if compose_content_debug else "","compose_content_full":compose_content_debug if compose_content_debug else "","config_deploy_compose_length":len(deploy_compose_content) if deploy_compose_content else 0,"config_deploy_compose_preview":deploy_compose_content[:200] if deploy_compose_content else ""},"timestamp":int(time.time()*1000)}) + "\n")
+        except: pass
+        # #endregion
 
         # 获取要执行的目标
         targets = config.get("targets", [])

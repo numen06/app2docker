@@ -340,8 +340,8 @@ class DeployExecutor:
                 "start_period": "40s",
             }
 
-        # 构建完整的 compose 配置
-        compose_config = {"version": "3.8", "services": {"app": service_config}}
+        # 构建完整的 compose 配置（Docker Compose v2 不再需要 version 字段）
+        compose_config = {"services": {"app": service_config}}
 
         # 写入文件
         with open(compose_file, "w", encoding="utf-8") as f:

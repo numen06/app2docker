@@ -18,6 +18,231 @@ class SSHDeployExecutor:
         """初始化 SSH 部署执行器"""
         pass
     
+    def _clean_compose_content(self, compose_content: str) -> str:
+        """
+        清理 docker-compose.yml 内容，移除不支持的 version 字段
+        
+        Args:
+            compose_content: 原始的 compose 内容
+            
+        Returns:
+            清理后的 compose 内容
+        """
+        # #region agent log
+        try:
+            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                import json, time
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ssh_deploy_executor.py:_clean_compose_content:ENTRY","message":"清理函数被调用","data":{"content_length":len(compose_content),"has_version":("version:" in compose_content or "version:" in compose_content)},"timestamp":int(time.time()*1000)}) + "\n")
+        except: pass
+        # #endregion
+        try:
+            import yaml
+            
+            # 解析 YAML
+            compose_config = yaml.safe_load(compose_content)
+            # #region agent log
+            try:
+                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                    import json, time
+                    # 记录解析后的原始配置结构
+                    if isinstance(compose_config, dict):
+                        services = compose_config.get('services', {})
+                        service_keys = list(services.keys()) if services else []
+                        first_service_config = services.get(service_keys[0], {}) if service_keys else {}
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"ssh_deploy_executor.py:_clean_compose_content:AFTER_PARSE","message":"解析后的原始配置","data":{"is_dict":True,"has_services":"services" in compose_config,"service_count":len(services) if services else 0,"service_names":service_keys,"first_service_keys":list(first_service_config.keys()) if first_service_config else []},"timestamp":int(time.time()*1000)}) + "\n")
+                    else:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"ssh_deploy_executor.py:_clean_compose_content:AFTER_PARSE","message":"解析失败：不是字典","data":{"type":str(type(compose_config))},"timestamp":int(time.time()*1000)}) + "\n")
+            except: pass
+            # #endregion
+            if not isinstance(compose_config, dict):
+                # 如果不是字典，返回原内容（使用简单替换）
+                logger.warning("compose 文件不是有效的字典格式，使用简单替换清理")
+                return self._simple_clean_compose(compose_content)
+            
+            # 验证结构：确保有 services 字段，且 services 是字典
+            if "services" not in compose_config:
+                logger.warning("compose 文件缺少 services 字段，返回原内容")
+                return compose_content
+            
+            if not isinstance(compose_config.get("services"), dict):
+                logger.warning("compose 文件的 services 字段不是字典格式，返回原内容")
+                return compose_content
+            
+            # 移除 version 字段（Docker Compose v2 不再需要）
+            # #region agent log
+            try:
+                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                    import json, time
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"ssh_deploy_executor.py:_clean_compose_content:BEFORE_DELETE","message":"准备移除version字段","data":{"has_version_in_dict":"version" in compose_config},"timestamp":int(time.time()*1000)}) + "\n")
+            except: pass
+            # #endregion
+            if "version" in compose_config:
+                del compose_config["version"]
+                logger.info(f"✅ 已移除 docker-compose.yml 中的 version 字段（Docker Compose v2 不再需要）")
+                # #region agent log
+                try:
+                    with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                        import json, time
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"ssh_deploy_executor.py:_clean_compose_content:AFTER_DELETE","message":"已移除version字段","data":{},"timestamp":int(time.time()*1000)}) + "\n")
+                except: pass
+                # #endregion
+            
+            # 重新序列化为 YAML，强制使用 block style（多行格式）
+            try:
+                # 必须使用 default_flow_style=False 强制 block style
+                # 这样服务配置会以多行格式输出，而不是单行 {key: value} 格式
+                cleaned_content = yaml.dump(
+                    compose_config, 
+                    default_flow_style=False,  # 强制使用 block style（多行格式）
+                    allow_unicode=True,
+                    sort_keys=False,  # 保持原始键的顺序
+                    width=1000,  # 增加行宽，避免长行被截断
+                    indent=2,  # 确保缩进一致
+                    default_style=None,  # 不使用引号样式
+                    explicit_start=False,  # 不添加 ---
+                    explicit_end=False,  # 不添加 ...
+                    Dumper=yaml.SafeDumper  # 使用 SafeDumper
+                )
+                # 确保以换行符结尾
+                if not cleaned_content.endswith('\n'):
+                    cleaned_content += '\n'
+                
+                # 验证序列化后的内容可以正确解析
+                test_parse = yaml.safe_load(cleaned_content)
+                if not isinstance(test_parse, dict) or "services" not in test_parse:
+                    logger.error("序列化后的内容无法正确解析，使用简单替换方法")
+                    return self._simple_clean_compose(compose_content)
+                
+                # 检查缩进和格式 - 确保 services 下的服务配置是字典格式
+                services = test_parse.get("services", {})
+                for service_name, service_config in services.items():
+                    if not isinstance(service_config, dict):
+                        logger.error(f"服务 {service_name} 的配置不是字典格式，使用简单替换方法")
+                        return self._simple_clean_compose(compose_content)
+                    # 确保服务配置至少有一个有效字段（如 image）
+                    if not service_config:
+                        logger.error(f"服务 {service_name} 的配置为空，使用简单替换方法")
+                        return self._simple_clean_compose(compose_content)
+                
+                # #region agent log
+                try:
+                    with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                        import json, time
+                        # 记录序列化后的完整内容和服务配置
+                        services = test_parse.get('services', {})
+                        service_keys = list(services.keys()) if services else []
+                        first_service_config = services.get(service_keys[0], {}) if service_keys else {}
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"ssh_deploy_executor.py:_clean_compose_content:AFTER_SERIALIZE","message":"序列化后的内容检查","data":{"cleaned_content":cleaned_content,"service_count":len(services),"service_names":service_keys,"first_service_keys":list(first_service_config.keys())},"timestamp":int(time.time()*1000)}) + "\n")
+                except: pass
+                # #endregion
+                    
+            except Exception as dump_error:
+                logger.error(f"YAML 序列化失败: {dump_error}，使用简单替换方法")
+                import traceback
+                logger.error(traceback.format_exc())
+                return self._simple_clean_compose(compose_content)
+            
+            # 验证清理后的内容
+            try:
+                verify_config = yaml.safe_load(cleaned_content)
+                if not isinstance(verify_config, dict):
+                    logger.error("清理后的 compose 文件不是字典格式，返回原内容")
+                    return compose_content
+                if "services" not in verify_config:
+                    logger.error("清理后的 compose 文件缺少 services 字段，返回原内容")
+                    return compose_content
+                if not isinstance(verify_config.get("services"), dict):
+                    logger.error("清理后的 compose 文件的 services 字段不是字典格式，返回原内容")
+                    return compose_content
+                
+                # 验证 services 下的每个服务都是字典
+                for service_name, service_config in verify_config["services"].items():
+                    if not isinstance(service_config, dict):
+                        logger.error(f"服务 {service_name} 的配置不是字典格式，返回原内容")
+                        return compose_content
+                
+                logger.debug(f"清理后的 compose 文件验证通过，包含 {len(verify_config['services'])} 个服务")
+                # #region agent log
+                try:
+                    with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                        import json, time
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"ssh_deploy_executor.py:_clean_compose_content:SUCCESS","message":"清理成功","data":{"cleaned_length":len(cleaned_content),"has_version_in_result":("version:" in cleaned_content or "version:" in cleaned_content),"service_count":len(verify_config.get('services',{}))},"timestamp":int(time.time()*1000)}) + "\n")
+                except: pass
+                # #endregion
+            except Exception as verify_error:
+                logger.error(f"验证清理后的 compose 文件失败: {verify_error}，返回原内容")
+                import traceback
+                logger.error(traceback.format_exc())
+                # #region agent log
+                try:
+                    with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                        import json, time
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"ssh_deploy_executor.py:_clean_compose_content:VERIFY_FAILED","message":"验证失败","data":{"error":str(verify_error)},"timestamp":int(time.time()*1000)}) + "\n")
+                except: pass
+                # #endregion
+                return compose_content
+            
+            return cleaned_content
+        except Exception as e:
+            # 如果解析失败，尝试简单的字符串替换
+            logger.warning(f"清理 compose_content 失败，使用简单替换: {e}")
+            # #region agent log
+            try:
+                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                    import json, time
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ssh_deploy_executor.py:_clean_compose_content:EXCEPTION","message":"清理失败，使用简单替换","data":{"error":str(e)},"timestamp":int(time.time()*1000)}) + "\n")
+            except: pass
+            # #endregion
+            return self._simple_clean_compose(compose_content)
+    
+    def _simple_clean_compose(self, compose_content: str) -> str:
+        """
+        简单的 compose 内容清理（字符串替换方式）
+        这个方法更可靠，不会改变文件的其他格式
+        
+        Args:
+            compose_content: 原始的 compose 内容
+            
+        Returns:
+            清理后的 compose 内容
+        """
+        lines = compose_content.split("\n")
+        cleaned_lines = []
+        skip_next = False
+        
+        for line in lines:
+            # 跳过 version 行（支持多种格式）
+            stripped = line.strip()
+            # 匹配 version: 'x.x' 或 version: "x.x" 或 version: x.x
+            if (stripped.startswith("version:") or 
+                stripped.startswith('version:') or
+                (stripped.startswith('version') and ':' in stripped)):
+                skip_next = True
+                continue
+            # 跳过空行（如果上一行是 version）
+            if skip_next and stripped == "":
+                skip_next = False
+                continue
+            skip_next = False
+            cleaned_lines.append(line)
+        
+        result = "\n".join(cleaned_lines)
+        
+        # 确保以换行符结尾
+        if not result.endswith('\n'):
+            result += '\n'
+        
+        # 验证清理结果
+        if "version:" in result or "version:" in result:
+            logger.warning("简单替换方法未能完全移除 version 字段，尝试更严格的清理")
+            # 更严格的清理：移除所有包含 version 的行
+            strict_lines = [line for line in lines if not line.strip().startswith('version')]
+            result = "\n".join(strict_lines)
+            if not result.endswith('\n'):
+                result += '\n'
+        
+        return result
+    
     def _create_ssh_client(
         self,
         host: str,
@@ -169,13 +394,271 @@ class SSHDeployExecutor:
                     )
                     stdout.channel.recv_exit_status()
                     
+                    # 清理 compose_content：移除不支持的 version 字段
+                    logger.info(f"🔍 开始清理 compose 内容，原始内容长度: {len(compose_content)} 字节")
+                    logger.info(f"原始内容（前10行）:\n{chr(10).join(compose_content.split(chr(10))[:10])}")
+                    # #region agent log
+                    try:
+                        with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                            import json, time
+                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"ssh_deploy_executor.py:execute_deploy:BEFORE_CLEAN","message":"原始compose内容完整检查","data":{"original_length":len(compose_content),"original_full_content":compose_content,"original_has_version":("version:" in compose_content or "version:" in compose_content)},"timestamp":int(time.time()*1000)}) + "\n")
+                    except: pass
+                    # #endregion
+                    
+                    # 直接使用简单替换方法，避免 YAML 解析/序列化可能的问题
+                    # 简单替换方法更可靠，不会改变文件格式
+                    cleaned_compose_content = self._simple_clean_compose(compose_content)
+                    logger.info("使用简单替换方法清理 compose 内容（更可靠）")
+                    
+                    # #region agent log
+                    try:
+                        with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                            import json, time
+                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"ssh_deploy_executor.py:execute_deploy:AFTER_CLEAN","message":"清理完成","data":{"cleaned_length":len(cleaned_compose_content),"cleaned_has_version":("version:" in cleaned_compose_content or "version:" in cleaned_compose_content),"is_same":(cleaned_compose_content == compose_content)},"timestamp":int(time.time()*1000)}) + "\n")
+                    except: pass
+                    # #endregion
+                    
+                    # 检查是否真的清理了 version
+                    if "version:" in cleaned_compose_content or "version:" in cleaned_compose_content:
+                        logger.warning("⚠️ 清理后仍然包含 version 字段，使用简单替换方法强制清理")
+                        cleaned_compose_content = self._simple_clean_compose(compose_content)
+                        # 再次检查
+                        if "version:" in cleaned_compose_content or "version:" in cleaned_compose_content:
+                            logger.error("❌ 简单替换方法也失败，version 字段仍然存在")
+                        else:
+                            logger.info("✅ 简单替换方法成功移除了 version 字段")
+                    
+                    # 记录清理后的内容（用于调试）
+                    logger.info(f"清理后的 compose 内容（前30行）:\n{chr(10).join(cleaned_compose_content.split(chr(10))[:30])}")
+                    logger.info(f"清理后的内容长度: {len(cleaned_compose_content)} 字节")
+                    
+                    # 验证清理后的内容是否有效（再次验证）
+                    try:
+                        import yaml
+                        test_config = yaml.safe_load(cleaned_compose_content)
+                        if not isinstance(test_config, dict) or "services" not in test_config:
+                            logger.error("清理后的 compose 文件结构无效，使用简单替换方法")
+                            cleaned_compose_content = self._simple_clean_compose(compose_content)
+                        else:
+                            # 验证 services 结构
+                            services = test_config.get("services", {})
+                            if not isinstance(services, dict):
+                                logger.error("清理后的 compose 文件的 services 不是字典，使用简单替换方法")
+                                cleaned_compose_content = self._simple_clean_compose(compose_content)
+                            else:
+                                logger.info(f"清理后的 compose 文件验证通过，包含 {len(services)} 个服务: {list(services.keys())}")
+                    except Exception as e:
+                        logger.error(f"验证清理后的 compose 文件失败: {e}，使用简单替换方法")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        cleaned_compose_content = self._simple_clean_compose(compose_content)
+                    
+                    # 最终验证：确保 version 字段已移除
+                    if "version:" in cleaned_compose_content or "version:" in cleaned_compose_content:
+                        logger.error("❌ 清理失败，version 字段仍然存在，强制使用简单替换方法")
+                        cleaned_compose_content = self._simple_clean_compose(compose_content)
+                        # 再次强制检查
+                        if "version:" in cleaned_compose_content or "version:" in cleaned_compose_content:
+                            logger.error("❌ 简单替换方法也失败，尝试手动移除")
+                            # 手动移除所有包含 version 的行
+                            lines = cleaned_compose_content.split('\n')
+                            cleaned_lines = [line for line in lines if not line.strip().startswith('version')]
+                            cleaned_compose_content = '\n'.join(cleaned_lines)
+                            if not cleaned_compose_content.endswith('\n'):
+                                cleaned_compose_content += '\n'
+                    
                     # 写入 docker-compose.yml
                     sftp = ssh_client.open_sftp()
                     compose_file = f"/tmp/{stack_name}/docker-compose.yml"
-                    remote_file = sftp.file(compose_file, "w")
-                    remote_file.write(compose_content)
+                    
+                    # 确保内容以 UTF-8 编码写入
+                    file_content_bytes = cleaned_compose_content.encode('utf-8')
+                    # #region agent log
+                    try:
+                        with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                            import json, time
+                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:BEFORE_WRITE","message":"准备写入文件","data":{"file_path":compose_file,"content_length":len(file_content_bytes),"bytes_length":len(file_content_bytes),"has_version":("version:" in cleaned_compose_content or "version:" in cleaned_compose_content)},"timestamp":int(time.time()*1000)}) + "\n")
+                    except: pass
+                    # #endregion
+                    
+                    # 使用二进制模式写入，确保换行符正确
+                    remote_file = sftp.file(compose_file, "wb")  # 使用二进制模式
+                    remote_file.write(file_content_bytes)
+                    remote_file.flush()  # 确保数据写入
                     remote_file.close()
                     sftp.close()
+                    
+                    # 验证文件权限
+                    try:
+                        stdin, stdout, stderr = ssh_client.exec_command(f"chmod 644 /tmp/{stack_name}/docker-compose.yml")
+                        stdout.channel.recv_exit_status()
+                    except:
+                        pass
+                    
+                    logger.info(f"✅ 已写入 docker-compose.yml 到 {compose_file} (大小: {len(file_content_bytes)} 字节)")
+                    # #region agent log
+                    try:
+                        with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                            import json, time
+                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:AFTER_WRITE","message":"文件写入完成","data":{"file_path":compose_file,"bytes_written":len(file_content_bytes)},"timestamp":int(time.time()*1000)}) + "\n")
+                    except: pass
+                    # #endregion
+                    
+                    # 强制验证文件是否写入成功（使用 SSH 命令检查文件是否存在）
+                    logger.info(f"🔍 验证文件是否成功写入到远程主机...")
+                    check_file_cmd = f"test -f {compose_file} && echo 'FILE_EXISTS' && ls -lh {compose_file} && wc -l {compose_file}"
+                    stdin, stdout, stderr = ssh_client.exec_command(check_file_cmd)
+                    check_output = stdout.read().decode("utf-8", errors='ignore')
+                    check_error = stderr.read().decode("utf-8", errors='ignore')
+                    exit_status = stdout.channel.recv_exit_status()
+                    
+                    if exit_status == 0 and "FILE_EXISTS" in check_output:
+                        logger.info(f"✅ 文件验证成功：文件已存在于远程主机")
+                        logger.info(f"文件信息:\n{check_output}")
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:FILE_EXISTS","message":"文件存在验证成功","data":{"file_path":compose_file,"check_output":check_output},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
+                    else:
+                        logger.error(f"❌ 文件验证失败：文件不存在于远程主机")
+                        logger.error(f"检查命令输出: {check_output}")
+                        logger.error(f"检查命令错误: {check_error}")
+                        logger.error(f"退出状态: {exit_status}")
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:FILE_NOT_EXISTS","message":"文件不存在验证失败","data":{"file_path":compose_file,"check_output":check_output,"check_error":check_error,"exit_status":exit_status},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
+                        return {
+                            "success": False,
+                            "message": f"文件写入失败：无法在远程主机找到文件 {compose_file}"
+                        }
+                    
+                    # 验证文件内容（读取完整内容）
+                    try:
+                        sftp = ssh_client.open_sftp()
+                        verify_file = sftp.file(compose_file, "r")
+                        verify_content = verify_file.read().decode('utf-8', errors='ignore')
+                        verify_file.close()
+                        sftp.close()
+                        
+                        # 检查是否还有 version
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:VERIFY_FILE","message":"验证写入的文件内容","data":{"verify_content_length":len(verify_content),"verify_has_version":("version:" in verify_content or "version:" in verify_content),"first_100_chars":verify_content[:100]},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
+                        if "version:" in verify_content or "version:" in verify_content:
+                            logger.error(f"❌ 写入的文件仍然包含 version 字段！")
+                            logger.error(f"文件内容:\n{verify_content}")
+                            # #region agent log
+                            try:
+                                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                    import json, time
+                                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"ssh_deploy_executor.py:execute_deploy:VERIFY_FAILED","message":"验证失败：文件仍包含version","data":{"full_content":verify_content},"timestamp":int(time.time()*1000)}) + "\n")
+                            except: pass
+                            # #endregion
+                        else:
+                            logger.info(f"✅ 验证通过：文件不包含 version 字段")
+                            logger.info(f"写入的文件完整内容:\n{verify_content}")
+                            # #region agent log
+                            try:
+                                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                    import json, time
+                                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:VERIFY_SUCCESS","message":"验证成功：文件不包含version","data":{"full_content":verify_content},"timestamp":int(time.time()*1000)}) + "\n")
+                            except: pass
+                            # #endregion
+                    except Exception as verify_error:
+                        logger.warning(f"无法验证写入的文件内容: {verify_error}")
+                        import traceback
+                        logger.warning(traceback.format_exc())
+                    
+                    # 验证 compose 文件（使用 docker-compose config 命令）
+                    if compose_mode == "docker-compose":
+                        logger.info("验证 docker-compose.yml 文件...")
+                        # 先尝试读取并显示文件内容
+                        try:
+                            sftp = ssh_client.open_sftp()
+                            verify_file = sftp.file(compose_file, "r")
+                            verify_content = verify_file.read().decode('utf-8', errors='ignore')
+                            verify_file.close()
+                            sftp.close()
+                            logger.info(f"远程文件完整内容:\n{verify_content}")
+                            # #region agent log
+                            try:
+                                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                    import json, time
+                                    # 检查文件内容的详细信息
+                                    import yaml as yaml_check
+                                    try:
+                                        parsed_check = yaml_check.safe_load(verify_content)
+                                        services_check = parsed_check.get('services', {}) if isinstance(parsed_check, dict) else {}
+                                        first_service_check = list(services_check.values())[0] if services_check else {}
+                                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"J","location":"ssh_deploy_executor.py:execute_deploy:READ_REMOTE","message":"读取远程文件并解析检查","data":{"content":verify_content,"length":len(verify_content),"can_parse":isinstance(parsed_check, dict),"has_services":"services" in parsed_check if isinstance(parsed_check, dict) else False,"service_count":len(services_check),"first_service_keys":list(first_service_check.keys()) if isinstance(first_service_check, dict) else []},"timestamp":int(time.time()*1000)}) + "\n")
+                                    except Exception as parse_err:
+                                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"J","location":"ssh_deploy_executor.py:execute_deploy:READ_REMOTE_PARSE_ERROR","message":"解析远程文件失败","data":{"content":verify_content,"error":str(parse_err)},"timestamp":int(time.time()*1000)}) + "\n")
+                            except: pass
+                            # #endregion
+                        except Exception as read_error:
+                            logger.warning(f"无法读取远程文件进行调试: {read_error}")
+                        
+                        # 检查文件是否存在和可读
+                        check_cmd = f"test -f /tmp/{stack_name}/docker-compose.yml && ls -la /tmp/{stack_name}/docker-compose.yml && file /tmp/{stack_name}/docker-compose.yml && cat -A /tmp/{stack_name}/docker-compose.yml"
+                        stdin, stdout, stderr = ssh_client.exec_command(check_cmd)
+                        check_output = stdout.read().decode("utf-8", errors='ignore')
+                        check_error = stderr.read().decode("utf-8", errors='ignore')
+                        logger.info(f"文件检查结果:\n{check_output}")
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"K","location":"ssh_deploy_executor.py:execute_deploy:FILE_CHECK","message":"文件检查结果（包含cat -A输出）","data":{"check_output":check_output,"check_error":check_error},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
+                        
+                        # 检查 docker compose 版本，优先使用 v2
+                        check_v2_cmd = "docker compose version 2>&1"
+                        stdin, stdout, stderr = ssh_client.exec_command(check_v2_cmd)
+                        v2_exit = stdout.channel.recv_exit_status()
+                        use_docker_compose_v2 = (v2_exit == 0)
+                        compose_cmd = "docker compose" if use_docker_compose_v2 else "docker-compose"
+                        
+                        # 先尝试使用绝对路径验证
+                        validate_cmd = f"cd /tmp/{stack_name} && {compose_cmd} -f {compose_file} config 2>&1"
+                        stdin, stdout, stderr = ssh_client.exec_command(validate_cmd)
+                        validate_output = stdout.read().decode("utf-8", errors='ignore')
+                        validate_error = stderr.read().decode("utf-8", errors='ignore')
+                        exit_status = stdout.channel.recv_exit_status()
+                        
+                        # 记录验证命令的完整输出
+                        logger.info(f"docker-compose config 验证输出:\nstdout: {validate_output}\nstderr: {validate_error}\nexit_status: {exit_status}")
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"ssh_deploy_executor.py:execute_deploy:VALIDATE_FULL","message":"docker-compose config 完整输出","data":{"exit_status":exit_status,"stdout":validate_output,"stderr":validate_error,"command":validate_cmd},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
+                        if exit_status != 0:
+                            # 错误信息已经在上面记录了，这里不再重复获取
+                            # 但是继续执行部署，让 docker-compose 自己报告错误
+                            logger.warning(f"docker-compose.yml 文件验证失败，但继续执行部署")
+                            # #region agent log
+                            try:
+                                with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                    import json, time
+                                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"ssh_deploy_executor.py:execute_deploy:VALIDATE_ERROR","message":"docker-compose config 验证失败","data":{"error":error_output},"timestamp":int(time.time()*1000)}) + "\n")
+                            except: pass
+                            # #endregion
+                            
+                            # 不阻止部署，让 docker-compose 自己报告错误
                     
                     # 如果是 docker-stack 模式，检查 compose 文件中是否有不兼容的选项
                     if compose_mode == "docker-stack":
@@ -220,19 +703,57 @@ class SSHDeployExecutor:
                         logger.info(f"执行 SSH Stack 命令: {stack_command}")
                         stdin, stdout, stderr = ssh_client.exec_command(stack_command)
                     else:
-                        # Docker Compose 模式：使用 docker-compose
+                        # Docker Compose 模式：优先使用 docker compose (v2)，如果不存在则使用 docker-compose (v1)
+                        # 先检查 docker compose 版本
+                        check_v2_cmd = "docker compose version 2>&1"
+                        stdin, stdout, stderr = ssh_client.exec_command(check_v2_cmd)
+                        v2_output = stdout.read().decode("utf-8", errors='ignore')
+                        v2_exit = stdout.channel.recv_exit_status()
+                        
+                        # 检查 docker-compose (v1) 版本
+                        check_v1_cmd = "docker-compose --version 2>&1"
+                        stdin, stdout, stderr = ssh_client.exec_command(check_v1_cmd)
+                        v1_output = stdout.read().decode("utf-8", errors='ignore')
+                        v1_exit = stdout.channel.recv_exit_status()
+                        
+                        # 决定使用哪个命令
+                        use_docker_compose_v2 = (v2_exit == 0)
+                        compose_cmd = "docker compose" if use_docker_compose_v2 else "docker-compose"
+                        
+                        logger.info(f"检测到的 docker compose 版本: v2={use_docker_compose_v2}, v2_output={v2_output}, v1_output={v1_output}")
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"L","location":"ssh_deploy_executor.py:execute_deploy:CHECK_VERSION","message":"检查docker compose版本","data":{"use_v2":use_docker_compose_v2,"v2_exit":v2_exit,"v2_output":v2_output,"v1_exit":v1_exit,"v1_output":v1_output},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
+                        
                         command = docker_config.get("command", "up -d")
-                        # 添加项目名称参数（-p 或 --project-name）
-                        # 检查命令中是否已包含项目名称参数
+                        # 确保文件存在后再执行命令
+                        # 使用绝对路径，并确保工作目录正确
                         import shlex
                         cmd_parts = shlex.split(command)
                         if "-p" not in cmd_parts and "--project-name" not in cmd_parts:
                             # 添加项目名称参数
-                            compose_command = f"cd /tmp/{stack_name} && docker-compose -p {project_name} {command}"
+                            # docker compose v2 使用 --project-name，docker-compose v1 使用 -p
+                            project_flag = "--project-name" if use_docker_compose_v2 else "-p"
+                            # 使用绝对路径 -f 指定 compose 文件路径，确保能找到文件
+                            compose_command = f"cd /tmp/{stack_name} && pwd && ls -la docker-compose.yml && {compose_cmd} -f {compose_file} {project_flag} {shlex.quote(project_name)} {command}"
                         else:
-                            compose_command = f"cd /tmp/{stack_name} && docker-compose {command}"
+                            # 使用绝对路径 -f 指定 compose 文件路径
+                            compose_command = f"cd /tmp/{stack_name} && pwd && ls -la docker-compose.yml && {compose_cmd} -f {compose_file} {command}"
                         logger.info(f"执行 SSH Compose 命令: {compose_command}")
                         logger.info(f"使用项目名称: {project_name}")
+                        logger.info(f"使用 compose 文件: {compose_file}")
+                        logger.info(f"使用 compose 命令: {compose_cmd}")
+                        # #region agent log
+                        try:
+                            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
+                                import json, time
+                                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"ssh_deploy_executor.py:execute_deploy:BEFORE_EXECUTE","message":"准备执行docker-compose命令","data":{"compose_command":compose_command,"compose_file":compose_file,"stack_name":stack_name,"compose_cmd":compose_cmd},"timestamp":int(time.time()*1000)}) + "\n")
+                        except: pass
+                        # #endregion
                         stdin, stdout, stderr = ssh_client.exec_command(compose_command)
                         stack_command = compose_command
                     

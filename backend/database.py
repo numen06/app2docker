@@ -128,6 +128,7 @@ def init_db():
 
     # 迁移：创建deploy_configs表
     migrate_add_deploy_config_table()
+    migrate_deploy_task_architecture()
 
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
@@ -831,6 +832,173 @@ def migrate_add_deploy_config_table():
         print("✅ deploy_configs 表将在表创建时自动创建")
     except Exception as e:
         print(f"⚠️ 检查deploy_configs表失败: {e}")
+
+
+def migrate_deploy_task_architecture():
+    """迁移：重构部署任务架构，将配置任务迁移到 DeployConfig 表"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        # 1. 添加 deploy_config_id 字段到 tasks 表（如果不存在）
+        try:
+            cursor.execute("ALTER TABLE tasks ADD COLUMN deploy_config_id VARCHAR(36)")
+            conn.commit()
+            print("✅ 已添加 deploy_config_id 字段到 tasks 表")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" in str(e).lower():
+                print("✅ deploy_config_id 字段已存在")
+            else:
+                print(f"⚠️ 添加 deploy_config_id 字段失败: {e}")
+                conn.rollback()
+                return
+        except Exception as e:
+            print(f"⚠️ 添加 deploy_config_id 字段失败: {e}")
+            conn.rollback()
+            return
+
+        # 2. 检查是否有需要迁移的数据
+        # 只迁移真正的配置任务：task_type='deploy' 且没有 source_config_id 且没有 deploy_config_id
+        cursor.execute("""
+            SELECT COUNT(*) FROM tasks 
+            WHERE task_type = 'deploy' 
+            AND (deploy_config_id IS NULL)
+            AND (task_config IS NOT NULL AND json_extract(task_config, '$.source_config_id') IS NULL)
+        """)
+        config_task_count = cursor.fetchone()[0]
+
+        if config_task_count == 0:
+            print("✅ 没有需要迁移的配置任务")
+            conn.close()
+            return
+
+        print(f"🔄 开始迁移 {config_task_count} 个配置任务到 DeployConfig 表...")
+
+        # 3. 查询所有配置任务（task_type="deploy" 且没有 source_config_id 且没有 deploy_config_id）
+        cursor.execute("""
+            SELECT task_id, task_config, tag, created_at
+            FROM tasks 
+            WHERE task_type = 'deploy' 
+            AND (deploy_config_id IS NULL)
+            AND (task_config IS NOT NULL AND json_extract(task_config, '$.source_config_id') IS NULL)
+        """)
+        config_tasks = cursor.fetchall()
+
+        migrated_count = 0
+        for task_id, task_config_json, tag, created_at in config_tasks:
+            try:
+                import json
+                task_config = json.loads(task_config_json) if task_config_json else {}
+
+                # 提取配置信息
+                config_content = task_config.get("config_content", "")
+                registry = task_config.get("registry")
+                webhook_token = task_config.get("webhook_token")
+                webhook_secret = task_config.get("webhook_secret")
+                webhook_branch_strategy = task_config.get("webhook_branch_strategy")
+                webhook_allowed_branches = task_config.get("webhook_allowed_branches")
+                config = task_config.get("config", {})
+
+                # 从配置中提取应用名称
+                app_name = config.get("app", {}).get("name") if isinstance(config.get("app"), dict) else config.get("app_name", "")
+                if not app_name:
+                    # 如果没有应用名称，使用 task_id 的前8位
+                    app_name = f"deploy-{task_id[:8]}"
+
+                # 检查应用名称是否已存在（DeployConfig 表有唯一约束）
+                cursor.execute("SELECT config_id FROM deploy_configs WHERE app_name = ?", (app_name,))
+                existing = cursor.fetchone()
+                if existing:
+                    # 如果已存在，检查是否已经有相同的配置内容
+                    existing_config_id = existing[0]
+                    cursor.execute("SELECT config_content FROM deploy_configs WHERE config_id = ?", (existing_config_id,))
+                    existing_config = cursor.fetchone()
+                    if existing_config and existing_config[0] == config_content:
+                        # 配置内容相同，直接使用现有的配置，更新执行任务的关联
+                        print(f"  ⚠️ 配置已存在，跳过迁移: {task_id[:8]} -> {existing_config_id[:8]} (app_name: {app_name})")
+                        # 更新执行任务的 deploy_config_id（如果有）
+                        cursor.execute("""
+                            UPDATE tasks 
+                            SET deploy_config_id = ?
+                            WHERE task_type = 'deploy' 
+                            AND task_config IS NOT NULL 
+                            AND json_extract(task_config, '$.source_config_id') = ?
+                        """, (existing_config_id, task_id))
+                        # 删除原配置任务
+                        cursor.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
+                        migrated_count += 1
+                        continue
+                    else:
+                        # 配置内容不同，使用 task_id 作为后缀
+                        app_name = f"{app_name}-{task_id[:8]}"
+
+                # 创建 DeployConfig 记录
+                config_id = str(uuid.uuid4())
+                cursor.execute("""
+                    INSERT INTO deploy_configs (
+                        config_id, app_name, config_content, config_json, 
+                        registry, tag, webhook_token, webhook_secret,
+                        webhook_branch_strategy, webhook_allowed_branches,
+                        execution_count, last_executed_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    config_id,
+                    app_name,
+                    config_content,
+                    json.dumps(config),
+                    registry,
+                    tag,
+                    webhook_token,
+                    webhook_secret,
+                    webhook_branch_strategy,
+                    json.dumps(webhook_allowed_branches) if webhook_allowed_branches else None,
+                    0,  # execution_count
+                    None,  # last_executed_at
+                    created_at,
+                    created_at,  # updated_at
+                ))
+
+                # 4. 更新所有执行任务（有 source_config_id 指向此配置的任务）
+                cursor.execute("""
+                    UPDATE tasks 
+                    SET deploy_config_id = ?
+                    WHERE task_type = 'deploy' 
+                    AND task_config IS NOT NULL 
+                    AND json_extract(task_config, '$.source_config_id') = ?
+                """, (config_id, task_id))
+
+                # 5. 删除原配置任务（已迁移到 DeployConfig 表）
+                cursor.execute("DELETE FROM tasks WHERE task_id = ?", (task_id,))
+
+                migrated_count += 1
+                print(f"  ✅ 迁移配置任务: {task_id[:8]} -> {config_id[:8]} (app_name: {app_name})")
+
+            except Exception as e:
+                print(f"  ⚠️ 迁移配置任务 {task_id[:8]} 失败: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+        conn.commit()
+        print(f"✅ 迁移完成：共迁移 {migrated_count} 个配置任务")
+
+        # 6. 创建索引（如果不存在）
+        try:
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_deploy_config ON tasks(deploy_config_id)")
+            conn.commit()
+            print("✅ 已创建 deploy_config_id 索引")
+        except Exception as e:
+            print(f"⚠️ 创建索引失败: {e}")
+
+        conn.close()
+
+    except Exception as e:
+        print(f"⚠️ 迁移部署任务架构失败: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def close_db():

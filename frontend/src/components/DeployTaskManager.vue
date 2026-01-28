@@ -55,7 +55,7 @@
             <td>
               <code class="small">{{ task.task_id.substring(0, 8) }}</code>
             </td>
-            <td>{{ task.config?.app?.name || "-" }}</td>
+            <td>{{ task.app_name || task.config?.app?.name || "-" }}</td>
             <td>
               <span
                 v-for="(target, idx) in task.config?.targets || []"
@@ -452,7 +452,7 @@
                     :placeholder="
                       simpleForm.composeMode === 'docker-compose'
                         ? 'up -d'
-                        : '--compose-file docker-compose.yml'
+                        : '-c docker-compose.yml'
                     "
                   />
                   <small class="text-muted">
@@ -462,8 +462,7 @@
                     >
                     <span v-else
                       >输入 docker stack deploy 的参数（不包含 "docker stack
-                      deploy" 前缀，如：--compose-file
-                      docker-compose.yml）</span
+                      deploy" 前缀，如：-c docker-compose.yml）</span
                     >
                   </small>
                 </div>
@@ -1524,7 +1523,7 @@
                       :placeholder="
                         editForm.composeMode === 'docker-compose'
                           ? 'up -d'
-                          : '--compose-file docker-compose.yml'
+                          : '-c docker-compose.yml'
                       "
                     />
                     <small class="text-muted">
@@ -1534,8 +1533,7 @@
                       >
                       <span v-else
                         >输入 docker stack deploy 的参数（不包含 "docker stack
-                        deploy" 前缀，如：--compose-file
-                        docker-compose.yml）</span
+                        deploy" 前缀，如：-c docker-compose.yml）</span
                       >
                     </small>
                   </div>
@@ -2247,7 +2245,7 @@ export default {
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
         runCommand: "",
-        composeCommand: "",
+        composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
         redeploy: false,
         webhook_token: "",
@@ -2274,7 +2272,7 @@ export default {
         deployMode: "docker_run",
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
-        composeCommand: "",
+        composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
         ports: ["8000:8000"],
         envVars: [""],
@@ -2459,6 +2457,21 @@ export default {
       },
       deep: true,
     },
+    // 监听 simpleForm.composeMode 变化，自动设置默认命令
+    "simpleForm.composeMode": {
+      handler(newMode, oldMode) {
+        if (newMode !== oldMode && this.simpleForm.deployMode === "docker_compose") {
+          // 如果命令为空，设置默认值
+          if (!this.simpleForm.composeCommand.trim()) {
+            if (newMode === "docker-stack") {
+              this.simpleForm.composeCommand = "-c docker-compose.yml";
+            } else if (newMode === "docker-compose") {
+              this.simpleForm.composeCommand = "up -d";
+            }
+          }
+        }
+      },
+    },
     // 监听编辑表单的主机选择变化，自动调整 Compose 模式
     "editForm.selectedHosts": {
       handler(newHosts) {
@@ -2485,6 +2498,21 @@ export default {
         }
       },
       deep: true,
+    },
+    // 监听 editForm.composeMode 变化，自动设置默认命令
+    "editForm.composeMode": {
+      handler(newMode, oldMode) {
+        if (newMode !== oldMode && this.editForm.deployMode === "docker_compose") {
+          // 如果命令为空，设置默认值
+          if (!this.editForm.composeCommand.trim()) {
+            if (newMode === "docker-stack") {
+              this.editForm.composeCommand = "-c docker-compose.yml";
+            } else if (newMode === "docker-compose") {
+              this.editForm.composeCommand = "up -d";
+            }
+          }
+        }
+      },
     },
   },
   mounted() {
@@ -2515,6 +2543,8 @@ export default {
         // 注意：task_id 实际对应 config_id（配置ID），配置存储在 DeployConfig 表中
         this.tasks = (res.data.tasks || []).map((task) => {
           // 确保数据结构一致
+          // 适配新的数据结构：后端返回的 task 包含 app_name 字段
+          const appName = task.app_name || task.config?.app?.name || "";
           return {
             ...task,
             status: task.status?.status || task.status || "pending",
@@ -2523,6 +2553,8 @@ export default {
               task.config_content || task.task_config?.config_content || "",
             execution_count: task.execution_count || 0,
             last_executed_at: task.last_executed_at || null,
+            // 确保应用名称可用
+            app_name: appName,
           };
         });
       } catch (error) {
@@ -2868,8 +2900,12 @@ export default {
       }
       if (this.simpleForm.deployMode === "docker_compose") {
         if (!this.simpleForm.composeCommand.trim()) {
-          alert("请输入 Docker Compose 命令");
-          return;
+          // 如果命令为空，设置默认值
+          if (this.simpleForm.composeMode === "docker-stack") {
+            this.simpleForm.composeCommand = "-c docker-compose.yml";
+          } else {
+            this.simpleForm.composeCommand = "up -d";
+          }
         }
         if (!this.simpleForm.composeContent.trim()) {
           alert("请输入 docker-compose.yml 内容");
@@ -2988,7 +3024,7 @@ export default {
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
         runCommand: "",
-        composeCommand: "",
+        composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
         redeploy: false,
         steps: [],
@@ -3142,7 +3178,7 @@ export default {
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
         runCommand: "",
-        composeCommand: "",
+        composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
         redeploy: false,
         steps: [],
@@ -3210,11 +3246,21 @@ export default {
           if (this.editForm.deployMode === "docker_run") {
             this.editForm.runCommand = deployConfig.command || "";
           } else {
-            this.editForm.composeCommand = deployConfig.command || "up -d";
-            this.editForm.composeContent = deployConfig.compose_content || "";
             // 解析 compose_mode 和 redeploy_strategy
             this.editForm.composeMode =
               deployConfig.compose_mode || "docker-compose";
+            // 根据 compose_mode 设置默认命令
+            if (deployConfig.command) {
+              this.editForm.composeCommand = deployConfig.command;
+            } else {
+              // 设置默认命令
+              if (this.editForm.composeMode === "docker-stack") {
+                this.editForm.composeCommand = "-c docker-compose.yml";
+              } else {
+                this.editForm.composeCommand = "up -d";
+              }
+            }
+            this.editForm.composeContent = deployConfig.compose_content || "";
             this.editForm.redeployStrategy =
               deployConfig.redeploy_strategy || "update_existing";
           }
@@ -3283,8 +3329,12 @@ export default {
         }
         if (this.editForm.deployMode === "docker_compose") {
           if (!this.editForm.composeCommand.trim()) {
-            alert("请输入 Docker Compose 命令");
-            return;
+            // 如果命令为空，设置默认值
+            if (this.editForm.composeMode === "docker-stack") {
+              this.editForm.composeCommand = "-c docker-compose.yml";
+            } else {
+              this.editForm.composeCommand = "up -d";
+            }
           }
           if (!this.editForm.composeContent.trim()) {
             alert("请输入 docker-compose.yml 内容");
@@ -3497,7 +3547,9 @@ export default {
       // 显示确认提示
       // 尝试多种方式获取应用名称
       let appName = "未知任务";
-      if (task.config && task.config.app && task.config.app.name) {
+      if (task.app_name) {
+        appName = task.app_name;
+      } else if (task.config && task.config.app && task.config.app.name) {
         appName = task.config.app.name;
       } else if (task.status && task.status.app_name) {
         appName = task.status.app_name;

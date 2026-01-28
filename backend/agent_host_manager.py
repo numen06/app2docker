@@ -569,10 +569,8 @@ class AgentHostManager:
             }
 
         elif deploy_type == "stack":
-            # Docker Stack方式
-            compose_content = f"""version: '3.8'
-
-services:
+            # Docker Stack方式（Docker Compose v2 不再需要 version 字段）
+            compose_content = f"""services:
   agent:
     image: {agent_image}
     container_name: app2docker-agent
