@@ -2461,13 +2461,32 @@ class BuildManager:
         ):
             only_service = selected_services[0]
             only_service_cfg = service_push_config.get(only_service, {})
+            has_explicit_service_image = False
             if isinstance(only_service_cfg, dict):
                 service_image_name = (only_service_cfg.get("imageName") or "").strip()
                 service_tag = (only_service_cfg.get("tag") or "").strip()
                 if service_image_name:
+                    has_explicit_service_image = True
                     image_name = service_image_name
                 if service_tag:
                     tag = service_tag
+
+            # 兜底：仅在服务未显式配置 imageName 时，按前缀+服务名自动补齐
+            # 例如 registry.cn-shanghai.aliyuncs.com/51jbm -> .../51jbm/opcua-go
+            candidate = (image_name or "").strip().rstrip("/")
+            candidate_parts = [p for p in candidate.split("/") if p]
+            if (
+                not has_explicit_service_image
+                and candidate
+                and len(candidate_parts) == 2
+                and "." in candidate_parts[0]
+                and not candidate.endswith(f"/{only_service}")
+            ):
+                image_name = f"{candidate}/{only_service}"
+                log_msg = (
+                    f"⚠️ 检测到镜像名可能缺少服务名，自动修正为: {image_name}\n"
+                )
+                print(log_msg.strip())
 
         full_tag = f"{image_name}:{tag}"
         # 使用 task_id 作为构建上下文目录名的一部分，避免冲突
@@ -3509,6 +3528,14 @@ logs/
                 # full_tag 格式: image_name:tag，可能包含registry路径
                 # 例如: registry.cn-shanghai.aliyuncs.com/51jbm/app2docker:dev
                 push_repository = image_name  # 直接使用构建时的镜像名
+                push_tag = tag
+                # 强一致：优先按构建时 full_tag 反解 repository/tag，避免变量漂移导致推送错镜像
+                last_colon = full_tag.rfind(":")
+                last_slash = full_tag.rfind("/")
+                if last_colon > last_slash:
+                    push_repository = full_tag[:last_colon]
+                    push_tag = full_tag[last_colon + 1 :]
+                tag = push_tag
 
                 # 根据镜像名找到对应的registry配置
                 def find_matching_registry_for_push(image_name):
