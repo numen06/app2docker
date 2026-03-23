@@ -4143,6 +4143,28 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
 
 
 # ============ 任务配置JSON结构辅助函数 ============
+def _multi_mode_should_push_or_any_service(
+    base_should_push: bool,
+    selected_services: list,
+    service_push_config: dict,
+) -> bool:
+    """
+    多阶段推送模式：流水线顶层 push 与任一分服务的 push 取逻辑或。
+    解决仅选一个服务时仍走单服务构建路径、但依赖 should_push 的问题。
+    """
+    if base_should_push:
+        return True
+    if not selected_services or not service_push_config:
+        return False
+    for svc in selected_services:
+        cfg = service_push_config.get(svc)
+        if isinstance(cfg, dict) and cfg.get("push"):
+            return True
+        if cfg is not None and not isinstance(cfg, dict) and bool(cfg):
+            return True
+    return False
+
+
 def build_task_config(
     git_url: str,
     image_name: str,
@@ -4213,6 +4235,18 @@ def build_task_config(
                 normalized_service_push_config = normalized_service_push_config.copy()
                 normalized_service_push_config[first_service] = service_config.copy()
                 normalized_service_push_config[first_service]["push"] = should_push
+
+    if push_mode == "multi":
+        merged = _multi_mode_should_push_or_any_service(
+            should_push,
+            selected_services or [],
+            normalized_service_push_config,
+        )
+        if merged != should_push:
+            print(
+                f"⚠️ 字段对齐：多阶段模式下根据 service_push_config 将 should_push 设为 {merged}（原为 {should_push}）"
+            )
+        should_push = merged
 
     config = {
         "git_url": git_url,
@@ -4474,8 +4508,12 @@ def pipeline_to_task_config(
             else:
                 should_push = bool(service_config)
     else:
-        # 多服务模式：使用旧的 push 字段（向后兼容）
-        should_push = pipeline.get("push", False)
+        # 多服务模式：顶层 push 与任一分服务推送取或（与 build_task_config 一致）
+        should_push = _multi_mode_should_push_or_any_service(
+            pipeline.get("push", False),
+            selected_services or [],
+            service_push_config or {},
+        )
 
     print(f"🔍 should_push 计算:")
     print(f"   - push_mode: {push_mode}")
