@@ -188,6 +188,20 @@ class PipelineManager:
             if not webhook_secret:
                 webhook_secret = str(uuid.uuid4())
 
+            pm = push_mode or "multi"
+            spc = service_push_config or {}
+            if pm == "multi" and isinstance(spc, dict):
+                any_svc = any(
+                    isinstance(v, dict) and v.get("push") for v in spc.values()
+                )
+                push_resolved = bool(push) or bool(any_svc)
+            elif pm == "single" and selected_services and isinstance(spc, dict):
+                first = selected_services[0]
+                fc = spc.get(first)
+                push_resolved = bool(isinstance(fc, dict) and fc.get("push"))
+            else:
+                push_resolved = bool(push)
+
             pipeline = Pipeline(
                 pipeline_id=pipeline_id,
                 name=name,
@@ -200,7 +214,7 @@ class PipelineManager:
                 template=template,
                 image_name=image_name,
                 tag=tag,
-                push=push,
+                push=push_resolved,
                 push_registry=push_registry,
                 template_params=template_params or {},
                 use_project_dockerfile=use_project_dockerfile,
@@ -624,6 +638,22 @@ class PipelineManager:
                 pipeline.resource_package_configs = resource_package_configs
             if post_build_webhooks is not None:
                 pipeline.post_build_webhooks = post_build_webhooks
+
+            # 顶层 push 与分服务配置对齐
+            pm = pipeline.push_mode or "multi"
+            spc = pipeline.service_push_config or {}
+            if pm == "multi" and isinstance(spc, dict):
+                any_svc = any(
+                    isinstance(v, dict) and v.get("push") for v in spc.values()
+                )
+                pipeline.push = bool(pipeline.push) or bool(any_svc)
+            elif pm == "single" and pipeline.selected_services and isinstance(
+                spc, dict
+            ):
+                first = pipeline.selected_services[0]
+                fc = spc.get(first)
+                if isinstance(fc, dict):
+                    pipeline.push = bool(fc.get("push"))
 
             pipeline.updated_at = datetime.now()
 

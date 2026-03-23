@@ -4354,6 +4354,10 @@ function editPipeline(pipeline) {
       ? pipeline.use_project_dockerfile
       : !pipeline.template; // 有模板则 false，无模板则 true
 
+  const normalizedPipelineSpc = normalizeServicePushConfig(
+    pipeline.service_push_config || {}
+  );
+
   formData.value = {
     name: pipeline.name,
     description: pipeline.description || "",
@@ -4364,7 +4368,10 @@ function editPipeline(pipeline) {
     template: savedTemplate,
     image_name: pipeline.image_name || "",
     tag: pipeline.tag || "latest",
-    push: pipeline.push || false,
+    push:
+      pipeline.push_mode === "multi"
+        ? anyServicePushEnabled(normalizedPipelineSpc) || !!pipeline.push
+        : pipeline.push || false,
     webhook_token: pipeline.webhook_token || "",
     webhook_secret: pipeline.webhook_secret || "",
     webhook_branch_strategy: getWebhookBranchStrategy(pipeline),
@@ -4407,9 +4414,7 @@ function editPipeline(pipeline) {
         ? pipeline.selected_services[0]
         : "",
     selected_services: pipeline.selected_services || [],
-    service_push_config: normalizeServicePushConfig(
-      pipeline.service_push_config || {}
-    ),
+    service_push_config: normalizedPipelineSpc,
     service_template_params: pipeline.service_template_params || {},
     resource_package_configs: pipeline.resource_package_configs || [],
   };
@@ -4851,6 +4856,10 @@ async function savePipeline() {
         });
       })(),
     };
+    // 多阶段模式：顶层 push 与分服务推送开关同步（否则仅保存 service_push_config 时 DB 仍为 false）
+    if (payload.push_mode === "multi" && payload.service_push_config) {
+      payload.push = anyServicePushEnabled(payload.service_push_config);
+    }
     // 移除webhook_branch_strategy，因为后端不需要这个字段
     delete payload.webhook_branch_strategy;
     delete payload.selected_service; // 移除单服务字段，后端不需要
@@ -6037,6 +6046,16 @@ function normalizeServicePushConfig(config) {
     }
   });
   return normalized;
+}
+
+/** 多阶段模式下任一分服务是否开启推送（用于同步顶层 pipeline.push） */
+function anyServicePushEnabled(servicePushConfig) {
+  if (!servicePushConfig || typeof servicePushConfig !== "object") {
+    return false;
+  }
+  return Object.values(servicePushConfig).some(
+    (cfg) => cfg && typeof cfg === "object" && cfg.push === true
+  );
 }
 
 // 加载资源包列表
@@ -7831,6 +7850,10 @@ async function saveMultiServiceConfig() {
         }
       });
 
+      const firstName = serviceNames[0];
+      const firstCfg = firstName
+        ? normalizedServicePushConfig[firstName]
+        : null;
       const payload = {
         push_mode: "single",
         selected_services: serviceNames, // 保留所有服务
@@ -7843,6 +7866,7 @@ async function saveMultiServiceConfig() {
           multiServiceFormData.value.global_tag ||
           multiServiceConfigPipeline.value.tag ||
           "latest",
+        push: !!(firstCfg && firstCfg.push),
       };
 
       console.log("保存单服务模式配置:", payload);
@@ -7904,6 +7928,7 @@ async function saveMultiServiceConfig() {
           multiServiceFormData.value.global_tag ||
           multiServiceConfigPipeline.value.tag ||
           "latest",
+        push: anyServicePushEnabled(normalizedServicePushConfig),
       };
 
       await axios.put(
@@ -7950,6 +7975,14 @@ async function saveMultiServiceConfig() {
         );
         formData.value.image_name = updatedPipeline.image_name || "";
         formData.value.tag = updatedPipeline.tag || "latest";
+        formData.value.push =
+          updatedPipeline.push_mode === "multi"
+            ? anyServicePushEnabled(
+                normalizeServicePushConfig(
+                  updatedPipeline.service_push_config || {}
+                )
+              ) || !!updatedPipeline.push
+            : updatedPipeline.push || false;
 
         // 更新 buildConfigJsonText（如果JSON模态框是打开的）
         if (showBuildConfigJsonModal.value) {
