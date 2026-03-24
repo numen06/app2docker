@@ -6,7 +6,7 @@ Portainer API 客户端
 import requests
 import logging
 from typing import Dict, Any, Optional, List
-from requests.auth import HTTPBasicAuth
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,26 @@ class PortainerClient:
         self.api_key = api_key
         self.endpoint_id = endpoint_id
         self.session = requests.Session()
-        self.session.headers.update({
-            'X-API-Key': self.api_key,
-            'Content-Type': 'application/json'
-        })
+        self.session.headers.update({"Content-Type": "application/json"})
         logger.info(f"PortainerClient 初始化: URL={self.url}, EndpointID={endpoint_id}")
+
+    def _build_auth_headers(self, force_mode: Optional[str] = None) -> Dict[str, str]:
+        """根据凭据格式构建鉴权头。"""
+        auth_headers: Dict[str, str] = {}
+        mode = force_mode
+        if not mode:
+            if self.api_key.startswith("ptc_"):
+                mode = "x_api_key"
+            elif self.api_key.count(".") == 2:
+                mode = "bearer"
+            else:
+                mode = "x_api_key"
+
+        if mode == "bearer":
+            auth_headers["Authorization"] = f"Bearer {self.api_key}"
+        else:
+            auth_headers["X-API-Key"] = self.api_key
+        return auth_headers
     
     def _request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
         """
@@ -57,7 +72,24 @@ class PortainerClient:
             if 'timeout' not in kwargs:
                 kwargs['timeout'] = 10
             logger.debug(f"Portainer API 请求: {method} {url}")
-            response = self.session.request(method, url, **kwargs)
+            request_headers = kwargs.pop("headers", {})
+            headers = {
+                **self._build_auth_headers(),
+                **request_headers,
+            }
+            response = self.session.request(method, url, headers=headers, **kwargs)
+            if (
+                response.status_code == 401
+                and self.api_key
+                and self.api_key.count(".") == 2
+            ):
+                alt_headers = {
+                    **self._build_auth_headers(force_mode="x_api_key"),
+                    **request_headers,
+                }
+                response = self.session.request(
+                    method, url, headers=alt_headers, **kwargs
+                )
             
             # 记录响应状态
             logger.debug(f"Portainer API 响应状态: {response.status_code}")
@@ -235,7 +267,7 @@ class PortainerClient:
         restart_policy: str = "always"
     ) -> Dict[str, Any]:
         """
-        部署容器（Docker Run）
+        部署容器（Portainer 模式下转换为单容器 Stack）
         
         Args:
             name: 容器名称
@@ -249,222 +281,94 @@ class PortainerClient:
         Returns:
             部署结果
         """
-        try:
-            # 如果提供了 command，需要解析 docker run 命令参数
-            if command:
-                # 处理多行命令和反斜杠续行符
-                import re
-                command = re.sub(r'\\\s*\n\s*', ' ', command)
-                command = re.sub(r'\\\\\s*\n\s*', ' ', command)
-                command = re.sub(r'\s+', ' ', command).strip()
-                
-                # 解析命令参数
-                import shlex
-                cmd_parts = shlex.split(command)
-                
-                # 解析 docker run 参数
-                parsed_env = env or []
-                parsed_volumes = volumes or []
-                parsed_ports = ports or []
-                parsed_restart = restart_policy
-                container_cmd = []  # 容器启动后的命令（如果有）
-                
-                i = 0
-                while i < len(cmd_parts):
-                    arg = cmd_parts[i]
-                    
-                    if arg == '-d' or arg == '--detach':
-                        # 后台运行，Portainer API 中不需要
-                        i += 1
-                    elif arg == '--name':
-                        # 容器名称，已经在 name 参数中传递，忽略
-                        i += 2
-                    elif arg == '-e' or arg == '--env':
-                        # 环境变量
-                        if i + 1 < len(cmd_parts):
-                            parsed_env.append(cmd_parts[i + 1])
-                            i += 2
-                        else:
-                            i += 1
-                    elif arg == '--env-file':
-                        # 环境变量文件，暂不支持
-                        i += 2
-                    elif arg == '-v' or arg == '--volume':
-                        # 卷映射
-                        if i + 1 < len(cmd_parts):
-                            parsed_volumes.append(cmd_parts[i + 1])
-                            i += 2
-                        else:
-                            i += 1
-                    elif arg == '-p' or arg == '--publish':
-                        # 端口映射
-                        if i + 1 < len(cmd_parts):
-                            parsed_ports.append(cmd_parts[i + 1])
-                            i += 2
-                        else:
-                            i += 1
-                    elif arg == '--restart':
-                        # 重启策略
-                        if i + 1 < len(cmd_parts):
-                            parsed_restart = cmd_parts[i + 1]
-                            i += 2
-                        else:
-                            i += 1
-                    elif arg.startswith('-'):
-                        # 其他参数，跳过
-                        i += 1
-                    else:
-                        # 可能是镜像名称或容器命令
-                        # 如果还没有设置镜像，且这不是最后一个参数，可能是镜像
-                        # 最后一个参数通常是镜像名称，但我们已经从参数中获取了
-                        # 这里可能是容器启动后的命令
-                        if i == len(cmd_parts) - 1:
-                            # 最后一个参数，应该是镜像名称，但我们已经有了
-                            # 如果和传入的 image 不一致，可能是命令
-                            if arg != image:
-                                container_cmd.append(arg)
-                        else:
-                            container_cmd.append(arg)
-                        i += 1
-                
-                # 构建容器创建配置
-                container_config = {
-                    "Image": image,
-                    "Env": parsed_env,
-                    "ExposedPorts": {},
-                    "HostConfig": {
-                        "RestartPolicy": {"Name": parsed_restart},
-                        "Binds": parsed_volumes,
-                        "PortBindings": {}
-                    }
-                }
-                
-                # 如果有容器命令，添加它
-                if container_cmd:
-                    container_config["Cmd"] = container_cmd
-                
-                # 处理端口映射
-                if parsed_ports:
-                    for port_mapping in parsed_ports:
-                        if ':' in port_mapping:
-                            host_port, container_port = port_mapping.split(':')
-                            container_port_proto = f"{container_port}/tcp"
-                            container_config["ExposedPorts"][container_port_proto] = {}
-                            container_config["HostConfig"]["PortBindings"][container_port_proto] = [
-                                {"HostPort": host_port}
-                            ]
-                
-                # 创建容器（使用更长的超时时间，因为创建容器可能需要较长时间）
-                try:
-                    create_response = self._request(
-                        'POST',
-                        f'/endpoints/{self.endpoint_id}/docker/containers/create',
-                        params={"name": name},
-                        json=container_config,
-                        timeout=60  # 创建容器可能需要更长时间
-                    )
-                except Exception as e:
-                    error_msg = str(e)
-                    if "Connection reset" in error_msg or "Connection aborted" in error_msg:
-                        raise Exception("创建容器时连接被重置，可能是 Portainer 服务器不稳定或网络问题，请稍后重试")
-                    raise
-                
-                container_id = create_response.get("Id")
-                if not container_id:
-                    raise Exception("创建容器失败：未返回容器 ID")
-                
-                # 启动容器（使用更长的超时时间）
-                try:
-                    self._request(
-                        'POST',
-                        f'/endpoints/{self.endpoint_id}/docker/containers/{container_id}/start',
-                        timeout=30  # 启动容器也需要一些时间
-                    )
-                except Exception as e:
-                    error_msg = str(e)
-                    if "Connection reset" in error_msg or "Connection aborted" in error_msg:
-                        raise Exception("启动容器时连接被重置，容器可能已创建但未启动，请检查 Portainer 中的容器状态")
-                    raise
-                
-                return {
-                    "success": True,
-                    "message": "容器部署成功",
-                    "container_id": container_id
-                }
-            else:
-                # 使用配置构建容器
-                container_config = {
-                    "Image": image,
-                    "Env": env or [],
-                    "ExposedPorts": {},
-                    "HostConfig": {
-                        "RestartPolicy": {"Name": restart_policy},
-                        "Binds": volumes or [],
-                        "PortBindings": {}
-                    }
-                }
-                
-                # 处理端口映射
-                if ports:
-                    for port_mapping in ports:
-                        if ':' in port_mapping:
-                            host_port, container_port = port_mapping.split(':')
-                            container_port_proto = f"{container_port}/tcp"
-                            container_config["ExposedPorts"][container_port_proto] = {}
-                            container_config["HostConfig"]["PortBindings"][container_port_proto] = [
-                                {"HostPort": host_port}
-                            ]
-                
-                # 创建容器（使用更长的超时时间，因为创建容器可能需要较长时间）
-                try:
-                    create_response = self._request(
-                        'POST',
-                        f'/endpoints/{self.endpoint_id}/docker/containers/create',
-                        params={"name": name},
-                        json=container_config,
-                        timeout=60  # 创建容器可能需要更长时间
-                    )
-                except Exception as e:
-                    error_msg = str(e)
-                    if "Connection reset" in error_msg or "Connection aborted" in error_msg:
-                        raise Exception("创建容器时连接被重置，可能是 Portainer 服务器不稳定或网络问题，请稍后重试")
-                    raise
-                
-                container_id = create_response.get("Id")
-                if not container_id:
-                    raise Exception("创建容器失败：未返回容器 ID")
-                
-                # 启动容器（使用更长的超时时间）
-                try:
-                    self._request(
-                        'POST',
-                        f'/endpoints/{self.endpoint_id}/docker/containers/{container_id}/start',
-                        timeout=30  # 启动容器也需要一些时间
-                    )
-                except Exception as e:
-                    error_msg = str(e)
-                    if "Connection reset" in error_msg or "Connection aborted" in error_msg:
-                        raise Exception("启动容器时连接被重置，容器可能已创建但未启动，请检查 Portainer 中的容器状态")
-                    raise
-                
-                return {
-                    "success": True,
-                    "message": "容器部署成功",
-                    "container_id": container_id
-                }
-        
-        except Exception as e:
-            logger.exception("Portainer 容器部署失败")
-            return {
-                "success": False,
-                "message": f"部署失败: {str(e)}"
-            }
+        return self.deploy_container_as_stack(
+            container_name=name,
+            image=image,
+            command=command,
+            ports=ports,
+            env=env,
+            volumes=volumes,
+            restart_policy=restart_policy,
+        )
+
+    def _split_env_pairs(self, env: Optional[List[str]]) -> List[Dict[str, str]]:
+        if not env:
+            return []
+        result = []
+        for item in env:
+            if "=" in item:
+                key, value = item.split("=", 1)
+                result.append({"name": key, "value": value})
+        return result
+
+    def list_stacks(self) -> List[Dict[str, Any]]:
+        return self._request("GET", "/stacks", params={"endpointId": self.endpoint_id})
+
+    def get_stack(self, stack_id: int) -> Dict[str, Any]:
+        return self._request(
+            "GET", f"/stacks/{stack_id}", params={"endpointId": self.endpoint_id}
+        )
+
+    def get_stack_by_name(self, stack_name: str) -> Optional[Dict[str, Any]]:
+        stacks = self.list_stacks()
+        for stack in stacks:
+            if (
+                stack.get("Name") == stack_name
+                and int(stack.get("EndpointId", stack.get("EndpointID", 0)))
+                == int(self.endpoint_id)
+            ):
+                return stack
+        return None
+
+    def update_stack(
+        self, stack_id: int, compose_content: str, env: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        payload = {
+            "StackFileContent": compose_content,
+            "Env": self._split_env_pairs(env),
+            "Prune": False,
+        }
+        self._request(
+            "PUT",
+            f"/stacks/{stack_id}",
+            params={"endpointId": self.endpoint_id},
+            json=payload,
+        )
+        return {"success": True, "message": "Stack 更新成功", "stack_id": stack_id}
+
+    def deploy_container_as_stack(
+        self,
+        container_name: str,
+        image: str,
+        command: Optional[str] = None,
+        ports: Optional[List[str]] = None,
+        env: Optional[List[str]] = None,
+        volumes: Optional[List[str]] = None,
+        restart_policy: str = "always",
+    ) -> Dict[str, Any]:
+        service: Dict[str, Any] = {"image": image, "restart": restart_policy}
+        if ports:
+            service["ports"] = ports
+        if env:
+            service["environment"] = env
+        if volumes:
+            service["volumes"] = volumes
+        if command:
+            service["command"] = command
+
+        compose = {
+            "version": "3.8",
+            "services": {container_name: service},
+        }
+        compose_content = yaml.safe_dump(compose, allow_unicode=True, sort_keys=False)
+        return self.deploy_stack(container_name, compose_content, env=env)
     
     def deploy_stack(
         self,
         name: str,
         compose_content: str,
-        command: str = "up -d"
+        command: str = "up -d",
+        env: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         部署 Docker Compose Stack
@@ -478,43 +382,55 @@ class PortainerClient:
             部署结果
         """
         try:
-            # Portainer 使用 stacks API
-            stack_config = {
-                "Name": name,
-                "StackFileContent": compose_content,
-                "EndpointID": self.endpoint_id
-            }
-            
-            # 检查 Stack 是否已存在
-            stacks = self._request('GET', '/stacks')
-            existing_stack = None
-            for stack in stacks:
-                if stack.get("Name") == name and stack.get("EndpointID") == self.endpoint_id:
-                    existing_stack = stack
-                    break
-            
+            existing_stack = self.get_stack_by_name(name)
             if existing_stack:
-                # 更新现有 Stack
                 stack_id = existing_stack["Id"]
-                update_response = self._request(
-                    'PUT',
-                    f'/stacks/{stack_id}',
-                    params={"endpointId": self.endpoint_id},
-                    json=stack_config
-                )
-                return {
-                    "success": True,
-                    "message": "Stack 更新成功",
-                    "stack_id": stack_id
-                }
+                return self.update_stack(stack_id, compose_content, env=env)
             else:
-                # 创建新 Stack
-                create_response = self._request(
-                    'POST',
-                    '/stacks',
-                    params={"endpointId": self.endpoint_id, "method": "string"},
-                    json=stack_config
-                )
+                payload = {
+                    "Name": name,
+                    "StackFileContent": compose_content,
+                    "Env": self._split_env_pairs(env),
+                }
+                try:
+                    create_response = self._request(
+                        "POST",
+                        "/stacks",
+                        params={
+                            "endpointId": self.endpoint_id,
+                            "type": 2,
+                            "method": "string",
+                        },
+                        json=payload,
+                    )
+                except Exception as create_err:
+                    err_msg = str(create_err)
+                    # 某些 Portainer 版本 /api/stacks 创建会返回 405，回退到 standalone 端点。
+                    if "405" in err_msg:
+                        logger.warning(
+                            "创建 Stack 走 /stacks 失败，尝试 standalone 回退: %s",
+                            err_msg,
+                        )
+                        fallback_payload = {
+                            **payload,
+                            "FromAppTemplate": False,
+                        }
+                        try:
+                            create_response = self._request(
+                                "POST",
+                                "/stacks/create/standalone/string",
+                                params={"endpointId": self.endpoint_id},
+                                json=fallback_payload,
+                            )
+                        except Exception:
+                            # 部分环境会返回 500 但实际已创建，二次查询确认。
+                            created = self.get_stack_by_name(name)
+                            if created:
+                                create_response = {"Id": created.get("Id")}
+                            else:
+                                raise
+                    else:
+                        raise
                 return {
                     "success": True,
                     "message": "Stack 部署成功",

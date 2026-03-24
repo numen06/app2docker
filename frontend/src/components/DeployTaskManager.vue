@@ -2,8 +2,8 @@
   <div>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">
-        <i class="fas fa-rocket text-primary"></i> 部署配置管理
-        <small class="text-muted ms-2">（配置触发后会生成任务）</small>
+        <i class="fas fa-rocket text-primary"></i>
+        部署配置管理
       </h5>
       <div>
         <button class="btn btn-primary btn-sm" @click="showImportModal = true">
@@ -11,15 +11,69 @@
         </button>
         <button
           class="btn btn-success btn-sm ms-2"
-          @click="openSimpleCreateModal"
+          @click="openSimpleCreateModal('standard')"
         >
-          <i class="fas fa-plus me-1"></i> 快速创建
+          <i class="fas fa-plus me-1"></i>
+          新建 SSH/Agent 部署
+        </button>
+        <button
+          class="btn btn-outline-success btn-sm ms-2"
+          @click="openSimpleCreateModal('portainer')"
+        >
+          <i class="fas fa-cubes me-1"></i> 新建 Portainer 部署
         </button>
         <button
           class="btn btn-info btn-sm ms-2"
           @click="showCreateModal = true"
         >
           <i class="fas fa-code me-1"></i> YAML创建
+        </button>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="small text-muted">快捷过滤</span>
+      <div class="btn-group btn-group-sm" role="group" aria-label="任务类型过滤">
+        <button
+          type="button"
+          class="btn"
+          :class="taskTypeFilter === 'all' ? 'btn-success' : 'btn-outline-success'"
+          @click="taskTypeFilter = 'all'"
+          title="全部类型"
+        >
+          全部类型
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :class="
+            taskTypeFilter === 'agent' ? 'btn-success' : 'btn-outline-success'
+          "
+          @click="taskTypeFilter = 'agent'"
+          title="Agent"
+        >
+          Agent
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :class="taskTypeFilter === 'ssh' ? 'btn-success' : 'btn-outline-success'"
+          @click="taskTypeFilter = 'ssh'"
+          title="SSH"
+        >
+          SSH
+        </button>
+        <button
+          type="button"
+          class="btn"
+          :class="
+            taskTypeFilter === 'portainer'
+              ? 'btn-success'
+              : 'btn-outline-success'
+          "
+          @click="taskTypeFilter = 'portainer'"
+          title="Portainer"
+        >
+          Portainer
         </button>
       </div>
     </div>
@@ -46,12 +100,12 @@
               加载中...
             </td>
           </tr>
-          <tr v-else-if="tasks.length === 0">
+          <tr v-else-if="filteredTasks.length === 0">
             <td colspan="8" class="text-center py-4 text-muted">
-              暂无部署配置
+              暂无符合筛选条件的部署配置
             </td>
           </tr>
-          <tr v-else v-for="task in tasks" :key="task.task_id">
+          <tr v-else v-for="task in filteredTasks" :key="task.task_id">
             <td>
               <code class="small">{{ task.task_id.substring(0, 8) }}</code>
             </td>
@@ -191,12 +245,13 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title">
-              <i class="fas fa-rocket me-2"></i> 快速创建部署任务
+              <i class="fas fa-rocket me-2"></i>
+              快速创建部署任务
             </h5>
             <button
               type="button"
               class="btn-close"
-              @click="showSimpleCreateModal = false"
+              @click="closeSimpleCreateModal"
             ></button>
           </div>
           <div class="modal-body">
@@ -217,7 +272,6 @@
                 placeholder="my-app"
                 @blur="checkAppNameDuplicate(simpleForm.appName.trim(), null)"
               />
-              <small class="text-muted">用于标识此部署任务的应用名称</small>
               <div
                 v-if="
                   simpleForm.appName &&
@@ -227,6 +281,26 @@
               >
                 应用名称已存在，请使用其他名称
               </div>
+            </div>
+
+            <!-- Portainer 目标主机（前置，便于先选主机再选 Stack） -->
+            <div v-if="simpleForm.deployChannel === 'portainer'" class="mb-3">
+              <label class="form-label"
+                >Portainer 目标主机 <span class="text-danger">*</span></label
+              >
+              <select
+                v-model="simpleForm.portainerTargetHost"
+                class="form-select form-select-sm"
+              >
+                <option :value="null" disabled>请选择 Portainer 主机</option>
+                <option
+                  v-for="host in createPortainerHosts"
+                  :key="`top-portainer-${host.host_id}`"
+                  :value="host.host_id"
+                >
+                  {{ host.name }} ({{ host.portainer_url || "-" }})
+                </option>
+              </select>
             </div>
 
             <!-- 统一部署配置 -->
@@ -239,6 +313,59 @@
               </div>
               <div class="card-body">
                 <div class="mb-3">
+                  <label class="form-label"
+                    >发布通道 <span class="text-danger">*</span></label
+                  >
+                  <div class="btn-group w-100" role="group">
+                    <input
+                      v-if="canUseCreateChannel('agent')"
+                      type="radio"
+                      class="btn-check"
+                      id="channel-agent"
+                      v-model="simpleForm.deployChannel"
+                      value="agent"
+                    />
+                    <label
+                      v-if="canUseCreateChannel('agent')"
+                      class="btn btn-outline-secondary"
+                      for="channel-agent"
+                    >
+                      Agent 发布
+                    </label>
+                    <input
+                      v-if="canUseCreateChannel('ssh')"
+                      type="radio"
+                      class="btn-check"
+                      id="channel-ssh"
+                      v-model="simpleForm.deployChannel"
+                      value="ssh"
+                    />
+                    <label
+                      v-if="canUseCreateChannel('ssh')"
+                      class="btn btn-outline-secondary"
+                      for="channel-ssh"
+                    >
+                      SSH 发布
+                    </label>
+                    <input
+                      v-if="canUseCreateChannel('portainer')"
+                      type="radio"
+                      class="btn-check"
+                      id="channel-portainer"
+                      v-model="simpleForm.deployChannel"
+                      value="portainer"
+                    />
+                    <label
+                      v-if="canUseCreateChannel('portainer')"
+                      class="btn btn-outline-secondary"
+                      for="channel-portainer"
+                    >
+                      Portainer 发布
+                    </label>
+                  </div>
+                </div>
+
+                <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3">
                   <label class="form-label"
                     >部署方式 <span class="text-danger">*</span></label
                   >
@@ -273,14 +400,12 @@
                       v-model="simpleForm.deployMode"
                       value="multi_step"
                     />
-                    <label
-                      class="btn btn-outline-primary"
-                      for="deploy-multi-step"
-                    >
+                    <label class="btn btn-outline-primary" for="deploy-multi-step">
                       <i class="fas fa-list-ol me-1"></i> 多步骤
                     </label>
                   </div>
                 </div>
+
 
                 <!-- Docker Run 命令输入 -->
                 <div v-if="simpleForm.deployMode === 'docker_run'" class="mb-3">
@@ -293,10 +418,6 @@
                     rows="6"
                     placeholder="-d --name my-app -p 8000:8000 registry.cn-hangzhou.aliyuncs.com/namespace/app:tag"
                   ></textarea>
-                  <small class="text-muted"
-                    >输入 docker run 的参数（可包含 "docker run"
-                    前缀，系统会自动适配）</small
-                  >
                 </div>
 
                 <!-- Docker Compose 模式选择 -->
@@ -354,15 +475,6 @@
                       <i class="fas fa-server me-1"></i> docker stack deploy
                     </label>
                   </div>
-                  <small class="text-muted d-block mt-1">
-                    <span v-if="simpleForm.composeMode === 'docker-compose'"
-                      >使用 docker-compose 命令部署（传统 Compose 模式）</span
-                    >
-                    <span v-else
-                      >使用 docker stack deploy 命令部署（Docker Swarm Stack
-                      模式）</span
-                    >
-                  </small>
                   <small
                     v-if="
                       !isComposeModeSupported('docker-compose') &&
@@ -381,7 +493,92 @@
                   v-if="simpleForm.deployMode === 'docker_compose'"
                   class="mb-3"
                 >
-                  <label class="form-label">重新发布策略</label>
+                  <div v-if="simpleForm.deployChannel === 'portainer'" class="mb-2">
+                    <label class="form-label">Stack 部署策略</label>
+                    <div class="btn-group w-100" role="group">
+                      <input
+                        type="radio"
+                        class="btn-check"
+                        id="stack-create"
+                        v-model="simpleForm.stackStrategy"
+                        value="create_new"
+                      />
+                      <label class="btn btn-outline-success" for="stack-create">
+                        创建新 Stack
+                      </label>
+                      <input
+                        type="radio"
+                        class="btn-check"
+                        id="stack-update"
+                        v-model="simpleForm.stackStrategy"
+                        value="update_existing"
+                      />
+                      <label class="btn btn-outline-info" for="stack-update">
+                        更新已有 Stack
+                      </label>
+                    </div>
+                    <div
+                      v-if="simpleForm.stackStrategy === 'update_existing'"
+                      class="mt-2"
+                    >
+                      <label class="form-label small">选择已有 Stack</label>
+                      <div class="input-group input-group-sm">
+                        <select
+                          v-model="simpleForm.selectedStackId"
+                          class="form-select"
+                          :disabled="
+                            loadingStacks ||
+                            !simpleForm.portainerTargetHost ||
+                            availableStacks.length === 0
+                          "
+                        >
+                          <option :value="null" disabled>请选择 Stack</option>
+                          <option
+                            v-for="stack in availableStacks"
+                            :key="stack.id"
+                            :value="stack.id"
+                          >
+                            {{ stack.name }} (ID: {{ stack.id }})
+                          </option>
+                        </select>
+                        <button
+                          type="button"
+                          class="btn btn-outline-secondary"
+                          @click="loadAvailableStacks"
+                          :disabled="loadingStacks"
+                          title="刷新 Stack 列表"
+                        >
+                          <span
+                            v-if="loadingStacks"
+                            class="spinner-border spinner-border-sm"
+                          ></span>
+                          <i v-else class="fas fa-sync-alt"></i>
+                        </button>
+                      </div>
+                      <small class="text-muted d-block mt-1">
+                        <span v-if="!simpleForm.portainerTargetHost">
+                          请先选择 Portainer 目标主机
+                        </span>
+                        <span v-else>已加载 {{ availableStacks.length }} 个 Stack</span>
+                      </small>
+                    </div>
+                    <div v-else class="mt-2">
+                      <label class="form-label small"
+                        >新 Stack 名称 <span class="text-danger">*</span></label
+                      >
+                      <input
+                        v-model="simpleForm.newStackName"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="请输入要创建的 Stack 名称"
+                      />
+                    </div>
+                  </div>
+                  <label
+                    v-if="simpleForm.deployChannel !== 'portainer'"
+                    class="form-label"
+                    >重新发布策略</label
+                  >
                   <div class="btn-group w-100" role="group">
                     <input
                       type="radio"
@@ -411,31 +608,14 @@
                       <i class="fas fa-sync-alt me-1"></i> 直接更新
                     </label>
                   </div>
-                  <small class="text-muted d-block mt-1">
-                    <span
-                      v-if="
-                        simpleForm.redeployStrategy === 'remove_and_redeploy'
-                      "
-                    >
-                      <span v-if="simpleForm.composeMode === 'docker-compose'"
-                        >先执行 docker-compose down，然后重新部署</span
-                      >
-                      <span v-else>先执行 docker stack rm，然后重新部署</span>
-                    </span>
-                    <span v-else>
-                      <span v-if="simpleForm.composeMode === 'docker-compose'"
-                        >直接执行 docker-compose up -d（自动更新）</span
-                      >
-                      <span v-else
-                        >直接执行 docker stack deploy（自动更新）</span
-                      >
-                    </span>
-                  </small>
                 </div>
 
                 <!-- Docker Compose 命令输入 -->
                 <div
-                  v-if="simpleForm.deployMode === 'docker_compose'"
+                  v-if="
+                    simpleForm.deployMode === 'docker_compose' &&
+                    simpleForm.deployChannel !== 'portainer'
+                  "
                   class="mb-3"
                 >
                   <label class="form-label">
@@ -455,16 +635,6 @@
                         : '-c docker-compose.yml'
                     "
                   />
-                  <small class="text-muted">
-                    <span v-if="simpleForm.composeMode === 'docker-compose'"
-                      >输入 docker-compose 命令参数（不包含 "docker-compose"
-                      前缀，如：up -d）</span
-                    >
-                    <span v-else
-                      >输入 docker stack deploy 的参数（不包含 "docker stack
-                      deploy" 前缀，如：-c docker-compose.yml）</span
-                    >
-                  </small>
                 </div>
 
                 <div
@@ -481,9 +651,6 @@
                     rows="15"
                     placeholder="version: '3.8'&#10;services:&#10;  app:&#10;    image: registry.cn-hangzhou.aliyuncs.com/namespace/app:tag&#10;    ports:&#10;      - '8000:8000'"
                   ></textarea>
-                  <small class="text-muted"
-                    >输入完整的 docker-compose.yml 内容</small
-                  >
                 </div>
 
                 <!-- 多步骤配置 -->
@@ -494,9 +661,6 @@
                     <div>
                       <label class="form-label mb-0"
                         >部署步骤 <span class="text-danger">*</span></label
-                      >
-                      <small class="text-muted d-block"
-                        >按顺序添加多个部署步骤，系统将依次执行</small
                       >
                     </div>
                     <button
@@ -586,16 +750,13 @@
                             rows="4"
                             placeholder="docker stop my-app || true&#10;或&#10;docker pull registry.cn-hangzhou.aliyuncs.com/namespace/app:latest"
                           ></textarea>
-                          <small class="text-muted"
-                            >输入要执行的命令或脚本，支持多行</small
-                          >
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div class="mb-0">
+                <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-0">
                   <div class="form-check form-switch">
                     <input
                       class="form-check-input"
@@ -608,46 +769,58 @@
                       重新发布（如果主机上已存在，先停止并删除）
                     </label>
                   </div>
-                  <small class="text-muted"
-                    >启用后，部署前会先停止并删除已有的容器或服务</small
-                  >
                 </div>
               </div>
             </div>
 
             <!-- 目标主机选择 -->
-            <div class="mb-3">
+            <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3">
               <label class="form-label"
                 >选择目标主机 <span class="text-danger">*</span></label
               >
-              <small class="text-muted d-block mb-2"
-                >选择要部署到的主机，上述部署配置将应用到所有选中的主机</small
-              >
+              <div v-if="false" class="mb-2">
+                <label class="form-label small">Portainer 目标主机</label>
+                <select
+                  v-model="simpleForm.portainerTargetHost"
+                  class="form-select form-select-sm"
+                >
+                  <option :value="null" disabled>请选择 Portainer 主机</option>
+                  <option
+                    v-for="host in channelFilteredHostsByType.portainer"
+                    :key="host.host_id"
+                    :value="host.host_id"
+                  >
+                    {{ host.name }} ({{ host.portainer_url || "-" }})
+                  </option>
+                </select>
+              </div>
 
               <!-- 主机类型筛选和搜索 -->
-              <div class="mb-2">
+              <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-2">
                 <div class="btn-group btn-group-sm mb-2" role="group">
-                  <input
-                    type="radio"
-                    class="btn-check"
-                    id="filter-all"
-                    v-model="hostFilter"
-                    value="all"
-                  />
-                  <label class="btn btn-outline-secondary" for="filter-all"
-                    >全部</label
-                  >
+                  <template v-if="simpleForm.deployChannel !== 'portainer'">
+                    <input
+                      type="radio"
+                      class="btn-check"
+                      id="filter-all"
+                      v-model="hostFilter"
+                      value="all"
+                    />
+                    <label class="btn btn-outline-secondary" for="filter-all"
+                      >全部</label
+                    >
 
-                  <input
-                    type="radio"
-                    class="btn-check"
-                    id="filter-agent"
-                    v-model="hostFilter"
-                    value="agent"
-                  />
-                  <label class="btn btn-outline-secondary" for="filter-agent">
-                    <i class="fas fa-network-wired me-1"></i> Agent
-                  </label>
+                    <input
+                      type="radio"
+                      class="btn-check"
+                      id="filter-agent"
+                      v-model="hostFilter"
+                      value="agent"
+                    />
+                    <label class="btn btn-outline-secondary" for="filter-agent">
+                      <i class="fas fa-network-wired me-1"></i> Agent
+                    </label>
+                  </template>
 
                   <input
                     type="radio"
@@ -655,24 +828,28 @@
                     id="filter-portainer"
                     v-model="hostFilter"
                     value="portainer"
+                    :disabled="simpleForm.deployChannel !== 'portainer'"
                   />
                   <label
                     class="btn btn-outline-secondary"
                     for="filter-portainer"
+                    :class="{ disabled: simpleForm.deployChannel !== 'portainer' }"
                   >
                     <i class="fas fa-server me-1"></i> Portainer
                   </label>
 
-                  <input
-                    type="radio"
-                    class="btn-check"
-                    id="filter-ssh"
-                    v-model="hostFilter"
-                    value="ssh"
-                  />
-                  <label class="btn btn-outline-secondary" for="filter-ssh">
-                    <i class="fas fa-terminal me-1"></i> SSH
-                  </label>
+                  <template v-if="simpleForm.deployChannel !== 'portainer'">
+                    <input
+                      type="radio"
+                      class="btn-check"
+                      id="filter-ssh"
+                      v-model="hostFilter"
+                      value="ssh"
+                    />
+                    <label class="btn btn-outline-secondary" for="filter-ssh">
+                      <i class="fas fa-terminal me-1"></i> SSH
+                    </label>
+                  </template>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                   <div class="form-check">
@@ -707,16 +884,17 @@
                 v-else
                 class="border rounded p-2"
                 style="max-height: 300px; overflow-y: auto"
+                v-show="simpleForm.deployChannel !== 'portainer'"
               >
                 <!-- Agent 主机 -->
-                <div v-if="filteredHostsByType.agent.length > 0" class="mb-3">
+                <div v-if="channelFilteredHostsByType.agent.length > 0" class="mb-3">
                   <div class="fw-bold text-primary mb-2">
                     <i class="fas fa-network-wired me-1"></i> Agent 主机 ({{
-                      filteredHostsByType.agent.length
+                      channelFilteredHostsByType.agent.length
                     }})
                   </div>
                   <div
-                    v-for="host in filteredHostsByType.agent"
+                    v-for="host in channelFilteredHostsByType.agent"
                     :key="host.host_id"
                     class="form-check ms-3"
                   >
@@ -749,16 +927,16 @@
 
                 <!-- Portainer 主机 -->
                 <div
-                  v-if="filteredHostsByType.portainer.length > 0"
+                  v-if="channelFilteredHostsByType.portainer.length > 0"
                   class="mb-3"
                 >
                   <div class="fw-bold text-info mb-2">
                     <i class="fas fa-server me-1"></i> Portainer 主机 ({{
-                      filteredHostsByType.portainer.length
+                      channelFilteredHostsByType.portainer.length
                     }})
                   </div>
                   <div
-                    v-for="host in filteredHostsByType.portainer"
+                    v-for="host in channelFilteredHostsByType.portainer"
                     :key="host.host_id"
                     class="form-check ms-3"
                   >
@@ -790,14 +968,14 @@
                 </div>
 
                 <!-- SSH 主机 -->
-                <div v-if="filteredHostsByType.ssh.length > 0" class="mb-3">
+                <div v-if="channelFilteredHostsByType.ssh.length > 0" class="mb-3">
                   <div class="fw-bold text-warning mb-2">
                     <i class="fas fa-terminal me-1"></i> SSH 主机 ({{
-                      filteredHostsByType.ssh.length
+                      channelFilteredHostsByType.ssh.length
                     }})
                   </div>
                   <div
-                    v-for="host in filteredHostsByType.ssh"
+                    v-for="host in channelFilteredHostsByType.ssh"
                     :key="host.host_id"
                     class="form-check ms-3"
                   >
@@ -860,7 +1038,7 @@
             <button
               type="button"
               class="btn btn-secondary"
-              @click="showSimpleCreateModal = false"
+              @click="closeSimpleCreateModal"
             >
               取消
             </button>
@@ -1211,7 +1389,7 @@
             <button
               type="button"
               class="btn-close"
-              @click="showEditModal = false"
+              @click="closeEditModal"
             ></button>
           </div>
           <div class="modal-body">
@@ -1276,7 +1454,6 @@
                     )
                   "
                 />
-                <small class="text-muted">用于标识此部署任务的应用名称</small>
                 <div
                   v-if="
                     editForm.appName &&
@@ -1301,6 +1478,60 @@
                 </div>
                 <div class="card-body">
                   <div class="mb-3">
+                    <label class="form-label"
+                      >发布通道 <span class="text-danger">*</span></label
+                    >
+                    <div class="btn-group w-100" role="group">
+                      <input
+                        v-if="canUseEditChannel('agent')"
+                        type="radio"
+                        class="btn-check"
+                        id="edit-channel-agent"
+                        v-model="editForm.deployChannel"
+                        value="agent"
+                      />
+                      <label
+                        v-if="canUseEditChannel('agent')"
+                        class="btn btn-outline-secondary"
+                        for="edit-channel-agent"
+                      >
+                        Agent 发布
+                      </label>
+                      <input
+                        v-if="canUseEditChannel('ssh')"
+                        type="radio"
+                        class="btn-check"
+                        id="edit-channel-ssh"
+                        v-model="editForm.deployChannel"
+                        value="ssh"
+                      />
+                      <label
+                        v-if="canUseEditChannel('ssh')"
+                        class="btn btn-outline-secondary"
+                        for="edit-channel-ssh"
+                      >
+                        SSH 发布
+                      </label>
+                      <input
+                        v-if="canUseEditChannel('portainer')"
+                        type="radio"
+                        class="btn-check"
+                        id="edit-channel-portainer"
+                        v-model="editForm.deployChannel"
+                        value="portainer"
+                      />
+                      <label
+                        v-if="canUseEditChannel('portainer')"
+                        class="btn btn-outline-secondary"
+                        for="edit-channel-portainer"
+                      >
+                        Portainer 发布
+                      </label>
+                    </div>
+                  </div>
+
+
+                  <div v-if="editForm.deployChannel !== 'portainer'" class="mb-3">
                     <label class="form-label"
                       >部署方式 <span class="text-danger">*</span></label
                     >
@@ -1360,15 +1591,14 @@
                       rows="6"
                       placeholder="-d --name my-app -p 8000:8000 registry.cn-hangzhou.aliyuncs.com/namespace/app:tag"
                     ></textarea>
-                    <small class="text-muted"
-                      >输入 docker run 的参数（可包含 "docker run"
-                      前缀，系统会自动适配）</small
-                    >
                   </div>
 
                   <!-- Docker Compose 模式选择 -->
                   <div
-                    v-if="editForm.deployMode === 'docker_compose'"
+                    v-if="
+                      editForm.deployMode === 'docker_compose' &&
+                      editForm.deployChannel !== 'portainer'
+                    "
                     class="mb-3"
                   >
                     <label class="form-label"
@@ -1425,15 +1655,6 @@
                         <i class="fas fa-server me-1"></i> docker stack deploy
                       </label>
                     </div>
-                    <small class="text-muted d-block mt-1">
-                      <span v-if="editForm.composeMode === 'docker-compose'"
-                        >使用 docker-compose 命令部署（传统 Compose 模式）</span
-                      >
-                      <span v-else
-                        >使用 docker stack deploy 命令部署（Docker Swarm Stack
-                        模式）</span
-                      >
-                    </small>
                     <small
                       v-if="
                         !isEditComposeModeSupported('docker-compose') &&
@@ -1448,11 +1669,83 @@
                   </div>
 
                   <!-- 重新发布策略选择 -->
-                  <div
-                    v-if="editForm.deployMode === 'docker_compose'"
-                    class="mb-3"
-                  >
-                    <label class="form-label">重新发布策略</label>
+                  <div v-if="editForm.deployMode === 'docker_compose'" class="mb-3">
+                    <div v-if="editForm.deployChannel === 'portainer'" class="mb-2">
+                      <label class="form-label">Stack 部署策略</label>
+                      <div class="btn-group w-100" role="group">
+                        <input
+                          type="radio"
+                          class="btn-check"
+                          id="edit-stack-create"
+                          v-model="editForm.stackStrategy"
+                          value="create_new"
+                        />
+                        <label class="btn btn-outline-success" for="edit-stack-create">
+                          创建新 Stack
+                        </label>
+                        <input
+                          type="radio"
+                          class="btn-check"
+                          id="edit-stack-update"
+                          v-model="editForm.stackStrategy"
+                          value="update_existing"
+                        />
+                        <label class="btn btn-outline-info" for="edit-stack-update">
+                          更新已有 Stack
+                        </label>
+                      </div>
+                      <div v-if="editForm.stackStrategy === 'update_existing'" class="mt-2">
+                        <label class="form-label small">选择已有 Stack</label>
+                        <div class="input-group input-group-sm">
+                          <select
+                            v-model="editForm.selectedStackId"
+                            class="form-select"
+                            :disabled="
+                              loadingStacks ||
+                              !editForm.portainerTargetHost ||
+                              availableStacks.length === 0
+                            "
+                          >
+                            <option :value="null" disabled>请选择 Stack</option>
+                            <option
+                              v-for="stack in availableStacks"
+                              :key="stack.id"
+                              :value="stack.id"
+                            >
+                              {{ stack.name }} (ID: {{ stack.id }})
+                            </option>
+                          </select>
+                          <button
+                            type="button"
+                            class="btn btn-outline-secondary"
+                            @click="loadAvailableStacksForEdit"
+                            :disabled="loadingStacks"
+                          >
+                            <span
+                              v-if="loadingStacks"
+                              class="spinner-border spinner-border-sm"
+                            ></span>
+                            <i v-else class="fas fa-sync-alt"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else class="mt-2">
+                        <label class="form-label small"
+                          >新 Stack 名称 <span class="text-danger">*</span></label
+                        >
+                        <input
+                          v-model="editForm.newStackName"
+                          type="text"
+                          class="form-control form-control-sm"
+                          placeholder="请输入要创建的 Stack 名称"
+                        />
+                      </div>
+                    </div>
+                    <label
+                      v-if="editForm.deployChannel !== 'portainer'"
+                      class="form-label"
+                      >重新发布策略</label
+                    >
                     <div class="btn-group w-100" role="group">
                       <input
                         type="radio"
@@ -1482,7 +1775,10 @@
                         <i class="fas fa-sync-alt me-1"></i> 直接更新
                       </label>
                     </div>
-                    <small class="text-muted d-block mt-1">
+                    <small
+                      v-if="editForm.deployChannel !== 'portainer'"
+                      class="text-muted d-block mt-1"
+                    >
                       <span
                         v-if="
                           editForm.redeployStrategy === 'remove_and_redeploy'
@@ -1506,7 +1802,10 @@
 
                   <!-- Docker Compose 命令输入 -->
                   <div
-                    v-if="editForm.deployMode === 'docker_compose'"
+                    v-if="
+                      editForm.deployMode === 'docker_compose' &&
+                      editForm.deployChannel !== 'portainer'
+                    "
                     class="mb-3"
                   >
                     <label class="form-label">
@@ -1526,16 +1825,6 @@
                           : '-c docker-compose.yml'
                       "
                     />
-                    <small class="text-muted">
-                      <span v-if="editForm.composeMode === 'docker-compose'"
-                        >输入 docker-compose 命令参数（不包含 "docker-compose"
-                        前缀，如：up -d）</span
-                      >
-                      <span v-else
-                        >输入 docker stack deploy 的参数（不包含 "docker stack
-                        deploy" 前缀，如：-c docker-compose.yml）</span
-                      >
-                    </small>
                   </div>
 
                   <div
@@ -1552,9 +1841,6 @@
                       rows="15"
                       placeholder="version: '3.8'&#10;services:&#10;  app:&#10;    image: registry.cn-hangzhou.aliyuncs.com/namespace/app:tag&#10;    ports:&#10;      - '8000:8000'"
                     ></textarea>
-                    <small class="text-muted"
-                      >输入完整的 docker-compose.yml 内容</small
-                    >
                   </div>
 
                   <!-- 多步骤配置 -->
@@ -1565,9 +1851,6 @@
                       <div>
                         <label class="form-label mb-0"
                           >部署步骤 <span class="text-danger">*</span></label
-                        >
-                        <small class="text-muted d-block"
-                          >按顺序添加多个部署步骤，系统将依次执行</small
                         >
                       </div>
                       <button
@@ -1661,16 +1944,13 @@
                               rows="4"
                               placeholder="docker stop my-app || true&#10;或&#10;docker pull registry.cn-hangzhou.aliyuncs.com/namespace/app:latest"
                             ></textarea>
-                            <small class="text-muted"
-                              >输入要执行的命令或脚本，支持多行</small
-                            >
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div class="mb-0">
+                  <div v-if="editForm.deployChannel !== 'portainer'" class="mb-0">
                     <div class="form-check form-switch">
                       <input
                         class="form-check-input"
@@ -1683,9 +1963,6 @@
                         重新发布（如果主机上已存在，先停止并删除）
                       </label>
                     </div>
-                    <small class="text-muted"
-                      >启用后，部署前会先停止并删除已有的容器或服务</small
-                    >
                   </div>
                 </div>
               </div>
@@ -1695,12 +1972,25 @@
                 <label class="form-label"
                   >选择目标主机 <span class="text-danger">*</span></label
                 >
-                <small class="text-muted d-block mb-2"
-                  >选择要部署到的主机，上述部署配置将应用到所有选中的主机</small
-                >
+                <div v-if="editForm.deployChannel === 'portainer'" class="mb-2">
+                  <label class="form-label small">Portainer 目标主机</label>
+                  <select
+                    v-model="editForm.portainerTargetHost"
+                    class="form-select form-select-sm"
+                  >
+                    <option :value="null" disabled>请选择 Portainer 主机</option>
+                    <option
+                    v-for="host in editPortainerHosts"
+                      :key="host.host_id"
+                      :value="host.host_id"
+                    >
+                      {{ host.name }} ({{ host.portainer_url || "-" }})
+                    </option>
+                  </select>
+                </div>
 
                 <!-- 主机类型筛选和搜索 -->
-                <div class="mb-2">
+                <div v-if="editForm.deployChannel !== 'portainer'" class="mb-2">
                   <div class="btn-group btn-group-sm mb-2" role="group">
                     <input
                       type="radio"
@@ -1790,6 +2080,7 @@
                   v-else
                   class="border rounded p-2"
                   style="max-height: 300px; overflow-y: auto"
+                  v-show="editForm.deployChannel !== 'portainer'"
                 >
                   <!-- Agent 主机 -->
                   <div
@@ -2136,7 +2427,7 @@
             <button
               type="button"
               class="btn btn-secondary"
-              @click="showEditModal = false"
+              @click="closeEditModal"
             >
               取消
             </button>
@@ -2241,9 +2532,14 @@ export default {
       editForm: {
         appName: "",
         selectedHosts: [],
+        portainerTargetHost: null,
+        deployChannel: "agent",
         deployMode: "docker_run",
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
+        stackStrategy: "create_new",
+        selectedStackId: null,
+        newStackName: "",
         runCommand: "",
         composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
@@ -2267,11 +2563,16 @@ export default {
       simpleForm: {
         appName: "",
         selectedHosts: [],
+        portainerTargetHost: null,
+        deployChannel: "agent",
         imageName: "",
         containerName: "",
         deployMode: "docker_run",
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
+        stackStrategy: "create_new",
+        selectedStackId: null,
+        newStackName: "",
         composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
         ports: ["8000:8000"],
@@ -2279,10 +2580,30 @@ export default {
         volumes: [""],
         restartPolicy: "always",
       },
+      availableStacks: [],
+      loadingStacks: false,
+      selectedStackDetails: null,
       autoRefreshInterval: null, // 自动刷新定时器
+      taskTypeFilter: "all",
+      createTypeLock: null, // standard | portainer
+      editTypeLock: null, // standard | portainer
     };
   },
   computed: {
+    filteredTasks() {
+      if (this.taskTypeFilter === "all") {
+        return this.tasks;
+      }
+      return this.tasks.filter(
+        (task) => this.resolveDeployChannel(task) === this.taskTypeFilter
+      );
+    },
+    createPortainerHosts() {
+      return (this.agentHosts || []).filter((host) => host.host_type === "portainer");
+    },
+    editPortainerHosts() {
+      return (this.agentHosts || []).filter((host) => host.host_type === "portainer");
+    },
     // 过滤后的主机列表
     filteredHosts() {
       let hosts = [];
@@ -2357,6 +2678,17 @@ export default {
 
       return result;
     },
+    channelFilteredHostsByType() {
+      const all = this.filteredHostsByType;
+      const channel = this.simpleForm.deployChannel;
+      if (channel === "portainer") {
+        return { agent: [], portainer: all.portainer, ssh: [] };
+      }
+      if (channel === "ssh") {
+        return { agent: [], portainer: [], ssh: all.ssh };
+      }
+      return { agent: all.agent, portainer: [], ssh: [] };
+    },
     // 编辑表单过滤后的主机列表
     editFilteredHosts() {
       let hosts = [];
@@ -2428,11 +2760,78 @@ export default {
 
       return result;
     },
+    editChannelFilteredHostsByType() {
+      const all = this.editFilteredHostsByType;
+      const channel = this.editForm.deployChannel;
+      if (channel === "portainer") {
+        return { agent: [], portainer: all.portainer, ssh: [] };
+      }
+      if (channel === "ssh") {
+        return { agent: [], portainer: [], ssh: all.ssh };
+      }
+      return { agent: all.agent, portainer: [], ssh: [] };
+    },
   },
   watch: {
+    "simpleForm.deployChannel": {
+      handler(newChannel) {
+        this.simpleForm.selectedHosts = [];
+        this.simpleForm.portainerTargetHost = null;
+        if (newChannel === "portainer") {
+          this.hostFilter = "portainer";
+          this.simpleForm.deployMode = "docker_compose";
+          this.simpleForm.composeMode = "docker-compose";
+          this.simpleForm.stackStrategy = "create_new";
+          this.loadAvailableStacks();
+          if (this.simpleForm.deployMode === "multi_step") {
+            this.simpleForm.deployMode = "docker_run";
+          }
+        } else {
+          this.hostFilter = "all";
+        }
+      },
+    },
+    "simpleForm.portainerTargetHost": {
+      handler(newHostId) {
+        if (this.simpleForm.deployChannel !== "portainer") return;
+        if (newHostId) {
+          this.simpleForm.selectedHosts = [newHostId];
+          this.loadAvailableStacks();
+        } else {
+          this.simpleForm.selectedHosts = [];
+          this.simpleForm.selectedStackId = null;
+        }
+      },
+    },
+    "simpleForm.selectedStackId": {
+      async handler(newStackId) {
+        if (
+          this.simpleForm.deployChannel !== "portainer" ||
+          this.simpleForm.stackStrategy !== "update_existing" ||
+          !newStackId ||
+          this.simpleForm.selectedHosts.length !== 1
+        ) {
+          return;
+        }
+        await this.loadStackComposeForSimple();
+      },
+    },
+    "simpleForm.stackStrategy": {
+      handler(newStrategy) {
+        if (this.simpleForm.deployChannel !== "portainer") return;
+        if (newStrategy === "create_new") {
+          this.simpleForm.selectedStackId = null;
+        } else if (newStrategy === "update_existing") {
+          this.simpleForm.newStackName = "";
+        }
+      },
+    },
     // 监听简单表单的主机选择变化，自动调整 Compose 模式
     "simpleForm.selectedHosts": {
       handler(newHosts) {
+        if (this.simpleForm.deployChannel === "portainer") {
+          this.loadAvailableStacks();
+        }
         if (
           this.simpleForm.deployMode === "docker_compose" &&
           newHosts.length > 0
@@ -2473,8 +2872,61 @@ export default {
       },
     },
     // 监听编辑表单的主机选择变化，自动调整 Compose 模式
+    "editForm.deployChannel": {
+      handler(newChannel) {
+        this.editForm.selectedHosts = [];
+        this.editForm.portainerTargetHost = null;
+        if (newChannel === "portainer") {
+          this.editHostFilter = "portainer";
+          this.editForm.deployMode = "docker_compose";
+          this.editForm.composeMode = "docker-compose";
+          this.editForm.stackStrategy = "create_new";
+          this.loadAvailableStacksForEdit();
+        } else {
+          this.editHostFilter = "all";
+        }
+      },
+    },
+    "editForm.portainerTargetHost": {
+      handler(newHostId) {
+        if (this.editForm.deployChannel !== "portainer") return;
+        if (newHostId) {
+          this.editForm.selectedHosts = [newHostId];
+          this.loadAvailableStacksForEdit();
+        } else {
+          this.editForm.selectedHosts = [];
+          this.editForm.selectedStackId = null;
+        }
+      },
+    },
+    "editForm.selectedStackId": {
+      async handler(newStackId) {
+        if (
+          this.editForm.deployChannel !== "portainer" ||
+          this.editForm.stackStrategy !== "update_existing" ||
+          !newStackId ||
+          this.editForm.selectedHosts.length !== 1
+        ) {
+          return;
+        }
+        await this.loadStackComposeForEdit();
+      },
+    },
+    "editForm.stackStrategy": {
+      handler(newStrategy) {
+        if (this.editForm.deployChannel !== "portainer") return;
+        if (newStrategy === "create_new") {
+          this.editForm.selectedStackId = null;
+        } else if (newStrategy === "update_existing") {
+          this.editForm.newStackName = "";
+        }
+      },
+    },
     "editForm.selectedHosts": {
       handler(newHosts) {
+        if (this.editForm.deployChannel === "portainer") {
+          this.loadAvailableStacksForEdit();
+        }
         if (
           this.editForm.deployMode === "docker_compose" &&
           newHosts.length > 0
@@ -2528,6 +2980,77 @@ export default {
     }
   },
   methods: {
+    normalizeCompareValue(value) {
+      return String(value ?? "")
+        .trim()
+        .toLowerCase();
+    },
+    findHostIdFromTarget(target) {
+      const allHosts = [...this.agentHosts, ...this.sshHosts];
+      if (!allHosts.length || !target) return null;
+
+      // 1) 如果配置里带 host_id，直接匹配
+      if (target.host_id) {
+        const hostById = allHosts.find(
+          (h) => String(h.host_id) === String(target.host_id)
+        );
+        if (hostById?.host_id) return hostById.host_id;
+      }
+
+      // 2) 按 host_name/name/历史 name-deploy 匹配
+      const candidates = [];
+      if (target.host_name) candidates.push(target.host_name);
+      if (target.name) {
+        candidates.push(target.name);
+        candidates.push(String(target.name).replace(/-deploy$/, ""));
+      }
+      if (target.mode === "agent" && target.agent?.name) {
+        candidates.push(target.agent.name);
+      }
+      if (target.mode === "ssh" && target.host) {
+        candidates.push(target.host);
+      }
+
+      const normalizedCandidates = candidates
+        .map((item) => this.normalizeCompareValue(item))
+        .filter(Boolean);
+      if (!normalizedCandidates.length) return null;
+
+      const host = allHosts.find((h) => {
+        const hostName = this.normalizeCompareValue(h.name);
+        return normalizedCandidates.includes(hostName);
+      });
+      return host?.host_id || null;
+    },
+    canUseCreateChannel(channel) {
+      if (this.createTypeLock === "portainer") return channel === "portainer";
+      if (this.createTypeLock === "standard") return channel !== "portainer";
+      return true;
+    },
+    canUseEditChannel(channel) {
+      if (this.editTypeLock === "portainer") return channel === "portainer";
+      if (this.editTypeLock === "standard") return channel !== "portainer";
+      return true;
+    },
+    closeSimpleCreateModal() {
+      this.showSimpleCreateModal = false;
+      this.createTypeLock = null;
+    },
+    closeEditModal() {
+      this.showEditModal = false;
+      this.editTypeLock = null;
+    },
+    resolveDeployChannel(task) {
+      const deployChannel = task?.config?.deploy?.channel;
+      if (deployChannel) {
+        return deployChannel;
+      }
+      const firstTarget = task?.config?.targets?.[0];
+      if (firstTarget?.host_type) {
+        return firstTarget.host_type;
+      }
+      return "agent";
+    },
     stopAutoRefresh() {
       // 停止自动刷新（兼容性方法）
       if (this.autoRefreshInterval) {
@@ -2871,6 +3394,20 @@ export default {
       }
     },
     async createSimpleTask() {
+      if (
+        this.createTypeLock === "portainer" &&
+        this.simpleForm.deployChannel !== "portainer"
+      ) {
+        alert("当前为 Portainer 新建流程，不能切换到 SSH/Agent 类型");
+        return;
+      }
+      if (
+        this.createTypeLock === "standard" &&
+        this.simpleForm.deployChannel === "portainer"
+      ) {
+        alert("当前为 SSH/Agent 新建流程，不能切换到 Portainer 类型");
+        return;
+      }
       // 验证必填字段
       if (!this.simpleForm.appName.trim()) {
         alert("请输入应用名称");
@@ -2892,6 +3429,27 @@ export default {
         return;
       }
       if (
+        this.simpleForm.deployChannel === "portainer" &&
+        this.simpleForm.selectedHosts.length !== 1
+      ) {
+        alert("Portainer 发布必须选择一个目标主机");
+        return;
+      }
+      if (
+        this.simpleForm.deployChannel === "portainer" &&
+        this.simpleForm.deployMode === "multi_step"
+      ) {
+        alert("Portainer 发布暂不支持多步骤模式");
+        return;
+      }
+      if (
+        this.simpleForm.deployChannel === "portainer" &&
+        this.simpleForm.deployMode !== "docker_compose"
+      ) {
+        alert("Portainer 发布仅支持 Docker Compose/Stack");
+        return;
+      }
+      if (
         this.simpleForm.deployMode === "docker_run" &&
         !this.simpleForm.runCommand.trim()
       ) {
@@ -2899,6 +3457,22 @@ export default {
         return;
       }
       if (this.simpleForm.deployMode === "docker_compose") {
+        if (
+          this.simpleForm.deployChannel === "portainer" &&
+          this.simpleForm.stackStrategy === "update_existing" &&
+          !this.simpleForm.selectedStackId
+        ) {
+          alert("请选择要更新的 Stack");
+          return;
+        }
+        if (
+          this.simpleForm.deployChannel === "portainer" &&
+          this.simpleForm.stackStrategy === "create_new" &&
+          !this.simpleForm.newStackName?.trim()
+        ) {
+          alert("请输入新 Stack 名称");
+          return;
+        }
         if (!this.simpleForm.composeCommand.trim()) {
           // 如果命令为空，设置默认值
           if (this.simpleForm.composeMode === "docker-stack") {
@@ -2954,6 +3528,7 @@ export default {
       } else {
         // 单命令模式
         deployConfig = {
+          channel: this.simpleForm.deployChannel,
           type:
             this.simpleForm.deployMode === "docker_compose"
               ? "docker_compose"
@@ -2972,6 +3547,15 @@ export default {
           }
           if (this.simpleForm.redeployStrategy) {
             deployConfig.redeploy_strategy = this.simpleForm.redeployStrategy;
+          }
+          if (this.simpleForm.deployChannel === "portainer") {
+            deployConfig.stack_strategy = this.simpleForm.stackStrategy;
+            if (this.simpleForm.selectedStackId) {
+              deployConfig.stack_id = this.simpleForm.selectedStackId;
+            }
+            if (this.simpleForm.newStackName?.trim()) {
+              deployConfig.stack_name = this.simpleForm.newStackName.trim();
+            }
           }
         }
       }
@@ -3004,7 +3588,7 @@ export default {
           tag: null,
         });
         alert("创建成功");
-        this.showSimpleCreateModal = false;
+        this.closeSimpleCreateModal();
         this.resetSimpleForm();
         this.loadTasks();
       } catch (error) {
@@ -3020,15 +3604,86 @@ export default {
       this.simpleForm = {
         appName: "",
         selectedHosts: [],
+        portainerTargetHost: null,
+        deployChannel: "agent",
         deployMode: "docker_run",
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
+        stackStrategy: "create_new",
+        selectedStackId: null,
+        newStackName: "",
         runCommand: "",
         composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
         redeploy: false,
         steps: [],
       };
+    },
+    async loadAvailableStacks() {
+      if (
+        this.simpleForm.deployChannel !== "portainer" ||
+        this.simpleForm.selectedHosts.length !== 1
+      ) {
+        this.availableStacks = [];
+        return;
+      }
+      const hostId = this.simpleForm.selectedHosts[0];
+      this.loadingStacks = true;
+      try {
+        const res = await axios.get(`/api/agent-hosts/${hostId}/stacks`);
+        this.availableStacks = res.data.stacks || [];
+      } catch (error) {
+        this.availableStacks = [];
+      } finally {
+        this.loadingStacks = false;
+      }
+    },
+    async loadStackComposeForSimple() {
+      const hostId = this.simpleForm.selectedHosts[0];
+      const stackId = this.simpleForm.selectedStackId;
+      if (!hostId || !stackId) return;
+      try {
+        const res = await axios.get(`/api/agent-hosts/${hostId}/stacks/${stackId}`);
+        const compose = res.data?.stack?.compose_content;
+        if (compose && compose.trim()) {
+          this.simpleForm.composeContent = compose;
+        }
+      } catch (error) {
+        alert("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
+      }
+    },
+    async loadAvailableStacksForEdit() {
+      if (
+        this.editForm.deployChannel !== "portainer" ||
+        this.editForm.selectedHosts.length !== 1
+      ) {
+        this.availableStacks = [];
+        return;
+      }
+      const hostId = this.editForm.selectedHosts[0];
+      this.loadingStacks = true;
+      try {
+        const res = await axios.get(`/api/agent-hosts/${hostId}/stacks`);
+        this.availableStacks = res.data.stacks || [];
+      } catch (error) {
+        this.availableStacks = [];
+      } finally {
+        this.loadingStacks = false;
+      }
+    },
+    async loadStackComposeForEdit() {
+      const hostId = this.editForm.selectedHosts[0];
+      const stackId = this.editForm.selectedStackId;
+      if (!hostId || !stackId) return;
+      try {
+        const res = await axios.get(`/api/agent-hosts/${hostId}/stacks/${stackId}`);
+        const compose = res.data?.stack?.compose_content;
+        if (compose && compose.trim()) {
+          this.editForm.composeContent = compose;
+        }
+      } catch (error) {
+        alert("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
+      }
     },
     addStep() {
       this.simpleForm.steps.push({
@@ -3091,13 +3746,28 @@ export default {
       }
       this.editMode = "yaml";
     },
-    openSimpleCreateModal() {
+    openSimpleCreateModal(createType = "standard") {
       this.resetSimpleForm();
+      this.createTypeLock = createType;
+      if (createType === "portainer") {
+        this.simpleForm.deployChannel = "portainer";
+        this.simpleForm.deployMode = "docker_compose";
+        this.simpleForm.composeMode = "docker-compose";
+        this.simpleForm.stackStrategy = "create_new";
+        this.hostFilter = "portainer";
+      } else {
+        this.simpleForm.deployChannel = "agent";
+        this.hostFilter = "all";
+      }
       this.loadAgentHosts();
       this.showSimpleCreateModal = true;
     },
     async editTask(task) {
       try {
+        this.editTypeLock = null;
+        // 编辑时默认不过滤在线状态，避免已绑定离线主机看起来“未反选”
+        this.editFilterOnlineOnly = false;
+        this.editHostFilter = "all";
         // 注意：task.task_id 实际是 config_id（配置ID），用于查询和更新配置
         const res = await axios.get(`/api/deploy-tasks/${task.task_id}`);
         const taskData = res.data.task;
@@ -3138,6 +3808,8 @@ export default {
         // 解析YAML配置到表单
         const config = taskData.config || taskConfig.config || {};
         this.parseYamlToForm(configContent, config);
+        this.editTypeLock =
+          this.editForm.deployChannel === "portainer" ? "portainer" : "standard";
 
         // 恢复webhook配置（必须在parseYamlToForm之后）
         this.editForm.webhook_token = savedWebhookToken;
@@ -3174,9 +3846,14 @@ export default {
       this.editForm = {
         appName: "",
         selectedHosts: [],
+        portainerTargetHost: null,
+        deployChannel: "agent",
         deployMode: "docker_run",
         composeMode: "docker-compose",
         redeployStrategy: "update_existing",
+        stackStrategy: "create_new",
+        selectedStackId: null,
+        newStackName: "",
         runCommand: "",
         composeCommand: "up -d", // Docker Compose 默认命令
         composeContent: "",
@@ -3227,6 +3904,13 @@ export default {
       }
 
       if (deployConfig) {
+        const targetHostType =
+          (config.targets &&
+            config.targets[0] &&
+            (config.targets[0].host_type ||
+              (config.targets[0].mode === "ssh" ? "ssh" : "agent"))) ||
+          "agent";
+        this.editForm.deployChannel = deployConfig.channel || targetHostType;
         // 判断是否为多步骤模式
         if (deployConfig.steps && Array.isArray(deployConfig.steps)) {
           // 多步骤模式
@@ -3241,6 +3925,7 @@ export default {
             deployConfig.type === "docker_compose"
               ? "docker_compose"
               : "docker_run";
+          this.editForm.deployChannel = deployConfig.channel || targetHostType;
 
           // 解析部署命令和内容
           if (this.editForm.deployMode === "docker_run") {
@@ -3263,6 +3948,10 @@ export default {
             this.editForm.composeContent = deployConfig.compose_content || "";
             this.editForm.redeployStrategy =
               deployConfig.redeploy_strategy || "update_existing";
+            this.editForm.stackStrategy =
+              deployConfig.stack_strategy || "create_new";
+            this.editForm.selectedStackId = deployConfig.stack_id || null;
+            this.editForm.newStackName = deployConfig.stack_name || "";
           }
         }
 
@@ -3273,31 +3962,33 @@ export default {
       const targets = config.targets || [];
       const selectedHostIds = [];
       for (const target of targets) {
-        let hostName = null;
-
-        // 新格式：使用host_type和host_name
-        if (target.host_type && target.host_name) {
-          hostName = target.host_name;
-        }
-        // 旧格式：向后兼容
-        else if (target.mode === "agent" && target.agent && target.agent.name) {
-          hostName = target.agent.name;
-        } else if (target.mode === "ssh" && target.host) {
-          hostName = target.host;
-        }
-
-        if (hostName) {
-          // 在所有主机列表中查找匹配的主机
-          const allHosts = [...this.agentHosts, ...this.sshHosts];
-          const host = allHosts.find((h) => h.name === hostName);
-          if (host && host.host_id) {
-            selectedHostIds.push(host.host_id);
-          }
-        }
+        const hostId = this.findHostIdFromTarget(target);
+        if (hostId) selectedHostIds.push(hostId);
       }
       this.editForm.selectedHosts = selectedHostIds;
+      if (
+        this.editForm.deployChannel === "portainer" &&
+        this.editForm.selectedHosts.length > 0
+      ) {
+        this.editForm.portainerTargetHost = this.editForm.selectedHosts[0];
+        this.loadAvailableStacksForEdit();
+      }
     },
     async saveEditTask() {
+      if (
+        this.editTypeLock === "portainer" &&
+        this.editForm.deployChannel !== "portainer"
+      ) {
+        alert("Portainer 任务不允许切换为 SSH/Agent 类型");
+        return;
+      }
+      if (
+        this.editTypeLock === "standard" &&
+        this.editForm.deployChannel === "portainer"
+      ) {
+        alert("SSH/Agent 任务不允许切换为 Portainer 类型");
+        return;
+      }
       let yamlContent = "";
       const registry = this.editingTask.registry || null;
       const tag = this.editingTask.tag || null;
@@ -3321,6 +4012,20 @@ export default {
           return;
         }
         if (
+          this.editForm.deployChannel === "portainer" &&
+          this.editForm.selectedHosts.length !== 1
+        ) {
+          alert("Portainer 发布必须选择一个目标主机");
+          return;
+        }
+        if (
+          this.editForm.deployChannel === "portainer" &&
+          this.editForm.deployMode !== "docker_compose"
+        ) {
+          alert("Portainer 发布仅支持 Docker Compose/Stack");
+          return;
+        }
+        if (
           this.editForm.deployMode === "docker_run" &&
           !this.editForm.runCommand.trim()
         ) {
@@ -3328,6 +4033,22 @@ export default {
           return;
         }
         if (this.editForm.deployMode === "docker_compose") {
+          if (
+            this.editForm.deployChannel === "portainer" &&
+            this.editForm.stackStrategy === "update_existing" &&
+            !this.editForm.selectedStackId
+          ) {
+            alert("请选择要更新的 Stack");
+            return;
+          }
+          if (
+            this.editForm.deployChannel === "portainer" &&
+            this.editForm.stackStrategy === "create_new" &&
+            !this.editForm.newStackName?.trim()
+          ) {
+            alert("请输入新 Stack 名称");
+            return;
+          }
           if (!this.editForm.composeCommand.trim()) {
             // 如果命令为空，设置默认值
             if (this.editForm.composeMode === "docker-stack") {
@@ -3451,7 +4172,7 @@ export default {
         });
 
         alert("保存成功");
-        this.showEditModal = false;
+        this.closeEditModal();
         this.editingTask = null;
         this.loadTasks();
       } catch (error) {
@@ -3503,6 +4224,7 @@ export default {
       } else {
         // 单命令模式
         deployConfig = {
+          channel: form.deployChannel || "agent",
           type:
             form.deployMode === "docker_compose"
               ? "docker_compose"
@@ -3521,6 +4243,15 @@ export default {
           }
           if (form.redeployStrategy) {
             deployConfig.redeploy_strategy = form.redeployStrategy;
+          }
+          if (form.deployChannel === "portainer") {
+            deployConfig.stack_strategy = form.stackStrategy || "create_new";
+            if (form.selectedStackId) {
+              deployConfig.stack_id = form.selectedStackId;
+            }
+            if (form.newStackName && form.newStackName.trim()) {
+              deployConfig.stack_name = form.newStackName.trim();
+            }
           }
         }
       }

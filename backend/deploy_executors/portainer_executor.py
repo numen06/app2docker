@@ -117,9 +117,12 @@ class PortainerExecutor(DeployExecutor):
         try:
             client = self._get_portainer_client()
             deploy_mode = deploy_config.get("deploy_mode", "docker_run")
+            deploy_channel = deploy_config.get("channel", "portainer")
             redeploy = deploy_config.get("redeploy", False)
             
-            logger.info(f"部署模式: {deploy_mode}, 重新发布: {redeploy}")
+            logger.info(
+                f"部署模式: {deploy_mode}, 通道: {deploy_channel}, 重新发布: {redeploy}"
+            )
             
             # 记录命令信息
             if update_status_callback:
@@ -159,7 +162,7 @@ class PortainerExecutor(DeployExecutor):
                 
                 if deploy_mode == "docker_compose":
                     # 尝试删除 Stack
-                    stack_name = f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}"
+                    stack_name = deploy_config.get("stack_name") or f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}"
                     try:
                         client._request('DELETE', f'/stacks', params={
                             "endpointId": self.portainer_endpoint_id,
@@ -171,23 +174,25 @@ class PortainerExecutor(DeployExecutor):
                     except Exception as e:
                         logger.warning(f"删除 Stack 失败（可能不存在）: {e}")
                 else:
-                    # 尝试删除容器
-                    container_name = deploy_config.get("container_name", "")
-                    if container_name:
-                        # 从命令中提取容器名
-                        command = deploy_config.get("command", "")
-                        if command and "--name" in command:
-                            import shlex
-                            cmd_parts = shlex.split(command)
-                            name_idx = cmd_parts.index("--name")
-                            if name_idx + 1 < len(cmd_parts):
-                                container_name = cmd_parts[name_idx + 1]
-                        
-                        try:
-                            client.remove_container(container_name, force=True)
-                            logger.info(f"已删除容器: {container_name}")
-                        except Exception as e:
-                            logger.warning(f"删除容器失败（可能不存在）: {e}")
+                    # Portainer 模式下 docker_run 已统一为单容器 Stack，按 stack 名称清理
+                    stack_name = deploy_config.get(
+                        "stack_name",
+                    ) or deploy_config.get(
+                        "container_name",
+                        f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}",
+                    )
+                    try:
+                        client._request(
+                            "DELETE",
+                            "/stacks",
+                            params={
+                                "endpointId": self.portainer_endpoint_id,
+                                "name": stack_name,
+                            },
+                        )
+                        logger.info(f"已删除单容器 Stack: {stack_name}")
+                    except Exception as e:
+                        logger.warning(f"删除单容器 Stack 失败（可能不存在）: {e}")
             
             # 执行部署
             logger.info(f"开始执行部署: mode={deploy_mode}")
@@ -196,7 +201,28 @@ class PortainerExecutor(DeployExecutor):
             
             if deploy_mode == "docker_compose":
                 # Docker Compose 部署
-                stack_name = f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}"
+                default_stack_name = f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}"
+                stack_strategy = deploy_config.get("stack_strategy", "create_new")
+                selected_stack_id = deploy_config.get("stack_id")
+                custom_stack_name = deploy_config.get("stack_name")
+                stack_name = default_stack_name
+                if stack_strategy == "update_existing":
+                    if selected_stack_id:
+                        try:
+                            stack_info = client.get_stack(int(selected_stack_id))
+                            stack_name = stack_info.get("Name") or default_stack_name
+                        except Exception as e:
+                            return {
+                                "success": False,
+                                "message": f"指定 Stack 不存在或不可访问: {selected_stack_id}, {e}",
+                                "host_type": "portainer",
+                                "deploy_method": "portainer_api",
+                            }
+                    elif custom_stack_name:
+                        stack_name = custom_stack_name
+                else:
+                    if custom_stack_name:
+                        stack_name = custom_stack_name
                 compose_content = deploy_config.get("compose_content", "")
                 compose_mode = deploy_config.get("compose_mode", "docker-compose")
                 

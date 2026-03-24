@@ -86,6 +86,9 @@ class DeployConfigParser:
         if has_deploy_section:
             # 新格式：统一部署定义
             deploy_config = config.get("deploy", {})
+            deploy_channel = deploy_config.get("channel")
+            if deploy_channel and deploy_channel not in ["agent", "portainer", "ssh"]:
+                raise ValueError("deploy.channel 必须是 'agent'、'portainer' 或 'ssh'")
             
             # 支持两种模式：单命令模式 或 多步骤模式
             if "steps" in deploy_config:
@@ -180,6 +183,14 @@ class DeployConfigParser:
         
         # 如果已经是新格式，直接返回
         if "deploy" in normalized:
+            deploy_config = normalized.get("deploy", {})
+            if isinstance(deploy_config, dict) and not deploy_config.get("channel"):
+                inferred_channel = self._infer_channel_from_targets(
+                    normalized.get("targets", [])
+                )
+                if inferred_channel:
+                    deploy_config["channel"] = inferred_channel
+                    normalized["deploy"] = deploy_config
             return normalized
         
         # 旧格式迁移：从第一个target的docker配置提取部署信息
@@ -199,6 +210,9 @@ class DeployConfigParser:
             "type": deploy_type,
             "command": docker_config.get("command", "")
         }
+        inferred_channel = self._infer_channel_from_targets(targets)
+        if inferred_channel:
+            deploy_config["channel"] = inferred_channel
         
         if deploy_type == "docker_compose":
             deploy_config["compose_content"] = docker_config.get("compose_content", "")
@@ -239,6 +253,33 @@ class DeployConfigParser:
         normalized["targets"] = normalized_targets
         
         return normalized
+
+    def _infer_channel_from_targets(self, targets: List[Dict[str, Any]]) -> Optional[str]:
+        """根据目标主机类型推断 deploy.channel。"""
+        if not targets:
+            return None
+
+        host_types = []
+        for target in targets:
+            host_type = target.get("host_type")
+            if host_type:
+                host_types.append(host_type)
+                continue
+
+            mode = target.get("mode")
+            if mode == "ssh":
+                host_types.append("ssh")
+            elif mode == "agent":
+                host_types.append("agent")
+
+        unique_types = set(host_types)
+        if len(unique_types) == 1:
+            only_type = next(iter(unique_types))
+            if only_type in ["agent", "portainer", "ssh"]:
+                return only_type
+
+        # 混合目标默认使用 agent 通道，避免破坏旧配置执行。
+        return "agent"
     
     def render_template(self, template: str, context: Dict[str, Any]) -> str:
         """

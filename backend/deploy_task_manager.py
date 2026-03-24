@@ -66,6 +66,23 @@ class DeployTaskManager:
         self.executor_factory = ExecutorFactory()
         self.command_adapter = CommandAdapter()
 
+    def _resolve_deploy_channel(
+        self, deploy_config: Dict[str, Any], target: Dict[str, Any], host_type: str
+    ) -> str:
+        """解析发布通道，优先使用 deploy.channel，其次根据目标主机类型推断。"""
+        channel = deploy_config.get("channel")
+        if channel in ["agent", "portainer", "ssh"]:
+            return channel
+
+        target_host_type = target.get("host_type")
+        if target_host_type in ["agent", "portainer", "ssh"]:
+            return target_host_type
+
+        if host_type in ["agent", "portainer", "ssh"]:
+            return host_type
+
+        return "agent"
+
     async def execute_task_with_manager(
         self,
         task_id: str,
@@ -327,6 +344,23 @@ class DeployTaskManager:
                 "host_type": host_type,
             }
 
+        deploy_channel = self._resolve_deploy_channel(deploy_config, target, host_type)
+        has_explicit_channel = deploy_config.get("channel") in [
+            "agent",
+            "portainer",
+            "ssh",
+        ]
+        if has_explicit_channel and deploy_channel != host_type:
+            return {
+                "success": False,
+                "message": (
+                    f"发布通道与目标主机类型不匹配: channel={deploy_channel}, "
+                    f"host_type={host_type}, host={host_name}"
+                ),
+                "host_type": host_type,
+                "host_name": host_name,
+            }
+
         # 创建执行器
         executor = self.executor_factory.create_executor(host_type, host_name)
         if not executor:
@@ -409,6 +443,7 @@ class DeployTaskManager:
             adapted_config = {
                 "steps": steps,
                 "redeploy": deploy_config.get("redeploy", False),
+                "channel": deploy_channel,
             }
         else:
             # 单命令模式：适配命令（根据主机类型）
@@ -452,11 +487,18 @@ class DeployTaskManager:
             # 合并redeploy等配置
             if deploy_config.get("redeploy"):
                 adapted_config["redeploy"] = True
+            adapted_config["channel"] = deploy_channel
             # 合并 compose_mode 和 redeploy_strategy（如果存在）
             if "compose_mode" in deploy_config:
                 adapted_config["compose_mode"] = deploy_config["compose_mode"]
             if "redeploy_strategy" in deploy_config:
                 adapted_config["redeploy_strategy"] = deploy_config["redeploy_strategy"]
+            if "stack_strategy" in deploy_config:
+                adapted_config["stack_strategy"] = deploy_config["stack_strategy"]
+            if "stack_id" in deploy_config:
+                adapted_config["stack_id"] = deploy_config["stack_id"]
+            if "stack_name" in deploy_config:
+                adapted_config["stack_name"] = deploy_config["stack_name"]
             # 合并应用名称（用于 Docker Compose 项目名称）
             if context and isinstance(context.get("app"), dict):
                 app_name = context.get("app", {}).get("name", "")
@@ -467,6 +509,12 @@ class DeployTaskManager:
                 adapted_config["compose_mode"] = deploy_config["compose_mode"]
             if "redeploy_strategy" in deploy_config:
                 adapted_config["redeploy_strategy"] = deploy_config["redeploy_strategy"]
+            if "stack_strategy" in deploy_config:
+                adapted_config["stack_strategy"] = deploy_config["stack_strategy"]
+            if "stack_id" in deploy_config:
+                adapted_config["stack_id"] = deploy_config["stack_id"]
+            if "stack_name" in deploy_config:
+                adapted_config["stack_name"] = deploy_config["stack_name"]
 
         # 创建状态更新回调
         def update_status_callback(message: str):
@@ -980,7 +1028,7 @@ class DeployTaskManager:
                 logger.info(f"开始清理已有部署...")
                 if deploy_mode == "docker_compose":
                     # 尝试删除 Stack
-                    stack_name = (
+                    stack_name = docker_config.get("stack_name") or (
                         f"{context.get('app', {}).get('name', 'app')}-{target_name}"
                     )
                     try:
@@ -1019,7 +1067,7 @@ class DeployTaskManager:
 
             if deploy_mode == "docker_compose":
                 # Docker Compose 部署
-                stack_name = (
+                stack_name = docker_config.get("stack_name") or (
                     f"{context.get('app', {}).get('name', 'app')}-{target_name}"
                 )
                 compose_content = docker_config.get("compose_content", "")

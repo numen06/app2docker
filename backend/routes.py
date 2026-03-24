@@ -7614,10 +7614,19 @@ class PortainerTestRequest(BaseModel):
     endpoint_id: int
 
 
+class PortainerTestByHostRequest(BaseModel):
+    portainer_url: Optional[str] = None
+    endpoint_id: Optional[int] = None
+
+
 class PortainerListEndpointsRequest(BaseModel):
     portainer_url: str
     api_key: str
     endpoint_id: int = 0  # 获取列表时不需要真实的 endpoint_id
+
+
+class PortainerListEndpointsByHostRequest(BaseModel):
+    portainer_url: Optional[str] = None
 
 
 class DeployTaskCreateRequest(BaseModel):
@@ -7643,6 +7652,52 @@ async def test_portainer_connection(request: Request, test_req: PortainerTestReq
             test_req.portainer_url, test_req.api_key, test_req.endpoint_id
         )
         return JSONResponse(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"测试连接失败: {str(e)}")
+
+
+@router.post("/agent-hosts/{host_id}/test-portainer")
+async def test_portainer_connection_by_host(
+    request: Request, host_id: str, test_req: PortainerTestByHostRequest
+):
+    """使用已保存的 API Key 测试指定 Portainer 主机连接"""
+    try:
+        manager = AgentHostManager()
+        host = manager.get_agent_host(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+        if host.get("host_type") != "portainer":
+            raise HTTPException(status_code=400, detail="该主机不是 Portainer 类型")
+
+        from backend.database import get_db_session
+        from backend.models import AgentHost
+
+        db = get_db_session()
+        try:
+            host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
+            if not host_obj or not host_obj.portainer_api_key:
+                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+
+            portainer_url = test_req.portainer_url or host_obj.portainer_url
+            endpoint_id = (
+                test_req.endpoint_id
+                if test_req.endpoint_id is not None
+                else host_obj.portainer_endpoint_id
+            )
+
+            if not portainer_url:
+                raise HTTPException(status_code=400, detail="Portainer URL 未配置")
+            if endpoint_id is None:
+                raise HTTPException(status_code=400, detail="Portainer Endpoint 未配置")
+
+            result = manager.test_portainer_connection(
+                str(portainer_url), str(host_obj.portainer_api_key), int(endpoint_id)
+            )
+            return JSONResponse(result)
+        finally:
+            db.close()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"测试连接失败: {str(e)}")
 
@@ -7682,6 +7737,167 @@ async def list_portainer_endpoints(
                 "endpoints": [],
             }
         )
+
+
+@router.post("/agent-hosts/{host_id}/list-portainer-endpoints")
+async def list_portainer_endpoints_by_host(
+    request: Request, host_id: str, req: PortainerListEndpointsByHostRequest
+):
+    """使用已保存的 API Key 获取指定 Portainer 主机的 Endpoints 列表"""
+    try:
+        manager = AgentHostManager()
+        host = manager.get_agent_host(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+        if host.get("host_type") != "portainer":
+            raise HTTPException(status_code=400, detail="该主机不是 Portainer 类型")
+
+        from backend.database import get_db_session
+        from backend.models import AgentHost
+        from backend.portainer_client import PortainerClient
+
+        db = get_db_session()
+        try:
+            host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
+            if not host_obj or not host_obj.portainer_api_key:
+                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+
+            portainer_url = req.portainer_url or host_obj.portainer_url
+            if not portainer_url:
+                raise HTTPException(status_code=400, detail="Portainer URL 未配置")
+
+            client = PortainerClient(portainer_url, host_obj.portainer_api_key, 0)
+            endpoints = client._request("GET", "/endpoints", timeout=5)
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "endpoints": [
+                        {
+                            "id": ep.get("Id"),
+                            "name": ep.get("Name"),
+                            "type": ep.get("Type"),
+                        }
+                        for ep in endpoints
+                    ],
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": f"获取 Endpoints 列表失败: {str(e)}",
+                "endpoints": [],
+            }
+        )
+
+
+@router.get("/agent-hosts/{host_id}/stacks")
+async def get_portainer_stacks(request: Request, host_id: str):
+    """获取 Portainer 主机的 Stack 列表"""
+    try:
+        manager = AgentHostManager()
+        host = manager.get_agent_host(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+        if host.get("host_type") != "portainer":
+            raise HTTPException(status_code=400, detail="该主机不是 Portainer 类型")
+
+        from backend.database import get_db_session
+        from backend.models import AgentHost
+        from backend.portainer_client import PortainerClient
+
+        db = get_db_session()
+        try:
+            host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
+            if not host_obj or not host_obj.portainer_api_key:
+                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+
+            client = PortainerClient(
+                host_obj.portainer_url,
+                host_obj.portainer_api_key,
+                int(host_obj.portainer_endpoint_id),
+            )
+            stacks = client.list_stacks()
+            return JSONResponse(
+                {
+                    "success": True,
+                    "stacks": [
+                        {
+                            "id": s.get("Id"),
+                            "name": s.get("Name"),
+                            "status": s.get("Status"),
+                            "created_at": s.get("CreationDate"),
+                            "updated_at": s.get("UpdateDate"),
+                            "endpoint_id": s.get("EndpointId", s.get("EndpointID")),
+                        }
+                        for s in stacks
+                    ],
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取 Stack 列表失败: {str(e)}")
+
+
+@router.get("/agent-hosts/{host_id}/stacks/{stack_id}")
+async def get_portainer_stack_details(request: Request, host_id: str, stack_id: int):
+    """获取 Portainer 主机指定 Stack 详情"""
+    try:
+        manager = AgentHostManager()
+        host = manager.get_agent_host(host_id)
+        if not host:
+            raise HTTPException(status_code=404, detail="主机不存在")
+        if host.get("host_type") != "portainer":
+            raise HTTPException(status_code=400, detail="该主机不是 Portainer 类型")
+
+        from backend.database import get_db_session
+        from backend.models import AgentHost
+        from backend.portainer_client import PortainerClient
+
+        db = get_db_session()
+        try:
+            host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
+            if not host_obj or not host_obj.portainer_api_key:
+                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+
+            client = PortainerClient(
+                host_obj.portainer_url,
+                host_obj.portainer_api_key,
+                int(host_obj.portainer_endpoint_id),
+            )
+            stack = client.get_stack(stack_id)
+            stack_file = client._request(
+                "GET",
+                f"/stacks/{stack_id}/file",
+                params={"endpointId": int(host_obj.portainer_endpoint_id)},
+            )
+            return JSONResponse(
+                {
+                    "success": True,
+                    "stack": {
+                        "id": stack.get("Id"),
+                        "name": stack.get("Name"),
+                        "status": stack.get("Status"),
+                        "created_at": stack.get("CreationDate"),
+                        "updated_at": stack.get("UpdateDate"),
+                        "compose_content": stack_file.get("StackFileContent", ""),
+                    },
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取 Stack 详情失败: {str(e)}")
 
 
 @router.post("/agent-hosts")
