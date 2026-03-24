@@ -1,18 +1,66 @@
 # Portainer API 文档
 
-> 文档生成时间: 2026-03-24
+> 文档生成时间: 2026-03-24  
+> 更新时间: 2026-03-24 (新增 Access Token 认证方式)
 
-**注意**: 使用此文档前，请配置以下环境变量：
+**注意**: 使用此文档前，请准备以下信息：
 
 - `PORTAINER_URL` - Portainer 服务器地址 (例如: http://localhost:9000)
-- `PORTAINER_USERNAME` - 登录用户名
-- `PORTAINER_PASSWORD` - 登录密码
+- **认证方式二选一**:
+  - 方式1: `PORTAINER_USERNAME` + `PORTAINER_PASSWORD` (JWT Token)
+  - 方式2: `PORTAINER_API_KEY` (Access Token，推荐)
 
 ---
 
 ## 1. 认证
 
-### 获取访问令牌
+Portainer 提供两种认证方式:
+
+### 1.1 方式一: Access Token (推荐)
+
+**优点**:
+
+- 无需每次登录获取JWT
+- Token长期有效
+- 可在Portainer UI中管理
+
+**获取方式**:
+
+1. 登录 Portainer Web UI
+2. 点击右上角用户头像 → "My account"
+3. 滚动到 "Access tokens" 区域
+4. 点击 "Add access token"
+5. 输入描述(如"API Access")，点击 "Add access token"
+6. **⚠️ 立即复制生成的Token** (只显示一次)
+
+**Token格式**: `ptr_<随机字符串>`
+
+**示例**: `ptr_Sxv8PTnyvGspUTe8+APsTFY7KiEGLaKBLSUPLUW7HoQ=`
+
+**使用方式**: 在请求Header中添加 `X-API-Key: <access_token>`
+
+**测试命令**:
+
+```bash
+# PowerShell
+$headers = @{"X-API-Key" = "ptr_Sxv8PTnyvGspUTe8+APsTFY7KiEGLaKBLSUPLUW7HoQ="}
+Invoke-RestMethod -Uri "http://127.0.0.1:9000/api/status" -Headers $headers
+
+# curl
+curl -H "X-API-Key: ptr_Sxv8PTnyvGspUTe8+APsTFY7KiEGLaKBLSUPLUW7HoQ=" \
+     http://127.0.0.1:9000/api/status
+```
+
+**测试结果**: ✅ 可用 (测试于 Portainer 2.33.3)
+
+---
+
+### 1.2 方式二: JWT Token
+
+**缺点**:
+
+- Token有效期较短(通常24小时)
+- 每次使用需先登录获取Token
 
 **请求:**
 
@@ -38,7 +86,7 @@ Content-Type: application/json
 }
 ```
 
-**使用方式:** 在后续请求的 Header 中添加 `Authorization: Bearer <jwt_token>`
+**使用方式**: 在后续请求的 Header 中添加 `Authorization: Bearer <jwt_token>`
 
 ---
 
@@ -751,7 +799,9 @@ Authorization: Bearer <token>
 
 ## 8. 注意事项
 
-1. **认证**: 所有 API 请求都需要在 Header 中携带 JWT Token
+1. **认证方式**:
+   - **推荐使用 Access Token** (`X-API-Key` Header): Token长期有效,无需每次登录
+   - JWT Token (`Authorization: Bearer` Header): 有效期较短,需定期刷新
 2. **EndpointId**: 大多数 Stack 操作需要指定 `endpointId` 参数
 3. **StackFileContent**: 更新 Stack 时必须提交完整的 docker-compose 文件内容
 4. **重启机制**: Portainer 没有直接的 restart 接口，通过 PUT 更新触发重新部署
@@ -759,3 +809,53 @@ Authorization: Bearer <token>
    - 不带更新：直接使用本地缓存镜像
    - 带更新：在 compose 文件中添加 `pull_policy: always` 强制拉取
 6. **权限**: 确保用户有足够的权限操作目标 Stack
+
+---
+
+## 9. 常见问题
+
+### 9.1 Access Token vs JWT Token 有什么区别?
+
+| 特性     | Access Token         | JWT Token                   |
+| -------- | -------------------- | --------------------------- |
+| 获取方式 | Portainer UI 生成    | API 登录获取                |
+| 有效期   | 长期有效(可手动撤销) | 短期有效(通常24小时)        |
+| Header   | `X-API-Key: ptr_...` | `Authorization: Bearer ...` |
+| 推荐度   | ⭐⭐⭐⭐⭐           | ⭐⭐⭐                      |
+| 适用场景 | 自动化脚本、CI/CD    | 临时测试、Web应用           |
+
+### 9.2 如何创建 Access Token?
+
+1. 登录 Portainer Web UI (例如: http://127.0.0.1:9000)
+2. 点击右上角用户头像 → "My account"
+3. 滚动到 "Access tokens" 区域
+4. 点击 "Add access token"
+5. 输入描述(如"API Access")，点击 "Add access token"
+6. **⚠️ 立即复制生成的Token** (只显示一次!)
+
+### 9.3 测试 Access Token 是否有效
+
+**PowerShell:**
+
+```powershell
+$apiKey = "ptr_YOUR_TOKEN_HERE"
+$headers = @{"X-API-Key" = $apiKey}
+try {
+    $result = Invoke-RestMethod -Uri "http://127.0.0.1:9000/api/status" -Headers $headers
+    Write-Host "✅ Token 有效! Portainer 版本: $($result.Version)"
+} catch {
+    Write-Host "❌ Token 无效或已过期: $($_.Exception.Message)"
+}
+```
+
+**curl:**
+
+```bash
+curl -H "X-API-Key: ptr_YOUR_TOKEN_HERE" http://127.0.0.1:9000/api/status
+```
+
+### 9.4 Portainer API 常用端口
+
+- `9000`: Portainer Web UI 和 API
+- `9443`: Portainer HTTPS (如果启用)
+- `8000`: Edge Agent 通信端口
