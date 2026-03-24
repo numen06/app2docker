@@ -157,7 +157,7 @@ docker run -d \
 ```mermaid
 flowchart LR
   User[用户] --> DeployUI[部署任务界面]
-  DeployUI --> DeployApi[/deploy-tasks接口]
+  DeployUI --> DeployApi["/deploy-tasks 接口"]
   DeployApi --> TaskMgr[统一任务管理]
   TaskMgr --> DeployEngine[部署执行编排]
 
