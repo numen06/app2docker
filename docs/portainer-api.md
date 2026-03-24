@@ -757,21 +757,112 @@ Authorization: Bearer <token>
 
 ### 6.3 镜像管理 API
 
-| API                     | 方法 | 状态          | 说明                          |
-| ----------------------- | ---- | ------------- | ----------------------------- |
-| `/docker/images/json`   | GET  | ✅ 可用       | 获取镜像列表                  |
-| `/docker/images/create` | POST | ⚠️ 可能不支持 | 镜像会在创建 Stack 时自动拉取 |
+| API                     | 方法 | 状态      | 说明                          |
+| ----------------------- | ---- | --------- | ----------------------------- |
+| `/docker/images/json`   | GET  | ✅ 可用   | 获取镜像列表                  |
+| `/docker/images/create` | POST | ✅ 可用   | 拉取镜像（已测试成功）        |
 
 ### 6.4 重要说明
 
-1. **创建容器方式**: Portainer 2.33.3 不支持直接通过 Docker API 创建容器 (`POST /containers/create` 返回 404)。
+1. **创建容器方式**: Portainer 2.33.3 不支持直接通过 Docker API 创建容器 (`POST /containers/create` 返回 400 错误)。
    - **正确做法**: 使用 Stack API 创建 Stack，镜像会自动拉取
 
-2. **镜像拉取**: 无需手动拉取镜像，创建 Stack 时会自动拉取所需镜像
+2. **镜像拉取**: ✅ **支持通过API拉取镜像** - 已测试成功拉取 nginx:latest
 
 3. **容器管理**: 可以通过 Docker API 代理管理现有容器（启动、停止、重启、查看日志等）
 
 4. **Endpoint ID**: 当前环境使用 Endpoint ID = 4
+
+5. **Stack 操作限制**:
+   - ✅ 支持: 获取Stack列表、详情、文件、启动、删除
+   - ❌ 不支持: 创建Stack(405)、更新Stack(500)、停止Stack(400)
+   - ⚠️ **替代方案**: 通过 Portainer Web UI 创建和更新 Stack
+
+---
+
+## 7. API 测试详细结果
+
+### 7.1 ✅ 成功的 API
+
+#### 7.1.1 拉取镜像 (POST /docker/images/create)
+```
+状态码: 200 OK
+响应: 成功拉取 nginx:latest 镜像
+说明: 可以通过 API 拉取镜像,支持进度流式输出
+```
+
+#### 7.1.2 启动 Stack (POST /api/stacks/{id}/start)
+```
+状态码: 200 OK
+测试: Stack ID 18 (ollama-openai-proxy) 启动成功
+状态变化: Status = 2 (已停止) → Status = 1 (运行中)
+```
+
+#### 7.1.3 获取 Stack 文件 (GET /api/stacks/{id}/file)
+```
+状态码: 200 OK
+响应: 返回完整的 docker-compose.yml 内容
+说明: 可用于查看 Stack 的当前配置
+```
+
+### 7.2 ❌ 失败的 API
+
+#### 7.2.1 创建 Stack (POST /api/stacks)
+```
+状态码: 405 Method Not Allowed
+请求: POST /api/stacks?endpointId=4&type=2&method=string
+请求体: { Name, StackFileContent, Env }
+错误: "不允许的方法"
+原因: Portainer 2.33.3 可能不支持通过 API 创建 Stack
+替代方案: 使用 Portainer Web UI 创建 Stack
+```
+
+#### 7.2.2 更新 Stack (PUT /api/stacks/{id})
+```
+状态码: 500 Internal Server Error
+请求: PUT /api/stacks/18?endpointId=4
+请求体: { StackFileContent, Env, Prune }
+错误: "内部服务器错误"
+原因: 可能是参数格式问题或 Portainer 版本限制
+替代方案: 使用 Portainer Web UI 更新 Stack
+```
+
+#### 7.2.3 停止 Stack (POST /api/stacks/{id}/stop)
+```
+状态码: 400 Bad Request
+请求: POST /api/stacks/18/stop?endpointId=4
+错误: "错误的请求"
+原因: 可能需要额外的参数或 Header
+替代方案: 使用容器级别的停止操作
+```
+
+#### 7.2.4 创建容器 (POST /docker/containers/create)
+```
+状态码: 400 Bad Request
+请求: POST /api/endpoints/4/docker/containers/create?name=test-nginx-direct
+请求体: { Image, HostConfig }
+错误: "错误的请求"
+原因: Portainer 2.33.3 不支持直接创建容器
+替代方案: 创建 Stack 来部署容器
+```
+
+### 7.3 测试结论
+
+**✅ 可用的功能:**
+- 查询类操作: 获取列表、详情、文件等
+- 容器管理: 启动、停止、重启、查看日志
+- Stack 管理: 启动、删除
+- 镜像管理: 拉取镜像
+
+**❌ 不可用的功能:**
+- Stack 创建和更新
+- Stack 停止
+- 直接创建容器
+
+**💡 推荐方案:**
+- 创建/更新 Stack: 使用 Portainer Web UI
+- 管理容器: 使用 API (启动、停止、重启)
+- 拉取镜像: 可使用 API 或让 Stack 自动拉取
 
 ---
 
