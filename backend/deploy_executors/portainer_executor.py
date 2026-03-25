@@ -244,6 +244,10 @@ class PortainerExecutor(DeployExecutor):
                 logger.info(
                     f"发布 Compose Stack: {stack_name} (compose_mode={compose_mode}, 兼容字段)"
                 )
+                if update_status_callback:
+                    update_status_callback(
+                        f"[Portainer] Stack 策略: {stack_strategy}, selected_stack_id={selected_stack_id or '-'}, stack_name={stack_name}"
+                    )
                 
                 # 使用重试机制执行部署
                 result = None
@@ -259,7 +263,13 @@ class PortainerExecutor(DeployExecutor):
                                 update_status_callback(f"Stack 部署失败，{wait_time}秒后重试（{attempt + 1}/{max_retries}）...")
                             await asyncio.sleep(wait_time)
                         
-                        result = client.deploy_stack(stack_name, compose_content)
+                        # 选择“更新已有 Stack”时优先按 stack_id 更新，避免同名 Stack 或名称解析导致更新错目标
+                        if stack_strategy == "update_existing" and selected_stack_id:
+                            result = client.update_stack(
+                                int(selected_stack_id), compose_content
+                            )
+                        else:
+                            result = client.deploy_stack(stack_name, compose_content)
                         logger.info(f"Docker Compose 部署结果: {result}")
                         break
                         
