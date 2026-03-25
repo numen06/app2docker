@@ -323,10 +323,24 @@ class PortainerClient:
     def update_stack(
         self, stack_id: int, compose_content: str, env: Optional[List[str]] = None
     ) -> Dict[str, Any]:
+        # 读取更新前的 Stack 文件，便于判断“调用成功但内容未变化”的情况
+        before_content = ""
+        try:
+            stack_file = self._request(
+                "GET",
+                f"/stacks/{stack_id}/file",
+                params={"endpointId": self.endpoint_id},
+            )
+            before_content = stack_file.get("StackFileContent", "") or ""
+        except Exception as read_err:
+            logger.warning("读取更新前 Stack 文件失败 (stack_id=%s): %s", stack_id, read_err)
+
         payload = {
             "StackFileContent": compose_content,
             "Env": self._split_env_pairs(env),
             "Prune": False,
+            # 即使镜像 tag 不变（如 latest），也尝试拉取新镜像，避免“更新成功但运行态未变化”
+            "PullImage": True,
         }
         self._request(
             "PUT",
@@ -334,7 +348,23 @@ class PortainerClient:
             params={"endpointId": self.endpoint_id},
             json=payload,
         )
-        return {"success": True, "message": "Stack 更新成功", "stack_id": stack_id}
+
+        changed = (before_content or "").strip() != (compose_content or "").strip()
+        if changed:
+            message = "Stack 更新成功（Compose 内容已变更）"
+        else:
+            message = "Stack 更新成功（Compose 内容未变化，可能仅执行了重部署/拉镜像）"
+            logger.info(
+                "Stack 更新调用成功但 Compose 内容未变化: stack_id=%s, endpoint_id=%s",
+                stack_id,
+                self.endpoint_id,
+            )
+        return {
+            "success": True,
+            "message": message,
+            "stack_id": stack_id,
+            "compose_changed": changed,
+        }
 
     def deploy_container_as_stack(
         self,
