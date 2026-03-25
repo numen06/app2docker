@@ -89,19 +89,18 @@
             <th width="8%">触发次数</th>
             <th width="12%">创建时间</th>
             <th width="12%">最后触发</th>
-            <th width="18%">Webhook URL</th>
-            <th width="20%">操作</th>
+            <th width="38%">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="8" class="text-center py-4">
+            <td colspan="7" class="text-center py-4">
               <div class="spinner-border spinner-border-sm me-2"></div>
               加载中...
             </td>
           </tr>
           <tr v-else-if="filteredTasks.length === 0">
-            <td colspan="8" class="text-center py-4 text-muted">
+            <td colspan="7" class="text-center py-4 text-muted">
               暂无符合筛选条件的部署配置
             </td>
           </tr>
@@ -156,30 +155,6 @@
               </div>
             </td>
             <td>
-              <div v-if="task.webhook_token" class="d-flex align-items-start">
-                <code
-                  class="small text-primary"
-                  role="button"
-                  tabindex="0"
-                  style="
-                    font-size: 0.75rem;
-                    word-break: break-all;
-                    max-width: 220px;
-                    display: block;
-                    cursor: pointer;
-                    text-decoration: underline;
-                    text-decoration-style: dotted;
-                  "
-                  :title="getWebhookUrl(task) + ' — 点击查看说明与复制'"
-                  @click="showWebhookUrl(task)"
-                  @keydown.enter.prevent="showWebhookUrl(task)"
-                >
-                  {{ getWebhookUrl(task) }}
-                </code>
-              </div>
-              <span v-else class="text-muted small">未配置</span>
-            </td>
-            <td>
               <div class="btn-group" role="group">
                 <button
                   class="btn btn-sm btn-outline-primary"
@@ -194,6 +169,14 @@
                   title="触发部署（将创建新任务）"
                 >
                   <i class="fas fa-play"></i> 触发
+                </button>
+                <button
+                  v-if="task.webhook_token"
+                  class="btn btn-sm btn-outline-info"
+                  @click="showWebhookUrl(task)"
+                  title="查看 Webhook URL"
+                >
+                  <i class="fas fa-link"></i>
                 </button>
                 <button
                   class="btn btn-sm btn-outline-secondary"

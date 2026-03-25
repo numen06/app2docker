@@ -2290,6 +2290,9 @@ async def get_all_tasks(
                             "error": task_obj.error,
                             "task_config": task_config,
                             "deploy_config_id": task_obj.deploy_config_id,  # 关联的配置ID
+                            # 任务列表「来源」列：与 Task 表一致（Webhook / 手动 + trigger_source）
+                            "source": task_obj.source,
+                            "trigger_source": task_obj.trigger_source,
                         }
 
                         # 如果有 deploy_config_id，从配置中获取应用名称
@@ -2419,6 +2422,8 @@ async def get_running_tasks():
                     ),
                     "task_config": task_obj.task_config or {},
                     "deploy_config_id": task_obj.deploy_config_id,
+                    "source": task_obj.source,
+                    "trigger_source": task_obj.trigger_source,
                 }
 
                 # 如果有 deploy_config_id，从配置中获取应用名称
@@ -2480,6 +2485,11 @@ async def get_running_tasks():
                 result_task["image"] = task.get("image")
             if task.get("tag"):
                 result_task["tag"] = task.get("tag")
+            if task.get("task_category") == "deploy":
+                if task.get("source") is not None:
+                    result_task["source"] = task.get("source")
+                if task.get("trigger_source") is not None:
+                    result_task["trigger_source"] = task.get("trigger_source")
             result_tasks.append(result_task)
 
         return JSONResponse({"tasks": result_tasks})

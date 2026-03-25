@@ -516,7 +516,22 @@
               </div>
             </td>
             <td>
-              <span v-if="task.source === '流水线'" class="badge bg-primary">
+              <span
+                v-if="
+                  task.task_category === 'deploy' &&
+                  (task.trigger_source === 'webhook' || task.source === 'Webhook')
+                "
+                class="badge bg-success"
+              >
+                <i class="fas fa-link"></i> Webhook
+              </span>
+              <span
+                v-else-if="task.task_category === 'deploy'"
+                class="badge bg-success"
+              >
+                <i class="fas fa-hand-pointer"></i> 手动
+              </span>
+              <span v-else-if="task.source === '流水线'" class="badge bg-primary">
                 <i class="fas fa-project-diagram"></i> 流水线
               </span>
               <span v-else-if="task.source === 'Git源码'" class="badge bg-info">
