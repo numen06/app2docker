@@ -121,7 +121,7 @@ class PortainerExecutor(DeployExecutor):
             redeploy = deploy_config.get("redeploy", False)
             
             logger.info(
-                f"部署模式: {deploy_mode}, 通道: {deploy_channel}, 重新发布: {redeploy}"
+                f"Stack 发布参数: deploy_mode={deploy_mode}, channel={deploy_channel}, redeploy={redeploy}"
             )
             
             # 记录命令信息
@@ -140,10 +140,15 @@ class PortainerExecutor(DeployExecutor):
                     
                     if deploy_mode == "docker_compose":
                         if command:
-                            update_status_callback(f"[Portainer] 执行命令: docker-compose {command}")
+                            update_status_callback(
+                                f"[Portainer] Stack 发布命令参数: {command}"
+                            )
                         if compose_content:
                             compose_preview = compose_content.split('\n')[:5]
-                            update_status_callback(f"[Portainer] docker-compose.yml 内容预览:\n" + "\n".join([f"  {line}" for line in compose_preview]))
+                            update_status_callback(
+                                "[Portainer] Stack Compose 内容预览:\n"
+                                + "\n".join([f"  {line}" for line in compose_preview])
+                            )
                     else:
                         if command:
                             update_status_callback(f"[Portainer] 执行命令: docker run {command}")
@@ -151,7 +156,9 @@ class PortainerExecutor(DeployExecutor):
                         if image:
                             update_status_callback(f"[Portainer] 镜像: {image}")
                 
-                update_status_callback(f"[Portainer] 正在通过 Portainer API 部署到 {self.host_name}...")
+                update_status_callback(
+                    f"[Portainer] 正在通过 Portainer API 发布 Stack 到 {self.host_name}..."
+                )
             
             # 如果需要重新发布，根据策略处理
             redeploy_strategy = deploy_config.get("redeploy_strategy", "update_existing")
@@ -195,9 +202,9 @@ class PortainerExecutor(DeployExecutor):
                         logger.warning(f"删除单容器 Stack 失败（可能不存在）: {e}")
             
             # 执行部署
-            logger.info(f"开始执行部署: mode={deploy_mode}")
+            logger.info(f"开始执行 Portainer Stack 发布: mode={deploy_mode}")
             if update_status_callback:
-                update_status_callback(f"正在执行 {deploy_mode} 部署...")
+                update_status_callback(f"正在执行 Portainer Stack 发布（{deploy_mode}）...")
             
             if deploy_mode == "docker_compose":
                 # Docker Compose 部署
@@ -234,7 +241,9 @@ class PortainerExecutor(DeployExecutor):
                         "deploy_method": "portainer_api"
                     }
                 
-                logger.info(f"部署 Docker Compose Stack: {stack_name}")
+                logger.info(
+                    f"发布 Compose Stack: {stack_name} (compose_mode={compose_mode}, 兼容字段)"
+                )
                 
                 # 使用重试机制执行部署
                 result = None

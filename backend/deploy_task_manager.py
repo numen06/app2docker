@@ -406,8 +406,18 @@ class DeployTaskManager:
 
             if host_info:
                 docker_info = host_info.get("docker_info", {})
-
-                if compose_mode == "docker-compose":
+                # Portainer 通道统一按 Stack 发布，不依赖 compose_mode 的本机能力探测
+                if host_type == "portainer":
+                    logger.info(
+                        "[DeployTaskManager] Portainer 通道跳过 compose_mode 能力检查，统一按 Stack 发布: "
+                        f"task_id={task_id}, host={host_name}, compose_mode={compose_mode}"
+                    )
+                    if task_manager:
+                        task_manager.add_log(
+                            task_id,
+                            "ℹ️ Portainer 通道已忽略 compose_mode 能力检查，统一按 Stack 发布\n",
+                        )
+                elif compose_mode == "docker-compose":
                     compose_supported = docker_info.get("compose_supported")
                     if compose_supported is False:
                         if task_manager:

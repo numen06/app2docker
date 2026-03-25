@@ -410,7 +410,10 @@
 
                 <!-- Docker Compose 模式选择 -->
                 <div
-                  v-if="simpleForm.deployMode === 'docker_compose'"
+                  v-if="
+                    simpleForm.deployMode === 'docker_compose' &&
+                    simpleForm.deployChannel !== 'portainer'
+                  "
                   class="mb-3"
                 >
                   <label class="form-label"
@@ -2822,6 +2825,7 @@ export default {
         }
         if (
           this.simpleForm.deployMode === "docker_compose" &&
+          this.simpleForm.deployChannel !== "portainer" &&
           newHosts.length > 0
         ) {
           // 如果当前选择的模式不支持，自动切换到支持的模式
@@ -2917,6 +2921,7 @@ export default {
         }
         if (
           this.editForm.deployMode === "docker_compose" &&
+          this.editForm.deployChannel !== "portainer" &&
           newHosts.length > 0
         ) {
           // 如果当前选择的模式不支持，自动切换到支持的模式
@@ -3530,7 +3535,10 @@ export default {
         if (this.simpleForm.deployMode === "docker_compose") {
           deployConfig.compose_content = this.simpleForm.composeContent.trim();
           // 添加 compose_mode 和 redeploy_strategy
-          if (this.simpleForm.composeMode) {
+          if (
+            this.simpleForm.deployChannel !== "portainer" &&
+            this.simpleForm.composeMode
+          ) {
             deployConfig.compose_mode = this.simpleForm.composeMode;
           }
           if (this.simpleForm.redeployStrategy) {
@@ -4226,7 +4234,7 @@ export default {
         if (form.deployMode === "docker_compose") {
           deployConfig.compose_content = form.composeContent.trim();
           // 添加 compose_mode 和 redeploy_strategy
-          if (form.composeMode) {
+          if (form.deployChannel !== "portainer" && form.composeMode) {
             deployConfig.compose_mode = form.composeMode;
           }
           if (form.redeployStrategy) {
