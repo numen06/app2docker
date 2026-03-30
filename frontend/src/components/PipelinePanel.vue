@@ -1979,7 +1979,7 @@
                               class="form-control form-control-sm"
                               :placeholder="webhook.branch_strategy === 'filter_match' ? 'main, feature/*, release/*' : 'main, develop, staging'"
                               :value="(webhook.branches || []).join(', ')"
-                              @input="webhook.branches = $event.target.value.split(',').map(b => b.trim()).filter(Boolean)"
+                              @input="webhook.branches = $event.target.value.replace(/，/g, ',').split(',').map(b => b.trim()).filter(Boolean)"
                             />
                             <small class="text-muted">多个分支用逗号分隔</small>
                           </div>
@@ -4396,11 +4396,19 @@ function getDeployWebhookUrl(token) {
 function onDeployTaskSelected(webhook, configId) {
   const task = deployTaskList.value.find((t) => t.task_id === configId);
   if (!task) return;
-  const token = task.webhook_token;
-  if (token) {
-    webhook.url = getDeployWebhookUrl(token);
-    webhook.method = "POST";
+  let token = task.webhook_token;
+  if (!token) {
+    // 部署配置没有 webhook_token，自动生成一个
+    token = crypto.randomUUID();
+    task.webhook_token = token;
+    // 异步回写到后端，确保下次也能使用
+    axios.put(`/api/deploy-tasks/${configId}`, {
+      config_content: task.config_content,
+      webhook_token: token,
+    }).catch(() => {});
   }
+  webhook.url = getDeployWebhookUrl(token);
+  webhook.method = "POST";
 }
 
 function showCreateModal() {
@@ -4736,7 +4744,7 @@ async function savePipeline() {
       formData.value.branch_tag_mapping.forEach((mapping) => {
         if (mapping.branch && mapping.tag) {
           // 如果标签包含逗号，转换为数组；否则保持字符串
-          const tagValue = mapping.tag.trim();
+          const tagValue = mapping.tag.trim().replace(/，/g, ',');
           if (tagValue.includes(",")) {
             // 多个标签，转换为数组
             branch_tag_mapping[mapping.branch] = tagValue

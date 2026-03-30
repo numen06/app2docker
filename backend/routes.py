@@ -5327,15 +5327,16 @@ async def run_pipeline(
                     # 如果是数组，直接使用
                     tags = mapped_tag_value
                 elif isinstance(mapped_tag_value, str):
-                    # 如果是字符串，检查是否包含逗号
-                    if "," in mapped_tag_value:
+                    # 如果是字符串，检查是否包含逗号（兼容全角逗号）
+                    normalized = mapped_tag_value.replace("，", ",")
+                    if "," in normalized:
                         # 逗号分隔的多个标签
                         tags = [
-                            t.strip() for t in mapped_tag_value.split(",") if t.strip()
+                            t.strip() for t in normalized.split(",") if t.strip()
                         ]
                     else:
                         # 单个标签
-                        tags = [mapped_tag_value]
+                        tags = [normalized]
 
         # 检查防抖（5秒内重复触发直接加入队列）
         if manager.check_debounce(pipeline_id, debounce_seconds=5):
@@ -5425,15 +5426,16 @@ async def run_pipeline(
                     # 如果是数组，直接使用
                     tags = mapped_tag_value
                 elif isinstance(mapped_tag_value, str):
-                    # 如果是字符串，检查是否包含逗号
-                    if "," in mapped_tag_value:
+                    # 如果是字符串，检查是否包含逗号（兼容全角逗号）
+                    normalized = mapped_tag_value.replace("，", ",")
+                    if "," in normalized:
                         # 逗号分隔的多个标签
                         tags = [
-                            t.strip() for t in mapped_tag_value.split(",") if t.strip()
+                            t.strip() for t in normalized.split(",") if t.strip()
                         ]
                     else:
                         # 单个标签
-                        tags = [mapped_tag_value]
+                        tags = [normalized]
 
         # 为每个标签创建任务（与webhook使用相同的逻辑）
         from backend.handlers import pipeline_to_task_config
@@ -5867,15 +5869,16 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     # 如果是数组，直接使用
                     tags = mapped_tag_value
                 elif isinstance(mapped_tag_value, str):
-                    # 如果是字符串，检查是否包含逗号
-                    if "," in mapped_tag_value:
+                    # 如果是字符串，检查是否包含逗号（兼容全角逗号）
+                    normalized = mapped_tag_value.replace("，", ",")
+                    if "," in normalized:
                         # 逗号分隔的多个标签
                         tags = [
-                            t.strip() for t in mapped_tag_value.split(",") if t.strip()
+                            t.strip() for t in normalized.split(",") if t.strip()
                         ]
                     else:
                         # 单个标签
-                        tags = [mapped_tag_value]
+                        tags = [normalized]
 
         # 为每个标签创建任务
         from backend.handlers import pipeline_to_task_config

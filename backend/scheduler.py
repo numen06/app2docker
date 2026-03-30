@@ -2,7 +2,7 @@
 """流水线定时调度器"""
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from croniter import croniter
 from backend.pipeline_manager import PipelineManager
@@ -100,11 +100,19 @@ class PipelineScheduler:
                 next_run = pipeline.get("next_run_time")
                 
                 if next_run is None:
-                    # 首次运行，计算下次执行时间
-                    cron = croniter(cron_expr, now)
+                    # 首次运行，计算下次执行时间（基于上一分钟，确保错过的时间点也能触发）
+                    cron = croniter(cron_expr, now - timedelta(minutes=1))
                     next_run_time = cron.get_next(datetime)
                     self._update_next_run_time(pipeline_id, next_run_time)
                     print(f"📅 流水线 {pipeline['name']} 下次执行时间: {next_run_time}")
+                    # 如果下次执行时间已过或即将到达（1分钟内），立即触发
+                    if now >= next_run_time - timedelta(minutes=1):
+                        print(f"🚀 首次触发定时流水线: {pipeline['name']}")
+                        self._trigger_pipeline(pipeline)
+                        cron = croniter(cron_expr, now)
+                        next_run_time = cron.get_next(datetime)
+                        self._update_next_run_time(pipeline_id, next_run_time)
+                        print(f"📅 流水线 {pipeline['name']} 新的下次执行时间: {next_run_time}")
                     continue
                 
                 # 解析下次执行时间

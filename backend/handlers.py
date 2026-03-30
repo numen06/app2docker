@@ -4476,14 +4476,15 @@ def pipeline_to_task_config(
                 if isinstance(mapped_tag_value, list):
                     tag_list = mapped_tag_value
                 elif isinstance(mapped_tag_value, str):
-                    if "," in mapped_tag_value:
+                    normalized = mapped_tag_value.replace("，", ",")
+                    if "," in normalized:
                         # 逗号分隔的多个标签
                         tag_list = [
-                            t.strip() for t in mapped_tag_value.split(",") if t.strip()
+                            t.strip() for t in normalized.split(",") if t.strip()
                         ]
                     else:
                         # 单个标签
-                        tag_list = [mapped_tag_value]
+                        tag_list = [normalized]
 
                 # 如果传入了tag参数，且该tag在映射值列表中，使用传入的tag
                 # 这样可以支持多个标签的场景（如test分支映射到dev,test两个标签）
