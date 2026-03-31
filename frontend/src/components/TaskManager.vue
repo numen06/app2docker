@@ -1105,7 +1105,7 @@ const saving = ref(false); // 保存中状态
 const showConfigModal = ref(false); // 任务配置JSON模态框
 const taskConfigJson = ref(""); // 任务配置JSON
 const taskConfigJsonText = ref(""); // JSON文本内容（用于CodeMirror）
-const maxConcurrentTasks = ref(3);
+const maxConcurrentTasks = ref(15);
 const queueRunningCount = ref(0);
 const queuePendingCount = ref(0);
 const savingSystemSettings = ref(false);
@@ -1399,7 +1399,7 @@ async function loadTasks(includeStats = true) {
 async function loadSystemQueueSettings() {
   try {
     const res = await axios.get("/api/system-settings");
-    maxConcurrentTasks.value = res.data.max_concurrent_tasks || 3;
+    maxConcurrentTasks.value = res.data.max_concurrent_tasks || 15;
     queueRunningCount.value = res.data.running_count || 0;
     queuePendingCount.value = res.data.pending_count || 0;
   } catch (err) {

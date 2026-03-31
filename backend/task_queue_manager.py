@@ -38,7 +38,7 @@ class GlobalTaskQueueManager:
             self._get_or_create_setting(
                 db,
                 "max_concurrent_tasks",
-                "3",
+                "15",
                 "系统全局最大并发任务数（运行中）",
             )
         finally:
@@ -48,12 +48,12 @@ class GlobalTaskQueueManager:
         db = get_db_session()
         try:
             setting = self._get_or_create_setting(
-                db, "max_concurrent_tasks", "3", "系统全局最大并发任务数（运行中）"
+                db, "max_concurrent_tasks", "15", "系统全局最大并发任务数（运行中）"
             )
             try:
                 value = int(setting.setting_value)
             except (TypeError, ValueError):
-                value = 3
+                value = 15
             return max(1, value)
         finally:
             db.close()
