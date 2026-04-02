@@ -1094,6 +1094,8 @@ async function handleLoginSuccess(data) {
   authenticated.value = true;
   username.value = data.username;
   console.log("✅ 登录成功:", data.username);
+  await nextTick();
+  initTopbarDropdowns();
 
   try {
     const permissions = await getUserPermissions();
@@ -1196,6 +1198,12 @@ onUnmounted(() => {
 });
 
 watch(runningTasksCount, async () => {
+  await nextTick();
+  initTopbarDropdowns();
+});
+
+watch(authenticated, async (val) => {
+  if (!val) return;
   await nextTick();
   initTopbarDropdowns();
 });
