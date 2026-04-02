@@ -149,9 +149,7 @@ def check_gitee_update() -> dict:
         raw_body = release.get("body")
         if isinstance(raw_body, str) and raw_body.strip():
             result["release_body"] = raw_body.strip()
-            result["release_body_summary"] = (
-                summarize_release_body(raw_body) or None
-            )
+            result["release_body_summary"] = summarize_release_body(raw_body) or None
 
         result["latest_version"] = latest_version or None
         result["release_url"] = release_url
