@@ -279,13 +279,13 @@
         >
           <i class="fas fa-sliders-h"></i> 并发设置
         </button>
-        <div class="btn-group">
+        <div class="btn-group position-relative" ref="cleanupDropdownWrap">
           <button
-            ref="cleanupDropdownBtn"
             class="btn btn-sm btn-outline-danger dropdown-toggle"
             type="button"
-            data-bs-toggle="dropdown"
             :disabled="cleaning"
+            :aria-expanded="cleanupMenuOpen ? 'true' : 'false'"
+            @click.stop="toggleCleanupMenu"
           >
             <i class="fas fa-broom"></i> 清理任务
             <span
@@ -293,7 +293,11 @@
               class="spinner-border spinner-border-sm ms-1"
             ></span>
           </button>
-          <ul class="dropdown-menu dropdown-menu-end">
+          <ul
+            class="dropdown-menu dropdown-menu-end"
+            :class="{ show: cleanupMenuOpen }"
+            @click.stop
+          >
             <li>
               <a
                 class="dropdown-item text-danger"
@@ -1071,7 +1075,6 @@ import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
-import { Dropdown } from "bootstrap";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { Codemirror } from "vue-codemirror";
 import TaskLogModal from "./TaskLogModal.vue";
@@ -1116,8 +1119,8 @@ const savingSystemSettings = ref(false);
 const jsonEditorExtensions = [StreamLanguage.define(javascript), oneDark];
 
 const showSaveAsPipelineModal = ref(false); // 另存为流水线模态框
-const cleanupDropdownBtn = ref(null);
-let cleanupDropdownInstance = null;
+const cleanupDropdownWrap = ref(null);
+const cleanupMenuOpen = ref(false);
 const pipelineForm = ref({
   name: "",
   description: "",
@@ -1147,6 +1150,23 @@ const pipelineForm = ref({
   enabled: true,
 });
 let refreshInterval = null;
+
+function toggleCleanupMenu() {
+  if (cleaning.value) return;
+  cleanupMenuOpen.value = !cleanupMenuOpen.value;
+}
+
+function closeCleanupMenu() {
+  cleanupMenuOpen.value = false;
+}
+
+function handleCleanupOutsideClick(event) {
+  const wrap = cleanupDropdownWrap.value;
+  if (!wrap) return;
+  if (!wrap.contains(event.target)) {
+    closeCleanupMenu();
+  }
+}
 
 // 启动定时刷新（只在有运行中任务时启动）
 function startRefreshInterval() {
@@ -1821,6 +1841,7 @@ async function deleteTask(task) {
 }
 
 async function cleanupAll() {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   if (
@@ -1848,6 +1869,7 @@ async function cleanupAll() {
 }
 
 async function cleanupByStatus(status) {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   const statusText = status === "completed" ? "已完成" : "失败";
@@ -1878,6 +1900,7 @@ async function cleanupByStatus(status) {
 }
 
 async function cleanupByDaysPrompt() {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   const daysInput = prompt(
@@ -1921,6 +1944,7 @@ async function cleanupByDaysPrompt() {
 }
 
 async function cleanupOrphanDirs() {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   if (
@@ -2001,6 +2025,7 @@ async function cleanupOrphanDirs() {
 }
 
 async function cleanupBuildDir() {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   if (
@@ -2090,6 +2115,7 @@ async function cleanupBuildDir() {
 
 // 清理下载目录
 async function cleanupExportDir() {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   if (
@@ -2133,6 +2159,7 @@ async function cleanupExportDir() {
 
 // 清理N天前的下载文件
 async function cleanupExportDirDays() {
+  closeCleanupMenu();
   if (cleaning.value) return;
 
   const days = prompt(
@@ -2452,10 +2479,7 @@ function handleTaskCreated(event) {
 }
 
 onMounted(() => {
-  // 显式初始化清理任务下拉菜单，避免迁移后 data-api 绑定失效
-  if (cleanupDropdownBtn.value) {
-    cleanupDropdownInstance = new Dropdown(cleanupDropdownBtn.value);
-  }
+  document.addEventListener("click", handleCleanupOutsideClick);
 
   // 监听任务创建事件
   window.addEventListener("taskCreated", handleTaskCreated);
@@ -2479,10 +2503,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (cleanupDropdownInstance) {
-    cleanupDropdownInstance.dispose();
-    cleanupDropdownInstance = null;
-  }
+  document.removeEventListener("click", handleCleanupOutsideClick);
 
   // 移除任务创建事件监听器
   window.removeEventListener("taskCreated", handleTaskCreated);
