@@ -187,21 +187,98 @@
         </div>
       </nav>
 
-      <!-- 侧边栏 -->
+      <!-- 侧边栏（二级菜单） -->
       <aside class="admin-sidebar" aria-label="主导航">
-        <nav class="admin-sidebar-nav">
-          <button
-            v-for="item in visibleSidebarItems"
-            :key="item.id"
-            type="button"
-            class="admin-sidebar-link"
-            :class="{ active: activeTab === item.id }"
-            :title="item.label"
-            @click="activeTab = item.id"
+        <nav v-if="!sidebarCollapsed" class="admin-sidebar-nav">
+          <div
+            v-for="group in visibleSidebarGroups"
+            :key="group.id"
+            class="admin-sidebar-group"
+            :class="{
+              'admin-sidebar-group--open': isGroupExpanded(group.id),
+              'admin-sidebar-group--active': groupHasActiveChild(group),
+            }"
           >
-            <i :class="['fa-fw', item.iconPrefix || 'fas', item.icon]"></i>
-            <span class="admin-sidebar-label">{{ item.label }}</span>
-          </button>
+            <button
+              type="button"
+              class="admin-sidebar-group__toggle"
+              :aria-expanded="isGroupExpanded(group.id)"
+              @click="toggleGroup(group.id)"
+            >
+              <i :class="['fa-fw', 'fas', group.icon]"></i>
+              <span class="admin-sidebar-label flex-grow-1 text-start">{{
+                group.label
+              }}</span>
+              <i
+                class="fas fa-chevron-down admin-sidebar-group__chevron"
+                aria-hidden="true"
+              ></i>
+            </button>
+            <div
+              v-show="isGroupExpanded(group.id)"
+              class="admin-sidebar-children"
+            >
+              <button
+                v-for="child in group.children"
+                :key="child.id"
+                type="button"
+                class="admin-sidebar-sublink"
+                :class="{ active: activeTab === child.id }"
+                :title="child.label"
+                @click="activeTab = child.id"
+              >
+                <i
+                  :class="[
+                    'fa-fw',
+                    child.iconPrefix || 'fas',
+                    child.icon,
+                  ]"
+                ></i>
+                <span class="admin-sidebar-label">{{ child.label }}</span>
+              </button>
+            </div>
+          </div>
+        </nav>
+        <nav
+          v-else
+          class="admin-sidebar-nav admin-sidebar-nav--collapsed"
+          aria-label="主导航"
+        >
+          <div
+            v-for="group in visibleSidebarGroups"
+            :key="'fly-' + group.id"
+            class="dropend admin-sidebar-dropend"
+          >
+            <button
+              :id="'sidebar-flyout-' + group.id"
+              type="button"
+              class="admin-sidebar-flyout-trigger"
+              data-bs-toggle="dropdown"
+              data-bs-offset="0,8"
+              aria-expanded="false"
+              :title="group.label"
+            >
+              <i :class="['fa-fw', 'fas', group.icon]"></i>
+            </button>
+            <ul
+              class="dropdown-menu dropdown-menu-start shadow-sm py-1 admin-sidebar-flyout-menu"
+              :aria-labelledby="'sidebar-flyout-' + group.id"
+            >
+              <li v-for="child in group.children" :key="child.id">
+                <button
+                  type="button"
+                  class="dropdown-item py-2 d-flex align-items-center gap-2"
+                  :class="{ active: activeTab === child.id }"
+                  @click="selectTabFromFlyout(group.id, child.id)"
+                >
+                  <i
+                    :class="[child.iconPrefix || 'fas', child.icon, 'text-muted']"
+                  ></i>
+                  {{ child.label }}
+                </button>
+              </li>
+            </ul>
+          </div>
         </nav>
       </aside>
 
@@ -496,33 +573,124 @@ import UserCenterModal from "./components/UserCenterModal.vue";
 import UserManagement from "./components/UserManagement.vue";
 import { clearPermissionsCache, getUserPermissions } from "./utils/permissions";
 
-const SIDEBAR_ITEMS = [
-  { id: "dashboard", perm: "menu.dashboard", label: "仪表盘", icon: "fa-chart-line" },
-  { id: "step-build", perm: "menu.build", label: "镜像构建", icon: "fa-list-ol" },
-  { id: "export", perm: "menu.export", label: "导出镜像", icon: "fa-file-export" },
-  { id: "tasks", perm: "menu.tasks", label: "任务管理", icon: "fa-list-check" },
-  { id: "pipeline", perm: "menu.pipeline", label: "流水线", icon: "fa-project-diagram" },
-  { id: "datasource", perm: "menu.datasource", label: "数据源", icon: "fa-database" },
-  { id: "registry", perm: "menu.registry", label: "镜像仓库", icon: "fa-box" },
-  { id: "template", perm: "menu.template", label: "模板管理", icon: "fa-layer-group" },
+/** 侧边栏二级分组（一级：分组，二级：原菜单项，权限与 tab id 不变） */
+const SIDEBAR_GROUPS = [
   {
-    id: "resource-package",
-    perm: "menu.resource-package",
-    label: "资源包",
-    icon: "fa-archive",
+    id: "overview",
+    label: "总览",
+    icon: "fa-house",
+    children: [
+      {
+        id: "dashboard",
+        perm: "menu.dashboard",
+        label: "仪表盘",
+        icon: "fa-chart-line",
+      },
+    ],
   },
-  { id: "host", perm: "menu.host", label: "主机管理", icon: "fa-server" },
   {
-    id: "docker",
-    perm: "menu.docker",
-    label: "Docker 管理",
-    icon: "fa-docker",
-    iconPrefix: "fab",
+    id: "cicd",
+    label: "构建与交付",
+    icon: "fa-gears",
+    children: [
+      {
+        id: "step-build",
+        perm: "menu.build",
+        label: "镜像构建",
+        icon: "fa-list-ol",
+      },
+      {
+        id: "export",
+        perm: "menu.export",
+        label: "导出镜像",
+        icon: "fa-file-export",
+      },
+      {
+        id: "tasks",
+        perm: "menu.tasks",
+        label: "任务管理",
+        icon: "fa-list-check",
+      },
+      {
+        id: "pipeline",
+        perm: "menu.pipeline",
+        label: "流水线",
+        icon: "fa-project-diagram",
+      },
+    ],
   },
-  { id: "deploy", perm: "menu.deploy", label: "部署管理", icon: "fa-rocket" },
-  { id: "users", perm: "menu.users", label: "用户管理", icon: "fa-users" },
-  { id: "roles", perm: "menu.users", label: "角色管理", icon: "fa-user-shield" },
-  { id: "logs", perm: null, label: "操作日志", icon: "fa-history" },
+  {
+    id: "resources",
+    label: "资源与模板",
+    icon: "fa-folder-tree",
+    children: [
+      {
+        id: "datasource",
+        perm: "menu.datasource",
+        label: "数据源",
+        icon: "fa-database",
+      },
+      {
+        id: "registry",
+        perm: "menu.registry",
+        label: "镜像仓库",
+        icon: "fa-box",
+      },
+      {
+        id: "template",
+        perm: "menu.template",
+        label: "模板管理",
+        icon: "fa-layer-group",
+      },
+      {
+        id: "resource-package",
+        perm: "menu.resource-package",
+        label: "资源包",
+        icon: "fa-archive",
+      },
+    ],
+  },
+  {
+    id: "runtime",
+    label: "运行与部署",
+    icon: "fa-network-wired",
+    children: [
+      { id: "host", perm: "menu.host", label: "主机管理", icon: "fa-server" },
+      {
+        id: "docker",
+        perm: "menu.docker",
+        label: "Docker 管理",
+        icon: "fa-docker",
+        iconPrefix: "fab",
+      },
+      {
+        id: "deploy",
+        perm: "menu.deploy",
+        label: "部署管理",
+        icon: "fa-rocket",
+      },
+    ],
+  },
+  {
+    id: "system",
+    label: "系统与安全",
+    icon: "fa-shield-halved",
+    children: [
+      {
+        id: "users",
+        perm: "menu.users",
+        label: "用户管理",
+        icon: "fa-users",
+      },
+      {
+        id: "roles",
+        perm: "menu.users",
+        label: "角色管理",
+        icon: "fa-user-shield",
+      },
+      { id: "logs", perm: null, label: "操作日志", icon: "fa-history" },
+    ],
+  },
 ];
 
 const PAGE_TITLES = {
@@ -556,13 +724,6 @@ const activeTab = ref(
     : "dashboard"
 );
 
-watch(activeTab, (newTab) => {
-  try {
-    sessionStorage.setItem(ACTIVE_TAB_STORAGE_KEY, newTab);
-  } catch {
-    /* ignore */
-  }
-});
 const showConfig = ref(false);
 const showUserCenter = ref(false);
 const runningTasksCount = ref(0);
@@ -589,8 +750,60 @@ function toggleSidebar() {
   }
 }
 
-const visibleSidebarItems = computed(() =>
-  SIDEBAR_ITEMS.filter((item) => !item.perm || hasPermission(item.perm))
+const visibleSidebarGroups = computed(() =>
+  SIDEBAR_GROUPS.map((g) => ({
+    ...g,
+    children: g.children.filter((c) => !c.perm || hasPermission(c.perm)),
+  })).filter((g) => g.children.length > 0)
+);
+
+const expandedGroupIds = ref(/** @type {string[]} */ ([]));
+
+function isGroupExpanded(groupId) {
+  return expandedGroupIds.value.includes(groupId);
+}
+
+function toggleGroup(groupId) {
+  const cur = expandedGroupIds.value;
+  const i = cur.indexOf(groupId);
+  expandedGroupIds.value =
+    i >= 0 ? cur.filter((id) => id !== groupId) : [...cur, groupId];
+}
+
+function expandGroupForTab(tab) {
+  const g = SIDEBAR_GROUPS.find((grp) =>
+    grp.children.some((c) => c.id === tab)
+  );
+  if (!g) return;
+  if (!expandedGroupIds.value.includes(g.id)) {
+    expandedGroupIds.value = [...expandedGroupIds.value, g.id];
+  }
+}
+
+function groupHasActiveChild(group) {
+  return group.children.some((c) => c.id === activeTab.value);
+}
+
+function selectTabFromFlyout(groupId, childId) {
+  activeTab.value = childId;
+  const el = document.getElementById(`sidebar-flyout-${groupId}`);
+  if (el) {
+    const inst = Dropdown.getInstance(el) || Dropdown.getOrCreateInstance(el);
+    inst.hide();
+  }
+}
+
+watch(
+  activeTab,
+  (newTab) => {
+    try {
+      sessionStorage.setItem(ACTIVE_TAB_STORAGE_KEY, newTab);
+    } catch {
+      /* ignore */
+    }
+    expandGroupForTab(newTab);
+  },
+  { immediate: true }
 );
 
 const pageTitle = computed(() => {
@@ -938,40 +1151,8 @@ onUnmounted(() => {
 .admin-sidebar-nav {
   display: flex;
   flex-direction: column;
-  padding: 0.75rem 0;
-  gap: 0.125rem;
-}
-
-.admin-sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  padding: 0.6rem 1rem;
-  border: none;
-  background: transparent;
-  color: #334155;
-  font-size: 0.9rem;
-  text-align: left;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
-  white-space: nowrap;
-}
-
-.admin-sidebar-link:hover {
-  background: rgba(59, 130, 246, 0.08);
-  color: #1e40af;
-}
-
-.admin-sidebar-link.active {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-  border-left-color: #2563eb;
-  font-weight: 600;
+  padding: 0.65rem 0;
+  gap: 0.05rem;
 }
 
 .admin-sidebar-label {
@@ -980,16 +1161,132 @@ onUnmounted(() => {
   transition: opacity 0.15s ease;
 }
 
-.admin-layout--sidebar-collapsed .admin-sidebar-label {
-  opacity: 0;
-  width: 0;
-  pointer-events: none;
+/* 一级分组 */
+.admin-sidebar-group {
+  margin-bottom: 0.1rem;
 }
 
-.admin-layout--sidebar-collapsed .admin-sidebar-link {
-  justify-content: center;
+.admin-sidebar-group__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem 0.5rem 0.65rem;
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  border-radius: 0 0.25rem 0.25rem 0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.admin-sidebar-group__toggle:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+}
+
+.admin-sidebar-group--active .admin-sidebar-group__toggle {
+  color: #1d4ed8;
+}
+
+.admin-sidebar-group__chevron {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+}
+
+.admin-sidebar-group--open .admin-sidebar-group__chevron {
+  transform: rotate(-180deg);
+}
+
+/* 二级菜单 */
+.admin-sidebar-children {
+  display: flex;
+  flex-direction: column;
+  margin: 0.15rem 0 0.35rem 0.65rem;
   padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  border-left: 2px solid #e2e8f0;
+}
+
+.admin-sidebar-sublink {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem 0.4rem 0.45rem;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0.25rem 0.25rem 0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  white-space: nowrap;
+}
+
+.admin-sidebar-sublink:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+}
+
+.admin-sidebar-sublink.active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+/* 侧栏收起：图标 + 右侧飞出子菜单 */
+.admin-sidebar-nav--collapsed {
+  padding: 0.4rem 0;
+  align-items: center;
+}
+
+.admin-sidebar-dropend {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.admin-sidebar-flyout-trigger {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.admin-sidebar-flyout-trigger:hover,
+.admin-sidebar-flyout-trigger:focus {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+}
+
+.admin-sidebar-flyout-menu {
+  min-width: 11.5rem;
+  font-size: 0.875rem;
+  z-index: 1055;
 }
 
 .admin-main-wrap {
@@ -1010,8 +1307,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
   padding: 1rem 1rem 0;
   box-sizing: border-box;
 }
