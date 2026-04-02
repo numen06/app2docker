@@ -109,7 +109,7 @@ RUN python -m venv .venv && \
 # ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
 ENV PATH="/app/.venv/bin:$PATH"
 
-# 复制后端代码
+# 复制后端代码（含 backend/VERSION，供运行时版本号与更新检查）
 COPY backend/ ./backend/
 
 # ============ 阶段 3: Agent 镜像 ============

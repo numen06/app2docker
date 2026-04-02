@@ -71,7 +71,13 @@
 
         <!-- 版本信息 -->
         <div class="card-footer text-center text-muted small bg-light">
-          <i class="fas fa-shield-alt"></i> 安全认证登录
+          <div>
+            <i class="fas fa-shield-alt"></i> 安全认证登录
+          </div>
+          <div v-if="appVersion" class="mt-1">
+            <i class="fas fa-code-branch"></i>
+            当前版本 <strong class="text-secondary">v{{ appVersion }}</strong>
+          </div>
         </div>
       </div>
     </div>
@@ -89,10 +95,23 @@
 
 <script setup>
 import axios from 'axios'
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import UserCenterModal from './UserCenterModal.vue'
 
 const emit = defineEmits(['login-success'])
+
+const appVersion = ref('')
+
+onMounted(async () => {
+  try {
+    const res = await axios.get('/api/public/version')
+    if (res.data?.success && res.data.version) {
+      appVersion.value = res.data.version
+    }
+  } catch {
+    // 版本展示非关键
+  }
+})
 
 const username = ref('')
 const password = ref('')

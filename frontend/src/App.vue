@@ -8,8 +8,24 @@
       <div class="container-fluid px-3 py-3" style="max-width: 1400px">
         <!-- 标题 -->
         <div class="text-center mb-4">
-          <h1 class="mb-2">
-            <i class="fas fa-box-open text-primary"></i> App2Docker
+          <h1 class="mb-2 d-flex flex-wrap align-items-center justify-content-center gap-2">
+            <span>
+              <i class="fas fa-box-open text-primary"></i> App2Docker
+            </span>
+            <button
+              type="button"
+              class="btn btn-outline-secondary btn-sm align-middle"
+              title="版本与更新"
+              @click="openVersionModal"
+            >
+              <i class="fas fa-tag me-1"></i>v{{ appVersion || "…" }}
+              <span
+                v-if="updateStatus.hasUpdate"
+                class="badge bg-danger ms-1"
+                style="font-size: 0.65rem"
+                >新</span
+              >
+            </button>
           </h1>
           <p class="lead text-muted mb-0">
             上传 Java/Node.js/Python/Go 应用，一键构建并推送 Docker 镜像
@@ -357,6 +373,171 @@
         </div>
       </div>
 
+      <!-- 版本与更新（底部，与标题区按钮呼应） -->
+      <div class="text-center text-muted small mt-2 mb-2 px-2">
+        <span class="me-1">当前版本</span>
+        <strong class="text-body">v{{ appVersion || "…" }}</strong>
+        <span class="mx-1">·</span>
+        <button
+          type="button"
+          class="btn btn-link btn-sm text-muted p-0 text-decoration-none align-baseline"
+          @click="openVersionModal"
+        >
+          检查更新与发行说明
+        </button>
+      </div>
+
+      <!-- 版本与更新对话框 -->
+      <div
+        ref="versionModalEl"
+        class="modal fade"
+        id="appVersionModal"
+        tabindex="-1"
+        aria-labelledby="appVersionModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="appVersionModalLabel">
+                <i class="fas fa-code-branch me-2"></i>版本与更新
+              </h5>
+              <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="modal"
+                aria-label="关闭"
+              ></button>
+            </div>
+            <div class="modal-body" v-if="checkLoading">
+              <div class="text-center py-3 text-muted">
+                <i class="fas fa-spinner fa-spin me-2"></i>正在检查…
+              </div>
+            </div>
+            <div class="modal-body" v-else>
+              <dl class="row small mb-2">
+                <dt class="col-sm-4">当前版本</dt>
+                <dd class="col-sm-8">
+                  {{ displayCurrentVersion }}
+                </dd>
+                <dt class="col-sm-4">Gitee 最新</dt>
+                <dd class="col-sm-8">
+                  {{ updateStatus.latestVersion || "—" }}
+                </dd>
+                <dt v-if="updateStatus.releaseName" class="col-sm-4">
+                  Release
+                </dt>
+                <dd v-if="updateStatus.releaseName" class="col-sm-8">
+                  {{ updateStatus.releaseName }}
+                </dd>
+              </dl>
+              <div
+                v-if="!updateStatus.checkSuccess"
+                class="alert alert-danger py-2 small"
+                role="alert"
+              >
+                {{ updateStatus.checkMessage || "检查更新失败" }}
+              </div>
+              <div
+                v-else-if="updateStatus.hasUpdate"
+                class="alert alert-warning py-2 small"
+                role="alert"
+              >
+                <strong>发现新版本</strong>，请前往 Gitee Release 拉取镜像或按说明升级。
+              </div>
+              <div
+                v-else-if="updateStatus.latestVersion"
+                class="alert alert-success py-2 small"
+                role="alert"
+              >
+                已是最新版本。
+              </div>
+              <div v-if="updateStatus.checkSuccess && updateStatus.releaseBody">
+                <div class="fw-semibold small mb-1">发行说明</div>
+                <pre
+                  class="small bg-light border rounded p-2 mb-0"
+                  style="max-height: 240px; overflow-y: auto; white-space: pre-wrap"
+                  >{{ updateStatus.releaseBody }}</pre
+                >
+              </div>
+              <div v-else-if="updateStatus.checkSuccess && updateStatus.latestVersion" class="small text-muted">
+                本 Release 暂无正文，可点击「在 Gitee 查看」。
+              </div>
+              <div class="mt-2 small d-flex flex-wrap gap-3">
+                <a
+                  href="https://gitee.com/numen06/app2docker/releases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >全部发行版</a
+                >
+                <a
+                  href="https://gitee.com/numen06/app2docker/tree/master/release-notes"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >仓库内版本说明（release-notes）</a
+                >
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                data-bs-dismiss="modal"
+              >
+                关闭
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-primary btn-sm"
+                :disabled="checkLoading"
+                @click="refreshVersionCheck"
+              >
+                <i
+                  class="fas fa-sync-alt"
+                  :class="{ 'fa-spin': checkLoading }"
+                ></i>
+                重新检查
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                :disabled="!updateStatus.releaseUrl"
+                @click="openReleaseUrl"
+              >
+                在 Gitee 查看
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新版本 Toast（每会话每个远端版本仅提示一次） -->
+      <div
+        class="toast-container position-fixed bottom-0 end-0 p-3"
+        style="z-index: 1080"
+      >
+        <div
+          ref="updateToastEl"
+          id="appUpdateToast"
+          class="toast"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <div class="toast-header">
+            <i class="fas fa-bell text-primary me-2"></i>
+            <strong class="me-auto">发现新版本</strong>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="toast"
+              aria-label="关闭"
+            ></button>
+          </div>
+          <div class="toast-body small" ref="updateToastBody"></div>
+        </div>
+      </div>
+
       <!-- 配置模态框 -->
       <ConfigModal v-if="showConfig" v-model="showConfig" />
 
@@ -372,7 +553,8 @@
 
 <script setup>
 import axios from "axios";
-import { onMounted, onUnmounted, ref } from "vue";
+import { Modal, Toast } from "bootstrap";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useModalEscape } from "./composables/useModalEscape";
 import { getToken, getUsername, isAuthenticated, logout } from "./utils/auth";
 
@@ -410,6 +592,127 @@ const buildConfigToEdit = ref({});
 const permissionsLoaded = ref(false);
 const userPermissions = ref(new Set()); // 响应式的权限集合
 let runningTasksTimer = null;
+
+/** 版本与更新检查 */
+const appVersion = ref("");
+const checkLoading = ref(false);
+const versionModalEl = ref(null);
+const updateToastEl = ref(null);
+const updateToastBody = ref(null);
+const updateStatus = ref({
+  hasUpdate: false,
+  latestVersion: null,
+  releaseUrl: null,
+  releaseName: null,
+  releaseBodySummary: null,
+  currentVersion: null,
+  releaseBody: null,
+  checkSuccess: true,
+  checkMessage: "",
+});
+
+const displayCurrentVersion = computed(() => {
+  return (
+    updateStatus.value.currentVersion ||
+    appVersion.value ||
+    "—"
+  );
+});
+
+async function loadSystemVersion() {
+  if (!authenticated.value) return;
+  try {
+    const res = await axios.get("/api/system/version");
+    if (res.data?.success && res.data.version) {
+      appVersion.value = res.data.version;
+    }
+  } catch (e) {
+    console.error("获取系统版本失败:", e);
+  }
+}
+
+function showUpdateToastOnce(resData) {
+  const key = `update-notified-${resData.latest_version || "unknown"}`;
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, "1");
+  const el = updateToastEl.value;
+  const body = updateToastBody.value;
+  if (!el || !body) return;
+  const summary = resData.release_body_summary
+    ? `\n${resData.release_body_summary}`
+    : "";
+  body.textContent = `当前 ${resData.current_version || "-"}，最新 ${resData.latest_version || "-"}${summary}`;
+  body.onclick = null;
+  body.style.cursor = "default";
+  body.removeAttribute("title");
+  if (resData.release_url) {
+    body.style.cursor = "pointer";
+    body.title = "点击打开 Gitee Release";
+    body.onclick = () => {
+      window.open(resData.release_url, "_blank", "noopener,noreferrer");
+    };
+  }
+  const toast = Toast.getOrCreateInstance(el, { delay: 8000 });
+  toast.show();
+}
+
+async function loadUpdateCheck(options = { showLoading: false }) {
+  if (!authenticated.value) return;
+  if (options.showLoading) checkLoading.value = true;
+  try {
+    const res = await axios.get("/api/system/version/check-update");
+    const d = res.data || {};
+    updateStatus.value = {
+      hasUpdate: !!d.has_update,
+      latestVersion: d.latest_version || null,
+      releaseUrl: d.release_url || null,
+      releaseName: d.release_name || null,
+      releaseBodySummary: d.release_body_summary || null,
+      currentVersion: d.current_version || null,
+      releaseBody: d.release_body || null,
+      checkSuccess: !!d.success,
+      checkMessage: d.message || "",
+    };
+    if (d.success && d.has_update) {
+      showUpdateToastOnce(d);
+    }
+  } catch (e) {
+    console.error("检查系统更新失败:", e);
+    const detail =
+      e?.response?.data?.detail ||
+      e?.message ||
+      "网络错误，检查更新失败";
+    updateStatus.value = {
+      ...updateStatus.value,
+      checkSuccess: false,
+      checkMessage: typeof detail === "string" ? detail : "检查更新失败",
+    };
+  } finally {
+    if (options.showLoading) checkLoading.value = false;
+  }
+}
+
+function openVersionModal() {
+  const el = versionModalEl.value;
+  if (el) {
+    Modal.getOrCreateInstance(el).show();
+  }
+  loadUpdateCheck({ showLoading: true });
+}
+
+function refreshVersionCheck() {
+  loadUpdateCheck({ showLoading: true });
+}
+
+function openReleaseUrl() {
+  if (updateStatus.value.releaseUrl) {
+    window.open(
+      updateStatus.value.releaseUrl,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
+}
 
 // 权限检查函数（响应式）
 function hasPermission(permissionCode) {
@@ -523,6 +826,9 @@ async function handleLoginSuccess(data) {
 
   // 登录后启动运行任务数量定时刷新
   startRunningTasksTimer();
+
+  await loadSystemVersion();
+  await loadUpdateCheck();
 }
 
 async function handleLogout() {
@@ -603,6 +909,9 @@ onMounted(async () => {
 
     // 启动运行任务数量定时刷新
     startRunningTasksTimer();
+
+    await loadSystemVersion();
+    await loadUpdateCheck();
 
     console.log("✅ 已登录用户:", username.value);
   } else {

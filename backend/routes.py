@@ -52,6 +52,7 @@ from backend.websocket_handler import handle_agent_websocket, active_connections
 from backend.agent_secret_manager import AgentSecretManager
 from backend.deploy_task_manager import DeployTaskManager
 from backend.project_types import get_project_types
+from backend.version import check_gitee_update, get_version
 from backend.config import (
     load_config,
     save_config,
@@ -227,6 +228,12 @@ class RegistryModel(BaseModel):
 
 class SaveRegistriesRequest(BaseModel):
     registries: list[RegistryModel]
+
+
+@router.get("/public/version")
+async def api_public_version():
+    """当前应用版本（无需登录，供登录页等展示）。"""
+    return JSONResponse({"success": True, "version": get_version()})
 
 
 # === 认证相关 ===
@@ -1542,6 +1549,33 @@ async def get_system_settings():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取系统设置失败: {str(e)}")
+
+
+@router.get("/system/version")
+async def api_get_system_version(request: Request):
+    """获取当前应用版本号（来自 backend/VERSION）。"""
+    require_auth(request)
+    return JSONResponse({"success": True, "version": get_version()})
+
+
+@router.get("/system/version/check-update")
+async def api_check_system_version_update(request: Request):
+    """检查 Gitee Releases 是否有新版本。"""
+    require_auth(request)
+    update_info = check_gitee_update()
+    return JSONResponse(
+        {
+            "success": update_info.get("success", False),
+            "current_version": update_info.get("current_version"),
+            "latest_version": update_info.get("latest_version"),
+            "has_update": update_info.get("has_update", False),
+            "release_url": update_info.get("release_url"),
+            "release_name": update_info.get("release_name"),
+            "release_body": update_info.get("release_body"),
+            "release_body_summary": update_info.get("release_body_summary"),
+            "message": update_info.get("message", ""),
+        }
+    )
 
 
 @router.put("/system-settings")

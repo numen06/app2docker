@@ -13,12 +13,13 @@ from typing import Dict, Any
 
 from backend.routes import router
 from backend.utils import ensure_dirs
+from backend.version import get_version as _get_app_version
 
 # 创建 FastAPI 应用
 app = FastAPI(
     title="App2Docker API",
     description="一键将应用打包成 Docker 镜像的可视化平台 - 支持 Java、Node.js、静态网站等多种应用类型",
-    version="2.0.0",
+    version=_get_app_version(),
 )
 
 # CORS 配置（允许前端访问）
