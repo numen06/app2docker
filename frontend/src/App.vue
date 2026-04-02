@@ -242,23 +242,6 @@
               </div>
             </div>
           </div>
-          <div class="mt-3 border-t border-gray-200 pt-3">
-            <button
-              type="button"
-              class="inline-flex w-full items-center justify-center rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-700 transition hover:bg-gray-50"
-              title="版本与更新"
-              @click="openVersionModal"
-            >
-              <i class="fas fa-tag me-1"></i>
-              <span>v{{ appVersion || "…" }}</span>
-              <span
-                v-if="updateStatus.hasUpdate"
-                class="ms-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
-                style="font-size: 0.65rem"
-                >新</span
-              >
-            </button>
-          </div>
         </nav>
         <nav
           v-else
@@ -316,20 +299,6 @@
                 </li>
               </ul>
             </div>
-          </div>
-          <div class="relative w-full border-t border-gray-200 pt-3">
-            <button
-              type="button"
-              class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-50"
-              title="版本与更新"
-              @click="openVersionModal"
-            >
-              <i class="fas fa-tag"></i>
-            </button>
-            <span
-              v-if="updateStatus.hasUpdate"
-              class="absolute ml-[-8px] mt-[-6px] inline-flex h-2.5 w-2.5 rounded-full bg-red-500"
-            />
           </div>
         </nav>
       </aside>
@@ -407,17 +376,21 @@
             <div class="admin-footer__inner">
               <div class="admin-footer__row">
                 <span class="admin-footer__meta">
-                  当前版本
                   <strong class="admin-footer__strong">v{{ appVersion || "…" }}</strong>
                 </span>
-                <span class="admin-footer__sep" aria-hidden="true">·</span>
                 <button
                   type="button"
                   class="btn btn-link btn-sm admin-footer__link p-0"
                   @click="openVersionModal"
                 >
-                  检查更新与发行说明
+                  更新
                 </button>
+                <span
+                  v-if="updateStatus.hasUpdate"
+                  class="admin-footer__dot"
+                  aria-label="有新版本"
+                  title="有新版本"
+                ></span>
               </div>
               <div class="admin-footer__row">
                 <i class="fas fa-code-branch admin-footer__icon" aria-hidden="true"></i>
@@ -1283,6 +1256,14 @@ onUnmounted(() => {
 .admin-footer__link:hover {
   color: #0d6efd !important;
   text-decoration: underline;
+}
+
+.admin-footer__dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgb(239 68 68 / 0.2);
 }
 
 .admin-footer__icon {
