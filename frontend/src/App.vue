@@ -1,24 +1,40 @@
 <template>
   <div id="app">
-    <!-- 登录页面 -->
     <LoginPage v-if="!authenticated" @login-success="handleLoginSuccess" />
 
-    <!-- 主应用 -->
-    <div v-else class="bg-light" style="min-height: 100vh">
-      <div class="container-fluid px-3 py-3" style="max-width: 1400px">
-        <!-- 标题 -->
-        <div class="text-center mb-4">
-          <h1 class="mb-2 d-flex flex-wrap align-items-center justify-content-center gap-2">
-            <span>
-              <i class="fas fa-box-open text-primary"></i> App2Docker
+    <div
+      v-else
+      class="admin-layout"
+      :class="{ 'admin-layout--sidebar-collapsed': sidebarCollapsed }"
+    >
+      <!-- 顶部导航 -->
+      <nav
+        class="admin-navbar navbar navbar-dark fixed-top border-bottom border-secondary border-opacity-25"
+        style="background-color: var(--admin-navbar-bg, #1e293b)"
+      >
+        <div class="container-fluid px-2 px-sm-3 d-flex flex-wrap align-items-center gap-2">
+          <div class="d-flex align-items-center gap-1 gap-sm-2 flex-shrink-0">
+            <button
+              type="button"
+              class="btn btn-link text-white p-2 admin-navbar-icon-btn"
+              title="展开/收起侧边栏"
+              aria-label="展开或收起侧边栏"
+              @click="toggleSidebar"
+            >
+              <i class="fas fa-bars"></i>
+            </button>
+            <span class="navbar-brand mb-0 d-flex align-items-center gap-2 text-white fw-semibold">
+              <i class="fas fa-box-open text-info"></i>
+              <span class="d-none d-sm-inline">App2Docker</span>
             </span>
             <button
               type="button"
-              class="btn btn-outline-secondary btn-sm align-middle"
+              class="btn btn-outline-light btn-sm py-0 px-2"
               title="版本与更新"
               @click="openVersionModal"
             >
-              <i class="fas fa-tag me-1"></i>v{{ appVersion || "…" }}
+              <i class="fas fa-tag me-1"></i>
+              <span class="small">v{{ appVersion || "…" }}</span>
               <span
                 v-if="updateStatus.hasUpdate"
                 class="badge bg-danger ms-1"
@@ -26,292 +42,181 @@
                 >新</span
               >
             </button>
-          </h1>
-          <p class="lead text-muted mb-0">
-            上传 Java/Node.js/Python/Go 应用，一键构建并推送 Docker 镜像
-          </p>
-        </div>
+          </div>
 
-        <!-- 操作面板 -->
-        <div class="card shadow-sm">
-          <!-- 卡片头部：标题+操作按钮 -->
-          <div
-            class="card-header bg-white d-flex justify-content-between align-items-center py-2"
-          >
-            <h5 class="mb-0">
-              <i class="fas fa-tools text-primary"></i> 操作面板
-            </h5>
-            <div class="d-flex gap-2">
-              <div class="position-relative" v-if="runningTasksCount > 0">
-                <button
-                  class="btn btn-outline-warning btn-sm"
-                  @click.stop="toggleRunningTasksPopup"
-                  :class="{ active: showRunningTasksPopup }"
-                >
-                  <i class="fas fa-spinner fa-spin"></i> 运行任务
-                  <span class="badge bg-danger ms-1">{{
-                    runningTasksCount
-                  }}</span>
-                </button>
-                <!-- 任务概况弹出框 -->
+          <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
+            <!-- 运行任务：下拉菜单 -->
+            <div v-if="runningTasksCount > 0" class="dropdown">
+              <button
+                id="adminRunningTasksDropdown"
+                class="btn btn-warning btn-sm dropdown-toggle"
+                type="button"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="outside"
+                aria-expanded="false"
+              >
+                <i class="fas fa-spinner fa-spin"></i>
+                <span class="d-none d-md-inline ms-1">运行任务</span>
+                <span class="badge bg-danger ms-1">{{ runningTasksCount }}</span>
+              </button>
+              <div
+                class="dropdown-menu dropdown-menu-end p-0 shadow admin-running-dropdown"
+                aria-labelledby="adminRunningTasksDropdown"
+                style="min-width: 300px; max-width: 400px"
+              >
                 <div
-                  v-if="showRunningTasksPopup && runningTasksList.length > 0"
-                  class="running-tasks-popup position-absolute top-100 start-0 mt-1 shadow-lg"
-                  @click.stop
+                  class="px-3 py-2 border-bottom bg-warning bg-opacity-10 d-flex justify-content-between align-items-center"
                 >
+                  <span class="small fw-semibold">
+                    <i class="fas fa-spinner fa-spin text-warning me-1"></i>
+                    正在运行 ({{ runningTasksCount }})
+                  </span>
+                </div>
+                <div class="p-2" style="max-height: 300px; overflow-y: auto">
                   <div
-                    class="card border-warning"
-                    style="min-width: 300px; max-width: 400px"
+                    v-for="task in runningTasksList.slice(0, 10)"
+                    :key="task.task_id"
+                    class="mb-2 pb-2 border-bottom"
                   >
-                    <div
-                      class="card-header bg-warning bg-opacity-10 py-2 d-flex justify-content-between align-items-center"
-                    >
-                      <h6 class="mb-0">
-                        <i class="fas fa-spinner fa-spin text-warning"></i>
-                        正在运行的任务 ({{ runningTasksCount }})
-                      </h6>
-                      <button
-                        class="btn-close btn-close-sm"
-                        @click="showRunningTasksPopup = false"
-                        aria-label="关闭"
-                      ></button>
+                    <div class="d-flex align-items-start">
+                      <code class="small me-2">{{
+                        task.task_id?.substring(0, 8) || "-"
+                      }}</code>
+                      <span
+                        class="badge"
+                        :class="getTaskTypeBadge(task.task_category)"
+                      >
+                        {{ getTaskTypeLabel(task.task_category) }}
+                      </span>
                     </div>
                     <div
-                      class="card-body p-2"
-                      style="max-height: 300px; overflow-y: auto"
+                      v-if="task.image || task.task_name"
+                      class="mt-1 small text-muted"
                     >
-                      <div
-                        v-for="task in runningTasksList.slice(0, 10)"
-                        :key="task.task_id"
-                        class="mb-2 pb-2 border-bottom"
-                      >
-                        <div class="d-flex align-items-start">
-                          <code class="small me-2">{{
-                            task.task_id?.substring(0, 8) || "-"
-                          }}</code>
-                          <span
-                            class="badge"
-                            :class="getTaskTypeBadge(task.task_category)"
-                          >
-                            {{ getTaskTypeLabel(task.task_category) }}
-                          </span>
-                        </div>
-                        <div
-                          v-if="task.image || task.task_name"
-                          class="mt-1 small text-muted"
-                        >
-                          {{ task.image || task.task_name || "-" }}
-                          <span v-if="task.tag" class="ms-1"
-                            >:{{ task.tag }}</span
-                          >
-                        </div>
-                      </div>
-                      <div
-                        v-if="runningTasksCount > 10"
-                        class="text-center text-muted small mt-2"
-                      >
-                        还有 {{ runningTasksCount - 10 }} 个任务...
-                      </div>
-                      <div class="text-center mt-3">
-                        <button
-                          class="btn btn-primary btn-sm"
-                          @click="goToRunningTasks"
-                        >
-                          <i class="fas fa-arrow-right"></i> 查看详情
-                        </button>
-                      </div>
+                      {{ task.image || task.task_name || "-" }}
+                      <span v-if="task.tag" class="ms-1">:{{ task.tag }}</span>
                     </div>
+                  </div>
+                  <div
+                    v-if="runningTasksCount > 10"
+                    class="text-center text-muted small mt-2"
+                  >
+                    还有 {{ runningTasksCount - 10 }} 个任务…
+                  </div>
+                  <div class="text-center mt-3">
+                    <button
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                      @click="goToRunningTasks"
+                    >
+                      <i class="fas fa-arrow-right"></i> 查看详情
+                    </button>
                   </div>
                 </div>
               </div>
+            </div>
+            <button
+              v-else
+              type="button"
+              class="btn btn-outline-light btn-sm"
+              title="暂无运行中的任务"
+              disabled
+            >
+              <i class="fas fa-check-circle"></i>
+              <span class="d-none d-md-inline ms-1">运行任务</span>
+              <span class="badge bg-secondary ms-1">0</span>
+            </button>
+
+            <!-- 用户菜单 -->
+            <div class="dropdown">
               <button
-                v-else
-                class="btn btn-outline-secondary btn-sm"
-                @click="goToRunningTasks"
-                title="暂无运行中的任务"
-                disabled
+                id="adminUserDropdown"
+                class="btn btn-outline-light btn-sm dropdown-toggle"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
               >
-                <i class="fas fa-check-circle"></i> 运行任务
-                <span class="badge bg-secondary ms-1">0</span>
+                <i class="fas fa-user-circle"></i>
+                <span class="d-none d-md-inline ms-1 text-truncate" style="max-width: 8rem">{{
+                  username
+                }}</span>
               </button>
-              <button
-                class="btn btn-outline-primary btn-sm"
-                @click="showUserCenter = true"
+              <ul
+                class="dropdown-menu dropdown-menu-end shadow"
+                aria-labelledby="adminUserDropdown"
               >
-                <i class="fas fa-user-circle"></i> 用户中心
-              </button>
-              <button
-                class="btn btn-outline-primary btn-sm"
-                @click="activeTab = 'logs'"
-              >
-                <i class="fas fa-history"></i> 操作日志
-              </button>
-              <button
-                class="btn btn-outline-primary btn-sm"
-                @click="showConfig = true"
-              >
-                <i class="fas fa-cog"></i> 配置
-              </button>
-              <button
-                class="btn btn-outline-danger btn-sm"
-                @click="handleLogout"
-              >
-                <i class="fas fa-sign-out-alt"></i> 登出
-              </button>
+                <li>
+                  <button
+                    type="button"
+                    class="dropdown-item"
+                    @click="showUserCenter = true"
+                  >
+                    <i class="fas fa-user me-2 text-muted"></i>用户中心
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="dropdown-item"
+                    @click="activeTab = 'logs'"
+                  >
+                    <i class="fas fa-history me-2 text-muted"></i>操作日志
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="dropdown-item"
+                    @click="showConfig = true"
+                  >
+                    <i class="fas fa-cog me-2 text-muted"></i>配置
+                  </button>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <button
+                    type="button"
+                    class="dropdown-item text-danger"
+                    @click="handleLogout"
+                  >
+                    <i class="fas fa-sign-out-alt me-2"></i>登出
+                  </button>
+                </li>
+              </ul>
             </div>
           </div>
+        </div>
+      </nav>
 
-          <!-- Tab 导航 -->
-          <div class="card-header bg-white py-0 border-top-0">
-            <ul class="nav nav-tabs border-0">
-              <li v-if="hasPermission('menu.dashboard')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'dashboard' }"
-                  @click="activeTab = 'dashboard'"
-                >
-                  <i class="fas fa-chart-line"></i> 仪表盘
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.build')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'step-build' }"
-                  @click="activeTab = 'step-build'"
-                >
-                  <i class="fas fa-list-ol"></i> 镜像构建
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.export')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'export' }"
-                  @click="activeTab = 'export'"
-                >
-                  <i class="fas fa-file-export"></i> 导出镜像
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.tasks')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'tasks' }"
-                  @click="activeTab = 'tasks'"
-                >
-                  <i class="fas fa-list-check"></i> 任务管理
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.pipeline')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'pipeline' }"
-                  @click="activeTab = 'pipeline'"
-                >
-                  <i class="fas fa-project-diagram"></i> 流水线
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.datasource')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'datasource' }"
-                  @click="activeTab = 'datasource'"
-                >
-                  <i class="fas fa-database"></i> 数据源
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.registry')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'registry' }"
-                  @click="activeTab = 'registry'"
-                >
-                  <i class="fas fa-box"></i> 镜像仓库
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.template')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'template' }"
-                  @click="activeTab = 'template'"
-                >
-                  <i class="fas fa-layer-group"></i> 模板管理
-                </button>
-              </li>
-              <li
-                v-if="hasPermission('menu.resource-package')"
-                class="nav-item"
-              >
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'resource-package' }"
-                  @click="activeTab = 'resource-package'"
-                >
-                  <i class="fas fa-archive"></i> 资源包
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.host')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'host' }"
-                  @click="activeTab = 'host'"
-                >
-                  <i class="fas fa-server"></i> 主机管理
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.docker')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'docker' }"
-                  @click="activeTab = 'docker'"
-                >
-                  <i class="fas fa-server"></i> Docker 管理
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.deploy')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'deploy' }"
-                  @click="activeTab = 'deploy'"
-                >
-                  <i class="fas fa-rocket"></i> 部署管理
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.users')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'users' }"
-                  @click="activeTab = 'users'"
-                >
-                  <i class="fas fa-users"></i> 用户管理
-                </button>
-              </li>
-              <li v-if="hasPermission('menu.users')" class="nav-item">
-                <button
-                  type="button"
-                  class="nav-link"
-                  :class="{ active: activeTab === 'roles' }"
-                  @click="activeTab = 'roles'"
-                >
-                  <i class="fas fa-user-shield"></i> 角色管理
-                </button>
-              </li>
-            </ul>
-          </div>
+      <!-- 侧边栏 -->
+      <aside class="admin-sidebar" aria-label="主导航">
+        <nav class="admin-sidebar-nav">
+          <button
+            v-for="item in visibleSidebarItems"
+            :key="item.id"
+            type="button"
+            class="admin-sidebar-link"
+            :class="{ active: activeTab === item.id }"
+            :title="item.label"
+            @click="activeTab = item.id"
+          >
+            <i :class="['fa-fw', item.iconPrefix || 'fas', item.icon]"></i>
+            <span class="admin-sidebar-label">{{ item.label }}</span>
+          </button>
+        </nav>
+      </aside>
 
-          <!-- 标签页内容 -->
-          <div class="card-body p-3" style="min-height: 400px">
+      <!-- 主内容 -->
+      <div class="admin-main-wrap">
+        <main class="admin-main">
+          <header class="admin-page-header">
+            <h1 class="admin-page-title h4 mb-1">{{ pageTitle }}</h1>
+            <p v-if="pageDescription" class="admin-page-desc text-muted small mb-0">
+              {{ pageDescription }}
+            </p>
+          </header>
+
+          <div class="admin-content-surface rounded-3 shadow-sm border bg-white p-3 p-md-4">
             <DashboardPanel
               v-if="
                 activeTab === 'dashboard' && hasPermission('menu.dashboard')
@@ -370,35 +275,33 @@
               @cancel="handleBuildConfigCancel"
             />
           </div>
-        </div>
-      </div>
 
-      <!-- 页脚：版本 + Gitee 仓库 -->
-      <footer class="text-center text-muted small mt-2 mb-3 px-2">
-        <div>
-          <span class="me-1">当前版本</span>
-          <strong class="text-body">v{{ appVersion || "…" }}</strong>
-          <span class="mx-1">·</span>
-          <button
-            type="button"
-            class="btn btn-link btn-sm text-muted p-0 text-decoration-none align-baseline"
-            @click="openVersionModal"
-          >
-            检查更新与发行说明
-          </button>
-        </div>
-        <div class="mt-2">
-          <i class="fas fa-code-branch me-1 opacity-75"></i>
-          <span class="me-1">Gitee</span>
-          <a
-            :href="GITEE_REPO_URL"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="link-secondary text-break"
-            >{{ GITEE_REPO_URL }}</a
-          >
-        </div>
-      </footer>
+          <footer class="admin-footer text-muted small mt-4 pb-3">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <span>当前版本 <strong class="text-body">v{{ appVersion || "…" }}</strong></span>
+              <span class="text-secondary">·</span>
+              <button
+                type="button"
+                class="btn btn-link btn-sm text-muted p-0 align-baseline"
+                @click="openVersionModal"
+              >
+                检查更新与发行说明
+              </button>
+            </div>
+            <div class="mt-2">
+              <i class="fas fa-code-branch me-1 opacity-75"></i>
+              <span class="me-1">Gitee</span>
+              <a
+                :href="GITEE_REPO_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link-secondary text-break"
+                >{{ GITEE_REPO_URL }}</a
+              >
+            </div>
+          </footer>
+        </main>
+      </div>
 
       <!-- 版本与更新对话框 -->
       <div
@@ -473,7 +376,10 @@
                   >{{ updateStatus.releaseBody }}</pre
                 >
               </div>
-              <div v-else-if="updateStatus.checkSuccess && updateStatus.latestVersion" class="small text-muted">
+              <div
+                v-else-if="updateStatus.checkSuccess && updateStatus.latestVersion"
+                class="small text-muted"
+              >
                 本 Release 暂无正文，可点击「在 Gitee 查看」。
               </div>
               <div class="mt-2 small d-flex flex-wrap gap-3">
@@ -524,7 +430,6 @@
         </div>
       </div>
 
-      <!-- 新版本 Toast（每会话每个远端版本仅提示一次） -->
       <div
         class="toast-container position-fixed bottom-0 end-0 p-3"
         style="z-index: 1080"
@@ -551,10 +456,7 @@
         </div>
       </div>
 
-      <!-- 配置模态框 -->
       <ConfigModal v-if="showConfig" v-model="showConfig" />
-
-      <!-- 用户中心模态框 -->
       <UserCenterModal
         v-if="showUserCenter"
         v-model:show="showUserCenter"
@@ -566,12 +468,11 @@
 
 <script setup>
 import axios from "axios";
-import { Modal, Toast } from "bootstrap";
+import { Dropdown, Modal, Toast } from "bootstrap";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useModalEscape } from "./composables/useModalEscape";
 import { getToken, getUsername, isAuthenticated, logout } from "./utils/auth";
 
-// 懒加载组件
 import BuildConfigEditor from "./components/BuildConfigEditor.vue";
 import ConfigModal from "./components/ConfigModal.vue";
 import DashboardPanel from "./components/DashboardPanel.vue";
@@ -593,6 +494,56 @@ import UserCenterModal from "./components/UserCenterModal.vue";
 import UserManagement from "./components/UserManagement.vue";
 import { clearPermissionsCache, getUserPermissions } from "./utils/permissions";
 
+const SIDEBAR_ITEMS = [
+  { id: "dashboard", perm: "menu.dashboard", label: "仪表盘", icon: "fa-chart-line" },
+  { id: "step-build", perm: "menu.build", label: "镜像构建", icon: "fa-list-ol" },
+  { id: "export", perm: "menu.export", label: "导出镜像", icon: "fa-file-export" },
+  { id: "tasks", perm: "menu.tasks", label: "任务管理", icon: "fa-list-check" },
+  { id: "pipeline", perm: "menu.pipeline", label: "流水线", icon: "fa-project-diagram" },
+  { id: "datasource", perm: "menu.datasource", label: "数据源", icon: "fa-database" },
+  { id: "registry", perm: "menu.registry", label: "镜像仓库", icon: "fa-box" },
+  { id: "template", perm: "menu.template", label: "模板管理", icon: "fa-layer-group" },
+  {
+    id: "resource-package",
+    perm: "menu.resource-package",
+    label: "资源包",
+    icon: "fa-archive",
+  },
+  { id: "host", perm: "menu.host", label: "主机管理", icon: "fa-server" },
+  {
+    id: "docker",
+    perm: "menu.docker",
+    label: "Docker 管理",
+    icon: "fa-docker",
+    iconPrefix: "fab",
+  },
+  { id: "deploy", perm: "menu.deploy", label: "部署管理", icon: "fa-rocket" },
+  { id: "users", perm: "menu.users", label: "用户管理", icon: "fa-users" },
+  { id: "roles", perm: "menu.users", label: "角色管理", icon: "fa-user-shield" },
+  { id: "logs", perm: null, label: "操作日志", icon: "fa-history" },
+];
+
+const PAGE_META = {
+  dashboard: { title: "仪表盘", desc: "总览与快捷入口" },
+  "step-build": { title: "镜像构建", desc: "上传应用，构建并推送 Docker 镜像" },
+  export: { title: "导出镜像", desc: "导出镜像为离线包" },
+  tasks: { title: "任务管理", desc: "查看与管理构建、导出、部署任务" },
+  pipeline: { title: "流水线", desc: "流水线编排与配置" },
+  datasource: { title: "数据源", desc: "管理代码与构建数据源" },
+  registry: { title: "镜像仓库", desc: "镜像仓库配置与镜像列表" },
+  template: { title: "模板管理", desc: "Dockerfile 与构建模板" },
+  "resource-package": { title: "资源包", desc: "资源包管理" },
+  host: { title: "主机管理", desc: "构建与部署目标主机" },
+  docker: { title: "Docker 管理", desc: "容器与镜像运维" },
+  deploy: { title: "部署管理", desc: "部署任务与目标环境" },
+  users: { title: "用户管理", desc: "系统用户与权限" },
+  roles: { title: "角色管理", desc: "角色与权限配置" },
+  logs: { title: "操作日志", desc: "审计与操作记录" },
+  "build-config-editor": { title: "构建配置", desc: "编辑流水线构建配置" },
+};
+
+const SIDEBAR_STORAGE_KEY = "app2docker-admin-sidebar-collapsed";
+
 const authenticated = ref(false);
 const username = ref("");
 const activeTab = ref("dashboard");
@@ -600,16 +551,44 @@ const showConfig = ref(false);
 const showUserCenter = ref(false);
 const runningTasksCount = ref(0);
 const runningTasksList = ref([]);
-const showRunningTasksPopup = ref(false);
 const buildConfigToEdit = ref({});
 const permissionsLoaded = ref(false);
-const userPermissions = ref(new Set()); // 响应式的权限集合
+const userPermissions = ref(new Set());
 let runningTasksTimer = null;
 
-/** 与 backend/version.py、更新检查一致的仓库地址 */
+const sidebarCollapsed = ref(
+  typeof localStorage !== "undefined" &&
+    localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1"
+);
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  try {
+    localStorage.setItem(
+      SIDEBAR_STORAGE_KEY,
+      sidebarCollapsed.value ? "1" : "0"
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+const visibleSidebarItems = computed(() =>
+  SIDEBAR_ITEMS.filter((item) => !item.perm || hasPermission(item.perm))
+);
+
+const pageTitle = computed(() => {
+  const m = PAGE_META[activeTab.value];
+  return m?.title || "App2Docker";
+});
+
+const pageDescription = computed(() => {
+  const m = PAGE_META[activeTab.value];
+  return m?.desc || "";
+});
+
 const GITEE_REPO_URL = "https://gitee.com/numen06/app2docker";
 
-/** 版本与更新检查 */
 const appVersion = ref("");
 const checkLoading = ref(false);
 const versionModalEl = ref(null);
@@ -628,11 +607,7 @@ const updateStatus = ref({
 });
 
 const displayCurrentVersion = computed(() => {
-  return (
-    updateStatus.value.currentVersion ||
-    appVersion.value ||
-    "—"
-  );
+  return updateStatus.value.currentVersion || appVersion.value || "—";
 });
 
 async function loadSystemVersion() {
@@ -725,15 +700,12 @@ function refreshVersionCheck() {
 
 function openReleaseUrl() {
   const url =
-    updateStatus.value.releaseUrl ||
-    `${GITEE_REPO_URL}/releases`;
+    updateStatus.value.releaseUrl || `${GITEE_REPO_URL}/releases`;
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-// 权限检查函数（响应式）
 function hasPermission(permissionCode) {
   if (!permissionsLoaded.value) {
-    // 权限未加载时，默认返回true（向后兼容，显示所有菜单）
     return true;
   }
   return userPermissions.value.has(permissionCode);
@@ -741,25 +713,24 @@ function hasPermission(permissionCode) {
 
 function handleNavigate(tab, params) {
   activeTab.value = tab;
-  // 如果传递了参数（比如筛选条件），可以在这里处理
-  // 例如设置到localStorage或通过其他方式传递给目标组件
   if (params && params.status) {
     sessionStorage.setItem("taskStatusFilter", params.status);
   }
 }
 
-// 切换运行任务弹出框显示
-function toggleRunningTasksPopup() {
-  showRunningTasksPopup.value = !showRunningTasksPopup.value;
+function hideRunningTasksDropdown() {
+  const el = document.getElementById("adminRunningTasksDropdown");
+  if (el) {
+    const inst = Dropdown.getInstance(el) || Dropdown.getOrCreateInstance(el);
+    inst.hide();
+  }
 }
 
-// 跳转到运行中的任务
 function goToRunningTasks() {
-  showRunningTasksPopup.value = false;
+  hideRunningTasksDropdown();
   handleNavigate("tasks", { status: "running" });
 }
 
-// 获取运行中的任务数量
 async function updateRunningTasksCount() {
   if (!authenticated.value) return;
   try {
@@ -779,7 +750,6 @@ async function updateRunningTasksCount() {
   }
 }
 
-// 获取任务类型标签
 function getTaskTypeLabel(type) {
   const map = {
     build: "构建",
@@ -789,7 +759,6 @@ function getTaskTypeLabel(type) {
   return map[type] || type;
 }
 
-// 获取任务类型徽章样式
 function getTaskTypeBadge(type) {
   const map = {
     build: "bg-primary",
@@ -799,23 +768,16 @@ function getTaskTypeBadge(type) {
   return map[type] || "bg-secondary";
 }
 
-// 启动运行任务数量定时刷新
 function startRunningTasksTimer() {
-  // 清除之前的定时器
   if (runningTasksTimer) {
     clearInterval(runningTasksTimer);
   }
-
-  // 立即获取一次
   updateRunningTasksCount();
-
-  // 每10秒刷新一次
   runningTasksTimer = setInterval(() => {
     updateRunningTasksCount();
   }, 10000);
 }
 
-// 停止运行任务数量定时刷新
 function stopRunningTasksTimer() {
   if (runningTasksTimer) {
     clearInterval(runningTasksTimer);
@@ -828,19 +790,16 @@ async function handleLoginSuccess(data) {
   username.value = data.username;
   console.log("✅ 登录成功:", data.username);
 
-  // 获取用户权限
   try {
     const permissions = await getUserPermissions();
-    userPermissions.value = permissions; // 更新响应式权限集合
+    userPermissions.value = permissions;
     permissionsLoaded.value = true;
   } catch (error) {
     console.error("获取用户权限失败:", error);
-    // 即使失败也标记为已加载，使用默认权限（显示所有菜单）
     userPermissions.value = new Set();
     permissionsLoaded.value = true;
   }
 
-  // 登录后启动运行任务数量定时刷新
   startRunningTasksTimer();
 
   await loadSystemVersion();
@@ -852,47 +811,25 @@ async function handleLogout() {
     await logout();
     authenticated.value = false;
     permissionsLoaded.value = false;
-    userPermissions.value = new Set(); // 清空权限
-    clearPermissionsCache(); // 清除权限缓存
+    userPermissions.value = new Set();
+    clearPermissionsCache();
     username.value = "";
     runningTasksCount.value = 0;
     runningTasksList.value = [];
-    showRunningTasksPopup.value = false;
     stopRunningTasksTimer();
     clearPermissionsCache();
     console.log("👋 已登出");
   }
 }
 
-// 统一处理所有模态框的 ESC 键
 useModalEscape();
 
-// 点击外部关闭运行任务弹出框
-function handleClickOutside(event) {
-  const popup = document.querySelector(".running-tasks-popup");
-  const button = event.target.closest(".btn-outline-warning");
-
-  if (
-    showRunningTasksPopup.value &&
-    popup &&
-    !popup.contains(event.target) &&
-    !button
-  ) {
-    showRunningTasksPopup.value = false;
-  }
-}
-
-// 处理构建配置保存
 function handleBuildConfigSave(config) {
-  // 将配置保存回流水线编辑页面
   localStorage.setItem("buildConfigEdited", JSON.stringify(config));
-  // 触发事件通知流水线编辑页面
   window.dispatchEvent(new CustomEvent("buildConfigSaved"));
-  // 返回流水线页面
   activeTab.value = "pipeline";
 }
 
-// 处理构建配置取消
 function handleBuildConfigCancel() {
   activeTab.value = "pipeline";
 }
@@ -900,30 +837,25 @@ function handleBuildConfigCancel() {
 onMounted(async () => {
   console.log("🚀 App 组件挂载");
 
-  // 检查是否已登录
   if (isAuthenticated()) {
     authenticated.value = true;
     username.value = getUsername() || "User";
 
-    // 设置 axios 默认 Authorization header
     const token = getToken();
     if (token) {
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     }
 
-    // 获取用户权限
     try {
       const permissions = await getUserPermissions();
-      userPermissions.value = permissions; // 更新响应式权限集合
+      userPermissions.value = permissions;
       permissionsLoaded.value = true;
     } catch (error) {
       console.error("获取用户权限失败:", error);
-      // 即使失败也标记为已加载，使用默认权限（显示所有菜单）
       userPermissions.value = new Set();
       permissionsLoaded.value = true;
     }
 
-    // 启动运行任务数量定时刷新
     startRunningTasksTimer();
 
     await loadSystemVersion();
@@ -934,10 +866,6 @@ onMounted(async () => {
     console.log("🔒 未登录，显示登录页面");
   }
 
-  // 添加点击外部关闭弹出框的监听
-  document.addEventListener("click", handleClickOutside);
-
-  // 监听子组件的页面导航事件（如从部署配置跳转到任务管理）
   window.addEventListener("navigate", handleNavigateEvent);
 });
 
@@ -949,19 +877,151 @@ function handleNavigateEvent(e) {
 
 onUnmounted(() => {
   stopRunningTasksTimer();
-  document.removeEventListener("click", handleClickOutside);
   window.removeEventListener("navigate", handleNavigateEvent);
 });
 </script>
 
 <style>
-/* 导入 Bootstrap 和 FontAwesome */
 @import "bootstrap/dist/css/bootstrap.min.css";
 @import "@fortawesome/fontawesome-free/css/all.min.css";
 
-/* === 全局统一样式 === */
+/* === 管理后台布局 === */
+.admin-layout {
+  min-height: 100vh;
+  background-color: var(--admin-content-bg, #f1f5f9);
+}
 
-/* Tab 样式统一 */
+.admin-navbar {
+  height: var(--admin-navbar-height, 56px);
+  z-index: 1030;
+}
+
+.admin-navbar-icon-btn {
+  text-decoration: none;
+  border: none;
+  line-height: 1;
+}
+.admin-navbar-icon-btn:hover,
+.admin-navbar-icon-btn:focus {
+  color: #e2e8f0 !important;
+}
+
+.admin-sidebar {
+  position: fixed;
+  top: var(--admin-navbar-height, 56px);
+  left: 0;
+  bottom: 0;
+  width: var(--admin-sidebar-width, 256px);
+  background: var(--admin-sidebar-bg, #f8fafc);
+  border-right: 1px solid var(--admin-sidebar-border, #e2e8f0);
+  z-index: 1020;
+  transition: width 0.2s ease;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.admin-layout--sidebar-collapsed .admin-sidebar {
+  width: var(--admin-sidebar-collapsed-width, 64px);
+}
+
+.admin-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0;
+  gap: 0.125rem;
+}
+
+.admin-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.admin-sidebar-link:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+}
+
+.admin-sidebar-link.active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border-left-color: #2563eb;
+  font-weight: 600;
+}
+
+.admin-sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.15s ease;
+}
+
+.admin-layout--sidebar-collapsed .admin-sidebar-label {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.admin-layout--sidebar-collapsed .admin-sidebar-link {
+  justify-content: center;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.admin-main-wrap {
+  margin-top: var(--admin-navbar-height, 56px);
+  margin-left: var(--admin-sidebar-width, 256px);
+  min-height: calc(100vh - var(--admin-navbar-height, 56px));
+  transition: margin-left 0.2s ease;
+}
+
+.admin-layout--sidebar-collapsed .admin-main-wrap {
+  margin-left: var(--admin-sidebar-collapsed-width, 64px);
+}
+
+.admin-main {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 0;
+}
+
+@media (min-width: 992px) {
+  .admin-main {
+    padding: 1.5rem 1.75rem 0;
+  }
+}
+
+.admin-page-header {
+  margin-bottom: 1rem;
+}
+
+.admin-page-title {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.admin-content-surface {
+  min-height: 400px;
+}
+
+.admin-running-dropdown {
+  z-index: 1055;
+}
+
+/* === 子页面通用（表格、表单、Tab）=== */
 .nav-tabs {
   border-bottom: 1px solid #dee2e6;
 }
@@ -974,7 +1034,9 @@ onUnmounted(() => {
   border-bottom: 2px solid transparent;
   background: none;
   color: #6c757d;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .nav-tabs .nav-link:hover {
@@ -989,7 +1051,6 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* 表单样式统一 */
 .form-label {
   margin-bottom: 0.5rem;
   font-size: 0.95rem;
@@ -1001,7 +1062,7 @@ onUnmounted(() => {
   font-size: 0.95rem;
 }
 
-/* 卡片样式统一 */
+.admin-content-surface > .card,
 .card {
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
@@ -1017,7 +1078,6 @@ onUnmounted(() => {
   background-color: #fff !important;
 }
 
-/* 按钮样式统一 */
 .btn {
   font-size: 0.9rem;
   border-radius: 0.375rem;
@@ -1028,7 +1088,6 @@ onUnmounted(() => {
   padding: 0.35rem 0.65rem;
 }
 
-/* 表格样式统一 */
 .table {
   margin-bottom: 0;
 }
@@ -1049,19 +1108,16 @@ onUnmounted(() => {
   background-color: rgba(13, 110, 253, 0.04);
 }
 
-/* Badge 样式统一 */
 .badge {
   font-weight: 500;
   font-size: 0.75rem;
 }
 
-/* 搜索栏样式 */
 .input-group-text {
   background-color: #f8f9fa;
   border-color: #dee2e6;
 }
 
-/* 分页样式 */
 .pagination {
   margin-bottom: 0;
 }
@@ -1071,7 +1127,6 @@ onUnmounted(() => {
   padding: 0.35rem 0.65rem;
 }
 
-/* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -1088,27 +1143,5 @@ onUnmounted(() => {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a1a1a1;
-}
-
-/* 运行任务弹出框样式 */
-.running-tasks-popup {
-  z-index: 1050;
-  animation: fadeIn 0.2s ease-in;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.running-tasks-tooltip .card {
-  border: 2px solid #ffc107;
-  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
 }
 </style>
