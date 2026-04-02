@@ -9,20 +9,20 @@
     >
       <!-- 顶部导航 -->
       <nav
-        class="admin-navbar navbar fixed-top border-bottom"
+        class="admin-navbar navbar navbar-light fixed-top border-bottom bg-white"
       >
         <div class="container-fluid px-2 px-sm-3 d-flex flex-wrap align-items-center gap-2">
           <div class="d-flex align-items-center gap-1 gap-sm-2 flex-shrink-0">
             <button
               type="button"
-              class="btn btn-link admin-navbar-icon-btn"
+              class="btn btn-link text-body p-2 admin-navbar-icon-btn"
               title="展开/收起侧边栏"
               aria-label="展开或收起侧边栏"
               @click="toggleSidebar"
             >
               <i class="fas fa-bars"></i>
             </button>
-            <span class="navbar-brand mb-0 d-flex align-items-center gap-2 fw-semibold">
+            <span class="navbar-brand mb-0 d-flex align-items-center gap-2 text-dark fw-semibold">
               <i class="fas fa-box-open text-primary"></i>
               <span class="d-none d-sm-inline">App2Docker</span>
             </span>
@@ -56,7 +56,7 @@
               >
                 <i class="fas fa-spinner fa-spin"></i>
                 <span class="d-none d-md-inline ms-1">运行任务</span>
-                <span class="badge bg-dark ms-1">{{ runningTasksCount }}</span>
+                <span class="badge bg-danger ms-1">{{ runningTasksCount }}</span>
               </button>
               <div
                 class="dropdown-menu dropdown-menu-end p-0 shadow admin-running-dropdown"
@@ -123,7 +123,7 @@
             >
               <i class="fas fa-check-circle"></i>
               <span class="d-none d-md-inline ms-1">运行任务</span>
-              <span class="badge ms-1" style="background: #475569">{{ runningTasksCount }}</span>
+              <span class="badge bg-secondary ms-1">0</span>
             </button>
 
             <!-- 用户菜单 -->
@@ -1135,49 +1135,49 @@ onUnmounted(() => {
 .admin-navbar {
   height: var(--admin-navbar-height, 56px);
   z-index: 1030;
-  background-color: #1e293b !important;
-  border-bottom: 1px solid #334155;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 0.1);
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
 }
 
 .admin-navbar .navbar-brand {
-  color: #f1f5f9 !important;
+  color: #0f172a !important;
 }
 
 .admin-navbar .text-body {
-  color: #cbd5e1 !important;
+  color: #475569 !important;
 }
 
 .admin-navbar .btn-outline-secondary,
 .admin-navbar .btn-outline-secondary:hover,
 .admin-navbar .btn-outline-secondary:focus {
-  color: #cbd5e1;
-  border-color: #475569;
+  color: #64748b;
+  border-color: #cbd5e1;
   background-color: transparent;
 }
 
 .admin-navbar .btn-outline-secondary:hover {
-  background-color: #334155;
-  border-color: #64748b;
-  color: #f1f5f9;
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #334155;
 }
 
 .admin-navbar .dropdown-menu {
-  background-color: #1e293b;
-  border: 1px solid #334155;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
 }
 
 .admin-navbar .dropdown-item {
-  color: #cbd5e1;
+  color: #334155;
 }
 
 .admin-navbar .dropdown-item:hover {
-  background-color: #334155;
-  color: #f1f5f9;
+  background-color: #f8fafc;
+  color: #0f172a;
 }
 
 .admin-navbar .dropdown-divider {
-  border-top-color: #334155;
+  border-top-color: #e2e8f0;
 }
 
 .admin-navbar-icon-btn {
@@ -1187,7 +1187,7 @@ onUnmounted(() => {
 }
 .admin-navbar-icon-btn:hover,
 .admin-navbar-icon-btn:focus {
-  color: #60a5fa !important;
+  color: #2563eb !important;
 }
 
 .admin-sidebar {
@@ -1196,8 +1196,8 @@ onUnmounted(() => {
   left: 0;
   bottom: 0;
   width: var(--admin-sidebar-width, 256px);
-  background: #1e293b;
-  border-right: 1px solid #334155;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
   z-index: 1020;
   transition: width 0.2s ease;
   overflow-x: hidden;
@@ -1224,7 +1224,7 @@ onUnmounted(() => {
   padding: 0.6rem 0.85rem;
   border: none;
   background: transparent;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 0.875rem;
   font-weight: 500;
   text-align: left;
@@ -1237,19 +1237,19 @@ onUnmounted(() => {
 }
 
 .admin-sidebar-home:hover {
-  background: #334155;
-  color: #f1f5f9;
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .admin-sidebar-home.active {
-  background: #3b82f6;
-  color: #fff;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .admin-sidebar-divider {
   height: 1px;
   margin: 0.5rem 0.85rem;
-  background: #334155;
+  background: #e2e8f0;
 }
 
 .admin-sidebar-divider--collapsed {
@@ -1257,7 +1257,7 @@ onUnmounted(() => {
   height: 1px;
   margin: 0.25rem auto 0.35rem;
   align-self: center;
-  background: #475569;
+  background: #cbd5e1;
 }
 
 .admin-sidebar-label {
@@ -1279,7 +1279,7 @@ onUnmounted(() => {
   padding: 0.5rem 0.85rem;
   border: none;
   background: transparent;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -1294,24 +1294,24 @@ onUnmounted(() => {
 }
 
 .admin-sidebar-group__toggle:hover {
-  background: #334155;
-  color: #cbd5e1;
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .admin-sidebar-group--active .admin-sidebar-group__toggle {
-  color: #cbd5e1;
+  color: #334155;
 }
 
 .admin-sidebar-group__chevron {
   flex-shrink: 0;
   font-size: 0.6rem;
-  color: #64748b;
+  color: #94a3b8;
   transition: transform 0.2s ease;
 }
 
 .admin-sidebar-group--open .admin-sidebar-group__chevron {
   transform: rotate(-180deg);
-  color: #94a3b8;
+  color: #64748b;
 }
 
 /* 二级菜单 */
@@ -1331,7 +1331,7 @@ onUnmounted(() => {
   padding: 0.5rem 0.75rem;
   border: none;
   background: transparent;
-  color: #cbd5e1;
+  color: #475569;
   font-size: 0.8125rem;
   font-weight: 400;
   text-align: left;
@@ -1344,13 +1344,13 @@ onUnmounted(() => {
 }
 
 .admin-sidebar-sublink:hover {
-  background: #334155;
-  color: #f1f5f9;
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .admin-sidebar-sublink.active {
-  background: #3b82f6;
-  color: #fff;
+  background: #dbeafe;
+  color: #1d4ed8;
   font-weight: 500;
 }
 
@@ -1376,7 +1376,7 @@ onUnmounted(() => {
   border: none;
   border-radius: 0.5rem;
   background: transparent;
-  color: #cbd5e1;
+  color: #475569;
   cursor: pointer;
   transition:
     background 0.2s ease,
@@ -1385,19 +1385,19 @@ onUnmounted(() => {
 
 .admin-sidebar-flyout-trigger:hover,
 .admin-sidebar-flyout-trigger:focus {
-  background: #334155;
-  color: #f1f5f9;
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .admin-sidebar-flyout-trigger--active {
-  background: #3b82f6;
-  color: #fff;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .admin-sidebar-flyout-trigger--home:hover,
 .admin-sidebar-flyout-trigger--home:focus,
 .admin-sidebar-flyout-trigger--home.admin-sidebar-flyout-trigger--active {
-  color: #fff;
+  color: #1d4ed8;
 }
 
 .admin-sidebar-flyout-menu {
