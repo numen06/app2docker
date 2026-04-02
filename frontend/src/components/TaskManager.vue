@@ -281,6 +281,7 @@
         </button>
         <div class="btn-group">
           <button
+            ref="cleanupDropdownBtn"
             class="btn btn-sm btn-outline-danger dropdown-toggle"
             type="button"
             data-bs-toggle="dropdown"
@@ -1070,6 +1071,7 @@ import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
+import { Dropdown } from "bootstrap";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { Codemirror } from "vue-codemirror";
 import TaskLogModal from "./TaskLogModal.vue";
@@ -1114,6 +1116,8 @@ const savingSystemSettings = ref(false);
 const jsonEditorExtensions = [StreamLanguage.define(javascript), oneDark];
 
 const showSaveAsPipelineModal = ref(false); // 另存为流水线模态框
+const cleanupDropdownBtn = ref(null);
+let cleanupDropdownInstance = null;
 const pipelineForm = ref({
   name: "",
   description: "",
@@ -2448,6 +2452,11 @@ function handleTaskCreated(event) {
 }
 
 onMounted(() => {
+  // 显式初始化清理任务下拉菜单，避免迁移后 data-api 绑定失效
+  if (cleanupDropdownBtn.value) {
+    cleanupDropdownInstance = new Dropdown(cleanupDropdownBtn.value);
+  }
+
   // 监听任务创建事件
   window.addEventListener("taskCreated", handleTaskCreated);
   // 检查是否有从仪表盘传递过来的筛选条件
@@ -2470,6 +2479,11 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (cleanupDropdownInstance) {
+    cleanupDropdownInstance.dispose();
+    cleanupDropdownInstance = null;
+  }
+
   // 移除任务创建事件监听器
   window.removeEventListener("taskCreated", handleTaskCreated);
 

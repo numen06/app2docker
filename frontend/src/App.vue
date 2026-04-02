@@ -131,9 +131,18 @@
                   <button
                     type="button"
                     class="dropdown-item"
-                    @click="showUserCenter = true"
+                    @click="openUserCenter('password')"
                   >
                     <i class="fas fa-user me-2 text-muted"></i>用户中心
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    class="dropdown-item"
+                    @click="openUserCenter('appkeys')"
+                  >
+                    <i class="fas fa-key me-2 text-muted"></i>APPKEY管理
                   </button>
                 </li>
                 <li>
@@ -242,6 +251,23 @@
               </div>
             </div>
           </div>
+          <div class="mt-3 border-t border-gray-200 pt-3">
+            <button
+              type="button"
+              class="relative inline-flex w-full items-center justify-center rounded-lg border border-gray-300 px-2 py-2 text-xs text-gray-700 transition hover:bg-gray-50"
+              title="版本与更新"
+              @click="openVersionModal"
+            >
+              <i class="fas fa-tag me-1"></i>
+              <span>v{{ appVersion || "…" }}</span>
+              <span
+                v-if="updateStatus.hasUpdate"
+                class="absolute inset-e-2 top-1/2 inline-flex h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500"
+                aria-label="有新版本"
+                title="有新版本"
+              />
+            </button>
+          </div>
         </nav>
         <nav
           v-else
@@ -299,6 +325,22 @@
                 </li>
               </ul>
             </div>
+          </div>
+          <div class="relative w-full border-t border-gray-200 pt-3">
+            <button
+              type="button"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-50"
+              title="版本与更新"
+              @click="openVersionModal"
+            >
+              <i class="fas fa-tag"></i>
+            </button>
+            <span
+              v-if="updateStatus.hasUpdate"
+              class="absolute ml-[-8px] mt-[-6px] inline-flex h-2.5 w-2.5 rounded-full bg-red-500"
+              aria-label="有新版本"
+              title="有新版本"
+            />
           </div>
         </nav>
       </aside>
@@ -376,21 +418,17 @@
             <div class="admin-footer__inner">
               <div class="admin-footer__row">
                 <span class="admin-footer__meta">
+                  当前版本
                   <strong class="admin-footer__strong">v{{ appVersion || "…" }}</strong>
                 </span>
+                <span class="admin-footer__sep" aria-hidden="true">·</span>
                 <button
                   type="button"
                   class="btn btn-link btn-sm admin-footer__link p-0"
                   @click="openVersionModal"
                 >
-                  更新
+                  检查更新与发行说明
                 </button>
-                <span
-                  v-if="updateStatus.hasUpdate"
-                  class="admin-footer__dot"
-                  aria-label="有新版本"
-                  title="有新版本"
-                ></span>
               </div>
               <div class="admin-footer__row">
                 <i class="fas fa-code-branch admin-footer__icon" aria-hidden="true"></i>
@@ -536,7 +574,7 @@
       </div>
 
       <div
-        class="toast-container position-fixed bottom-0 end-0 p-3"
+        class="toast-container position-fixed bottom-0 inset-e-0 p-3"
         style="z-index: 1080"
       >
         <div
@@ -566,6 +604,7 @@
         v-if="showUserCenter"
         v-model:show="showUserCenter"
         :username="username"
+        :initial-tab="userCenterInitialTab"
       />
     </div>
   </div>
@@ -742,6 +781,7 @@ const activeTab = ref(
 
 const showConfig = ref(false);
 const showUserCenter = ref(false);
+const userCenterInitialTab = ref("password");
 const runningTasksCount = ref(0);
 const runningTasksList = ref([]);
 const buildConfigToEdit = ref({});
@@ -955,6 +995,11 @@ function handleNavigate(tab, params) {
   if (params && params.status) {
     sessionStorage.setItem("taskStatusFilter", params.status);
   }
+}
+
+function openUserCenter(tab = "password") {
+  userCenterInitialTab.value = tab;
+  showUserCenter.value = true;
 }
 
 function hideRunningTasksDropdown() {
@@ -1256,14 +1301,6 @@ onUnmounted(() => {
 .admin-footer__link:hover {
   color: #0d6efd !important;
   text-decoration: underline;
-}
-
-.admin-footer__dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 9999px;
-  background: #ef4444;
-  box-shadow: 0 0 0 2px rgb(239 68 68 / 0.2);
 }
 
 .admin-footer__icon {

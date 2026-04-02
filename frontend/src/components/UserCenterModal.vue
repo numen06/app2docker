@@ -184,6 +184,10 @@ const props = defineProps({
   requirePasswordChange: {
     type: Boolean,
     default: false
+  },
+  initialTab: {
+    type: String,
+    default: 'password'
   }
 })
 
@@ -228,7 +232,7 @@ function resetState() {
     newPassword: '',
     confirmPassword: ''
   }
-  activeTab.value = 'password'
+  activeTab.value = props.initialTab === 'appkeys' ? 'appkeys' : 'password'
   appKeys.value = []
   showCreateForm.value = false
   createdAppKey.value = ''
@@ -382,7 +386,12 @@ async function handleChangePassword() {
 watch(
   () => props.show,
   (visible) => {
-    if (!visible) {
+    if (visible) {
+      activeTab.value = props.initialTab === 'appkeys' ? 'appkeys' : 'password'
+      if (activeTab.value === 'appkeys') {
+        loadAppKeys()
+      }
+    } else {
       resetState()
     }
   }
