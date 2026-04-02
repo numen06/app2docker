@@ -30,6 +30,7 @@
             <!-- 运行任务：下拉菜单 -->
             <div v-if="runningTasksCount > 0" class="dropdown">
               <button
+                ref="runningTasksDropdownBtn"
                 id="adminRunningTasksDropdown"
                 class="inline-flex items-center rounded-lg bg-amber-100 px-2 py-1 text-sm text-amber-900 hover:bg-amber-200 dropdown-toggle"
                 type="button"
@@ -112,6 +113,7 @@
             <!-- 用户菜单 -->
             <div class="dropdown">
               <button
+                ref="userDropdownBtn"
                 id="adminUserDropdown"
                 class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-700 hover:bg-gray-50 dropdown-toggle"
                 type="button"
@@ -613,7 +615,7 @@
 <script setup>
 import axios from "axios";
 import { Dropdown, Modal, Toast } from "bootstrap";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useModalEscape } from "./composables/useModalEscape";
 import { getToken, getUsername, isAuthenticated, logout } from "./utils/auth";
 
@@ -784,10 +786,14 @@ const showUserCenter = ref(false);
 const userCenterInitialTab = ref("password");
 const runningTasksCount = ref(0);
 const runningTasksList = ref([]);
+const runningTasksDropdownBtn = ref(null);
+const userDropdownBtn = ref(null);
 const buildConfigToEdit = ref({});
 const permissionsLoaded = ref(false);
 const userPermissions = ref(new Set());
 let runningTasksTimer = null;
+let runningTasksDropdownInstance = null;
+let userDropdownInstance = null;
 
 const sidebarCollapsed = ref(
   typeof localStorage !== "undefined" &&
@@ -1002,6 +1008,21 @@ function openUserCenter(tab = "password") {
   showUserCenter.value = true;
 }
 
+function initTopbarDropdowns() {
+  if (userDropdownBtn.value) {
+    if (userDropdownInstance) {
+      userDropdownInstance.dispose();
+    }
+    userDropdownInstance = new Dropdown(userDropdownBtn.value);
+  }
+  if (runningTasksDropdownBtn.value) {
+    if (runningTasksDropdownInstance) {
+      runningTasksDropdownInstance.dispose();
+    }
+    runningTasksDropdownInstance = new Dropdown(runningTasksDropdownBtn.value);
+  }
+}
+
 function hideRunningTasksDropdown() {
   const el = document.getElementById("adminRunningTasksDropdown");
   if (el) {
@@ -1151,6 +1172,8 @@ onMounted(async () => {
   }
 
   window.addEventListener("navigate", handleNavigateEvent);
+  await nextTick();
+  initTopbarDropdowns();
 });
 
 function handleNavigateEvent(e) {
@@ -1162,6 +1185,19 @@ function handleNavigateEvent(e) {
 onUnmounted(() => {
   stopRunningTasksTimer();
   window.removeEventListener("navigate", handleNavigateEvent);
+  if (runningTasksDropdownInstance) {
+    runningTasksDropdownInstance.dispose();
+    runningTasksDropdownInstance = null;
+  }
+  if (userDropdownInstance) {
+    userDropdownInstance.dispose();
+    userDropdownInstance = null;
+  }
+});
+
+watch(runningTasksCount, async () => {
+  await nextTick();
+  initTopbarDropdowns();
 });
 </script>
 
