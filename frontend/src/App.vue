@@ -7,59 +7,57 @@
       class="admin-layout"
       :class="{ 'admin-layout--sidebar-collapsed': sidebarCollapsed }"
     >
-      <!-- 顶部导航 -->
-      <nav
-        class="admin-navbar navbar navbar-light fixed-top border-bottom bg-white"
-      >
-        <div class="container-fluid px-2 px-sm-3 d-flex flex-wrap align-items-center gap-2">
-          <div class="d-flex align-items-center gap-1 gap-sm-2 flex-shrink-0">
+      <!-- 顶部导航（Flowbite 风格） -->
+      <nav class="fixed left-0 right-0 top-0 z-30 h-14 border-b border-gray-200 bg-white">
+        <div class="mx-auto flex h-full w-full items-center gap-2 px-2 sm:px-3">
+          <div class="flex shrink-0 items-center gap-1 sm:gap-2">
             <button
               type="button"
-              class="btn btn-link text-body p-2 admin-navbar-icon-btn"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
               title="展开/收起侧边栏"
               aria-label="展开或收起侧边栏"
               @click="toggleSidebar"
             >
               <i class="fas fa-bars"></i>
             </button>
-            <span class="navbar-brand mb-0 d-flex align-items-center gap-2 text-dark fw-semibold">
-              <i class="fas fa-box-open text-primary"></i>
-              <span class="d-none d-sm-inline">App2Docker</span>
+            <span class="mb-0 flex items-center gap-2 font-semibold text-gray-900">
+              <i class="fas fa-box-open text-blue-600"></i>
+              <span class="hidden sm:inline">App2Docker</span>
             </span>
             <button
               type="button"
-              class="btn btn-outline-secondary btn-sm py-0 px-2"
+              class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-700 transition hover:bg-gray-50"
               title="版本与更新"
               @click="openVersionModal"
             >
               <i class="fas fa-tag me-1"></i>
-              <span class="small">v{{ appVersion || "…" }}</span>
+              <span>v{{ appVersion || "…" }}</span>
               <span
                 v-if="updateStatus.hasUpdate"
-                class="badge bg-danger ms-1"
+                class="ms-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
                 style="font-size: 0.65rem"
                 >新</span
               >
             </button>
           </div>
 
-          <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
+          <div class="ms-auto flex shrink-0 items-center gap-2">
             <!-- 运行任务：下拉菜单 -->
             <div v-if="runningTasksCount > 0" class="dropdown">
               <button
                 id="adminRunningTasksDropdown"
-                class="btn btn-warning btn-sm dropdown-toggle"
+                class="inline-flex items-center rounded-lg bg-amber-100 px-2 py-1 text-sm text-amber-900 hover:bg-amber-200 dropdown-toggle"
                 type="button"
                 data-bs-toggle="dropdown"
                 data-bs-auto-close="outside"
                 aria-expanded="false"
               >
                 <i class="fas fa-spinner fa-spin"></i>
-                <span class="d-none d-md-inline ms-1">运行任务</span>
-                <span class="badge bg-danger ms-1">{{ runningTasksCount }}</span>
+                <span class="ms-1 hidden md:inline">运行任务</span>
+                <span class="ms-1 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ runningTasksCount }}</span>
               </button>
               <div
-                class="dropdown-menu dropdown-menu-end p-0 shadow admin-running-dropdown"
+                class="dropdown-menu dropdown-menu-end admin-running-dropdown rounded-lg border border-gray-200 p-0 shadow-lg"
                 aria-labelledby="adminRunningTasksDropdown"
                 style="min-width: 300px; max-width: 400px"
               >
@@ -117,31 +115,31 @@
             <button
               v-else
               type="button"
-              class="btn btn-outline-secondary btn-sm"
+              class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-500"
               title="暂无运行中的任务"
               disabled
             >
               <i class="fas fa-check-circle"></i>
-              <span class="d-none d-md-inline ms-1">运行任务</span>
-              <span class="badge bg-secondary ms-1">0</span>
+              <span class="ms-1 hidden md:inline">运行任务</span>
+              <span class="ms-1 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">0</span>
             </button>
 
             <!-- 用户菜单 -->
             <div class="dropdown">
               <button
                 id="adminUserDropdown"
-                class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                class="inline-flex items-center rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-700 hover:bg-gray-50 dropdown-toggle"
                 type="button"
                 data-bs-toggle="dropdown"
                 aria-expanded="false"
               >
                 <i class="fas fa-user-circle"></i>
-                <span class="d-none d-md-inline ms-1 text-truncate" style="max-width: 8rem">{{
+                <span class="ms-1 hidden max-w-32 truncate md:inline">{{
                   username
                 }}</span>
               </button>
               <ul
-                class="dropdown-menu dropdown-menu-end shadow"
+                class="dropdown-menu dropdown-menu-end rounded-lg border border-gray-200 py-1 shadow-lg"
                 aria-labelledby="adminUserDropdown"
               >
                 <li>
@@ -187,59 +185,61 @@
         </div>
       </nav>
 
-      <!-- 侧边栏（二级菜单） -->
-      <aside class="admin-sidebar" aria-label="主导航">
-        <nav v-if="!sidebarCollapsed" class="admin-sidebar-nav">
+      <!-- 侧边栏（Flowbite Sidebar 结构） -->
+      <aside
+        class="fixed bottom-0 left-0 top-14 z-20 overflow-y-auto border-r border-gray-200 bg-white transition-all duration-200"
+        :class="sidebarCollapsed ? 'w-16' : 'w-64'"
+        aria-label="主导航"
+      >
+        <nav v-if="!sidebarCollapsed" class="space-y-2 p-3">
           <button
             v-if="hasPermission('menu.dashboard')"
             type="button"
-            class="admin-sidebar-home"
-            :class="{ active: activeTab === 'dashboard' }"
+            class="group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-gray-900"
+            :class="activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : ''"
             title="首页"
             @click="activeTab = 'dashboard'"
           >
-            <i class="fas fa-house fa-fw"></i>
-            <span class="admin-sidebar-label">首页</span>
+            <i class="fas fa-house fa-fw text-gray-500 group-hover:text-gray-700"></i>
+            <span class="truncate">首页</span>
           </button>
           <div
             v-if="hasPermission('menu.dashboard') && visibleSidebarGroups.length"
-            class="admin-sidebar-divider"
+            class="my-2 h-px bg-gray-200"
             role="separator"
           />
           <div
             v-for="group in visibleSidebarGroups"
             :key="group.id"
-            class="admin-sidebar-group"
-            :class="{
-              'admin-sidebar-group--open': isGroupExpanded(group.id),
-              'admin-sidebar-group--active': groupHasActiveChild(group),
-            }"
+            class="space-y-1"
           >
             <button
               type="button"
-              class="admin-sidebar-group__toggle"
+              class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+              :class="groupHasActiveChild(group) ? 'text-gray-700' : ''"
               :aria-expanded="isGroupExpanded(group.id)"
               @click="toggleGroup(group.id)"
             >
-              <i :class="['fa-fw', 'fas', group.icon]"></i>
-              <span class="admin-sidebar-label flex-grow-1 text-start">{{
+              <i :class="['fa-fw', 'fas', group.icon, 'text-gray-400']"></i>
+              <span class="grow text-start truncate">{{
                 group.label
               }}</span>
               <i
-                class="fas fa-chevron-down admin-sidebar-group__chevron"
+                class="fas fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200"
+                :class="isGroupExpanded(group.id) ? 'rotate-180' : ''"
                 aria-hidden="true"
               ></i>
             </button>
             <div
               v-show="isGroupExpanded(group.id)"
-              class="admin-sidebar-children"
+              class="space-y-1 pl-3"
             >
               <button
                 v-for="child in group.children"
                 :key="child.id"
                 type="button"
-                class="admin-sidebar-sublink"
-                :class="{ active: activeTab === child.id }"
+                class="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                :class="activeTab === child.id ? 'bg-blue-50 text-blue-700' : ''"
                 :title="child.label"
                 @click="activeTab = child.id"
               >
@@ -248,23 +248,24 @@
                     'fa-fw',
                     child.iconPrefix || 'fas',
                     child.icon,
+                    activeTab === child.id ? 'text-blue-600' : 'text-gray-400',
                   ]"
                 ></i>
-                <span class="admin-sidebar-label">{{ child.label }}</span>
+                <span class="truncate">{{ child.label }}</span>
               </button>
             </div>
           </div>
         </nav>
         <nav
           v-else
-          class="admin-sidebar-nav admin-sidebar-nav--collapsed"
+          class="flex flex-col items-center gap-2 px-2 py-3"
           aria-label="主导航"
         >
           <button
             v-if="hasPermission('menu.dashboard')"
             type="button"
-            class="admin-sidebar-flyout-trigger admin-sidebar-flyout-trigger--home"
-            :class="{ 'admin-sidebar-flyout-trigger--active': activeTab === 'dashboard' }"
+            class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
+            :class="activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700' : ''"
             title="首页"
             @click="activeTab = 'dashboard'"
           >
@@ -272,18 +273,18 @@
           </button>
           <div
             v-if="hasPermission('menu.dashboard') && visibleSidebarGroups.length"
-            class="admin-sidebar-divider admin-sidebar-divider--collapsed"
+            class="my-1 h-px w-8 bg-gray-200"
             role="separator"
           />
           <div
             v-for="group in visibleSidebarGroups"
             :key="'fly-' + group.id"
-            class="dropend admin-sidebar-dropend"
+            class="dropend flex w-full justify-center"
           >
             <button
               :id="'sidebar-flyout-' + group.id"
               type="button"
-              class="admin-sidebar-flyout-trigger"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
               data-bs-toggle="dropdown"
               data-bs-offset="0,8"
               aria-expanded="false"
@@ -292,14 +293,14 @@
               <i :class="['fa-fw', 'fas', group.icon]"></i>
             </button>
             <ul
-              class="dropdown-menu dropdown-menu-start shadow-sm py-1 admin-sidebar-flyout-menu"
+              class="dropdown-menu dropdown-menu-start admin-sidebar-flyout-menu rounded-lg border border-gray-200 py-1 shadow-lg"
               :aria-labelledby="'sidebar-flyout-' + group.id"
             >
               <li v-for="child in group.children" :key="child.id">
                 <button
                   type="button"
-                  class="dropdown-item py-2 d-flex align-items-center gap-2"
-                  :class="{ active: activeTab === child.id }"
+                  class="dropdown-item flex items-center gap-2 py-2"
+                  :class="activeTab === child.id ? 'active' : ''"
                   @click="selectTabFromFlyout(group.id, child.id)"
                 >
                   <i
@@ -1130,274 +1131,6 @@ onUnmounted(() => {
 .admin-layout {
   min-height: 100vh;
   background-color: var(--admin-content-bg, #f1f5f9);
-}
-
-.admin-navbar {
-  height: var(--admin-navbar-height, 56px);
-  z-index: 1030;
-  background-color: #ffffff !important;
-  border-bottom: 1px solid #e2e8f0;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
-}
-
-.admin-navbar .navbar-brand {
-  color: #0f172a !important;
-}
-
-.admin-navbar .text-body {
-  color: #475569 !important;
-}
-
-.admin-navbar .btn-outline-secondary,
-.admin-navbar .btn-outline-secondary:hover,
-.admin-navbar .btn-outline-secondary:focus {
-  color: #64748b;
-  border-color: #cbd5e1;
-  background-color: transparent;
-}
-
-.admin-navbar .btn-outline-secondary:hover {
-  background-color: #f8fafc;
-  border-color: #94a3b8;
-  color: #334155;
-}
-
-.admin-navbar .dropdown-menu {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-}
-
-.admin-navbar .dropdown-item {
-  color: #334155;
-}
-
-.admin-navbar .dropdown-item:hover {
-  background-color: #f8fafc;
-  color: #0f172a;
-}
-
-.admin-navbar .dropdown-divider {
-  border-top-color: #e2e8f0;
-}
-
-.admin-navbar-icon-btn {
-  text-decoration: none;
-  border: none;
-  line-height: 1;
-}
-.admin-navbar-icon-btn:hover,
-.admin-navbar-icon-btn:focus {
-  color: #2563eb !important;
-}
-
-.admin-sidebar {
-  position: fixed;
-  top: var(--admin-navbar-height, 56px);
-  left: 0;
-  bottom: 0;
-  width: var(--admin-sidebar-width, 256px);
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
-  z-index: 1020;
-  transition: width 0.2s ease;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.admin-layout--sidebar-collapsed .admin-sidebar {
-  width: var(--admin-sidebar-collapsed-width, 64px);
-}
-
-.admin-sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem 0.5rem;
-  gap: 0.15rem;
-}
-
-/* 首页：单级入口（对应仪表盘） */
-.admin-sidebar-home {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  padding: 0.6rem 0.85rem;
-  border: none;
-  background: transparent;
-  color: #334155;
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 0.5rem;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
-  white-space: nowrap;
-}
-
-.admin-sidebar-home:hover {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.admin-sidebar-home.active {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.admin-sidebar-divider {
-  height: 1px;
-  margin: 0.5rem 0.85rem;
-  background: #e2e8f0;
-}
-
-.admin-sidebar-divider--collapsed {
-  width: 1.5rem;
-  height: 1px;
-  margin: 0.25rem auto 0.35rem;
-  align-self: center;
-  background: #cbd5e1;
-}
-
-.admin-sidebar-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: opacity 0.15s ease;
-}
-
-/* 一级分组 */
-.admin-sidebar-group {
-  margin-bottom: 0.1rem;
-}
-
-.admin-sidebar-group__toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  padding: 0.5rem 0.85rem;
-  border: none;
-  background: transparent;
-  color: #64748b;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 0.375rem;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
-  white-space: nowrap;
-}
-
-.admin-sidebar-group__toggle:hover {
-  background: #e2e8f0;
-  color: #334155;
-}
-
-.admin-sidebar-group--active .admin-sidebar-group__toggle {
-  color: #334155;
-}
-
-.admin-sidebar-group__chevron {
-  flex-shrink: 0;
-  font-size: 0.6rem;
-  color: #94a3b8;
-  transition: transform 0.2s ease;
-}
-
-.admin-sidebar-group--open .admin-sidebar-group__chevron {
-  transform: rotate(-180deg);
-  color: #64748b;
-}
-
-/* 二级菜单 */
-.admin-sidebar-children {
-  display: flex;
-  flex-direction: column;
-  margin: 0.15rem 0 0.25rem 0.5rem;
-  padding-left: 0.35rem;
-  gap: 0.1rem;
-}
-
-.admin-sidebar-sublink {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: none;
-  background: transparent;
-  color: #475569;
-  font-size: 0.8125rem;
-  font-weight: 400;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 0.5rem;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
-  white-space: nowrap;
-}
-
-.admin-sidebar-sublink:hover {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.admin-sidebar-sublink.active {
-  background: #dbeafe;
-  color: #1d4ed8;
-  font-weight: 500;
-}
-
-/* 侧栏收起：图标 + 右侧飞出子菜单 */
-.admin-sidebar-nav--collapsed {
-  padding: 0.5rem 0.35rem;
-  align-items: center;
-}
-
-.admin-sidebar-dropend {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-}
-
-.admin-sidebar-flyout-trigger {
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 0.5rem;
-  background: transparent;
-  color: #475569;
-  cursor: pointer;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
-}
-
-.admin-sidebar-flyout-trigger:hover,
-.admin-sidebar-flyout-trigger:focus {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-.admin-sidebar-flyout-trigger--active {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.admin-sidebar-flyout-trigger--home:hover,
-.admin-sidebar-flyout-trigger--home:focus,
-.admin-sidebar-flyout-trigger--home.admin-sidebar-flyout-trigger--active {
-  color: #1d4ed8;
 }
 
 .admin-sidebar-flyout-menu {
