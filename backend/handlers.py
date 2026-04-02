@@ -1,4 +1,5 @@
 # handlers.py
+import asyncio
 import json
 import os
 import re
@@ -14,7 +15,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict, deque
 from http.server import BaseHTTPRequestHandler
 from urllib import parse
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import yaml
 
 from backend.config import (
@@ -4709,34 +4710,10 @@ class BuildTaskManager:
         self.tasks_dir = os.path.join(BUILD_DIR, "tasks")
         os.makedirs(self.tasks_dir, exist_ok=True)
 
-        # 启动时，将 running/pending 状态的任务标记为失败
-        self._mark_lost_tasks_as_failed()
+        # 运行中任务恢复由 app 启动时 recover_non_deploy_tasks_after_restart / recover_deploy_tasks_after_restart 处理
 
         # 启动自动清理任务
         self._start_cleanup_task()
-
-    def _mark_lost_tasks_as_failed(self):
-        """将服务重启时丢失的任务标记为失败"""
-        from backend.database import get_db_session
-        from backend.models import Task
-
-        db = get_db_session()
-        try:
-            lost_tasks = (
-                db.query(Task).filter(Task.status.in_(["running", "pending"])).all()
-            )
-            if lost_tasks:
-                for task in lost_tasks:
-                    task.status = "failed"
-                    task.error = "服务重启，任务中断"
-                    task.completed_at = datetime.now()
-                db.commit()
-                print(f"⚠️ 已将 {len(lost_tasks)} 个丢失的任务标记为失败")
-        except Exception as e:
-            db.rollback()
-            print(f"⚠️ 标记丢失任务失败: {e}")
-        finally:
-            db.close()
 
     def _start_cleanup_task(self):
         """启动自动清理过期任务的后台线程"""
@@ -6137,6 +6114,255 @@ class BuildTaskManager:
             db.close()
 
 
+def _recover_export_tasks_after_restart() -> None:
+    """将 running 状态的导出任务按导出文件是否存在恢复为完成或失败。"""
+    from backend.database import get_db_session
+    from backend.models import ExportTask
+
+    db = get_db_session()
+    try:
+        running_exports = (
+            db.query(ExportTask).filter(ExportTask.status == "running").all()
+        )
+        if not running_exports:
+            return
+        for t in running_exports:
+            fp = t.file_path
+            if fp and os.path.isfile(fp):
+                try:
+                    t.status = "completed"
+                    t.file_size = os.path.getsize(fp)
+                    t.error = None
+                    t.completed_at = datetime.now()
+                except Exception:
+                    t.status = "failed"
+                    t.error = "服务重启：导出文件校验失败"
+                    t.completed_at = datetime.now()
+            else:
+                t.status = "failed"
+                t.error = "服务重启：导出文件不存在或未完成"
+                t.completed_at = datetime.now()
+        db.commit()
+        print(f"♻️ 已根据文件存在性恢复 {len(running_exports)} 个运行中的导出任务")
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ 恢复导出任务失败: {e}")
+    finally:
+        db.close()
+
+
+def _reset_task_to_pending(task_id: str) -> None:
+    from backend.database import get_db_session
+    from backend.models import Task
+
+    db = get_db_session()
+    try:
+        task = db.query(Task).filter(Task.task_id == task_id).first()
+        if task:
+            task.status = "pending"
+            task.error = None
+            task.completed_at = None
+            task.started_at = None
+            db.commit()
+    finally:
+        db.close()
+
+
+def _resolve_task_image_reference(task) -> Optional[str]:
+    cfg = task.task_config or {}
+    img = task.image or cfg.get("image_name") or cfg.get("image")
+    tag = task.tag or cfg.get("tag") or "latest"
+    if not img:
+        return None
+    if ":" in img.split("/")[-1]:
+        return img
+    return f"{img}:{tag}"
+
+
+def _docker_image_exists_locally(image_ref: str) -> bool:
+    try:
+        r = subprocess.run(
+            ["docker", "image", "inspect", image_ref],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+async def recover_non_deploy_tasks_after_restart() -> None:
+    """导出任务 + 构建类任务（不依赖 Agent WebSocket），可在调度器启动前执行。"""
+    from backend.database import get_db_session
+    from backend.models import Task
+
+    _recover_export_tasks_after_restart()
+
+    btm = BuildTaskManager()
+    db = get_db_session()
+    try:
+        running_builds = (
+            db.query(Task)
+            .filter(Task.status == "running")
+            .filter(Task.task_type.in_(["build", "build_from_source"]))
+            .all()
+        )
+        other_running = (
+            db.query(Task)
+            .filter(Task.status == "running")
+            .filter(~Task.task_type.in_(["build", "build_from_source", "deploy"]))
+            .all()
+        )
+        for task in other_running:
+            btm.update_task_status(
+                task.task_id,
+                "failed",
+                error="服务重启，任务中断（未识别的任务类型）",
+            )
+        if not running_builds:
+            return
+        print(
+            f"♻️ 服务重启恢复：检查 {len(running_builds)} 个运行中的构建任务（镜像）…"
+        )
+        for task in running_builds:
+            tid = task.task_id
+            try:
+                btm.add_log(
+                    tid, "\n♻️ 服务重启后检查构建产物镜像是否存在…\n"
+                )
+                ref = _resolve_task_image_reference(task)
+                if not ref:
+                    if task.task_type == "build_from_source":
+                        _reset_task_to_pending(tid)
+                        btm.add_log(
+                            tid,
+                            "ℹ️ 无法解析镜像引用，任务已恢复为 pending 并重新排队\n",
+                        )
+                        _process_global_queued_tasks()
+                    else:
+                        btm.update_task_status(
+                            tid,
+                            "failed",
+                            error="服务重启：无法解析镜像名，请重新发起上传构建",
+                        )
+                        btm.add_log(
+                            tid,
+                            "❌ 无法解析镜像引用（上传构建任务不会自动入队）\n",
+                        )
+                    continue
+                exists = await asyncio.to_thread(
+                    _docker_image_exists_locally, ref
+                )
+                if exists:
+                    btm.update_task_status(tid, "completed")
+                    btm.add_log(
+                        tid, f"✅ 检测到镜像已存在: {ref}，标记为完成\n"
+                    )
+                else:
+                    if task.task_type == "build_from_source":
+                        _reset_task_to_pending(tid)
+                        btm.add_log(
+                            tid,
+                            f"ℹ️ 镜像 {ref} 不存在，任务已恢复为 pending 将重新排队构建\n",
+                        )
+                        _process_global_queued_tasks()
+                    else:
+                        btm.update_task_status(
+                            tid,
+                            "failed",
+                            error=f"服务重启：镜像 {ref} 不存在，请重新上传并构建",
+                        )
+                        btm.add_log(
+                            tid,
+                            f"❌ 镜像 {ref} 不存在（上传构建需手动重试）\n",
+                        )
+            except Exception as ex:
+                print(f"⚠️ 恢复构建任务 {tid[:8]} 失败: {ex}")
+                try:
+                    btm.update_task_status(
+                        tid, "failed", error=f"服务重启恢复检查异常: {ex}"
+                    )
+                except Exception:
+                    pass
+    finally:
+        db.close()
+
+
+async def recover_deploy_tasks_after_restart() -> None:
+    """部署任务需 Agent（含本地 Agent）WebSocket 就绪后再检查。"""
+    from backend.database import get_db_session
+    from backend.models import Task
+    from backend.deploy_task_manager import DeployTaskManager
+
+    deploy_mgr = DeployTaskManager()
+    btm = BuildTaskManager()
+    db = get_db_session()
+    try:
+        running_deploys = (
+            db.query(Task)
+            .filter(Task.status == "running", Task.task_type == "deploy")
+            .all()
+        )
+        if not running_deploys:
+            return
+        print(
+            f"♻️ 服务重启恢复：检查 {len(running_deploys)} 个运行中的部署任务…"
+        )
+        for task in running_deploys:
+            tid = task.task_id
+            try:
+                task_config = task.task_config or {}
+                config = task_config.get("config", {})
+                targets = list(config.get("targets", []))
+                sel = task_config.get("target_names")
+                if sel:
+                    targets = [x for x in targets if x.get("name") in sel]
+                btm.add_log(
+                    tid, "\n♻️ 服务重启后正在检查各部署目标状态…\n"
+                )
+                if not targets:
+                    btm.update_task_status(
+                        tid, "failed", error="服务重启：无部署目标可校验"
+                    )
+                    continue
+                results: List[Tuple[str, dict]] = []
+                for target in targets:
+                    r = await deploy_mgr.check_deploy_recovery_for_target(
+                        tid, task_config, target
+                    )
+                    results.append((target.get("name") or "?", r))
+                    btm.add_log(
+                        tid,
+                        f"  · 目标 {target.get('name')}: "
+                        f"{'✅' if r.get('success') else '❌'} {r.get('message', '')}\n",
+                    )
+                all_ok = all(r.get("success") for _, r in results)
+                if all_ok:
+                    btm.update_task_status(tid, "completed")
+                else:
+                    msg = "; ".join(
+                        f"{n}:{r.get('message', '')}" for n, r in results
+                    )
+                    btm.update_task_status(tid, "failed", error=msg[:2000])
+            except Exception as ex:
+                print(f"⚠️ 恢复部署任务 {tid[:8]} 失败: {ex}")
+                try:
+                    btm.update_task_status(
+                        tid, "failed", error=f"服务重启恢复检查异常: {ex}"
+                    )
+                except Exception:
+                    pass
+    finally:
+        db.close()
+
+
+async def recover_interrupted_tasks_after_restart() -> None:
+    """兼容入口：依次执行非部署恢复 + 部署恢复（若仅调用此函数，请在 Agent 已连接后使用）。"""
+    await recover_non_deploy_tasks_after_restart()
+    await recover_deploy_tasks_after_restart()
+
+
 # ============ 导出任务管理器 ============
 class ExportTaskManager:
     """导出任务管理器 - 管理镜像导出任务，支持异步导出和文件存储"""
@@ -6163,44 +6389,10 @@ class ExportTaskManager:
         self.tasks_dir = os.path.join(EXPORT_DIR, "tasks")
         os.makedirs(self.tasks_dir, exist_ok=True)
 
-        # 启动时，将 running/pending 状态的任务标记为失败
-        self._mark_lost_tasks_as_failed()
+        # 导出任务 running 状态由 recover_non_deploy_tasks_after_restart() 按文件校验恢复
 
         # 启动自动清理任务
         self._start_cleanup_task()
-
-    def _mark_lost_tasks_as_failed(self):
-        """将服务重启时丢失的任务标记为失败（只标记运行中的任务，pending 状态的任务可以继续执行）"""
-        from backend.database import get_db_session
-        from backend.models import ExportTask
-
-        db = get_db_session()
-        try:
-            # 只标记 running 状态的任务为失败，pending 状态的任务可以继续执行
-            lost_tasks = (
-                db.query(ExportTask).filter(ExportTask.status == "running").all()
-            )
-            if lost_tasks:
-                for task in lost_tasks:
-                    task.status = "failed"
-                    task.error = "服务重启，任务中断"
-                    task.completed_at = datetime.now()
-                db.commit()
-                print(f"⚠️ 已将 {len(lost_tasks)} 个运行中的导出任务标记为失败")
-
-            # pending 状态的任务保持原样，可以继续执行
-            pending_tasks = (
-                db.query(ExportTask).filter(ExportTask.status == "pending").all()
-            )
-            if pending_tasks:
-                print(
-                    f"ℹ️ 发现 {len(pending_tasks)} 个待执行的导出任务，将保持 pending 状态"
-                )
-        except Exception as e:
-            db.rollback()
-            print(f"⚠️ 标记丢失导出任务失败: {e}")
-        finally:
-            db.close()
 
     def _start_cleanup_task(self):
         """启动自动清理过期任务的后台线程"""

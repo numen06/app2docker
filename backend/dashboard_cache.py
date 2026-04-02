@@ -71,7 +71,7 @@ class DashboardCacheManager:
         """计算仪表盘统计数据"""
         from backend.database import get_db_session
         from backend.models import (
-            Task, Pipeline, GitSource, Host, ResourcePackage, ExportTask,
+            Task, Pipeline, GitSource, Host, AgentHost, ResourcePackage, ExportTask,
         )
 
         # 初始化默认值
@@ -127,9 +127,9 @@ class DashboardCacheManager:
             except Exception as e:
                 print(f"⚠️ 获取数据源统计失败: {e}")
 
-            # 获取主机统计
+            # 获取主机统计（SSH主机 + Agent主机）
             try:
-                stats["hosts"] = db.query(Host).count()
+                stats["hosts"] = db.query(Host).count() + db.query(AgentHost).count()
             except Exception as e:
                 print(f"⚠️ 获取主机统计失败: {e}")
 

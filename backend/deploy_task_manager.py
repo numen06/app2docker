@@ -8,7 +8,7 @@ import uuid
 import yaml
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple, Union
 from datetime import datetime
 from pathlib import Path
 
@@ -118,18 +118,6 @@ class DeployTaskManager:
 
         # 获取部署配置（统一格式）
         deploy_config = self.parser.get_deploy_config(config)
-        
-        # #region agent log
-        try:
-            with open('/Users/wesley/wokerspacs/jar2docker/.cursor/debug.log', 'a') as f:
-                import json, time
-                compose_content_debug = deploy_config.get("compose_content", "")
-                # 检查 config 中 deploy 部分的 compose_content
-                deploy_section = config.get("deploy", {})
-                deploy_compose_content = deploy_section.get("compose_content", "") if isinstance(deploy_section, dict) else ""
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"deploy_task_manager.py:execute_task_with_manager:GET_DEPLOY_CONFIG","message":"获取部署配置","data":{"deploy_type":deploy_config.get("type"),"compose_content_length":len(compose_content_debug) if compose_content_debug else 0,"compose_content_preview":compose_content_debug[:200] if compose_content_debug else "","compose_content_full":compose_content_debug if compose_content_debug else "","config_deploy_compose_length":len(deploy_compose_content) if deploy_compose_content else 0,"config_deploy_compose_preview":deploy_compose_content[:200] if deploy_compose_content else ""},"timestamp":int(time.time()*1000)}) + "\n")
-        except: pass
-        # #endregion
 
         # 获取要执行的目标
         targets = config.get("targets", [])
@@ -285,25 +273,17 @@ class DeployTaskManager:
 
         return {"success": True, "task_id": task_id, "results": results}
 
-    async def _execute_target_with_executor(
+    async def _prepare_adapted_deploy_for_target(
         self,
         task_id: str,
         target: Dict[str, Any],
         deploy_config: Dict[str, Any],
         context: Dict[str, Any],
         task_manager=None,
-    ) -> Dict[str, Any]:
+    ) -> Union[Dict[str, Any], Tuple[Any, Dict[str, Any], str, str]]:
         """
-        使用执行器执行目标（新架构）
-
-        Args:
-            task_id: 任务ID
-            target: 目标配置
-            deploy_config: 部署配置（统一格式）
-            context: 模板变量上下文
-
-        Returns:
-            执行结果字典（统一格式）
+        解析主机与适配后的 deploy_config。成功返回 (executor, adapted_config, host_type, host_name)；
+        失败返回错误 dict（与 execute 返回格式一致）。
         """
         target_name = target.get("name")
 
@@ -526,6 +506,25 @@ class DeployTaskManager:
             if "stack_name" in deploy_config:
                 adapted_config["stack_name"] = deploy_config["stack_name"]
 
+        return (executor, adapted_config, host_type, host_name)
+
+    async def _execute_target_with_executor(
+        self,
+        task_id: str,
+        target: Dict[str, Any],
+        deploy_config: Dict[str, Any],
+        context: Dict[str, Any],
+        task_manager=None,
+    ) -> Dict[str, Any]:
+        """使用执行器执行目标（新架构）"""
+        target_name = target.get("name")
+        prep = await self._prepare_adapted_deploy_for_target(
+            task_id, target, deploy_config, context, task_manager
+        )
+        if isinstance(prep, dict):
+            return prep
+        executor, adapted_config, host_type, host_name = prep
+
         # 创建状态更新回调
         def update_status_callback(message: str):
             if task_manager:
@@ -716,6 +715,55 @@ class DeployTaskManager:
                 "host_type": host_type,
                 "host_name": host_name,
                 "error": str(e),
+            }
+
+    async def check_deploy_recovery_for_target(
+        self,
+        task_id: str,
+        task_config: Dict[str, Any],
+        target: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """主程序重启后：对单个部署目标检查远端是否已成功/仍在运行。"""
+        config = task_config.get("config") or {}
+        registry = task_config.get("registry")
+        tag = task_config.get("tag")
+        deploy_config = self.parser.get_deploy_config(config)
+        context = self.parser.build_deploy_context(
+            config, registry=registry, tag=tag, task_id=task_id
+        )
+        context = dict(context) if context else {}
+        context["target_name"] = target.get("name") or ""
+
+        prep = await self._prepare_adapted_deploy_for_target(
+            task_id, target, deploy_config, context, task_manager=None
+        )
+        if isinstance(prep, dict):
+            return {
+                "success": False,
+                "checked": True,
+                "message": prep.get("message", "无法准备部署检查"),
+                "host_type": prep.get("host_type"),
+                "host_name": prep.get("host_name"),
+            }
+
+        executor, adapted_config, host_type, host_name = prep
+        chk_ctx = dict(context)
+        chk_ctx["task_id"] = task_id
+        chk_ctx["target_name"] = target.get("name") or ""
+        try:
+            result = await executor.check_deploy_status(adapted_config, chk_ctx)
+            if isinstance(result, dict):
+                result.setdefault("host_type", host_type)
+                result.setdefault("host_name", host_name)
+            return result
+        except Exception as e:
+            logger.exception("check_deploy_recovery_for_target: %s", e)
+            return {
+                "success": False,
+                "checked": False,
+                "message": str(e),
+                "host_type": host_type,
+                "host_name": host_name,
             }
 
     async def _execute_target_unified(

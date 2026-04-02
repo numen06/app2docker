@@ -231,6 +231,14 @@ async def startup_event():
 
     init_db()
 
+    # 导出 + 构建类任务恢复（不依赖 Agent WebSocket），在调度器启动前执行
+    from backend.handlers import (
+        recover_non_deploy_tasks_after_restart,
+        recover_deploy_tasks_after_restart,
+    )
+
+    await recover_non_deploy_tasks_after_restart()
+
     # 启动流水线调度器
     start_scheduler()
 
@@ -372,6 +380,8 @@ async def startup_event():
                     )
                     # 在后台任务中处理部署任务
                     asyncio.create_task(handle_local_deploy_task(message))
+                elif message_type == "check_deploy":
+                    asyncio.create_task(handle_local_check_deploy_task(message))
                 elif message_type == "welcome":
                     print(f"✅ 收到欢迎消息: {message.get('message')}")
                 elif message_type == "heartbeat_ack":
@@ -381,6 +391,36 @@ async def startup_event():
                     print(f"✅ 收到主机信息确认: {message.get('message')}")
                 elif message_type == "error":
                     print(f"❌ 收到错误消息: {message.get('message')}")
+
+            async def handle_local_check_deploy_task(message: Dict[str, Any]):
+                """本地 Agent：响应部署状态检查。"""
+                check_id = message.get("check_id")
+                if not check_id or not _local_agent_client:
+                    return
+                try:
+                    from backend.agent.deploy_executor import DeployExecutor
+
+                    dex = DeployExecutor()
+                    result = dex.check_deployment_status(
+                        message.get("deploy_config", {}),
+                        message.get("context", {}),
+                    )
+                    await _local_agent_client.send_message(
+                        {"type": "check_deploy_result", "check_id": check_id, **result}
+                    )
+                except Exception as e:
+                    import logging
+
+                    logging.getLogger(__name__).exception("本地 check_deploy 失败")
+                    await _local_agent_client.send_message(
+                        {
+                            "type": "check_deploy_result",
+                            "check_id": check_id,
+                            "success": False,
+                            "checked": False,
+                            "message": str(e),
+                        }
+                    )
 
             async def handle_local_deploy_task(message: Dict[str, Any]):
                 """处理本地agent的部署任务"""
@@ -523,6 +563,15 @@ async def startup_event():
                     f"   当前 active_connections keys: {list(active_connections.keys())}"
                 )
                 print(f"   提示: 连接可能在后台建立中，请稍候...")
+
+            # 部署任务恢复依赖 Agent WebSocket（含本地 Agent），在连接尝试后执行
+            try:
+                await recover_deploy_tasks_after_restart()
+            except Exception as recover_err:
+                print(f"⚠️ 部署任务重启恢复失败: {recover_err}")
+                import traceback
+
+                traceback.print_exc()
 
         except Exception as e:
             print(f"⚠️ 启动本地 Agent WebSocket 客户端失败: {e}")

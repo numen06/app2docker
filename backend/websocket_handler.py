@@ -17,6 +17,9 @@ active_connections: Dict[str, WebSocket] = {}
 # 存储等待部署结果的任务（task_id -> Future）
 deploy_result_futures: Dict[str, asyncio.Future] = {}
 
+# 存储等待「部署状态检查」结果的 Future（check_id -> Future）
+check_deploy_result_futures: Dict[str, asyncio.Future] = {}
+
 
 class ConnectionManager:
     """WebSocket连接管理器"""
@@ -223,6 +226,42 @@ class ConnectionManager:
         """
         if task_id in deploy_result_futures:
             future = deploy_result_futures.pop(task_id)
+            if not future.done():
+                future.cancel()
+
+    def create_check_deploy_future(self, check_id: str) -> asyncio.Future:
+        """创建等待 check_deploy 结果的 Future。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        future = asyncio.Future()
+        check_deploy_result_futures[check_id] = future
+        logger.debug(
+            f"[WebSocket] 创建 check_deploy Future: check_id={check_id}, "
+            f"当前数量: {len(check_deploy_result_futures)}"
+        )
+        return future
+
+    def set_check_deploy_result(self, check_id: str, result: Dict[str, Any]):
+        """由 Agent 上报 check_deploy_result 时调用，唤醒等待方。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if check_id in check_deploy_result_futures:
+            future = check_deploy_result_futures.pop(check_id)
+            if not future.done():
+                future.set_result(result)
+                logger.debug(
+                    f"[WebSocket] check_deploy 结果已送达: check_id={check_id}"
+                )
+        else:
+            logger.warning(
+                f"[WebSocket] 未找到 check_deploy Future: check_id={check_id}"
+            )
+
+    def cancel_check_deploy_future(self, check_id: str):
+        if check_id in check_deploy_result_futures:
+            future = check_deploy_result_futures.pop(check_id)
             if not future.done():
                 future.cancel()
 
@@ -851,6 +890,41 @@ async def handle_agent_websocket(
                             "type": "deploy_result_ack",
                             "task_id": task_id,
                             "message": "部署结果已接收",
+                        }
+                    )
+
+                elif message_type == "check_deploy_result":
+                    if is_pending:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": "主机尚未批准加入，无法处理检查请求",
+                            }
+                        )
+                        continue
+                    check_id = message.get("check_id")
+                    if not check_id:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": "check_deploy_result 缺少 check_id",
+                            }
+                        )
+                        continue
+                    result_payload = {
+                        "success": bool(message.get("success", False)),
+                        "checked": message.get("checked", True),
+                        "message": message.get("message", ""),
+                        "exists": message.get("exists"),
+                        "running": message.get("running"),
+                        "exit_code": message.get("exit_code"),
+                    }
+                    connection_manager.set_check_deploy_result(check_id, result_payload)
+                    await websocket.send_json(
+                        {
+                            "type": "check_deploy_result_ack",
+                            "check_id": check_id,
+                            "message": "检查已接收",
                         }
                     )
 

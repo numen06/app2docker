@@ -395,3 +395,64 @@ class AgentExecutor(DeployExecutor):
                 "host_id": self.host_id,
                 "error": str(e),
             }
+
+    async def check_deploy_status(
+        self,
+        deploy_config: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """通过 WebSocket 让 Agent 执行 docker inspect / compose ps 等检查。"""
+        import uuid
+
+        ctx = context or {}
+        base_err: Dict[str, Any] = {
+            "success": False,
+            "checked": False,
+            "message": "",
+            "host_type": "agent",
+            "deploy_method": "websocket",
+            "host_id": self.host_id,
+        }
+        if not self.can_execute():
+            base_err["message"] = f"主机离线: {self.host_name}"
+            return base_err
+
+        from backend.websocket_handler import active_connections
+
+        if self.host_id not in active_connections:
+            base_err["message"] = (
+                f"无法检查部署状态: {self.host_name} WebSocket 未连接"
+            )
+            return base_err
+
+        check_id = str(uuid.uuid4())
+        future = connection_manager.create_check_deploy_future(check_id)
+        msg = {
+            "type": "check_deploy",
+            "check_id": check_id,
+            "deploy_config": deploy_config,
+            "context": ctx,
+        }
+        ok = await connection_manager.send_message(self.host_id, msg)
+        if not ok:
+            connection_manager.cancel_check_deploy_future(check_id)
+            base_err["message"] = "无法发送部署状态检查消息"
+            return base_err
+
+        try:
+            result = await asyncio.wait_for(future, timeout=15.0)
+            if isinstance(result, dict):
+                result.setdefault("host_type", "agent")
+                result.setdefault("deploy_method", "websocket")
+                result.setdefault("host_id", self.host_id)
+                return result
+            base_err["message"] = "检查结果格式错误"
+            return base_err
+        except asyncio.TimeoutError:
+            connection_manager.cancel_check_deploy_future(check_id)
+            base_err["message"] = "部署状态检查超时（15秒）"
+            return base_err
+        except Exception as e:
+            connection_manager.cancel_check_deploy_future(check_id)
+            base_err["message"] = str(e)
+            return base_err

@@ -457,3 +457,117 @@ class PortainerExecutor(DeployExecutor):
                 "error": str(e)
             }
 
+    async def check_deploy_status(
+        self,
+        deploy_config: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """通过 Portainer API 检查 Stack 或容器是否在运行。"""
+        ctx = context or {}
+        out: Dict[str, Any] = {
+            "success": False,
+            "checked": True,
+            "message": "",
+            "host_type": "portainer",
+            "deploy_method": "portainer_api",
+            "host_name": self.host_name,
+        }
+        if not self.can_execute():
+            out["checked"] = False
+            out["message"] = "Portainer 主机离线或未配置 API Key"
+            return out
+
+        target_name = ctx.get("target_name") or ctx.get("recovery_target_name") or ""
+
+        def _sync_check() -> Dict[str, Any]:
+            client = self._get_portainer_client()
+            deploy_mode = deploy_config.get("deploy_mode", "docker_run")
+
+            if deploy_config.get("steps"):
+                return {
+                    **out,
+                    "message": "多步骤 Portainer 部署无法自动确认状态",
+                }
+
+            if deploy_mode == "docker_compose":
+                app_name = (
+                    ctx.get("app", {}).get("name", "app")
+                    if isinstance(ctx.get("app"), dict)
+                    else "app"
+                )
+                stack_name = deploy_config.get("stack_name") or (
+                    f"{app_name}-{target_name}" if target_name else app_name
+                )
+                stack = client.get_stack_by_name(stack_name)
+                if not stack:
+                    return {
+                        **out,
+                        "message": f"未找到 Stack: {stack_name}",
+                    }
+                # Portainer Stack.Status: 1=Active, 2=Inactive 等，不同版本可能不同
+                status = stack.get("Status")
+                if status in (1, "1", "Active", "active"):
+                    return {
+                        **out,
+                        "success": True,
+                        "message": f"Stack 存在且为活动状态: {stack_name}",
+                    }
+                return {
+                    **out,
+                    "message": f"Stack 存在但状态异常: {stack_name}, Status={status}",
+                }
+
+            # docker_run：在 Portainer 中通常以与容器名相同的 Stack 发布
+            container_name = deploy_config.get("container_name") or (
+                f"{ctx.get('app', {}).get('name', 'app') if isinstance(ctx.get('app'), dict) else 'app'}-{target_name}"
+                if target_name
+                else None
+            )
+            if not container_name:
+                return {**out, "message": "无法解析容器/Stack 名称"}
+
+            containers = client._request(
+                "GET",
+                f"/endpoints/{self.portainer_endpoint_id}/docker/containers/json",
+                params={"all": True},
+            )
+            found = None
+            for c in containers:
+                names = c.get("Names") or []
+                for n in names:
+                    simple = n.strip("/")
+                    if simple == container_name or simple.endswith(f"/{container_name}"):
+                        found = c
+                        break
+                if found:
+                    break
+            if not found:
+                return {
+                    **out,
+                    "message": f"未找到容器: {container_name}",
+                }
+            state = (found.get("State") or "").lower()
+            status = found.get("Status") or ""
+            if state == "running" or "up" in status.lower():
+                return {
+                    **out,
+                    "success": True,
+                    "running": True,
+                    "exists": True,
+                    "message": f"容器运行中: {container_name} ({status})",
+                }
+            if "exited (0)" in status.lower():
+                return {
+                    **out,
+                    "success": True,
+                    "exists": True,
+                    "message": f"容器已退出(0): {container_name}",
+                }
+            return {
+                **out,
+                "exists": True,
+                "message": f"容器状态异常: {container_name}, State={state}, Status={status}",
+            }
+
+        return await asyncio.to_thread(_sync_check)
+

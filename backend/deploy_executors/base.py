@@ -58,12 +58,26 @@ class DeployExecutor(ABC):
     def can_execute(self) -> bool:
         """
         检查是否可以执行（如主机是否在线等）
-        
+
         Returns:
             是否可以执行
         """
         pass
-    
+
+    @abstractmethod
+    async def check_deploy_status(
+        self,
+        deploy_config: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        检查目标主机上部署的当前状态（用于主程序重启后恢复判断）。
+
+        Returns:
+            至少包含: success (bool), checked (bool), message (str)
+        """
+        pass
+
     def get_host_info(self) -> Dict[str, Any]:
         """
         获取主机信息

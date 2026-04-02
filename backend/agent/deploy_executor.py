@@ -4,9 +4,12 @@
 负责解析 YAML 部署配置，执行 docker run 或 docker-compose 部署
 """
 import os
+import re
+import json
 import subprocess
 import yaml
 import logging
+import shlex
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
@@ -1254,6 +1257,289 @@ class DeployExecutor:
         except Exception as e:
             logger.exception("部署执行异常")
             return {"success": False, "message": "部署异常", "error": str(e)}
+
+    def check_deployment_status(
+        self,
+        deploy_config: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        检查当前主机上部署是否仍存在且处于健康状态（用于主程序重启后恢复判断）。
+
+        Returns:
+            dict: success, checked, message, exists, running, exit_code(optional)
+        """
+        ctx = context or {}
+        base = {
+            "success": False,
+            "checked": True,
+            "exists": False,
+            "running": False,
+            "message": "",
+        }
+
+        steps = deploy_config.get("steps")
+        if steps and isinstance(steps, list):
+            base["message"] = "多步骤部署无法自动确认远端状态"
+            return base
+
+        deploy_mode = (
+            deploy_config.get("deploy_mode")
+            or deploy_config.get("type")
+            or "docker_run"
+        )
+
+        try:
+            if deploy_mode == "docker_run":
+                name = (deploy_config.get("container_name") or "").strip()
+                if name:
+                    name = self._render_template(name, ctx)
+                if not name:
+                    cmd_str = (deploy_config.get("command") or "").strip()
+                    if cmd_str:
+                        cmd_str = re.sub(r"\\\s*\n\s*", " ", cmd_str)
+                        cmd_str = re.sub(r"\s+", " ", cmd_str).strip()
+                        try:
+                            parts = shlex.split(cmd_str)
+                        except ValueError:
+                            parts = cmd_str.split()
+                        if "--name" in parts:
+                            ni = parts.index("--name")
+                            if ni + 1 < len(parts):
+                                name = parts[ni + 1]
+                if not name:
+                    base["message"] = "无法解析容器名称，无法检查部署状态"
+                    return base
+
+                return self._check_single_container_status(name, base)
+
+            if deploy_mode == "docker_compose":
+                compose_mode = deploy_config.get("compose_mode", "docker-compose")
+                task_id = ctx.get("task_id", "default")
+
+                if compose_mode == "docker-stack":
+                    app_name = (
+                        ctx.get("app", {}).get("name", "app")
+                        if isinstance(ctx.get("app"), dict)
+                        else "app"
+                    )
+                    stack_name = re.sub(
+                        r"[^a-z0-9-]", "-", f"{app_name}-{task_id}".lower()
+                    )
+                    if deploy_config.get("stack_name"):
+                        stack_name = self._render_template(
+                            str(deploy_config["stack_name"]), ctx
+                        )
+                    return self._check_docker_stack_status(stack_name, base)
+
+                # docker-compose：优先使用已有 compose 文件，否则从 compose_content 写入临时文件
+                compose_file = os.path.join(
+                    self.work_dir, f"docker-compose-{task_id}.yml"
+                )
+                compose_content = deploy_config.get("compose_content") or ""
+                if not os.path.isfile(compose_file) and compose_content.strip():
+                    os.makedirs(self.work_dir, exist_ok=True)
+                    with open(compose_file, "w", encoding="utf-8") as f:
+                        f.write(compose_content)
+
+                if not os.path.isfile(compose_file):
+                    base["message"] = "未找到 compose 文件且配置中无 compose_content，无法检查"
+                    return base
+
+                return self._check_compose_project_status(compose_file, base)
+
+            base["message"] = f"不支持的部署模式用于状态检查: {deploy_mode}"
+            return base
+
+        except Exception as e:
+            logger.exception("check_deployment_status 异常")
+            base["message"] = f"检查部署状态时异常: {e}"
+            return base
+
+    def _check_single_container_status(
+        self, container_name: str, base: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """根据 docker inspect 判断单个容器。"""
+        fmt = "{{.State.Running}}|{{.State.ExitCode}}|{{.State.Status}}"
+        result = subprocess.run(
+            ["docker", "inspect", "-f", fmt, container_name],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            base["exists"] = False
+            base["running"] = False
+            base["success"] = False
+            base["message"] = (
+                f"容器不存在或无法检查: {container_name} ({result.stderr.strip() or 'inspect 失败'})"
+            )
+            return base
+
+        base["exists"] = True
+        parts = (result.stdout or "").strip().split("|", 2)
+        running_s = parts[0].strip().lower() if parts else "false"
+        exit_code_s = parts[1].strip() if len(parts) > 1 else "0"
+        status_s = parts[2].strip() if len(parts) > 2 else ""
+
+        base["running"] = running_s == "true"
+        try:
+            exit_code = int(exit_code_s)
+        except ValueError:
+            exit_code = -1
+        base["exit_code"] = exit_code
+
+        if base["running"]:
+            base["success"] = True
+            base["message"] = f"容器正在运行: {container_name} ({status_s})"
+            return base
+
+        if exit_code == 0:
+            base["success"] = True
+            base["message"] = (
+                f"容器已退出且退出码为 0: {container_name} ({status_s})"
+            )
+            return base
+
+        base["success"] = False
+        base["message"] = (
+            f"容器未运行或异常退出: {container_name}, exit={exit_code} ({status_s})"
+        )
+        return base
+
+    def _check_docker_stack_status(
+        self, stack_name: str, base: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """检查 Swarm stack 是否有正常副本。"""
+        result = subprocess.run(
+            ["docker", "stack", "services", stack_name, "--format", "{{.Replicas}}"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            base["exists"] = False
+            base["success"] = False
+            base["message"] = (
+                f"Stack 不存在或无服务: {stack_name} ({result.stderr.strip() or result.stdout})"
+            )
+            return base
+
+        base["exists"] = True
+        lines = [ln.strip() for ln in result.stdout.strip().splitlines() if ln.strip()]
+        all_ok = True
+        for line in lines:
+            if "/" not in line:
+                continue
+            a, b = line.split("/", 1)
+            try:
+                if int(a.strip()) < int(b.strip()) or int(b.strip()) == 0:
+                    all_ok = False
+            except ValueError:
+                all_ok = False
+
+        base["running"] = all_ok
+        base["success"] = all_ok
+        base["message"] = (
+            f"Stack {stack_name} 副本: {lines} — {'正常' if all_ok else '未全部就绪'}"
+        )
+        return base
+
+    def _check_compose_project_status(
+        self, compose_file: str, base: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """使用 docker compose / docker-compose ps 检查项目容器。"""
+        for compose_cmd in (
+            ["docker", "compose", "-f", compose_file, "ps", "-a", "--format", "json"],
+            ["docker-compose", "-f", compose_file, "ps", "-a", "--format", "json"],
+        ):
+            result = subprocess.run(
+                compose_cmd, capture_output=True, text=True, timeout=90
+            )
+            if result.returncode != 0 or not (result.stdout or "").strip():
+                continue
+            try:
+                # 可能多行 JSON 或 JSON 数组
+                raw = result.stdout.strip()
+                items: List[Dict[str, Any]] = []
+                if raw.startswith("["):
+                    items = json.loads(raw)
+                else:
+                    for line in raw.splitlines():
+                        line = line.strip()
+                        if line:
+                            items.append(json.loads(line))
+                if not items:
+                    base["message"] = "Compose 项目下无容器记录"
+                    base["exists"] = False
+                    base["success"] = False
+                    return base
+
+                base["exists"] = True
+                any_running = False
+                for it in items:
+                    state = (it.get("State") or it.get("Status") or "").lower()
+                    if "running" in state or state == "running":
+                        any_running = True
+
+                if any_running:
+                    base["running"] = True
+                    base["success"] = True
+                    base["message"] = "Compose 服务中有容器正在运行"
+                    return base
+
+                # 无运行中：若至少有一个已退出且为 0，视为成功（一次性任务）
+                exited_zero = any(
+                    "exited (0)" in (it.get("State") or it.get("Status") or "").lower()
+                    or "dead" in (it.get("State") or "").lower()
+                    for it in items
+                )
+                # 简化：若无 running，检查是否全部 Exited (0)
+                statuses = [
+                    (it.get("State") or it.get("Status") or "").lower() for it in items
+                ]
+                if statuses and all(
+                    "exited (0)" in s or s.endswith("exit 0") for s in statuses
+                ):
+                    base["success"] = True
+                    base["message"] = "Compose 容器均已正常退出(0)"
+                    return base
+
+                if exited_zero and len(items) == 1:
+                    base["success"] = True
+                    base["message"] = "Compose 容器已退出且状态正常"
+                    return base
+
+                base["success"] = False
+                base["message"] = f"Compose 状态未满足运行或正常退出: {statuses}"
+                return base
+            except json.JSONDecodeError:
+                continue
+
+        # 回退：文本 ps
+        result = subprocess.run(
+            ["docker-compose", "-f", compose_file, "ps"],
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+        out = (result.stdout or "") + (result.stderr or "")
+        if "Up" in out:
+            base["exists"] = True
+            base["running"] = True
+            base["success"] = True
+            base["message"] = "docker-compose ps 显示有服务 Up"
+            return base
+        if "Exit 0" in out:
+            base["exists"] = True
+            base["success"] = True
+            base["message"] = "docker-compose ps 显示 Exit 0"
+            return base
+
+        base["exists"] = "Name" in out or len(out) > 20
+        base["success"] = False
+        base["message"] = "无法确认 Compose 部署状态（无 Up / Exit 0）"
+        return base
 
     def stop_deploy(
         self, container_name: str, deploy_mode: str = "docker_run"

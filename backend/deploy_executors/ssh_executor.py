@@ -3,7 +3,9 @@
 SSH 主机执行器
 通过 SSH 连接执行部署命令
 """
+import asyncio
 import logging
+import shlex
 from typing import Dict, Any, Optional, Callable
 
 from backend.deploy_executors.base import DeployExecutor
@@ -440,3 +442,140 @@ class SSHExecutor(DeployExecutor):
             error_msg = f"多步骤部署失败: {str(e)}"
             logger.exception(f"[SSH] 多步骤部署异常: {error_msg}")
             return {"success": False, "message": error_msg, "error": str(e)}
+
+    async def check_deploy_status(
+        self,
+        deploy_config: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """SSH 上执行 docker inspect / 解析 compose 中的容器名做检查。"""
+        ctx = context or {}
+        out: Dict[str, Any] = {
+            "success": False,
+            "checked": True,
+            "message": "",
+            "host_type": "ssh",
+            "deploy_method": "ssh_direct",
+            "host_name": self.host_name,
+        }
+        if not self.can_execute():
+            out["checked"] = False
+            out["message"] = "SSH 主机不可用"
+            return out
+
+        if deploy_config.get("steps"):
+            out["message"] = "多步骤 SSH 部署无法自动确认状态"
+            return out
+
+        def _remote_inspect_container(ssh_client, container_name: str) -> Dict[str, Any]:
+            qname = shlex.quote(container_name)
+            cmd = (
+                "docker inspect -f '{{.State.Running}}|{{.State.ExitCode}}|{{.State.Status}}' "
+                + qname
+            )
+            stdin, stdout, stderr = ssh_client.exec_command(cmd)
+            exit_status = stdout.channel.recv_exit_status()
+            so = stdout.read().decode("utf-8", errors="ignore").strip()
+            se = stderr.read().decode("utf-8", errors="ignore").strip()
+            if exit_status != 0:
+                return {
+                    "exists": False,
+                    "success": False,
+                    "message": f"容器不存在或 inspect 失败: {container_name} ({se or so})",
+                }
+            parts = so.split("|", 2)
+            running = (parts[0].strip().lower() == "true") if parts else False
+            try:
+                ec = int(parts[1].strip()) if len(parts) > 1 else 0
+            except ValueError:
+                ec = -1
+            status_s = parts[2].strip() if len(parts) > 2 else ""
+            if running:
+                return {
+                    "exists": True,
+                    "success": True,
+                    "running": True,
+                    "message": f"容器运行中: {container_name} ({status_s})",
+                }
+            if ec == 0:
+                return {
+                    "exists": True,
+                    "success": True,
+                    "message": f"容器已退出(0): {container_name}",
+                }
+            return {
+                "exists": True,
+                "success": False,
+                "message": f"容器未运行或异常退出: {container_name}, exit={ec}",
+            }
+
+        def _sync_check() -> Dict[str, Any]:
+            host_config = self._get_host_config()
+            ssh_client = self.ssh_executor._create_ssh_client(
+                host=host_config.get("host"),
+                port=host_config.get("port", 22),
+                username=host_config.get("username"),
+                password=host_config.get("password"),
+                private_key=host_config.get("private_key"),
+                key_password=host_config.get("key_password"),
+            )
+            try:
+                deploy_mode = deploy_config.get("deploy_mode", "docker_run")
+                if deploy_mode == "docker_run":
+                    name = (deploy_config.get("container_name") or "").strip()
+                    if not name:
+                        cmd_str = (deploy_config.get("command") or "").strip()
+                        if cmd_str:
+                            import re
+
+                            cmd_str = re.sub(r"\\\s*\n\s*", " ", cmd_str)
+                            cmd_str = re.sub(r"\s+", " ", cmd_str).strip()
+                            try:
+                                parts = shlex.split(cmd_str)
+                            except ValueError:
+                                parts = cmd_str.split()
+                            if "--name" in parts:
+                                ni = parts.index("--name")
+                                if ni + 1 < len(parts):
+                                    name = parts[ni + 1]
+                    if not name:
+                        return {**out, "message": "无法解析 SSH docker run 容器名"}
+                    r = _remote_inspect_container(ssh_client, name)
+                    return {**out, **r}
+
+                if deploy_mode == "docker_compose":
+                    import yaml
+
+                    content = deploy_config.get("compose_content") or ""
+                    names: list = []
+                    try:
+                        cfg = yaml.safe_load(content) if content else None
+                        if isinstance(cfg, dict):
+                            for _, svc in (cfg.get("services") or {}).items():
+                                if isinstance(svc, dict) and svc.get("container_name"):
+                                    names.append(str(svc["container_name"]))
+                    except Exception as e:
+                        logger.debug("解析 compose_content 失败: %s", e)
+                    if not names:
+                        return {
+                            **out,
+                            "message": "SSH Compose 无法从 compose 解析 container_name，无法自动检查",
+                        }
+                    worst = {"success": True, "message": ""}
+                    msgs = []
+                    for n in names:
+                        r = _remote_inspect_container(ssh_client, n)
+                        msgs.append(r.get("message", ""))
+                        if not r.get("success"):
+                            worst["success"] = False
+                    worst["message"] = "; ".join(msgs)
+                    return {**out, **worst}
+
+                return {**out, "message": f"不支持的 SSH 部署模式: {deploy_mode}"}
+            finally:
+                try:
+                    ssh_client.close()
+                except Exception:
+                    pass
+
+        return await asyncio.to_thread(_sync_check)

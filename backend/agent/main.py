@@ -310,6 +310,11 @@ def on_message(message: Dict[str, Any]):
         logger.info("收到部署任务")
         asyncio.create_task(handle_deploy_task(message))
 
+    elif message_type == "check_deploy":
+        # 主程序重启后检查部署是否仍在目标机上成功/运行
+        logger.info("收到部署状态检查请求")
+        asyncio.create_task(handle_check_deploy(message))
+
     elif message_type == "heartbeat_ack":
         # 心跳确认
         pass
@@ -500,6 +505,48 @@ async def handle_deploy_task(message: Dict[str, Any]):
                 "error": str(e),
             }
         )
+
+
+async def handle_check_deploy(message: Dict[str, Any]):
+    """响应主程序发来的部署状态检查（不修改容器，仅 inspect/ps）。"""
+    global deploy_executor, websocket_client
+
+    check_id = message.get("check_id")
+    if not check_id:
+        logger.warning("check_deploy 消息缺少 check_id")
+        return
+
+    deploy_config = message.get("deploy_config", {})
+    context = message.get("context", {})
+
+    if not websocket_client:
+        logger.error("WebSocket 客户端未初始化，无法回复 check_deploy_result")
+        return
+
+    if not deploy_executor:
+        await websocket_client.send_message(
+            {
+                "type": "check_deploy_result",
+                "check_id": check_id,
+                "success": False,
+                "checked": False,
+                "message": "DeployExecutor 未初始化",
+            }
+        )
+        return
+
+    try:
+        result = deploy_executor.check_deployment_status(deploy_config, context)
+    except Exception as e:
+        logger.exception("check_deployment_status 执行异常")
+        result = {
+            "success": False,
+            "checked": False,
+            "message": str(e),
+        }
+
+    payload = {"type": "check_deploy_result", "check_id": check_id, **result}
+    await websocket_client.send_message(payload)
 
 
 def signal_handler(signum, frame):
