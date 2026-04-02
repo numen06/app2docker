@@ -69,6 +69,11 @@ class DashboardCacheManager:
 
     def _calculate_stats(self) -> Dict:
         """计算仪表盘统计数据"""
+        from backend.database import get_db_session
+        from backend.models import (
+            Task, Pipeline, GitSource, Host, ResourcePackage, ExportTask,
+        )
+
         # 初始化默认值
         stats = {
             "totalTasks": 0,
@@ -89,56 +94,54 @@ class DashboardCacheManager:
         build_stats = {"total_size_mb": 0, "dir_count": 0}
         export_stats = {"total_size_mb": 0, "file_count": 0}
 
-        # 获取任务统计（单独处理，避免影响其他统计）
+        # 使用数据库 count 查询统计，避免加载全部数据（性能更好且无截断问题）
+        db = get_db_session()
         try:
-            from backend.handlers import BuildTaskManager, ExportTaskManager
+            # 获取任务统计
+            try:
+                stats["totalTasks"] = db.query(Task).count() + db.query(ExportTask).count()
+                stats["runningTasks"] = (
+                    db.query(Task).filter(Task.status == "running").count()
+                    + db.query(ExportTask).filter(ExportTask.status == "running").count()
+                )
+                stats["completedTasks"] = (
+                    db.query(Task).filter(Task.status == "completed").count()
+                    + db.query(ExportTask).filter(ExportTask.status == "completed").count()
+                )
+            except Exception as e:
+                print(f"⚠️ 获取任务统计失败: {e}")
+                import traceback
+                traceback.print_exc()
 
-            build_manager = BuildTaskManager()
-            export_manager = ExportTaskManager()
+            # 获取流水线统计
+            try:
+                stats["pipelines"] = db.query(Pipeline).count()
+                stats["enabledPipelines"] = db.query(Pipeline).filter(Pipeline.enabled == True).count()
+                stats["disabledPipelines"] = stats["pipelines"] - stats["enabledPipelines"]
+            except Exception as e:
+                print(f"⚠️ 获取流水线统计失败: {e}")
 
-            # 获取构建任务和导出任务
-            build_tasks = build_manager.list_tasks()
-            export_tasks = export_manager.list_tasks()
-            all_tasks = build_tasks + export_tasks
+            # 获取数据源统计（直接 count 查询，避免 list_sources 的 50 条截断）
+            try:
+                stats["datasources"] = db.query(GitSource).count()
+            except Exception as e:
+                print(f"⚠️ 获取数据源统计失败: {e}")
 
-            stats["totalTasks"] = len(all_tasks)
-            stats["runningTasks"] = len(
-                [t for t in all_tasks if t.get("status") == "running"]
-            )
-            stats["completedTasks"] = len(
-                [t for t in all_tasks if t.get("status") == "completed"]
-            )
-        except Exception as e:
-            print(f"⚠️ 获取任务统计失败: {e}")
-            import traceback
+            # 获取主机统计
+            try:
+                stats["hosts"] = db.query(Host).count()
+            except Exception as e:
+                print(f"⚠️ 获取主机统计失败: {e}")
 
-            traceback.print_exc()
+            # 获取资源包统计（直接 count 查询，避免 list_packages 中的文件存在性检查开销）
+            try:
+                stats["resourcePackages"] = db.query(ResourcePackage).count()
+            except Exception as e:
+                print(f"⚠️ 获取资源包统计失败: {e}")
+        finally:
+            db.close()
 
-        # 获取流水线统计
-        try:
-            from backend.pipeline_manager import PipelineManager
-
-            pipeline_manager = PipelineManager()
-            pipelines = pipeline_manager.list_pipelines()
-            stats["pipelines"] = len(pipelines)
-            stats["enabledPipelines"] = len(
-                [p for p in pipelines if p.get("enabled", False)]
-            )
-            stats["disabledPipelines"] = stats["pipelines"] - stats["enabledPipelines"]
-        except Exception as e:
-            print(f"⚠️ 获取流水线统计失败: {e}")
-
-        # 获取数据源统计
-        try:
-            from backend.git_source_manager import GitSourceManager
-
-            git_source_manager = GitSourceManager()
-            datasources = git_source_manager.list_sources()
-            stats["datasources"] = len(datasources)
-        except Exception as e:
-            print(f"⚠️ 获取数据源统计失败: {e}")
-
-        # 获取仓库统计
+        # 获取仓库统计（配置文件数据，保持原有方式）
         try:
             from backend.config import get_all_registries
 
@@ -147,7 +150,7 @@ class DashboardCacheManager:
         except Exception as e:
             print(f"⚠️ 获取仓库统计失败: {e}")
 
-        # 获取模板统计
+        # 获取模板统计（配置文件数据，保持原有方式）
         try:
             from backend.config import get_all_templates
 
@@ -155,26 +158,6 @@ class DashboardCacheManager:
             stats["templates"] = len(templates)
         except Exception as e:
             print(f"⚠️ 获取模板统计失败: {e}")
-
-        # 获取资源包统计
-        try:
-            from backend.resource_package_manager import ResourcePackageManager
-
-            resource_package_manager = ResourcePackageManager()
-            resource_packages = resource_package_manager.list_packages()
-            stats["resourcePackages"] = len(resource_packages)
-        except Exception as e:
-            print(f"⚠️ 获取资源包统计失败: {e}")
-
-        # 获取主机统计
-        try:
-            from backend.host_manager import HostManager
-
-            host_manager = HostManager()
-            hosts = host_manager.list_hosts()
-            stats["hosts"] = len(hosts)
-        except Exception as e:
-            print(f"⚠️ 获取主机统计失败: {e}")
 
         # 获取存储统计
         try:
