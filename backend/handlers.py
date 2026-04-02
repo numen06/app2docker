@@ -2322,6 +2322,9 @@ class BuildManager:
 
     def _start_build_from_source_thread(self, task_id: str, task_config: dict):
         """按已有 task_config 启动构建线程（用于全局队列调度）。"""
+        # 启动线程前先将状态更新为 running，避免任务实际在执行但状态仍为 pending
+        self.task_manager.update_task_status(task_id, "running")
+
         git_url = task_config.get("git_url")
         image_name = task_config.get("image_name")
         tag = task_config.get("tag", "latest")
