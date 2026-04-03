@@ -806,6 +806,173 @@ async def toggle_user_enable(
         raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
 
 
+def _require_admin(request: Request) -> str:
+    from backend.auth import check_role
+
+    username = require_auth(request)
+    if not check_role(username, "admin"):
+        raise HTTPException(status_code=403, detail="权限不足：需要管理员权限")
+    return username
+
+
+@router.get("/users/{user_id}/app-keys")
+async def admin_get_user_app_keys(user_id: str, request: Request):
+    """管理员：获取指定用户的 APP Key 列表"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User
+
+        admin_username = _require_admin(request)
+        db = get_db_session()
+        try:
+            target = db.query(User).filter(User.user_id == user_id).first()
+            if not target:
+                raise HTTPException(status_code=404, detail="用户不存在")
+            keys = get_user_app_keys(user_id)
+            OperationLogger.log(
+                admin_username,
+                "admin_list_user_app_keys",
+                {"target_user_id": user_id, "target_username": target.username},
+            )
+            return JSONResponse({"success": True, "app_keys": keys})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取 APP Key 失败: {str(e)}")
+
+
+@router.post("/users/{user_id}/app-keys")
+async def admin_create_user_app_key(
+    user_id: str, request: CreateAppKeyRequest, http_request: Request
+):
+    """管理员：为指定用户创建 APP Key"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User
+        from datetime import datetime
+
+        admin_username = _require_admin(http_request)
+        db = get_db_session()
+        try:
+            target = db.query(User).filter(User.user_id == user_id).first()
+            if not target:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            expires_at = None
+            if request.expires_at:
+                expires_text = request.expires_at.replace("Z", "+00:00")
+                expires_at = datetime.fromisoformat(expires_text)
+
+            created = generate_app_key(
+                user_id=user_id,
+                name=request.name,
+                expires_at=expires_at,
+            )
+            OperationLogger.log(
+                admin_username,
+                "admin_create_user_app_key",
+                {
+                    "target_user_id": user_id,
+                    "target_username": target.username,
+                    "name": request.name,
+                },
+            )
+            return JSONResponse({"success": True, **created})
+        finally:
+            db.close()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="expires_at 格式无效")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建 APP Key 失败: {str(e)}")
+
+
+@router.delete("/users/{user_id}/app-keys/{key_id}")
+async def admin_delete_user_app_key(
+    user_id: str, key_id: str, request: Request
+):
+    """管理员：删除指定用户的 APP Key"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User
+
+        admin_username = _require_admin(request)
+        db = get_db_session()
+        try:
+            target = db.query(User).filter(User.user_id == user_id).first()
+            if not target:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            deleted = delete_app_key(key_id=key_id, user_id=user_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="APP Key 不存在")
+
+            OperationLogger.log(
+                admin_username,
+                "admin_delete_user_app_key",
+                {
+                    "target_user_id": user_id,
+                    "target_username": target.username,
+                    "key_id": key_id,
+                },
+            )
+            return JSONResponse({"success": True, "message": "APP Key 已删除"})
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除 APP Key 失败: {str(e)}")
+
+
+@router.put("/users/{user_id}/app-keys/{key_id}/toggle")
+async def admin_toggle_user_app_key_user(
+    user_id: str, key_id: str, request: Request
+):
+    """管理员：启用/禁用指定用户的 APP Key"""
+    try:
+        from backend.database import get_db_session
+        from backend.models import User
+
+        admin_username = _require_admin(request)
+        db = get_db_session()
+        try:
+            target = db.query(User).filter(User.user_id == user_id).first()
+            if not target:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            enabled = toggle_app_key(key_id=key_id, user_id=user_id)
+            if enabled is None:
+                raise HTTPException(status_code=404, detail="APP Key 不存在")
+
+            OperationLogger.log(
+                admin_username,
+                "admin_toggle_user_app_key",
+                {
+                    "target_user_id": user_id,
+                    "target_username": target.username,
+                    "key_id": key_id,
+                    "enabled": enabled,
+                },
+            )
+            return JSONResponse(
+                {
+                    "success": True,
+                    "enabled": enabled,
+                    "message": f"APP Key 已{'启用' if enabled else '禁用'}",
+                }
+            )
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"切换 APP Key 状态失败: {str(e)}")
+
+
 @router.get("/roles")
 async def get_roles(request: Request):
     """获取角色列表（包含权限信息）"""

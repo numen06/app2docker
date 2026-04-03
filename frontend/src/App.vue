@@ -131,6 +131,7 @@
                 ref="userDropdownMenu"
                 class="dropdown-menu dropdown-menu-end rounded-lg border border-gray-200 py-1 shadow-lg"
                 :class="{ show: userMenuOpen }"
+                :style="userMenuStyle"
                 @click="closeUserMenu"
               >
                 <li>
@@ -797,6 +798,7 @@ const userDropdownMenu = ref(null);
 const runningTasksMenuOpen = ref(false);
 const userMenuOpen = ref(false);
 const runningTasksMenuStyle = ref({});
+const userMenuStyle = ref({});
 const buildConfigToEdit = ref({});
 const permissionsLoaded = ref(false);
 const userPermissions = ref(new Set());
@@ -1044,6 +1046,48 @@ function closeRunningTasksMenu() {
 
 function closeUserMenu() {
   userMenuOpen.value = false;
+  userMenuStyle.value = {};
+}
+
+function adjustUserMenuPosition() {
+  const menu = userDropdownMenu.value;
+  if (!menu || !userMenuOpen.value) return;
+  const gap = 8;
+  const rect = menu.getBoundingClientRect();
+  const style = {
+    zIndex: 1050,
+    maxHeight: "min(60vh, calc(100vh - 16px))",
+    overflowY: "auto",
+  };
+
+  let tx = 0;
+  if (rect.right > window.innerWidth - gap) {
+    tx += window.innerWidth - gap - rect.right;
+  }
+  if (rect.left + tx < gap) {
+    tx = gap - rect.left;
+  }
+  if (tx !== 0) {
+    style.transform = `translateX(${tx}px)`;
+  }
+
+  if (rect.bottom > window.innerHeight - gap) {
+    style.top = "auto";
+    style.bottom = "100%";
+    style.marginBottom = "0.25rem";
+    style.marginTop = "0";
+  }
+
+  userMenuStyle.value = style;
+}
+
+function handleTopbarResize() {
+  if (runningTasksMenuOpen.value) {
+    adjustRunningTasksMenuPosition();
+  }
+  if (userMenuOpen.value) {
+    adjustUserMenuPosition();
+  }
 }
 
 function closeTopbarMenus() {
@@ -1072,6 +1116,14 @@ function toggleUserMenu() {
   userMenuOpen.value = !userMenuOpen.value;
   if (userMenuOpen.value) {
     closeRunningTasksMenu();
+    userMenuStyle.value = {};
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        adjustUserMenuPosition();
+      });
+    });
+  } else {
+    userMenuStyle.value = {};
   }
 }
 
@@ -1216,7 +1268,7 @@ onMounted(async () => {
 
   window.addEventListener("navigate", handleNavigateEvent);
   document.addEventListener("click", handleTopbarOutsideClick);
-  window.addEventListener("resize", adjustRunningTasksMenuPosition);
+  window.addEventListener("resize", handleTopbarResize);
 });
 
 function handleNavigateEvent(e) {
@@ -1229,7 +1281,7 @@ onUnmounted(() => {
   stopRunningTasksTimer();
   window.removeEventListener("navigate", handleNavigateEvent);
   document.removeEventListener("click", handleTopbarOutsideClick);
-  window.removeEventListener("resize", adjustRunningTasksMenuPosition);
+  window.removeEventListener("resize", handleTopbarResize);
 });
 
 watch(runningTasksCount, () => {
