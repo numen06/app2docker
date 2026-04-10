@@ -4283,11 +4283,36 @@ export default {
         const taskData = res.data.task;
 
         // 创建新任务（使用相同的配置）
-        const configContent =
+        let configContent =
           taskData.config_content ||
           (taskData.task_config && taskData.task_config.config_content) ||
           "";
         const taskConfig = taskData.task_config || {};
+        // 部署配置的 app 名全局唯一，克隆时必须改名，否则后端会报「应用名称已存在」
+        try {
+          const cfg = yaml.load(configContent);
+          if (cfg && typeof cfg === "object") {
+            const base =
+              (cfg.app && typeof cfg.app === "object" && cfg.app.name) ||
+              cfg.app_name ||
+              "app";
+            const suffix =
+              typeof crypto !== "undefined" && crypto.randomUUID
+                ? crypto.randomUUID().replace(/-/g, "").slice(0, 8)
+                : String(Date.now());
+            const newAppName = `${base}-clone-${suffix}`;
+            if (!cfg.app || typeof cfg.app !== "object") {
+              cfg.app = {};
+            }
+            cfg.app.name = newAppName;
+            configContent = yaml.dump(cfg, {
+              defaultFlowStyle: false,
+              allowUnicode: true,
+            });
+          }
+        } catch (e) {
+          console.warn("克隆时无法改写应用名称，将使用原始配置:", e);
+        }
         const createRes = await axios.post("/api/deploy-tasks", {
           config_content: configContent,
           registry:
