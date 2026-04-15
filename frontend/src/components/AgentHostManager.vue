@@ -1388,6 +1388,13 @@ export default {
       if (newVal === 'all' && this.activeTab === 'hosts') {
         this.loadSshHosts()
       }
+    },
+    activeTab(newTab) {
+      if (newTab === 'pending') {
+        this.loadPendingHosts()
+      } else if (newTab === 'secrets') {
+        this.loadSecrets()
+      }
     }
   },
   beforeUnmount() {
@@ -1442,11 +1449,12 @@ export default {
       } else {
         // 如果不在SSH模式，切换到SSH模式并打开添加模态框
         this.filterType = 'ssh'
-        this.$nextTick(() => {
+        // 等待组件渲染完成后再调用
+        setTimeout(() => {
           if (this.$refs.hostManager) {
             this.$refs.hostManager.showAddModal = true
           }
-        })
+        }, 100)
       }
     },
     openAddModal(type) {
@@ -2215,15 +2223,6 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
       if (this.secretDeployComposeContent) {
         this.copyToClipboard(this.secretDeployComposeContent)
         alert('docker-compose.yml 内容已复制到剪贴板')
-      }
-    }
-  },
-  watch: {
-    activeTab(newTab) {
-      if (newTab === 'pending') {
-        this.loadPendingHosts()
-      } else if (newTab === 'secrets') {
-        this.loadSecrets()
       }
     }
   }
