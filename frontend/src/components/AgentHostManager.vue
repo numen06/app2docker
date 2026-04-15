@@ -1274,6 +1274,7 @@
 <script>
 import axios from 'axios';
 import HostManager from './HostManager.vue';
+import { copyToClipboard as doCopy } from '../utils/clipboard.js';
 
 export default {
   name: 'AgentHostManager',
@@ -1863,53 +1864,36 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         this.loadingDeployCommand = false
       }
     },
-    copyDeployCommand() {
+    async copyDeployCommand() {
       if (this.deployCommand) {
-        this.copyToClipboard(this.deployCommand)
-        alert('部署命令已复制到剪贴板')
-      }
-    },
-    copyComposeContent() {
-      if (this.deployComposeContent) {
-        this.copyToClipboard(this.deployComposeContent)
-        alert('docker-compose.yml 内容已复制到剪贴板')
-      }
-    },
-    copyToClipboard(text, message) {
-      if (!text) {
-        alert('暂无可复制内容')
-        return
-      }
-
-      const fallbackCopy = () => {
-        const textarea = document.createElement('textarea')
-        textarea.value = text
-        textarea.style.position = 'fixed'
-        textarea.style.opacity = '0'
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-        if (message) {
-          alert(message)
+        const success = await doCopy(this.deployCommand)
+        if (success) {
+          alert('部署命令已复制到剪贴板')
+        } else {
+          alert('复制失败')
         }
       }
-
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text)
-          .then(() => {
-            if (message) {
-              alert(message)
-            }
-          })
-          .catch(() => {
-            // 无法使用 clipboard API 时，回退到旧方案
-            fallbackCopy()
-          })
-      } else {
-        // 降级方案
-        fallbackCopy()
+    },
+    async copyComposeContent() {
+      if (this.deployComposeContent) {
+        const success = await doCopy(this.deployComposeContent)
+        if (success) {
+          alert('docker-compose.yml 内容已复制到剪贴板')
+        } else {
+          alert('复制失败')
+        }
       }
+    },
+    async copyToClipboard(text, message) {
+      if (!text) {
+        alert('暂无可复制内容')
+        return false
+      }
+      const success = await doCopy(text)
+      if (success && message) {
+        alert(message)
+      }
+      return success
     },
     getStatusBadgeClass(status) {
       const statusMap = {
@@ -2237,16 +2221,24 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         this.loadingSecretDeployCommand = false
       }
     },
-    copySecretDeployCommand() {
+    async copySecretDeployCommand() {
       if (this.secretDeployCommand) {
-        this.copyToClipboard(this.secretDeployCommand)
-        alert('部署命令已复制到剪贴板')
+        const success = await doCopy(this.secretDeployCommand)
+        if (success) {
+          alert('部署命令已复制到剪贴板')
+        } else {
+          alert('复制失败')
+        }
       }
     },
-    copySecretComposeContent() {
+    async copySecretComposeContent() {
       if (this.secretDeployComposeContent) {
-        this.copyToClipboard(this.secretDeployComposeContent)
-        alert('docker-compose.yml 内容已复制到剪贴板')
+        const success = await doCopy(this.secretDeployComposeContent)
+        if (success) {
+          alert('docker-compose.yml 内容已复制到剪贴板')
+        } else {
+          alert('复制失败')
+        }
       }
     }
   }

@@ -102,6 +102,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { copyToClipboard } from '../utils/clipboard.js'
 
 const props = defineProps({
   modelValue: Boolean
@@ -171,7 +172,7 @@ function clearLog() {
   }
 }
 
-function copyLog() {
+async function copyLog() {
   // 清理和格式化日志文本
   const text = logs.value
     .map(log => {
@@ -183,12 +184,12 @@ function copyLog() {
     .filter(line => line.length > 0)  // 过滤空行
     .join('\n')  // 用换行符连接
   
-  navigator.clipboard.writeText(text).then(() => {
+  const success = await copyToClipboard(text)
+  if (success) {
     alert(`日志已复制到剪贴板 (${logs.value.length} 行)`)
-  }).catch(err => {
-    console.error('复制失败:', err)
+  } else {
     alert('复制失败，请手动选择文本复制')
-  })
+  }
 }
 
 function downloadLog() {

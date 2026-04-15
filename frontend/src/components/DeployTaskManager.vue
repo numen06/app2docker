@@ -2481,6 +2481,7 @@
 <script>
 import axios from "axios";
 import yaml from "js-yaml";
+import { copyToClipboard } from "../utils/clipboard.js";
 
 export default {
   name: "DeployTaskManager",
@@ -4461,11 +4462,14 @@ export default {
       this.webhookUrl = url;
       this.showWebhookModal = true;
     },
-    copyWebhookUrlFromModal() {
+    async copyWebhookUrlFromModal() {
       if (this.$refs.webhookUrlInput) {
-        this.$refs.webhookUrlInput.select();
-        document.execCommand("copy");
-        alert("Webhook URL 已复制到剪贴板");
+        const success = await copyToClipboard(this.$refs.webhookUrlInput.value);
+        if (success) {
+          alert("Webhook URL 已复制到剪贴板");
+        } else {
+          alert("复制失败，请手动选择文本复制");
+        }
       }
     },
   },

@@ -162,7 +162,7 @@
                     line-height: 1;
                     flex-shrink: 0;
                   "
-                  @click="copyToClipboard(pipeline.git_url, 'Git 地址')"
+                  @click="copyTextWithFeedback(pipeline.git_url, 'Git 地址', $event)"
                   title="复制 Git 地址"
                 >
                   <i class="fas fa-copy" style="font-size: 0.7rem"></i>
@@ -226,9 +226,10 @@
                     flex-shrink: 0;
                   "
                   @click="
-                    copyToClipboard(
+                    copyTextWithFeedback(
                       `${pipeline.image_name}:${pipeline.tag}`,
-                      '镜像名称'
+                      '镜像名称',
+                      $event
                     )
                   "
                   title="复制镜像名称"
@@ -3726,6 +3727,7 @@ import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
 import { getDockerfilesWithCache } from "../utils/dockerfileCache.js";
 import {
@@ -6538,47 +6540,13 @@ const buildConfigJson = computed(() => {
   return JSON.stringify(config, null, 2);
 });
 
-// 复制构建配置JSON（带降级方案）
 async function copyBuildConfigJson() {
   const text = buildConfigJson.value;
-
-  // 优先使用 Clipboard API
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      alert("构建配置JSON已复制到剪贴板");
-      return;
-    } catch (err) {
-      console.warn("Clipboard API 失败，尝试降级方案:", err);
-    }
-  }
-
-  // 降级方案：使用传统的选择文本方式
-  try {
-    // 创建临时文本区域
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.top = "-9999px";
-    document.body.appendChild(textarea);
-    textarea.select();
-    textarea.setSelectionRange(0, text.length); // 兼容移动端
-
-    // 执行复制
-    const successful = document.execCommand("copy");
-    document.body.removeChild(textarea);
-
-    if (successful) {
-      alert("构建配置JSON已复制到剪贴板");
-    } else {
-      throw new Error("execCommand 复制失败");
-    }
-  } catch (err) {
-    console.error("复制失败:", err);
-    // 最后的降级方案：提示用户手动复制
+  const success = await copyToClipboard(text);
+  if (success) {
+    alert("构建配置JSON已复制到剪贴板");
+  } else {
     alert("自动复制失败，请手动选择并复制文本（已自动选中）");
-    // 尝试选中 CodeMirror 中的文本
     nextTick(() => {
       const editor = document.querySelector(".cm-editor");
       if (editor) {
@@ -7008,61 +6976,34 @@ function generateUUID() {
   });
 }
 
-function copyWebhookUrl() {
+async function copyWebhookUrl() {
   if (webhookUrlInput.value) {
-    webhookUrlInput.value.select();
-    document.execCommand("copy");
-    alert("Webhook URL 已复制到剪贴板");
+    const success = await copyToClipboard(webhookUrlInput.value);
+    if (success) {
+      alert("Webhook URL 已复制到剪贴板");
+    } else {
+      alert("Webhook URL 复制失败");
+    }
   }
 }
 
-function copyToClipboard(text, label) {
+async function copyTextWithFeedback(text, label, event) {
   if (!text) return;
 
-  // 使用现代 Clipboard API
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        // 显示成功提示
-        const btn = event.target.closest("button");
-        if (btn) {
-          const originalHTML = btn.innerHTML;
-          btn.innerHTML =
-            '<i class="fas fa-check" style="font-size: 0.7rem; color: green;"></i>';
-          setTimeout(() => {
-            btn.innerHTML = originalHTML;
-          }, 1000);
-        }
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-        alert(`复制${label}失败`);
-      });
-  } else {
-    // 降级方案：使用传统方法
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand("copy");
-      const btn = event.target.closest("button");
-      if (btn) {
-        const originalHTML = btn.innerHTML;
-        btn.innerHTML =
-          '<i class="fas fa-check" style="font-size: 0.7rem; color: green;"></i>';
-        setTimeout(() => {
-          btn.innerHTML = originalHTML;
-        }, 1000);
-      }
-    } catch (err) {
-      console.error("复制失败:", err);
-      alert(`复制${label}失败`);
+  const success = await copyToClipboard(text);
+  if (success) {
+    const btn = event?.target?.closest?.("button");
+    if (btn) {
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML =
+        '<i class="fas fa-check" style="font-size: 0.7rem; color: green;"></i>';
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+      }, 1000);
     }
-    document.body.removeChild(textarea);
+  } else {
+    console.error("复制失败");
+    alert(`复制${label}失败`);
   }
 }
 
@@ -7328,18 +7269,14 @@ function toggleAutoScroll() {
   }
 }
 
-// 复制日志
-function copyLogs() {
+async function copyLogs() {
   if (taskLogs.value) {
-    navigator.clipboard
-      .writeText(taskLogs.value)
-      .then(() => {
-        alert("日志已复制到剪贴板");
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-        alert("复制失败");
-      });
+    const success = await copyToClipboard(taskLogs.value);
+    if (success) {
+      alert("日志已复制到剪贴板");
+    } else {
+      alert("复制失败");
+    }
   }
 }
 

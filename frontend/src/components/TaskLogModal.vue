@@ -124,6 +124,7 @@
 <script setup>
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import axios from 'axios'
+import { copyToClipboard } from '../utils/clipboard.js'
 
 const props = defineProps({
   modelValue: {
@@ -220,13 +221,13 @@ function toggleAutoScroll() {
 }
 
 // 复制日志
-function copyLogs() {
-  navigator.clipboard.writeText(logs.value).then(() => {
+async function copyLogs() {
+  const success = await copyToClipboard(logs.value)
+  if (success) {
     alert('日志已复制到剪贴板')
-  }).catch(err => {
-    console.error('复制失败:', err)
+  } else {
     alert('复制失败，请手动选择文本复制')
-  })
+  }
 }
 
 // 启动日志轮询

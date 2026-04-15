@@ -437,6 +437,7 @@
 <script setup>
 import axios from 'axios'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { copyToClipboard } from '../utils/clipboard.js'
 import { Codemirror } from 'vue-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { StreamLanguage } from '@codemirror/language'
@@ -766,39 +767,10 @@ function toggleAllPackages(event) {
 // 复制配置JSON（带降级方案）
 async function copyJson() {
   const text = configJson.value
-  
-  // 优先使用 Clipboard API
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      alert('JSON已复制到剪贴板')
-      return
-    } catch (err) {
-      console.warn('Clipboard API 失败，尝试降级方案:', err)
-    }
-  }
-  
-  // 降级方案：使用传统的选择文本方式
-  try {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.left = '-9999px'
-    textarea.style.top = '-9999px'
-    document.body.appendChild(textarea)
-    textarea.select()
-    textarea.setSelectionRange(0, text.length)
-    
-    const successful = document.execCommand('copy')
-    document.body.removeChild(textarea)
-    
-    if (successful) {
-      alert('JSON已复制到剪贴板')
-    } else {
-      throw new Error('execCommand 复制失败')
-    }
-  } catch (err) {
-    console.error('复制失败:', err)
+  const success = await copyToClipboard(text)
+  if (success) {
+    alert('JSON已复制到剪贴板')
+  } else {
     alert('自动复制失败，请手动选择并复制文本（已自动选中）')
     nextTick(() => {
       const editor = document.querySelector('.cm-editor')
