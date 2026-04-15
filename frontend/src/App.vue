@@ -1351,7 +1351,7 @@ watch(authenticated, (val) => {
   border: 1px solid var(--admin-panel-border, #e2e8f0);
   border-radius: var(--admin-panel-radius, 0.5rem);
   box-shadow: var(--admin-panel-shadow, 0 1px 2px 0 rgb(15 23 42 / 0.05));
-  overflow: hidden;
+  overflow: visible;
 }
 
 .admin-content-panel__header {
@@ -1365,6 +1365,7 @@ watch(authenticated, (val) => {
   flex: 1;
   padding: 1rem 1rem 1.25rem;
   min-height: 400px;
+  overflow: visible;
 }
 
 @media (min-width: 992px) {
