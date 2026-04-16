@@ -2704,35 +2704,37 @@ async def get_all_tasks(
         # 获取构建任务（排除部署任务）
         build_manager = BuildTaskManager()
         if task_type and task_type == "deploy":
-            # 如果只查询部署任务，跳过构建任务
             build_tasks = []
         else:
-            # 获取构建任务（排除部署任务）
             build_task_type = task_type if task_type and task_type != "deploy" else None
             build_tasks = build_manager.list_tasks(
                 status=status, task_type=build_task_type
             )
-            # 过滤掉部署任务（task_type="deploy"）
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
-            for task in build_tasks:
-                # 标记为构建任务
-                task["task_category"] = "build"
 
-                # 如果是流水线触发的任务，补充流水线名称（用于在任务列表中显示）
+            # 批量获取流水线名称（避免 N+1 查询）
+            pipeline_ids = list({t.get("pipeline_id") for t in build_tasks if t.get("pipeline_id")})
+            pipeline_name_map = {}
+            if pipeline_ids:
                 try:
-                    if task.get("pipeline_id"):
-                        from backend.pipeline_manager import PipelineManager
-
-                        pm = PipelineManager()
-                        pipeline = pm.get_pipeline(task["pipeline_id"])
-                        if pipeline and isinstance(pipeline, dict):
-                            task["pipeline_name"] = pipeline.get("name")
+                    from backend.pipeline_manager import PipelineManager
+                    pm = PipelineManager()
+                    # 批量查询所有需要的流水线
+                    from backend.database import get_db_session
+                    from backend.models import Pipeline
+                    db = get_db_session()
+                    try:
+                        pipelines = db.query(Pipeline).filter(Pipeline.pipeline_id.in_(pipeline_ids)).all()
+                        pipeline_name_map = {p.pipeline_id: p.name for p in pipelines}
+                    finally:
+                        db.close()
                 except Exception as e:
-                    # 获取流水线名称失败不影响任务显示
-                    print(
-                        f"⚠️ 获取流水线名称失败 (task_id={task.get('task_id', 'unknown')[:8]}): {e}"
-                    )
+                    print(f"⚠️ 批量获取流水线名称失败: {e}")
 
+            for task in build_tasks:
+                task["task_category"] = "build"
+                if task.get("pipeline_id"):
+                    task["pipeline_name"] = pipeline_name_map.get(task["pipeline_id"])
                 all_tasks.append(task)
 
         # 获取部署任务（包括配置和执行产生的任务）
@@ -2751,11 +2753,14 @@ async def get_all_tasks(
                         query = query.filter(Task.deploy_config_id == deploy_config_id)
                     deploy_tasks = query.order_by(Task.created_at.desc()).all()
 
-                    # 查询所有配置（用于关联显示配置信息）
-                    deploy_configs = {
-                        config.config_id: config
-                        for config in db.query(DeployConfig).all()
-                    }
+                    # 只查询关联到的部署配置（避免全表加载）
+                    deploy_config_ids = list({t.deploy_config_id for t in deploy_tasks if t.deploy_config_id})
+                    deploy_configs = {}
+                    if deploy_config_ids:
+                        deploy_configs = {
+                            config.config_id: config
+                            for config in db.query(DeployConfig).filter(DeployConfig.config_id.in_(deploy_config_ids)).all()
+                        }
 
                     for task_obj in deploy_tasks:
                         task_config = task_obj.task_config or {}
@@ -2859,25 +2864,13 @@ async def get_running_tasks():
         # 获取构建任务和部署任务（running 或 pending）
         build_manager = BuildTaskManager()
 
-        # 查询 running 状态的构建任务
-        running_build_tasks = build_manager.list_tasks(status="running")
-        for task in running_build_tasks:
+        # 一次查询获取 running 和 pending 状态的构建任务（避免两次全表扫描）
+        all_build_tasks = build_manager.list_tasks(status="running,pending")
+        for task in all_build_tasks:
             # 排除部署任务
             if task.get("task_type") != "deploy":
                 task["task_category"] = "build"
                 all_running_tasks.append(task)
-
-        # 查询 pending 状态的构建任务
-        pending_build_tasks = build_manager.list_tasks(status="pending")
-        for task in pending_build_tasks:
-            # 排除部署任务
-            if task.get("task_type") != "deploy":
-                task["task_category"] = "build"
-                # 避免重复添加
-                if not any(
-                    t.get("task_id") == task.get("task_id") for t in all_running_tasks
-                ):
-                    all_running_tasks.append(task)
 
         # 查询部署执行任务（running 或 pending）
         from backend.database import get_db_session
@@ -2895,11 +2888,14 @@ async def get_running_tasks():
                 .all()
             )
 
-            # 查询所有配置（用于关联显示配置信息）
-            deploy_configs = {
-                config.config_id: config
-                for config in db.query(DeployConfig).all()
-            }
+            # 只查询关联到的部署配置（避免全表加载）
+            deploy_config_ids = list({t.deploy_config_id for t in running_deploy_tasks if t.deploy_config_id})
+            deploy_configs = {}
+            if deploy_config_ids:
+                deploy_configs = {
+                    config.config_id: config
+                    for config in db.query(DeployConfig).filter(DeployConfig.config_id.in_(deploy_config_ids)).all()
+                }
 
             for task_obj in running_deploy_tasks:
                 task_dict = {
@@ -9007,77 +9003,99 @@ async def create_deploy_task(request: Request, task_req: DeployTaskCreateRequest
 
 
 @router.get("/deploy-tasks")
-async def list_deploy_tasks(request: Request):
-    """列出所有部署配置（只返回配置，不返回执行产生的任务）"""
+async def list_deploy_tasks(
+    request: Request,
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    task_type_filter: Optional[str] = Query(None, description="部署类型过滤: agent, ssh, portainer"),
+):
+    """列出所有部署配置（支持分页和类型过滤）"""
     try:
         username = get_current_username(request)
         from backend.database import get_db_session
         from backend.models import DeployConfig, Task
+        from sqlalchemy import func
 
         db = get_db_session()
         try:
-            # 查询所有部署配置
-            deploy_configs = db.query(DeployConfig).order_by(DeployConfig.created_at.desc()).all()
+            # 查询部署配置（带过滤）
+            query = db.query(DeployConfig).order_by(DeployConfig.created_at.desc())
+            deploy_configs = query.all()
 
-            # 转换为前端期望的格式
-            formatted_tasks = []
+            # 如果有过滤条件，先过滤配置
+            if task_type_filter:
+                filtered_configs = []
+                for config in deploy_configs:
+                    config_json = config.config_json or {}
+                    deploy_channel = config_json.get("deploy", {}).get("channel", "agent")
+                    targets = config_json.get("targets", [])
+                    first_target_type = targets[0].get("host_type") if targets else None
 
-            # 查询所有执行任务（用于统计）
-            all_execution_tasks = (
-                db.query(Task)
-                .filter(Task.task_type == "deploy", Task.deploy_config_id.isnot(None))
+                    if task_type_filter == "agent" and deploy_channel == "agent":
+                        filtered_configs.append(config)
+                    elif task_type_filter == "ssh" and deploy_channel == "ssh":
+                        filtered_configs.append(config)
+                    elif task_type_filter == "portainer" and (
+                        deploy_channel == "portainer" or first_target_type == "portainer"
+                    ):
+                        filtered_configs.append(config)
+                deploy_configs = filtered_configs
+
+            total = len(deploy_configs)
+
+            # 内存分页
+            start = (page - 1) * page_size
+            end = start + page_size
+            paginated_configs = deploy_configs[start:end]
+
+            # 使用 SQL 聚合查询执行任务统计（避免全量加载）
+            config_ids = [c.config_id for c in paginated_configs]
+            execution_stats = (
+                db.query(
+                    Task.deploy_config_id,
+                    func.count(Task.task_id).label("execution_count"),
+                    func.max(Task.created_at).label("last_executed_at"),
+                )
+                .filter(Task.task_type == "deploy", Task.deploy_config_id.in_(config_ids))
+                .group_by(Task.deploy_config_id)
                 .all()
             )
-            execution_tasks_map = {}  # config_id -> [execution_tasks]
-            for exec_task in all_execution_tasks:
-                config_id = exec_task.deploy_config_id
-                if config_id:
-                    if config_id not in execution_tasks_map:
-                        execution_tasks_map[config_id] = []
-                    exec_task_dict = {
-                        "task_id": exec_task.task_id,
-                        "status": exec_task.status,
-                        "created_at": (
-                            exec_task.created_at.isoformat()
-                            if exec_task.created_at
-                            else None
-                        ),
-                        "trigger_source": exec_task.trigger_source,
-                    }
-                    execution_tasks_map[config_id].append(exec_task_dict)
+            stats_map = {stat.deploy_config_id: stat for stat in execution_stats}
+
+            # 获取每个配置的最新执行任务（状态、触发来源）
+            latest_tasks_subq = (
+                db.query(
+                    Task.deploy_config_id,
+                    Task.task_id,
+                    Task.status,
+                    Task.trigger_source,
+                    Task.created_at,
+                )
+                .filter(Task.task_type == "deploy", Task.deploy_config_id.in_(config_ids))
+                .order_by(Task.deploy_config_id, Task.created_at.desc())
+                .distinct(Task.deploy_config_id)
+                .all()
+            )
+            latest_task_map = {t.deploy_config_id: t for t in latest_tasks_subq}
 
             # 转换为前端期望的格式
             formatted_tasks = []
-            for config in deploy_configs:
-                execution_tasks = execution_tasks_map.get(config.config_id, [])
+            for config in paginated_configs:
+                stats = stats_map.get(config.config_id)
+                latest_task = latest_task_map.get(config.config_id)
 
-                execution_count = len(execution_tasks)
+                execution_count = stats.execution_count if stats else 0
+                if config.execution_count and config.execution_count > execution_count:
+                    execution_count = config.execution_count
 
-                # 计算最后一次触发时间
                 last_executed_at = None
-                latest_execution_task = None
-                if execution_tasks:
-                    execution_tasks.sort(
-                        key=lambda x: x.get("created_at") or "", reverse=True
-                    )
-                    latest_execution_task = execution_tasks[0]
-                    last_executed_at = latest_execution_task.get("created_at")
+                if latest_task and latest_task.created_at:
+                    last_executed_at = latest_task.created_at.isoformat()
                 elif config.last_executed_at:
                     last_executed_at = config.last_executed_at.isoformat()
 
-                # 计算最新执行状态
-                latest_execution_status = (
-                    latest_execution_task.get("status")
-                    if latest_execution_task
-                    else "pending"
-                )
-
-                # 计算最近一次执行的触发来源
-                latest_trigger_source = (
-                    latest_execution_task.get("trigger_source", "manual")
-                    if latest_execution_task
-                    else "manual"
-                )
+                latest_execution_status = latest_task.status if latest_task else "pending"
+                latest_trigger_source = latest_task.trigger_source if latest_task else "manual"
 
                 formatted_tasks.append(
                     {
@@ -9102,24 +9120,24 @@ async def list_deploy_tasks(request: Request):
                         },
                         "config": config.config_json or {},
                         "config_content": config.config_content or "",
-                        "execution_count": max(
-                            execution_count, config.execution_count or 0
-                        ),
+                        "execution_count": execution_count,
                         "last_executed_at": last_executed_at,
-                        "latest_execution_task_id": (
-                            latest_execution_task.get("task_id")
-                            if latest_execution_task
-                            else None
-                        ),
+                        "latest_execution_task_id": latest_task.task_id if latest_task else None,
                         "webhook_token": config.webhook_token,
                         "webhook_secret": config.webhook_secret,
                         "webhook_branch_strategy": config.webhook_branch_strategy,
                         "webhook_allowed_branches": config.webhook_allowed_branches or [],
-                        "app_name": config.app_name,  # 添加应用名称
+                        "app_name": config.app_name,
                     }
                 )
 
-            return JSONResponse({"success": True, "tasks": formatted_tasks})
+            return JSONResponse({
+                "success": True,
+                "tasks": formatted_tasks,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            })
         finally:
             db.close()
     except Exception as e:

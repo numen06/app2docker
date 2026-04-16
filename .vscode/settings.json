@@ -3,7 +3,6 @@
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
   },
-  
   // Python 设置
   // 自动检测虚拟环境（支持 Windows 和 Linux）
   "python.defaultInterpreterPath": "${command:python.interpreterPath}",
@@ -11,16 +10,13 @@
   "python.linting.enabled": true,
   "python.linting.pylintEnabled": false,
   "python.linting.flake8Enabled": true,
-  
   // Vue 设置
   "vetur.experimental.templateInterpolationService": true,
-  
   // 文件关联
   "files.associations": {
     "*.Dockerfile": "dockerfile",
     "*.vue": "vue"
   },
-  
   // 排除文件
   "files.exclude": {
     "**/__pycache__": true,
@@ -28,7 +24,6 @@
     "**/node_modules": true,
     "**/.venv": true
   },
-  
   // 搜索排除
   "search.exclude": {
     "**/node_modules": true,
@@ -36,11 +31,11 @@
     "**/dist": true,
     "**/__pycache__": true
   },
-  
   // ESLint
   "eslint.validate": [
     "javascript",
     "javascriptreact",
     "vue"
-  ]
+  ],
+  "cursorpyright.analysis.typeCheckingMode": "basic"
 }

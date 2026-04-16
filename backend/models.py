@@ -136,6 +136,8 @@ class Task(Base):
         Index("idx_task_pipeline", "pipeline_id"),
         Index("idx_task_deploy_config", "deploy_config_id"),
         Index("idx_task_created", "created_at"),
+        Index("idx_task_type_status", "task_type", "status"),
+        Index("idx_task_type_deploy_config", "task_type", "deploy_config_id"),
     )
 
 

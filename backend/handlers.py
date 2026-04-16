@@ -4972,7 +4972,12 @@ class BuildTaskManager:
         try:
             query = db.query(Task)
             if status:
-                query = query.filter(Task.status == status)
+                # 支持逗号分隔的多状态查询（如 "running,pending"）
+                if "," in status:
+                    statuses = [s.strip() for s in status.split(",")]
+                    query = query.filter(Task.status.in_(statuses))
+                else:
+                    query = query.filter(Task.status == status)
             if task_type:
                 query = query.filter(Task.task_type == task_type)
             tasks = query.order_by(Task.created_at.desc()).all()

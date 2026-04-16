@@ -37,7 +37,7 @@
           type="button"
           class="btn"
           :class="taskTypeFilter === 'all' ? 'btn-success' : 'btn-outline-success'"
-          @click="taskTypeFilter = 'all'"
+          @click="filterByType('all')"
           title="全部类型"
         >
           全部类型
@@ -48,7 +48,7 @@
           :class="
             taskTypeFilter === 'agent' ? 'btn-success' : 'btn-outline-success'
           "
-          @click="taskTypeFilter = 'agent'"
+          @click="filterByType('agent')"
           title="Agent"
         >
           Agent
@@ -57,7 +57,7 @@
           type="button"
           class="btn"
           :class="taskTypeFilter === 'ssh' ? 'btn-success' : 'btn-outline-success'"
-          @click="taskTypeFilter = 'ssh'"
+          @click="filterByType('ssh')"
           title="SSH"
         >
           SSH
@@ -70,7 +70,7 @@
               ? 'btn-success'
               : 'btn-outline-success'
           "
-          @click="taskTypeFilter = 'portainer'"
+          @click="filterByType('portainer')"
           title="Portainer"
         >
           Portainer
@@ -204,6 +204,37 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- 分页组件 -->
+    <div v-if="!loading && totalTasks > pageSize" class="d-flex justify-content-between align-items-center mt-3">
+      <div class="text-muted small">
+        共 {{ totalTasks }} 条记录，当前第 {{ currentPage }}/{{ totalPages }} 页
+      </div>
+      <nav>
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item" :class="{ disabled: currentPage <= 1 }">
+            <a class="page-link" href="#" @click.prevent="goToPage(1)">首页</a>
+          </li>
+          <li class="page-item" :class="{ disabled: currentPage <= 1 }">
+            <a class="page-link" href="#" @click.prevent="goToPage(currentPage - 1)">上一页</a>
+          </li>
+          <li
+            v-for="p in visiblePages"
+            :key="p"
+            class="page-item"
+            :class="{ active: p === currentPage }"
+          >
+            <a class="page-link" href="#" @click.prevent="goToPage(p)">{{ p }}</a>
+          </li>
+          <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
+            <a class="page-link" href="#" @click.prevent="goToPage(currentPage + 1)">下一页</a>
+          </li>
+          <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
+            <a class="page-link" href="#" @click.prevent="goToPage(totalPages)">末页</a>
+          </li>
+        </ul>
+      </nav>
     </div>
 
     <!-- 简易创建任务模态框 -->
@@ -2562,16 +2593,31 @@ export default {
       taskTypeFilter: "all",
       createTypeLock: null, // standard | portainer
       editTypeLock: null, // standard | portainer
+      // 分页相关
+      currentPage: 1,
+      pageSize: 20,
+      totalTasks: 0,
     };
   },
   computed: {
     filteredTasks() {
-      if (this.taskTypeFilter === "all") {
-        return this.tasks;
+      return this.tasks;
+    },
+    totalPages() {
+      return Math.ceil(this.totalTasks / this.pageSize);
+    },
+    visiblePages() {
+      const pages = [];
+      const maxVisible = 5;
+      let start = Math.max(1, this.currentPage - Math.floor(maxVisible / 2));
+      let end = Math.min(this.totalPages, start + maxVisible - 1);
+      if (end - start + 1 < maxVisible) {
+        start = Math.max(1, end - maxVisible + 1);
       }
-      return this.tasks.filter(
-        (task) => this.resolveDeployChannel(task) === this.taskTypeFilter
-      );
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      return pages;
     },
     createPortainerHosts() {
       return (this.agentHosts || []).filter((host) => host.host_type === "portainer");
@@ -2957,6 +3003,15 @@ export default {
     }
   },
   methods: {
+    goToPage(page) {
+      if (page < 1 || page > this.totalPages) return;
+      this.loadTasks(page);
+    },
+    filterByType(type) {
+      this.taskTypeFilter = type;
+      this.currentPage = 1;
+      this.loadTasks(1);
+    },
     normalizeCompareValue(value) {
       return String(value ?? "")
         .trim()
@@ -3035,15 +3090,21 @@ export default {
         this.autoRefreshInterval = null;
       }
     },
-    async loadTasks() {
+    async loadTasks(page) {
+      if (page !== undefined) {
+        this.currentPage = page;
+      }
       this.loading = true;
       try {
-        const res = await axios.get("/api/deploy-tasks");
-        // 适配新的数据结构：后端返回的tasks已经是格式化后的
-        // 注意：task_id 实际对应 config_id（配置ID），配置存储在 DeployConfig 表中
+        const res = await axios.get("/api/deploy-tasks", {
+          params: {
+            page: this.currentPage,
+            page_size: this.pageSize,
+            task_type_filter: this.taskTypeFilter,
+          },
+        });
+        this.totalTasks = res.data.total || 0;
         this.tasks = (res.data.tasks || []).map((task) => {
-          // 确保数据结构一致
-          // 适配新的数据结构：后端返回的 task 包含 app_name 字段
           const appName = task.app_name || task.config?.app?.name || "";
           return {
             ...task,
@@ -3053,7 +3114,6 @@ export default {
               task.config_content || task.task_config?.config_content || "",
             execution_count: task.execution_count || 0,
             last_executed_at: task.last_executed_at || null,
-            // 确保应用名称可用
             app_name: appName,
           };
         });
