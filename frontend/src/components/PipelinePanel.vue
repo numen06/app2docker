@@ -6977,8 +6977,10 @@ function generateUUID() {
 }
 
 async function copyWebhookUrl() {
-  if (webhookUrlInput.value) {
-    const success = await copyToClipboard(webhookUrlInput.value);
+  const el = webhookUrlInput.value;
+  if (el) {
+    const url = typeof el === 'string' ? el : el.value;
+    const success = await copyToClipboard(url);
     if (success) {
       alert("Webhook URL 已复制到剪贴板");
     } else {
