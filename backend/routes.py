@@ -9023,7 +9023,8 @@ async def list_deploy_tasks(
             deploy_configs = query.all()
 
             # 如果有过滤条件，先过滤配置
-            if task_type_filter:
+            if task_type_filter and task_type_filter != "all":
+                filtered_configs = []
                 filtered_configs = []
                 for config in deploy_configs:
                     config_json = config.config_json or {}

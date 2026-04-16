@@ -3100,7 +3100,7 @@ export default {
           params: {
             page: this.currentPage,
             page_size: this.pageSize,
-            task_type_filter: this.taskTypeFilter,
+            task_type_filter: this.taskTypeFilter === "all" ? undefined : this.taskTypeFilter,
           },
         });
         this.totalTasks = res.data.total || 0;
