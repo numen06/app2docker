@@ -3527,7 +3527,7 @@
                 :disabled="!editingPipeline"
                 :extensions="jsonEditorExtensions"
               />
-            </motion.div>
+            </div>
             <div v-if="buildConfigJsonError" class="alert alert-danger mt-2">
               <i class="fas fa-exclamation-circle"></i>
               {{ buildConfigJsonError }}
