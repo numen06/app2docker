@@ -1,20 +1,14 @@
 <template>
-  <div class="operation-logs">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0"><i class="fas fa-history"></i> 操作日志</h5>
-      <div class="d-flex gap-2 align-items-center">
-        <input
+  <div>
+    <PageToolbar title="操作日志" icon="fa-history">
+      <template #actions>
+        <Input
           v-model="filterUsername"
           type="text"
-          class="form-control form-control-sm"
+          class="w-full min-w-0 sm:w-36"
           placeholder="过滤用户名"
-          style="width: 150px"
         />
-        <select
-          v-model="filterOperation"
-          class="form-select form-select-sm"
-          style="width: 150px"
-        >
+        <NativeSelect v-model="filterOperation" class="w-full min-w-0 sm:w-36">
           <option value="">全部操作</option>
           <option value="login">登录</option>
           <option value="logout">登出</option>
@@ -27,177 +21,109 @@
           <option value="template_create">创建模板</option>
           <option value="template_update">更新模板</option>
           <option value="template_delete">删除模板</option>
-        </select>
-        <button class="btn btn-sm btn-outline-primary" @click="loadLogs">
-          <i class="fas fa-sync-alt"></i> 刷新
-        </button>
-        <div class="btn-group">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-danger dropdown-toggle"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
-          >
-            <i class="fas fa-trash-alt"></i> 清理日志
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li>
-              <a class="dropdown-item" href="#" @click.prevent="clearLogs(7)">
-                <i class="fas fa-calendar-week"></i> 保留最近 7 天
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" @click.prevent="clearLogs(30)">
-                <i class="fas fa-calendar-alt"></i> 保留最近 30 天
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" @click.prevent="clearLogs(90)">
-                <i class="fas fa-calendar"></i> 保留最近 90 天
-              </a>
-            </li>
-            <li><hr class="dropdown-divider" /></li>
-            <li>
-              <a
-                class="dropdown-item text-danger"
-                href="#"
-                @click.prevent="clearLogs(null)"
-              >
-                <i class="fas fa-exclamation-triangle"></i> 清空所有日志
-              </a>
-            </li>
-          </ul>
-        </div>
-      </div>
+        </NativeSelect>
+        <Button variant="outline" size="sm" :disabled="loading" @click="loadLogs">
+          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+          刷新
+        </Button>
+        <DropdownMenu>
+          <template #trigger>
+            <Button variant="outline" size="sm" class="text-red-600 hover:text-red-700">
+              <i class="fas fa-trash-alt"></i>
+              清理日志
+              <i class="fas fa-chevron-down text-xs opacity-70"></i>
+            </Button>
+          </template>
+          <DropdownMenuItem @select="clearLogs(7)">
+            <i class="fas fa-calendar-week mr-2 w-4"></i> 保留最近 7 天
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="clearLogs(30)">
+            <i class="fas fa-calendar-alt mr-2 w-4"></i> 保留最近 30 天
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="clearLogs(90)">
+            <i class="fas fa-calendar mr-2 w-4"></i> 保留最近 90 天
+          </DropdownMenuItem>
+          <DropdownMenuItem class="text-red-600 focus:text-red-700" @select="clearLogs(null)">
+            <i class="fas fa-exclamation-triangle mr-2 w-4"></i> 清空所有日志
+          </DropdownMenuItem>
+        </DropdownMenu>
+      </template>
+    </PageToolbar>
+
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+      <i class="fas fa-spinner fa-spin"></i>
+      加载中…
     </div>
 
-    <!-- 日志列表 -->
-    <div v-if="loading" class="text-center py-4">
-      <div class="spinner-border spinner-border-sm" role="status">
-        <span class="visually-hidden">加载中...</span>
-      </div>
-    </div>
+    <EmptyState v-else-if="logs.length === 0" message="暂无操作日志" />
 
-    <div v-else-if="logs.length === 0" class="text-center py-4 text-muted">
-      <i class="fas fa-inbox fa-2x mb-2"></i>
-      <p class="mb-0">暂无操作日志</p>
-    </div>
-
-    <div v-else class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th style="width: 180px">时间</th>
-            <th style="width: 120px">用户名</th>
-            <th style="width: 150px">操作</th>
-            <th>详情</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
+    <Table v-else min-width-class="min-w-[44rem]">
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[180px]">时间</TableHead>
+            <TableHead class="w-[120px]">用户名</TableHead>
+            <TableHead class="w-[150px]">操作</TableHead>
+            <TableHead>详情</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
             v-for="log in logs"
             :key="log.timestamp + log.username + log.operation"
           >
-            <td class="small">
-              {{ formatTime(log.timestamp) }}
-            </td>
-            <td>
-              <code class="small">{{ log.username }}</code>
-            </td>
-            <td>
-              <span class="badge bg-primary">{{
-                getOperationName(log.operation)
-              }}</span>
-            </td>
-            <td class="small text-muted">
-              <code v-if="log.details && Object.keys(log.details).length > 0">
+            <TableCell class="text-sm text-slate-600">{{ formatTime(log.timestamp) }}</TableCell>
+            <TableCell>
+              <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
+                log.username
+              }}</code>
+            </TableCell>
+            <TableCell>
+              <Badge variant="info">{{ getOperationName(log.operation) }}</Badge>
+            </TableCell>
+            <TableCell class="text-sm text-slate-500">
+              <code
+                v-if="log.details && Object.keys(log.details).length > 0"
+                class="block max-w-xl truncate rounded bg-slate-50 px-1.5 py-0.5 text-xs"
+              >
                 {{ JSON.stringify(log.details) }}
               </code>
-              <span v-else>-</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              <span v-else>—</span>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+    </Table>
 
-    <!-- 分页控件 -->
-    <div
-      v-if="totalPages > 1"
-      class="d-flex justify-content-between align-items-center mt-3"
-    >
-      <div class="text-muted small">
-        显示第 {{ totalLogs > 0 ? (currentPage - 1) * pageSize + 1 : 0 }} -
-        {{ Math.min(currentPage * pageSize, totalLogs) }} 条，共
-        {{ totalLogs }} 条
-      </div>
-      <nav>
-        <ul class="pagination pagination-sm mb-0">
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-double-left"></i>
-            </button>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(currentPage - 1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-left"></i>
-            </button>
-          </li>
-          <li
-            v-for="page in visiblePages"
-            :key="page"
-            class="page-item"
-            :class="{ active: currentPage === page }"
-          >
-            <button class="page-link" @click="changePage(page)">
-              {{ page }}
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(currentPage + 1)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-right"></i>
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(totalPages)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-double-right"></i>
-            </button>
-          </li>
-        </ul>
-      </nav>
-    </div>
+    <PaginationBar
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalLogs"
+      :total-pages="totalPages"
+      @update:page="onPageChange"
+    />
 
-    <!-- 错误提示 -->
-    <div v-if="error" class="alert alert-danger mt-3 mb-0">
-      <i class="fas fa-exclamation-circle"></i> {{ error }}
-    </div>
+    <AlertBanner :message="error || ''" />
   </div>
 </template>
 
 <script setup>
 import axios from "axios";
-import { computed, onMounted, ref, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import NativeSelect from "@/components/ui/select/NativeSelect.vue";
+import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
+import DropdownMenuItem from "@/components/ui/dropdown-menu/DropdownMenuItem.vue";
+import { Badge } from "@/components/ui/badge";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
 
 const logs = ref([]);
 const loading = ref(false);
@@ -209,46 +135,7 @@ const pageSize = ref(10);
 const totalLogs = ref(0);
 const totalPages = ref(0);
 
-// 可见的页码列表
-const visiblePages = computed(() => {
-  const total = totalPages.value;
-  const current = currentPage.value;
-  const pages = [];
-
-  if (total <= 7) {
-    // 总页数小于7，显示所有页码
-    for (let i = 1; i <= total; i++) {
-      pages.push(i);
-    }
-  } else {
-    // 总页数大于7，智能显示
-    if (current <= 4) {
-      // 前部：1 2 3 4 5 ... 最后页
-      for (let i = 1; i <= 5; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    } else if (current >= total - 3) {
-      // 后部：1 ... 倍数第5页 倍数第4页 倍数第3页 倍数第2页 最后页
-      pages.push(1);
-      pages.push("...");
-      for (let i = total - 4; i <= total; i++) pages.push(i);
-    } else {
-      // 中间：1 ... current-1 current current+1 ... 最后页
-      pages.push(1);
-      pages.push("...");
-      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    }
-  }
-
-  return pages.filter(
-    (p) => p !== "..." || pages.indexOf(p) === pages.lastIndexOf(p)
-  );
-});
-
-// 切换页码
-function changePage(page) {
+function onPageChange(page) {
   if (page < 1 || page > totalPages.value || page === currentPage.value) return;
   currentPage.value = page;
   loadLogs();
@@ -289,18 +176,9 @@ async function loadLogs() {
   loading.value = true;
   error.value = null;
   try {
-    const params = {
-      page: currentPage.value,
-      page_size: pageSize.value,
-    };
-
-    // 将过滤条件传递到后端
-    if (filterUsername.value) {
-      params.username = filterUsername.value;
-    }
-    if (filterOperation.value) {
-      params.operation = filterOperation.value;
-    }
+    const params = { page: currentPage.value, page_size: pageSize.value };
+    if (filterUsername.value) params.username = filterUsername.value;
+    if (filterOperation.value) params.operation = filterOperation.value;
 
     const res = await axios.get("/api/operation-logs", { params });
     logs.value = res.data.logs || [];
@@ -312,7 +190,6 @@ async function loadLogs() {
       err.response?.data?.error ||
       err.message ||
       "加载操作日志失败";
-    console.error("加载操作日志失败:", err);
     logs.value = [];
     totalLogs.value = 0;
     totalPages.value = 0;
@@ -328,25 +205,18 @@ async function clearLogs(days) {
   } else {
     confirmMessage = `确定要清理操作日志吗？将保留最近 ${days} 天的日志，其他日志将被删除。`;
   }
-
-  if (!confirm(confirmMessage)) {
-    return;
-  }
+  if (!confirm(confirmMessage)) return;
 
   try {
     const params = days ? { days } : {};
     const res = await axios.delete("/api/operation-logs", { params });
-
     alert(res.data.message || "清理成功");
-    // 重新加载日志
     await loadLogs();
   } catch (err) {
     alert(err.response?.data?.detail || err.message || "清理失败");
-    console.error("清理操作日志失败:", err);
   }
 }
 
-// 监听过滤条件变化，重置到第一页并重新加载
 watch([filterUsername, filterOperation], () => {
   currentPage.value = 1;
   loadLogs();
@@ -356,45 +226,3 @@ onMounted(() => {
   loadLogs();
 });
 </script>
-
-<style scoped>
-.operation-logs {
-  animation: fadeIn 0.3s;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.table {
-  font-size: 0.9rem;
-}
-
-code {
-  font-size: 0.85rem;
-  background-color: #f8f9fa;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-/* 分页样式优化 */
-.pagination .page-link {
-  min-width: 38px;
-  text-align: center;
-}
-
-.pagination .page-item.disabled .page-link {
-  cursor: not-allowed;
-}
-
-.pagination .page-item.active .page-link {
-  font-weight: 600;
-}
-</style>

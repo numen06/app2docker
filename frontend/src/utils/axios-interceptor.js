@@ -3,6 +3,18 @@
  */
 import axios from 'axios'
 import { clearAuth, getToken } from './auth'
+import { useTeamStore } from '@/stores/team'
+
+const TEAM_SCOPED_API_PREFIXES = [
+  '/api/pipelines',
+  '/api/agent-hosts',
+  '/api/deploy-configs',
+  '/api/git-sources',
+  '/api/pipeline-groups',
+  '/api/host-groups',
+]
+
+axios.defaults.withCredentials = true
 
 /**
  * 设置 axios 拦截器
@@ -14,6 +26,27 @@ export function setupAxiosInterceptors() {
       const token = getToken()
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
+      }
+      try {
+        const teamStore = useTeamStore()
+        const teamId = teamStore.activeTeamIdForApi
+        const url = config.url || ''
+        const needsTeam = TEAM_SCOPED_API_PREFIXES.some((p) => url.includes(p))
+        if (teamId && needsTeam) {
+          const method = (config.method || 'get').toLowerCase()
+          if (method === 'get') {
+            config.params = { ...(config.params || {}), team_id: config.params?.team_id ?? teamId }
+          } else if (['post', 'put', 'patch'].includes(method)) {
+            const data = config.data
+            if (data && typeof data === 'object' && !(data instanceof FormData)) {
+              if (!data.team_id) {
+                config.data = { ...data, team_id: teamId }
+              }
+            }
+          }
+        }
+      } catch {
+        /* pinia 未就绪时忽略 */
       }
       return config
     },
@@ -31,9 +64,12 @@ export function setupAxiosInterceptors() {
       if (error.response?.status === 401) {
         // 如果是登录接口，不处理（让页面自己处理错误）
         const url = error.config?.url || ''
-        const isLoginRequest = url.includes('/api/login')
-        
-        if (!isLoginRequest) {
+        const isAuthPublicRequest =
+          url.includes('/api/login') ||
+          url.includes('/api/register') ||
+          url.includes('/api/auth/me')
+
+        if (!isAuthPublicRequest && getToken()) {
           // Token 过期或无效，清除认证信息
           const errorMessage = error.response?.data?.detail || error.response?.data?.message || 'Token已过期，请重新登录'
           

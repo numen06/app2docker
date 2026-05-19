@@ -118,6 +118,9 @@ class PipelineManager:
                     else None
                 ),
                 "trigger_count": pipeline.trigger_count,
+                "team_id": pipeline.team_id,
+                "group_id": pipeline.group_id,
+                "created_by": pipeline.created_by,
             }
         except Exception as e:
             print(
@@ -165,6 +168,9 @@ class PipelineManager:
         push_mode: str = "multi",
         resource_package_configs: list = None,
         post_build_webhooks: list = None,
+        team_id: str = None,
+        group_id: str = None,
+        created_by: str = None,
     ) -> str:
         """创建流水线配置"""
         pipeline_id = str(uuid.uuid4())
@@ -234,6 +240,9 @@ class PipelineManager:
                 cron_expression=cron_expression,
                 post_build_webhooks=post_build_webhooks or [],
                 task_queue=[],
+                team_id=team_id,
+                group_id=group_id,
+                created_by=created_by,
             )
 
             db.add(pipeline)
@@ -466,6 +475,17 @@ class PipelineManager:
                             "updated_at": row["updated_at"],
                             "last_triggered_at": row["last_triggered_at"],
                             "trigger_count": row["trigger_count"] or 0,
+                            "team_id": (
+                                row["team_id"] if "team_id" in row.keys() else None
+                            ),
+                            "group_id": (
+                                row["group_id"] if "group_id" in row.keys() else None
+                            ),
+                            "created_by": (
+                                row["created_by"]
+                                if "created_by" in row.keys()
+                                else None
+                            ),
                         }
 
                         # 格式化日期时间（SQLite 返回的是字符串，需要转换为 ISO 格式）

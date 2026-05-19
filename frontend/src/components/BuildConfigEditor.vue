@@ -1,32 +1,32 @@
 <template>
   <div class="build-config-editor">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="flex justify-between items-center mb-4">
       <h5 class="mb-0">
         <i class="fas fa-edit"></i> 编辑构建配置
       </h5>
       <div class="btn-group btn-group-sm">
-        <button 
+        <Button 
           type="button"
-          class="btn btn-outline-info"
+          variant="outline" size="sm"
           @click="showJsonModal = true"
         >
           <i class="fas fa-code"></i> 查看JSON
-        </button>
-        <button 
+        </Button>
+        <Button 
           type="button"
-          class="btn btn-primary"
+          
           @click="saveConfig"
           :disabled="saving"
         >
           <i class="fas fa-save"></i> {{ saving ? '保存中...' : '保存配置' }}
-        </button>
-        <button 
+        </Button>
+        <Button 
           type="button"
-          class="btn btn-secondary"
+          variant="outline"
           @click="cancel"
         >
           <i class="fas fa-times"></i> 取消
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -34,26 +34,26 @@
       <div class="card-body">
         <!-- Git配置 -->
         <div class="mb-4">
-          <h6 class="border-bottom pb-2 mb-3">
-            <i class="fas fa-code-branch text-primary"></i> Git 配置
+          <h6 class="border-b border-slate-200 pb-2 mb-3">
+            <i class="fas fa-code-branch text-blue-600"></i> Git 配置
           </h6>
-          <div class="row g-3">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div class="col-md-6">
-              <label class="form-label">Git 仓库地址 <span class="text-danger">*</span></label>
+              <label class="block text-sm font-medium text-slate-700">Git 仓库地址 <span class="text-red-500">*</span></label>
               <input 
                 v-model="formData.git_url" 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" 
                 required
                 placeholder="https://github.com/user/repo.git"
               >
             </div>
             <div class="col-md-6">
-              <label class="form-label">分支名称</label>
+              <label class="block text-sm font-medium text-slate-700">分支名称</label>
               <div class="input-group">
                 <select 
                   v-model="formData.branch" 
-                  class="form-select form-select-sm"
+                  class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                   :disabled="loadingBranches"
                 >
                   <option value="">-- 选择分支（留空使用默认分支） --</option>
@@ -61,8 +61,8 @@
                     {{ branch }}
                   </option>
                 </select>
-                <button 
-                  class="btn btn-outline-secondary btn-sm" 
+                <Button 
+                  variant="outline" size="sm" 
                   type="button"
                   @click="loadBranches"
                   :disabled="loadingBranches || !formData.git_url"
@@ -70,19 +70,19 @@
                 >
                   <i v-if="loadingBranches" class="fas fa-spinner fa-spin"></i>
                   <i v-else class="fas fa-sync-alt"></i>
-                </button>
+                </Button>
               </div>
-              <small class="text-muted">
+              <small class="text-slate-500">
                 <span v-if="loadingBranches">正在加载分支列表...</span>
                 <span v-else-if="branches.length > 0">已加载 {{ branches.length }} 个分支</span>
                 <span v-else>留空则使用默认分支，点击刷新按钮加载分支列表</span>
               </small>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Git 数据源</label>
+              <label class="block text-sm font-medium text-slate-700">Git 数据源</label>
               <select 
                 v-model="formData.source_id" 
-                class="form-select form-select-sm"
+                class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 @change="onSourceSelected"
               >
                 <option value="">-- 选择数据源或手动输入 --</option>
@@ -92,8 +92,8 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label">项目类型 <span class="text-danger">*</span></label>
-              <select v-model="formData.project_type" class="form-select form-select-sm">
+              <label class="block text-sm font-medium text-slate-700">项目类型 <span class="text-red-500">*</span></label>
+              <select v-model="formData.project_type" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                 <option value="">-- 请选择项目类型 --</option>
                 <option v-for="pt in projectTypesList" :key="pt.value" :value="pt.value">
                   {{ pt.label }}
@@ -105,13 +105,13 @@
 
         <!-- Dockerfile配置 -->
         <div class="mb-4">
-          <h6 class="border-bottom pb-2 mb-3">
-            <i class="fas fa-file-code text-primary"></i> Dockerfile 配置
+          <h6 class="border-b border-slate-200 pb-2 mb-3">
+            <i class="fas fa-file-code text-blue-600"></i> Dockerfile 配置
           </h6>
-          <div class="row g-3">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div class="col-12">
-              <label class="form-label">Dockerfile 来源</label>
-              <div class="btn-group w-100 mb-2" role="group">
+              <label class="block text-sm font-medium text-slate-700">Dockerfile 来源</label>
+              <div class="btn-group w-full mb-2" role="group">
                 <input 
                   type="radio" 
                   class="btn-check" 
@@ -120,7 +120,7 @@
                   v-model="formData.use_project_dockerfile"
                   @change="onDockerfileSourceChange"
                 >
-                <label class="btn btn-outline-primary" for="use-project-dockerfile">
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="use-project-dockerfile">
                   <i class="fas fa-file-code"></i> 项目Dockerfile
                 </label>
                 
@@ -132,23 +132,23 @@
                   v-model="formData.use_project_dockerfile"
                   @change="onDockerfileSourceChange"
                 >
-                <label class="btn btn-outline-primary" for="use-template">
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="use-template">
                   <i class="fas fa-layer-group"></i> 使用模板
                 </label>
               </div>
             </div>
             <div v-if="formData.use_project_dockerfile" class="col-md-6">
-              <label class="form-label">Dockerfile 文件名</label>
+              <label class="block text-sm font-medium text-slate-700">Dockerfile 文件名</label>
               <input 
                 v-model="formData.dockerfile_name" 
                 type="text" 
-                class="form-control form-control-sm"
+                class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 placeholder="Dockerfile"
               >
             </div>
             <div v-else class="col-md-6">
-              <label class="form-label">模板名称</label>
-              <select v-model="formData.template" class="form-select form-select-sm" @change="onTemplateChange">
+              <label class="block text-sm font-medium text-slate-700">模板名称</label>
+              <select v-model="formData.template" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" @change="onTemplateChange">
                 <option value="">-- 请选择模板 --</option>
                 <option v-for="t in filteredTemplates" :key="t.name" :value="t.name">
                   {{ t.name }}
@@ -156,9 +156,9 @@
               </select>
             </div>
             <div v-if="!formData.use_project_dockerfile && templateParams.length > 0" class="col-12">
-              <label class="form-label">模板参数</label>
+              <label class="block text-sm font-medium text-slate-700">模板参数</label>
               <div class="table-responsive">
-                <table class="table table-sm table-bordered">
+                <table class="w-full border-collapse text-sm border border-slate-200">
                   <thead>
                     <tr>
                       <th>参数名</th>
@@ -167,19 +167,19 @@
                   </thead>
                   <tbody>
                     <tr v-for="param in templateParams" :key="param.name">
-                      <td>{{ param.name }} <span v-if="param.required" class="text-danger">*</span></td>
+                      <td>{{ param.name }} <span v-if="param.required" class="text-red-500">*</span></td>
                       <td>
                         <input 
                           v-if="param.type === 'string'"
                           v-model="formData.template_params[param.name]"
                           type="text"
-                          class="form-control form-control-sm"
+                          class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                           :placeholder="param.default || ''"
                         >
                         <select 
                           v-else-if="param.type === 'select'"
                           v-model="formData.template_params[param.name]"
-                          class="form-select form-select-sm"
+                          class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                         >
                           <option value="">-- 请选择 --</option>
                           <option v-for="opt in param.options" :key="opt" :value="opt">{{ opt }}</option>
@@ -195,45 +195,45 @@
 
         <!-- 镜像配置 -->
         <div class="mb-4">
-          <h6 class="border-bottom pb-2 mb-3">
-            <i class="fab fa-docker text-primary"></i> 镜像配置
+          <h6 class="border-b border-slate-200 pb-2 mb-3">
+            <i class="fab fa-docker text-blue-600"></i> 镜像配置
           </h6>
-          <div class="row g-3">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div class="col-md-6">
-              <label class="form-label">镜像名称 <span class="text-danger">*</span></label>
+              <label class="block text-sm font-medium text-slate-700">镜像名称 <span class="text-red-500">*</span></label>
               <input 
                 v-model="formData.image_name" 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" 
                 required
                 placeholder="myapp/demo"
               >
             </div>
             <div class="col-md-6">
-              <label class="form-label">镜像标签</label>
+              <label class="block text-sm font-medium text-slate-700">镜像标签</label>
               <input 
                 v-model="formData.tag" 
                 type="text" 
-                class="form-control form-control-sm"
+                class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 placeholder="latest"
               >
             </div>
             <div class="col-md-6">
-              <label class="form-label">推送模式</label>
-              <select v-model="formData.push_mode" class="form-select form-select-sm" @change="onPushModeChange">
+              <label class="block text-sm font-medium text-slate-700">推送模式</label>
+              <select v-model="formData.push_mode" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" @change="onPushModeChange">
                 <option value="single">单服务推送</option>
                 <option value="multi">多服务推送</option>
               </select>
             </div>
             <div class="col-md-6">
-              <div class="form-check mt-4">
+              <div class="mt-4 flex items-center gap-2">
                 <input 
-                  class="form-check-input" 
+                  class="h-4 w-4 rounded border-slate-300" 
                   type="checkbox" 
                   id="should_push"
                   v-model="formData.should_push"
                 >
-                <label class="form-check-label" for="should_push">
+                <label class="text-sm text-slate-700" for="should_push">
                   构建完成后推送到仓库
                 </label>
               </div>
@@ -243,26 +243,26 @@
 
         <!-- 服务配置（多服务模式） -->
         <div v-if="formData.push_mode === 'multi' && services.length > 0" class="mb-4">
-          <h6 class="border-bottom pb-2 mb-3">
-            <i class="fas fa-layer-group text-primary"></i> 服务配置
+          <h6 class="border-b border-slate-200 pb-2 mb-3">
+            <i class="fas fa-layer-group text-blue-600"></i> 服务配置
           </h6>
           <div class="mb-3">
-            <label class="form-label">选择服务</label>
-            <div class="form-check" v-for="service in services" :key="service.name">
+            <label class="block text-sm font-medium text-slate-700">选择服务</label>
+            <div class="flex items-center gap-2" v-for="service in services" :key="service.name">
               <input 
-                class="form-check-input" 
+                class="h-4 w-4 rounded border-slate-300" 
                 type="checkbox" 
                 :id="`service-${service.name}`"
                 :value="service.name"
                 v-model="formData.selected_services"
               >
-              <label class="form-check-label" :for="`service-${service.name}`">
+              <label class="text-sm text-slate-700" :for="`service-${service.name}`">
                 {{ service.name }}
               </label>
             </div>
           </div>
           <div v-if="formData.selected_services.length > 0" class="table-responsive">
-            <table class="table table-sm table-bordered">
+            <table class="w-full border-collapse text-sm border border-slate-200">
               <thead>
                 <tr>
                   <th>服务名</th>
@@ -279,14 +279,14 @@
                     <input 
                       type="checkbox" 
                       v-model="formData.service_push_config[serviceName].push"
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300"
                     >
                   </td>
                   <td>
                     <input 
                       type="text" 
                       v-model="formData.service_push_config[serviceName].imageName"
-                      class="form-control form-control-sm"
+                      class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       :placeholder="getServiceDefaultImageName(serviceName)"
                     >
                   </td>
@@ -294,7 +294,7 @@
                     <input 
                       type="text" 
                       v-model="formData.service_push_config[serviceName].tag"
-                      class="form-control form-control-sm"
+                      class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       :placeholder="formData.tag || 'latest'"
                     >
                   </td>
@@ -302,7 +302,7 @@
                     <input 
                       type="text" 
                       v-model="formData.service_push_config[serviceName].registry"
-                      class="form-control form-control-sm"
+                      class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       placeholder="可选"
                     >
                   </td>
@@ -314,13 +314,13 @@
 
         <!-- 单服务推送模式 -->
         <div v-if="formData.push_mode === 'single'" class="mb-4">
-          <h6 class="border-bottom pb-2 mb-3">
-            <i class="fas fa-cube text-primary"></i> 单服务配置
+          <h6 class="border-b border-slate-200 pb-2 mb-3">
+            <i class="fas fa-cube text-blue-600"></i> 单服务配置
           </h6>
-          <div class="row g-3">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div class="col-md-6">
-              <label class="form-label">选择服务</label>
-              <select v-model="formData.selected_service" class="form-select form-select-sm">
+              <label class="block text-sm font-medium text-slate-700">选择服务</label>
+              <select v-model="formData.selected_service" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                 <option value="">-- 请选择服务 --</option>
                 <option v-for="service in services" :key="service.name" :value="service.name">
                   {{ service.name }}
@@ -328,11 +328,11 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label">完整镜像名</label>
+              <label class="block text-sm font-medium text-slate-700">完整镜像名</label>
               <input 
                 v-model="formData.custom_image_name" 
                 type="text" 
-                class="form-control form-control-sm"
+                class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 :placeholder="formData.selected_service ? `${formData.image_name}/${formData.selected_service}` : ''"
               >
             </div>
@@ -341,27 +341,27 @@
 
         <!-- 资源包配置 -->
         <div class="mb-4">
-          <h6 class="border-bottom pb-2 mb-3">
-            <i class="fas fa-archive text-primary"></i> 资源包配置
+          <h6 class="border-b border-slate-200 pb-2 mb-3">
+            <i class="fas fa-archive text-blue-600"></i> 资源包配置
           </h6>
-          <div v-if="packages.length === 0" class="text-muted">
+          <div v-if="packages.length === 0" class="text-slate-500">
             暂无资源包，请先创建资源包
           </div>
           <div v-else>
-            <div class="form-check mb-2">
+            <div class="mb-2 flex items-center gap-2">
               <input 
-                class="form-check-input" 
+                class="h-4 w-4 rounded border-slate-300" 
                 type="checkbox" 
                 id="select-all-packages"
                 :checked="formData.resource_package_ids.length === packages.length"
                 @change="toggleAllPackages"
               >
-              <label class="form-check-label" for="select-all-packages">
+              <label class="text-sm text-slate-700" for="select-all-packages">
                 全选
               </label>
             </div>
             <div class="table-responsive">
-              <table class="table table-sm table-bordered">
+              <table class="w-full border-collapse text-sm border border-slate-200">
                 <thead>
                   <tr>
                     <th width="50">选择</th>
@@ -376,7 +376,7 @@
                         type="checkbox" 
                         :value="pkg.package_id"
                         v-model="formData.resource_package_ids"
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300"
                       >
                     </td>
                     <td>{{ pkg.name }}</td>
@@ -384,7 +384,7 @@
                       <input 
                         type="text" 
                         v-model="formData.resource_package_paths[pkg.package_id]"
-                        class="form-control form-control-sm"
+                        class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                         :placeholder="pkg.name"
                       >
                     </td>
@@ -398,24 +398,24 @@
     </div>
 
     <!-- JSON模态框 -->
-    <div v-if="showJsonModal" class="modal fade show" style="display: block; z-index: 1055;" tabindex="-1">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showJsonModal" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showJsonModal = false">
+      <div class="relative z-10 mx-auto w-full max-w-3xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title">
               <i class="fas fa-code"></i> 构建配置JSON
             </h5>
-            <button type="button" class="btn-close" @click="showJsonModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showJsonModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body">
-            <div class="d-flex justify-content-end mb-2">
-              <button 
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div class="flex justify-end mb-2">
+              <Button 
                 type="button"
-                class="btn btn-sm btn-outline-primary"
+                variant="outline" size="sm"
                 @click="copyJson"
               >
                 <i class="fas fa-copy"></i> 复制JSON
-              </button>
+              </Button>
             </div>
             <codemirror
               v-model="configJsonText"
@@ -424,17 +424,33 @@
               :extensions="jsonEditorExtensions"
             />
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showJsonModal = false">关闭</button>
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showJsonModal = false">关闭</Button>
           </div>
         </div>
       </div>
     </div>
-    <div v-if="showJsonModal" class="modal-backdrop fade show" style="z-index: 1050;"></div>
-  </div>
+</div>
 </template>
 
 <script setup>
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import { Badge } from "@/components/ui/badge";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import BaseDialog from "@/components/ui/dialog/BaseDialog.vue";
+import NativeSelect from "@/components/ui/select/NativeSelect.vue";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
 import axios from 'axios'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { copyToClipboard } from '../utils/clipboard.js'

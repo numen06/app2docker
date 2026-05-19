@@ -1,0 +1,16 @@
+﻿{
+    "admin":  {
+                  "password":  "test123456",
+                  "username":  "team_admin_1779173114"
+              },
+    "member":  {
+                   "password":  "test123456",
+                   "username":  "team_member_1779173114"
+               },
+    "teamName":  "????????? 1779173114 (admin??",
+    "teamId":  "d72a12af-445f-423a-8c17-5eb85dee273a",
+    "owner":  {
+                  "password":  "test123456",
+                  "username":  "team_owner_1779173114"
+              }
+}

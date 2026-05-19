@@ -1,420 +1,450 @@
 <template>
-  <div class="user-management">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
-        <i class="fas fa-users"></i> 用户管理
-      </h5>
-      <div class="btn-group">
-        <button class="btn btn-outline-secondary btn-sm" @click="loadUsers" title="刷新">
-          <i class="fas fa-sync-alt"></i> 刷新
-        </button>
-        <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
-          <i class="fas fa-plus"></i> 创建用户
-        </button>
+  <div>
+    <PageToolbar title="用户管理" icon="fa-users">
+      <template #actions>
+        <Button variant="outline" size="sm" @click="loadUsers" title="刷新">
+          <i class="fas fa-sync-alt"></i>
+          刷新
+        </Button>
+        <Button size="sm" @click="showCreateModal = true">
+          <i class="fas fa-plus"></i>
+          创建用户
+        </Button>
+      </template>
+    </PageToolbar>
+
+    <div class="space-y-3 md:hidden">
+      <div
+        v-for="user in users"
+        :key="user.user_id"
+        class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+      >
+        <div class="min-w-0">
+          <div class="font-medium text-slate-900">{{ user.username }}</div>
+          <div class="mt-0.5 truncate text-xs text-slate-500">{{ user.email || "—" }}</div>
+          <div class="mt-2 flex flex-wrap gap-1">
+            <Badge v-for="role in user.roles" :key="role" variant="default">{{ role }}</Badge>
+            <Badge :variant="user.enabled ? 'success' : 'danger'">
+              {{ user.enabled ? "启用" : "禁用" }}
+            </Badge>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">{{ formatDate(user.created_at) }}</p>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+          <Button variant="outline" size="sm" title="编辑" @click="editUser(user)">
+            <i class="fas fa-edit"></i>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            title="修改密码"
+            :disabled="user.username === 'admin'"
+            @click="changePassword(user)"
+          >
+            <i class="fas fa-key"></i>
+          </Button>
+          <Button variant="outline" size="sm" title="API 密钥" @click="openAppKeysModal(user)">
+            <i class="fas fa-fingerprint"></i>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            :title="user.enabled ? '禁用' : '启用'"
+            :disabled="user.username === 'admin'"
+            @click="toggleEnable(user)"
+          >
+            <i class="fas" :class="user.enabled ? 'fa-ban' : 'fa-check'"></i>
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            title="删除"
+            :disabled="user.username === currentUsername"
+            @click="deleteUser(user)"
+          >
+            <i class="fas fa-trash"></i>
+          </Button>
+        </div>
       </div>
     </div>
 
-    <!-- 用户列表 -->
-    <div class="table-responsive">
-      <table class="table table-hover">
-        <thead>
-          <tr>
-            <th>用户名</th>
-            <th>邮箱</th>
-            <th>角色</th>
-            <th>状态</th>
-            <th>创建时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="user in users" :key="user.user_id">
-            <td>{{ user.username }}</td>
-            <td>{{ user.email || '-' }}</td>
-            <td>
-              <span 
-                v-for="role in user.roles" 
-                :key="role" 
-                class="badge bg-secondary me-1"
+    <div class="hidden md:block">
+      <Table min-width-class="min-w-[52rem]">
+        <TableHeader>
+          <TableRow>
+            <TableHead>用户名</TableHead>
+            <TableHead>邮箱</TableHead>
+            <TableHead>角色</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead>创建时间</TableHead>
+            <TableHead class="text-end">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="user in users" :key="user.user_id">
+            <TableCell class="font-medium text-slate-900">{{ user.username }}</TableCell>
+            <TableCell class="max-w-[12rem] truncate text-slate-600" :title="user.email || ''">
+              {{ user.email || "—" }}
+            </TableCell>
+            <TableCell>
+              <Badge
+                v-for="role in user.roles"
+                :key="role"
+                variant="default"
+                class="mr-1"
               >
                 {{ role }}
-              </span>
-            </td>
-            <td>
-              <span :class="user.enabled ? 'badge bg-success' : 'badge bg-danger'">
-                {{ user.enabled ? '启用' : '禁用' }}
-              </span>
-            </td>
-            <td>{{ formatDate(user.created_at) }}</td>
-            <td>
-              <div class="btn-group btn-group-sm">
-                <button 
-                  class="btn btn-outline-primary" 
-                  @click="editUser(user)"
-                  title="编辑"
-                >
+              </Badge>
+            </TableCell>
+            <TableCell>
+              <Badge :variant="user.enabled ? 'success' : 'danger'">
+                {{ user.enabled ? "启用" : "禁用" }}
+              </Badge>
+            </TableCell>
+            <TableCell class="whitespace-nowrap text-slate-600">{{ formatDate(user.created_at) }}</TableCell>
+            <TableCell class="text-end">
+              <div class="flex justify-end gap-1">
+                <Button variant="outline" size="sm" title="编辑" @click="editUser(user)">
                   <i class="fas fa-edit"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-warning" 
-                  @click="changePassword(user)"
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   title="修改密码"
                   :disabled="user.username === 'admin'"
+                  @click="changePassword(user)"
                 >
                   <i class="fas fa-key"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-info" 
-                  @click="openAppKeysModal(user)"
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   title="管理该用户的 API 密钥"
+                  @click="openAppKeysModal(user)"
                 >
                   <i class="fas fa-fingerprint"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-secondary" 
-                  @click="toggleEnable(user)"
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   :title="user.enabled ? '禁用' : '启用'"
                   :disabled="user.username === 'admin'"
+                  @click="toggleEnable(user)"
                 >
                   <i class="fas" :class="user.enabled ? 'fa-ban' : 'fa-check'"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-danger" 
-                  @click="deleteUser(user)"
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
                   title="删除"
                   :disabled="user.username === currentUsername"
+                  @click="deleteUser(user)"
                 >
                   <i class="fas fa-trash"></i>
-                </button>
+                </Button>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </div>
 
-    <!-- 创建/编辑用户模态框 -->
-    <div v-if="showCreateModal || showEditModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              {{ showCreateModal ? '创建用户' : '编辑用户' }}
-            </h5>
-            <button type="button" class="btn-close" @click="closeModal"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="saveUser">
-              <div class="mb-3">
-                <label class="form-label">用户名 <span class="text-danger">*</span></label>
-                <input 
-                  v-model="form.username" 
-                  type="text" 
-                  class="form-control" 
-                  required
-                  :disabled="showEditModal"
-                />
-              </div>
-              
-              <div v-if="showCreateModal" class="mb-3">
-                <label class="form-label">密码 <span class="text-danger">*</span></label>
-                <input 
-                  v-model="form.password" 
-                  type="password" 
-                  class="form-control" 
-                  required
-                  minlength="6"
-                />
-                <div class="form-text">密码长度至少6位</div>
-              </div>
-              
-              <div class="mb-3">
-                <label class="form-label">邮箱</label>
-                <input 
-                  v-model="form.email" 
-                  type="email" 
-                  class="form-control" 
-                />
-              </div>
-              
-              <div class="mb-3">
-                <label class="form-label">角色 <span class="text-danger">*</span></label>
-                <div v-for="role in availableRoles" :key="role.role_id" class="form-check">
-                  <input 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    :value="role.name"
-                    v-model="form.roles"
-                    :id="`role-${role.role_id}`"
-                  />
-                  <label class="form-check-label" :for="`role-${role.role_id}`">
-                    {{ role.name }}
-                    <small class="text-muted">({{ role.description }})</small>
-                  </label>
-                </div>
-              </div>
-              
-              <div v-if="showEditModal" class="mb-3">
-                <div class="form-check form-switch">
-                  <input 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    v-model="form.enabled"
-                    id="userEnabled"
-                  />
-                  <label class="form-check-label" for="userEnabled">
-                    启用用户
-                  </label>
-                </div>
-              </div>
-              
-              <div v-if="error" class="alert alert-danger mb-0">
-                {{ error }}
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeModal">取消</button>
-            <button type="button" class="btn btn-primary" @click="saveUser">保存</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 修改密码模态框 -->
-    <div v-if="showPasswordModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">修改密码 - {{ passwordForm.username }}</h5>
-            <button type="button" class="btn-close" @click="showPasswordModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="savePassword">
-              <div class="mb-3">
-                <label class="form-label">新密码 <span class="text-danger">*</span></label>
-                <input 
-                  v-model="passwordForm.newPassword" 
-                  type="password" 
-                  class="form-control" 
-                  required
-                  minlength="6"
-                />
-                <div class="form-text">密码长度至少6位</div>
-              </div>
-              
-              <div v-if="passwordError" class="alert alert-danger mb-0">
-                {{ passwordError }}
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showPasswordModal = false">取消</button>
-            <button type="button" class="btn btn-primary" @click="savePassword">保存</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 管理员：管理指定用户的 API 密钥 -->
-    <div
-      v-if="showAppKeysModal && appKeysTargetUser"
-      class="modal fade show d-block"
-      tabindex="-1"
-      style="background-color: rgba(0, 0, 0, 0.5)"
+    <FormDialog
+      :model-value="showCreateModal || showEditModal"
+      :title="showCreateModal ? '创建用户' : '编辑用户'"
+      icon="fa-user"
+      size="md"
+      @update:model-value="(v) => !v && closeModal()"
     >
-      <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-fingerprint me-1"></i>
-              API 密钥 — {{ appKeysTargetUser.username }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeAppKeysModal"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <p class="text-muted small mb-3">
-              以下密钥归属该用户，请求头可使用
-              <code>X-API-Key</code> 携带完整密钥。新建密钥仅显示一次明文，请通知用户妥善保存。
-            </p>
-            <div class="d-flex align-items-center justify-content-between mb-3">
-              <span class="fw-semibold">密钥列表</span>
-              <button
-                class="btn btn-sm btn-primary"
-                type="button"
-                :disabled="adminAppKeysLoading"
-                @click="adminShowCreateForm = !adminShowCreateForm"
-              >
-                <i class="fas fa-plus me-1"></i>创建密钥
-              </button>
-            </div>
-            <div v-if="adminShowCreateForm" class="card bg-light mb-3">
-              <div class="card-body">
-                <div class="mb-2">
-                  <label class="form-label mb-1">名称</label>
-                  <input
-                    v-model="adminNewAppKey.name"
-                    class="form-control"
-                    placeholder="例如：CI 调用密钥"
-                    maxlength="255"
-                  />
-                </div>
-                <div class="mb-2">
-                  <label class="form-label mb-1">过期时间（可选）</label>
-                  <input
-                    v-model="adminNewAppKey.expiresAt"
-                    type="datetime-local"
-                    class="form-control"
-                  />
-                </div>
-                <button
-                  class="btn btn-success btn-sm"
-                  type="button"
-                  :disabled="adminCreatingAppKey || !adminNewAppKey.name.trim()"
-                  @click="createAdminAppKey"
-                >
-                  <span
-                    v-if="adminCreatingAppKey"
-                    class="spinner-border spinner-border-sm me-1"
-                  ></span>
-                  生成密钥
-                </button>
-              </div>
-            </div>
-            <div v-if="adminCreatedAppKey" class="alert alert-warning py-2">
-              <div class="fw-bold mb-1">请立即复制并交给该用户，该密钥仅展示一次：</div>
-              <code>{{ adminCreatedAppKey }}</code>
-            </div>
-            <div v-if="adminAppKeysError" class="alert alert-danger py-2">
-              {{ adminAppKeysError }}
-            </div>
-            <div v-if="adminAppKeysLoading" class="text-muted">加载中...</div>
-            <div v-else-if="adminAppKeys.length === 0" class="text-muted">
-              该用户暂无 API 密钥
-            </div>
-            <div v-else class="table-responsive">
-              <table class="table table-sm align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>名称</th>
-                    <th>前缀</th>
-                    <th>状态</th>
-                    <th>最后使用</th>
-                    <th>过期时间</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in adminAppKeys" :key="item.key_id">
-                    <td>{{ item.name }}</td>
-                    <td><code>{{ item.key_prefix }}</code></td>
-                    <td>
-                      <span
-                        class="badge"
-                        :class="item.enabled ? 'text-bg-success' : 'text-bg-secondary'"
-                      >
-                        {{ item.enabled ? "启用" : "禁用" }}
-                      </span>
-                    </td>
-                    <td>{{ formatAppKeyTime(item.last_used_at) }}</td>
-                    <td>{{ formatAppKeyTime(item.expires_at) }}</td>
-                    <td>
-                      <button
-                        class="btn btn-outline-secondary btn-sm me-1"
-                        type="button"
-                        @click="toggleAdminAppKey(item.key_id)"
-                      >
-                        {{ item.enabled ? "禁用" : "启用" }}
-                      </button>
-                      <button
-                        class="btn btn-outline-danger btn-sm"
-                        type="button"
-                        @click="removeAdminAppKey(item.key_id)"
-                      >
-                        删除
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeAppKeysModal">
-              关闭
-            </button>
+      <form class="space-y-4" @submit.prevent="saveUser">
+        <div class="space-y-2">
+          <Label>用户名 <span class="text-red-500">*</span></Label>
+          <Input v-model="form.username" required :disabled="showEditModal" />
+        </div>
+
+        <div v-if="showCreateModal" class="space-y-2">
+          <Label>密码 <span class="text-red-500">*</span></Label>
+          <Input v-model="form.password" type="password" required minlength="6" />
+          <p class="text-xs text-slate-500">密码长度至少 6 位</p>
+        </div>
+
+        <div class="space-y-2">
+          <Label>邮箱</Label>
+          <Input v-model="form.email" type="email" />
+        </div>
+
+        <div class="space-y-2">
+          <Label>角色 <span class="text-red-500">*</span></Label>
+          <div class="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+            <label
+              v-for="role in availableRoles"
+              :key="role.role_id"
+              class="flex cursor-pointer items-start gap-2 text-sm"
+            >
+              <input
+                v-model="form.roles"
+                type="checkbox"
+                class="mt-1 h-4 w-4 rounded border-slate-300"
+                :value="role.name"
+              />
+              <span>
+                <span class="font-medium text-slate-900">{{ role.name }}</span>
+                <span class="text-slate-500">（{{ role.description }}）</span>
+              </span>
+            </label>
           </div>
         </div>
+
+        <label v-if="showEditModal" class="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            v-model="form.enabled"
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300"
+          />
+          <span class="font-medium text-slate-900">启用用户</span>
+        </label>
+
+        <AlertBanner :message="error" />
+      </form>
+      <template #footer>
+        <Button variant="outline" type="button" @click="closeModal">取消</Button>
+        <Button type="button" @click="saveUser">保存</Button>
+      </template>
+    </FormDialog>
+
+    <FormDialog
+      v-model="showPasswordModal"
+      :title="`修改密码 — ${passwordForm.username}`"
+      icon="fa-key"
+      size="md"
+    >
+      <form class="space-y-4" @submit.prevent="savePassword">
+        <div class="space-y-2">
+          <Label>新密码 <span class="text-red-500">*</span></Label>
+          <Input
+            v-model="passwordForm.newPassword"
+            type="password"
+            required
+            minlength="6"
+          />
+          <p class="text-xs text-slate-500">密码长度至少 6 位</p>
+        </div>
+        <AlertBanner :message="passwordError" />
+      </form>
+      <template #footer>
+        <Button variant="outline" type="button" @click="showPasswordModal = false">取消</Button>
+        <Button type="button" @click="savePassword">保存</Button>
+      </template>
+    </FormDialog>
+
+    <FormDialog
+      v-model="showAppKeysModal"
+      :title="appKeysDialogTitle"
+      icon="fa-fingerprint"
+      size="xl"
+      @update:model-value="(v) => !v && closeAppKeysModal()"
+    >
+      <p class="mb-4 text-sm text-slate-600">
+        以下密钥归属该用户，请求头可使用
+        <code class="rounded bg-slate-100 px-1 text-xs">X-API-Key</code>
+        携带完整密钥。新建密钥仅显示一次明文，请通知用户妥善保存。
+      </p>
+
+      <div class="mb-3 flex items-center justify-between">
+        <span class="text-sm font-semibold text-slate-900">密钥列表</span>
+        <Button
+          size="sm"
+          type="button"
+          :disabled="adminAppKeysLoading"
+          @click="adminShowCreateForm = !adminShowCreateForm"
+        >
+          <i class="fas fa-plus"></i>
+          创建密钥
+        </Button>
       </div>
-    </div>
+
+      <Card v-if="adminShowCreateForm" class="mb-4">
+        <CardContent class="space-y-3 p-4">
+          <div class="space-y-2">
+            <Label>名称</Label>
+            <Input
+              v-model="adminNewAppKey.name"
+              placeholder="例如：CI 调用密钥"
+              maxlength="255"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label>过期时间（可选）</Label>
+            <Input v-model="adminNewAppKey.expiresAt" type="datetime-local" />
+          </div>
+          <Button
+            size="sm"
+            type="button"
+            :disabled="adminCreatingAppKey || !adminNewAppKey.name.trim()"
+            @click="createAdminAppKey"
+          >
+            <i v-if="adminCreatingAppKey" class="fas fa-spinner fa-spin"></i>
+            生成密钥
+          </Button>
+        </CardContent>
+      </Card>
+
+      <AlertBanner
+        v-if="adminCreatedAppKey"
+        :message="`请立即复制并交给该用户，该密钥仅展示一次：${adminCreatedAppKey}`"
+        variant="warning"
+      />
+      <AlertBanner :message="adminAppKeysError" />
+
+      <div
+        v-if="adminAppKeysLoading"
+        class="flex items-center gap-2 py-6 text-sm text-slate-500"
+      >
+        <i class="fas fa-spinner fa-spin"></i>
+        加载中…
+      </div>
+      <EmptyState
+        v-else-if="adminAppKeys.length === 0"
+        message="该用户暂无 API 密钥"
+        icon="fa-fingerprint"
+      />
+      <Table v-else min-width-class="min-w-[48rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>前缀</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>最后使用</TableHead>
+              <TableHead>过期时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="item in adminAppKeys" :key="item.key_id">
+              <TableCell>{{ item.name }}</TableCell>
+              <TableCell>
+                <code class="rounded bg-slate-100 px-1 text-xs">{{ item.key_prefix }}</code>
+              </TableCell>
+              <TableCell>
+                <Badge :variant="item.enabled ? 'success' : 'default'">
+                  {{ item.enabled ? "启用" : "禁用" }}
+                </Badge>
+              </TableCell>
+              <TableCell class="text-slate-600">{{ formatAppKeyTime(item.last_used_at) }}</TableCell>
+              <TableCell class="text-slate-600">{{ formatAppKeyTime(item.expires_at) }}</TableCell>
+              <TableCell class="text-end">
+                <div class="flex justify-end gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    @click="toggleAdminAppKey(item.key_id)"
+                  >
+                    {{ item.enabled ? "禁用" : "启用" }}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    @click="removeAdminAppKey(item.key_id)"
+                  >
+                    删除
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+      </Table>
+      <template #footer>
+        <Button variant="outline" type="button" @click="closeAppKeysModal">关闭</Button>
+      </template>
+    </FormDialog>
   </div>
 </template>
 
 <script setup>
-import axios from 'axios'
-import { onMounted, ref } from 'vue'
-import { getUsername } from '../utils/auth'
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import { getUsername } from "../utils/auth";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import { Badge } from "@/components/ui/badge";
+import Card from "@/components/ui/card/Card.vue";
+import CardContent from "@/components/ui/card/CardContent.vue";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
 
-const users = ref([])
-const availableRoles = ref([])
-const showCreateModal = ref(false)
-const showEditModal = ref(false)
-const showPasswordModal = ref(false)
-const currentUsername = ref('')
-const error = ref('')
-const passwordError = ref('')
+const users = ref([]);
+const availableRoles = ref([]);
+const showCreateModal = ref(false);
+const showEditModal = ref(false);
+const showPasswordModal = ref(false);
+const currentUsername = ref("");
+const error = ref("");
+const passwordError = ref("");
 
 const form = ref({
-  user_id: '',
-  username: '',
-  password: '',
-  email: '',
+  user_id: "",
+  username: "",
+  password: "",
+  email: "",
   roles: [],
-  enabled: true
-})
+  enabled: true,
+});
 
 const passwordForm = ref({
-  user_id: '',
-  username: '',
-  newPassword: ''
-})
+  user_id: "",
+  username: "",
+  newPassword: "",
+});
 
-const showAppKeysModal = ref(false)
-const appKeysTargetUser = ref(null)
-const adminAppKeys = ref([])
-const adminAppKeysLoading = ref(false)
-const adminAppKeysError = ref('')
-const adminShowCreateForm = ref(false)
-const adminCreatingAppKey = ref(false)
-const adminCreatedAppKey = ref('')
-const adminNewAppKey = ref({ name: '', expiresAt: '' })
+const showAppKeysModal = ref(false);
+const appKeysTargetUser = ref(null);
+const adminAppKeys = ref([]);
+const adminAppKeysLoading = ref(false);
+const adminAppKeysError = ref("");
+const adminShowCreateForm = ref(false);
+const adminCreatingAppKey = ref(false);
+const adminCreatedAppKey = ref("");
+const adminNewAppKey = ref({ name: "", expiresAt: "" });
+
+const appKeysDialogTitle = computed(() =>
+  appKeysTargetUser.value
+    ? `API 密钥 — ${appKeysTargetUser.value.username}`
+    : "API 密钥"
+);
 
 onMounted(async () => {
-  currentUsername.value = getUsername() || ''
-  await loadUsers()
-  await loadRoles()
-})
+  currentUsername.value = getUsername() || "";
+  await loadUsers();
+  await loadRoles();
+});
 
 async function loadUsers() {
   try {
-    const res = await axios.get('/api/users')
-    users.value = res.data.users || []
-  } catch (error) {
-    console.error('加载用户列表失败:', error)
-    alert('加载用户列表失败: ' + (error.response?.data?.detail || error.message))
+    const res = await axios.get("/api/users");
+    users.value = res.data.users || [];
+  } catch (err) {
+    console.error("加载用户列表失败:", err);
+    alert("加载用户列表失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
 async function loadRoles() {
   try {
-    const res = await axios.get('/api/roles')
-    availableRoles.value = res.data.roles || []
-  } catch (error) {
-    console.error('加载角色列表失败:', error)
+    const res = await axios.get("/api/roles");
+    availableRoles.value = res.data.roles || [];
+  } catch (err) {
+    console.error("加载角色列表失败:", err);
   }
 }
 
@@ -422,141 +452,137 @@ function editUser(user) {
   form.value = {
     user_id: user.user_id,
     username: user.username,
-    password: '',
-    email: user.email || '',
+    password: "",
+    email: user.email || "",
     roles: [...user.roles],
-    enabled: user.enabled
-  }
-  showEditModal.value = true
+    enabled: user.enabled,
+  };
+  showEditModal.value = true;
 }
 
 function changePassword(user) {
-  // 不能修改超级管理员的密码
-  if (user.username === 'admin') {
-    alert('不能修改超级管理员的密码')
-    return
+  if (user.username === "admin") {
+    alert("不能修改超级管理员的密码");
+    return;
   }
-  
+
   passwordForm.value = {
     user_id: user.user_id,
     username: user.username,
-    newPassword: ''
-  }
-  showPasswordModal.value = true
-  passwordError.value = ''
+    newPassword: "",
+  };
+  showPasswordModal.value = true;
+  passwordError.value = "";
 }
 
 async function saveUser() {
-  error.value = ''
-  
+  error.value = "";
+
   try {
     if (showCreateModal.value) {
-      // 创建用户
-      await axios.post('/api/users', {
+      await axios.post("/api/users", {
         username: form.value.username,
         password: form.value.password,
         email: form.value.email || null,
-        roles: form.value.roles
-      })
-      alert('用户创建成功')
+        roles: form.value.roles,
+      });
+      alert("用户创建成功");
     } else {
-      // 更新用户
       await axios.put(`/api/users/${form.value.user_id}`, {
         email: form.value.email || null,
         enabled: form.value.enabled,
-        roles: form.value.roles
-      })
-      alert('用户更新成功')
+        roles: form.value.roles,
+      });
+      alert("用户更新成功");
     }
-    
-    closeModal()
-    await loadUsers()
+
+    closeModal();
+    await loadUsers();
   } catch (err) {
-    console.error('保存用户失败:', err)
-    error.value = err.response?.data?.detail || err.message || '操作失败'
+    console.error("保存用户失败:", err);
+    error.value = err.response?.data?.detail || err.message || "操作失败";
   }
 }
 
 async function savePassword() {
-  passwordError.value = ''
-  
+  passwordError.value = "";
+
   try {
     await axios.put(`/api/users/${passwordForm.value.user_id}/password`, {
-      new_password: passwordForm.value.newPassword
-    })
-    alert('密码修改成功')
-    showPasswordModal.value = false
-  } catch (error) {
-    console.error('修改密码失败:', error)
-    passwordError.value = error.response?.data?.detail || error.message || '操作失败'
+      new_password: passwordForm.value.newPassword,
+    });
+    alert("密码修改成功");
+    showPasswordModal.value = false;
+  } catch (err) {
+    console.error("修改密码失败:", err);
+    passwordError.value = err.response?.data?.detail || err.message || "操作失败";
   }
 }
 
 async function toggleEnable(user) {
-  // 不能修改超级管理员的状态
-  if (user.username === 'admin') {
-    alert('不能修改超级管理员的状态')
-    return
+  if (user.username === "admin") {
+    alert("不能修改超级管理员的状态");
+    return;
   }
-  
-  if (!confirm(`确定要${user.enabled ? '禁用' : '启用'}用户 ${user.username} 吗？`)) {
-    return
+
+  if (!confirm(`确定要${user.enabled ? "禁用" : "启用"}用户 ${user.username} 吗？`)) {
+    return;
   }
-  
+
   try {
-    const newEnabled = !user.enabled
+    const newEnabled = !user.enabled;
     await axios.put(`/api/users/${user.user_id}/enable`, {
-      enabled: newEnabled
-    })
-    alert(`用户已${newEnabled ? '启用' : '禁用'}`)
-    await loadUsers()
-  } catch (error) {
-    console.error('操作失败:', error)
-    alert('操作失败: ' + (error.response?.data?.detail || error.message))
+      enabled: newEnabled,
+    });
+    alert(`用户已${newEnabled ? "启用" : "禁用"}`);
+    await loadUsers();
+  } catch (err) {
+    console.error("操作失败:", err);
+    alert("操作失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
 async function deleteUser(user) {
   if (!confirm(`确定要删除用户 ${user.username} 吗？此操作不可恢复！`)) {
-    return
+    return;
   }
-  
+
   try {
-    await axios.delete(`/api/users/${user.user_id}`)
-    alert('用户删除成功')
-    await loadUsers()
-  } catch (error) {
-    console.error('删除用户失败:', error)
-    alert('删除失败: ' + (error.response?.data?.detail || error.message))
+    await axios.delete(`/api/users/${user.user_id}`);
+    alert("用户删除成功");
+    await loadUsers();
+  } catch (err) {
+    console.error("删除用户失败:", err);
+    alert("删除失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
 function closeModal() {
-  showCreateModal.value = false
-  showEditModal.value = false
+  showCreateModal.value = false;
+  showEditModal.value = false;
   form.value = {
-    user_id: '',
-    username: '',
-    password: '',
-    email: '',
+    user_id: "",
+    username: "",
+    password: "",
+    email: "",
     roles: [],
-    enabled: true
-  }
-  error.value = ''
+    enabled: true,
+  };
+  error.value = "";
 }
 
 function formatDate(dateString) {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  return date.toLocaleString('zh-CN')
+  if (!dateString) return "—";
+  const date = new Date(dateString);
+  return date.toLocaleString("zh-CN");
 }
 
 function formatAppKeyTime(value) {
-  if (!value) return '-'
+  if (!value) return "—";
   try {
-    return new Date(value).toLocaleString('zh-CN')
+    return new Date(value).toLocaleString("zh-CN");
   } catch {
-    return value
+    return value;
   }
 }
 
@@ -564,96 +590,90 @@ function openAppKeysModal(user) {
   appKeysTargetUser.value = {
     user_id: user.user_id,
     username: user.username,
-  }
-  adminAppKeysError.value = ''
-  adminCreatedAppKey.value = ''
-  adminShowCreateForm.value = false
-  adminNewAppKey.value = { name: '', expiresAt: '' }
-  showAppKeysModal.value = true
-  loadAdminAppKeys()
+  };
+  adminAppKeysError.value = "";
+  adminCreatedAppKey.value = "";
+  adminShowCreateForm.value = false;
+  adminNewAppKey.value = { name: "", expiresAt: "" };
+  showAppKeysModal.value = true;
+  loadAdminAppKeys();
 }
 
 function closeAppKeysModal() {
-  showAppKeysModal.value = false
-  appKeysTargetUser.value = null
-  adminAppKeys.value = []
-  adminAppKeysError.value = ''
-  adminCreatedAppKey.value = ''
-  adminShowCreateForm.value = false
-  adminNewAppKey.value = { name: '', expiresAt: '' }
+  showAppKeysModal.value = false;
+  appKeysTargetUser.value = null;
+  adminAppKeys.value = [];
+  adminAppKeysError.value = "";
+  adminCreatedAppKey.value = "";
+  adminShowCreateForm.value = false;
+  adminNewAppKey.value = { name: "", expiresAt: "" };
 }
 
 async function loadAdminAppKeys() {
-  const uid = appKeysTargetUser.value?.user_id
-  if (!uid) return
-  adminAppKeysLoading.value = true
-  adminAppKeysError.value = ''
+  const uid = appKeysTargetUser.value?.user_id;
+  if (!uid) return;
+  adminAppKeysLoading.value = true;
+  adminAppKeysError.value = "";
   try {
-    const res = await axios.get(`/api/users/${uid}/app-keys`)
-    adminAppKeys.value = res.data?.app_keys || []
+    const res = await axios.get(`/api/users/${uid}/app-keys`);
+    adminAppKeys.value = res.data?.app_keys || [];
   } catch (err) {
-    console.error('加载用户 API 密钥失败:', err)
+    console.error("加载用户 API 密钥失败:", err);
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || '加载失败'
-    adminAppKeys.value = []
+      err.response?.data?.detail || err.message || "加载失败";
+    adminAppKeys.value = [];
   } finally {
-    adminAppKeysLoading.value = false
+    adminAppKeysLoading.value = false;
   }
 }
 
 async function createAdminAppKey() {
-  const uid = appKeysTargetUser.value?.user_id
-  if (!uid || !adminNewAppKey.value.name.trim()) return
-  adminCreatingAppKey.value = true
-  adminAppKeysError.value = ''
+  const uid = appKeysTargetUser.value?.user_id;
+  if (!uid || !adminNewAppKey.value.name.trim()) return;
+  adminCreatingAppKey.value = true;
+  adminAppKeysError.value = "";
   try {
-    const payload = { name: adminNewAppKey.value.name.trim() }
+    const payload = { name: adminNewAppKey.value.name.trim() };
     if (adminNewAppKey.value.expiresAt) {
-      payload.expires_at = new Date(adminNewAppKey.value.expiresAt).toISOString()
+      payload.expires_at = new Date(adminNewAppKey.value.expiresAt).toISOString();
     }
-    const res = await axios.post(`/api/users/${uid}/app-keys`, payload)
-    adminCreatedAppKey.value = res.data?.app_key || ''
-    adminNewAppKey.value = { name: '', expiresAt: '' }
-    adminShowCreateForm.value = false
-    await loadAdminAppKeys()
+    const res = await axios.post(`/api/users/${uid}/app-keys`, payload);
+    adminCreatedAppKey.value = res.data?.app_key || "";
+    adminNewAppKey.value = { name: "", expiresAt: "" };
+    adminShowCreateForm.value = false;
+    await loadAdminAppKeys();
   } catch (err) {
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || '创建失败'
+      err.response?.data?.detail || err.message || "创建失败";
   } finally {
-    adminCreatingAppKey.value = false
+    adminCreatingAppKey.value = false;
   }
 }
 
 async function toggleAdminAppKey(keyId) {
-  const uid = appKeysTargetUser.value?.user_id
-  if (!uid) return
-  adminAppKeysError.value = ''
+  const uid = appKeysTargetUser.value?.user_id;
+  if (!uid) return;
+  adminAppKeysError.value = "";
   try {
-    await axios.put(`/api/users/${uid}/app-keys/${keyId}/toggle`)
-    await loadAdminAppKeys()
+    await axios.put(`/api/users/${uid}/app-keys/${keyId}/toggle`);
+    await loadAdminAppKeys();
   } catch (err) {
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || '操作失败'
+      err.response?.data?.detail || err.message || "操作失败";
   }
 }
 
 async function removeAdminAppKey(keyId) {
-  if (!confirm('确定删除该 API 密钥吗？此操作不可恢复。')) return
-  const uid = appKeysTargetUser.value?.user_id
-  if (!uid) return
-  adminAppKeysError.value = ''
+  if (!confirm("确定删除该 API 密钥吗？此操作不可恢复。")) return;
+  const uid = appKeysTargetUser.value?.user_id;
+  if (!uid) return;
+  adminAppKeysError.value = "";
   try {
-    await axios.delete(`/api/users/${uid}/app-keys/${keyId}`)
-    await loadAdminAppKeys()
+    await axios.delete(`/api/users/${uid}/app-keys/${keyId}`);
+    await loadAdminAppKeys();
   } catch (err) {
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || '删除失败'
+      err.response?.data?.detail || err.message || "删除失败";
   }
 }
 </script>
-
-<style scoped>
-.user-management {
-  padding: 1rem;
-}
-</style>

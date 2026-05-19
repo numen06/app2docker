@@ -1,15 +1,26 @@
 import { createApp } from 'vue'
-import './tailwind.css'
+import { createPinia } from 'pinia'
 import App from './App.vue'
+import './shadcn.css'
+import './tailwind.css'
+import './styles/modal-compat.css'
+import './styles/page-compat.css'
+import '@fortawesome/fontawesome-free/css/all.min.css'
 import './style.css'
-
-// 导入 Bootstrap JS
-import 'bootstrap/dist/js/bootstrap.bundle.min.js'
-
-// 配置 axios
+import router from './router'
 import { setupAxiosInterceptors } from './utils/axios-interceptor'
+import { useAuthStore } from './stores/auth'
 
-// 不设置 baseURL，直接使用 /api 前缀，Vite 会代理
+const pinia = createPinia()
+const app = createApp(App)
+app.use(pinia)
+app.use(router)
+
 setupAxiosInterceptors()
 
-createApp(App).mount('#app')
+const authStore = useAuthStore()
+authStore.syncFromStorage()
+
+app.mount('#app')
+const appLoading = document.getElementById('app-loading')
+if (appLoading) appLoading.style.display = 'none'

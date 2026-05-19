@@ -11,7 +11,7 @@
               @click="activeTab = 'hosts'"
               type="button"
             >
-              <i class="fas fa-server me-1"></i> 主机列表
+              <i class="fas fa-server mr-1"></i> 主机列表
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -21,7 +21,7 @@
               @click="activeTab = 'secrets'"
               type="button"
             >
-              <i class="fas fa-key me-1"></i> 密钥管理
+              <i class="fas fa-key mr-1"></i> 密钥管理
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -31,8 +31,8 @@
               @click="activeTab = 'pending'"
               type="button"
             >
-              <i class="fas fa-clock me-1"></i> 待加入主机
-              <span v-if="pendingHostsCount > 0" class="badge bg-danger ms-1">{{ pendingHostsCount }}</span>
+              <i class="fas fa-clock mr-1"></i> 待加入主机
+              <span v-if="pendingHostsCount > 0" class="badge bg-danger ml-1">{{ pendingHostsCount }}</span>
             </button>
           </li>
         </ul>
@@ -44,65 +44,65 @@
       <!-- 主机类型筛选器和添加按钮 -->
       <div class="card mb-3 filter-card">
         <div class="card-body py-2 filter-card-body">
-          <div class="d-flex justify-content-between align-items-center">
-            <div class="btn-group" role="group">
+          <div class="flex justify-between items-center">
+            <div class="flex flex-wrap gap-2" role="group">
               <input
                 type="radio"
-                class="btn-check"
+                class="btn-check sr-only"
                 id="filter-all"
                 value="all"
                 v-model="filterType"
               />
-              <label class="btn btn-outline-secondary btn-sm" for="filter-all">
-                <i class="fas fa-list me-1"></i> 全部
+              <label class="inline-flex cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-all">
+                <i class="fas fa-list mr-1"></i> 全部
               </label>
 
               <input
                 type="radio"
-                class="btn-check"
+                class="btn-check sr-only"
                 id="filter-ssh"
                 value="ssh"
                 v-model="filterType"
               />
-              <label class="btn btn-outline-secondary btn-sm" for="filter-ssh">
-                <i class="fas fa-server me-1"></i> SSH主机
+              <label class="inline-flex cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-ssh">
+                <i class="fas fa-server mr-1"></i> SSH主机
               </label>
 
               <input
                 type="radio"
-                class="btn-check"
+                class="btn-check sr-only"
                 id="filter-agent"
                 value="agent"
                 v-model="filterType"
               />
-              <label class="btn btn-outline-secondary btn-sm" for="filter-agent">
-                <i class="fas fa-network-wired me-1"></i> Agent主机
+              <label class="inline-flex cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-agent">
+                <i class="fas fa-network-wired mr-1"></i> Agent主机
               </label>
             </div>
-            <div class="btn-group filter-dropdown-group">
-              <button 
+            <div class="relative filter-dropdown-group">
+              <Button 
                 type="button" 
-                class="btn btn-primary btn-sm dropdown-toggle" 
+                size="sm" 
                 :class="{ 'show': showDropdown }"
                 @click="toggleDropdown"
                 aria-expanded="showDropdown"
               >
-                <i class="fas fa-plus me-1"></i> 添加主机
-              </button>
+                <i class="fas fa-plus mr-1"></i> 添加主机
+              </Button>
               <ul class="dropdown-menu dropdown-menu-end" :class="{ 'show': showDropdown }">
                 <li>
                   <a class="dropdown-item" href="#" @click.prevent="handleAddHost('ssh')">
-                    <i class="fas fa-server me-2"></i> SSH主机
+                    <i class="fas fa-server mr-2"></i> SSH主机
                   </a>
                 </li>
                 <li>
                   <a class="dropdown-item" href="#" @click.prevent="handleAddHost('agent')">
-                    <i class="fas fa-network-wired me-2"></i> Agent主机
+                    <i class="fas fa-network-wired mr-2"></i> Agent主机
                   </a>
                 </li>
                 <li>
                   <a class="dropdown-item" href="#" @click.prevent="handleAddHost('portainer')">
-                    <i class="fab fa-docker me-2"></i> Portainer主机
+                    <i class="fab fa-docker mr-2"></i> Portainer主机
                   </a>
                 </li>
               </ul>
@@ -113,72 +113,71 @@
 
       <!-- 统一显示所有主机（当filterType为all时） -->
       <template v-if="filterType === 'all'">
-        <div v-if="allHostsLoading" class="text-center py-5">
-          <span class="spinner-border spinner-border-sm"></span> 加载中...
+        <div v-if="allHostsLoading" class="text-center py-12">
+          <i class="fas fa-spinner fa-spin"></i> 加载中...
         </div>
-        <div v-else-if="allHosts.length === 0" class="text-center py-5 text-muted">
-          <i class="fas fa-server fa-3x mb-3"></i>
+        <div v-else-if="allHosts.length === 0" class="text-center py-12 text-slate-500">
+          <i class="fas fa-server text-4xl mb-3"></i>
           <p class="mb-0">暂无主机</p>
         </div>
-        <div v-else class="row g-4">
+        <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div
             v-for="host in allHosts"
             :key="`${host.host_type || 'ssh'}-${host.host_id}`"
-            class="col-12 col-md-6 col-xl-4"
-          >
+            >
             <!-- SSH主机卡片 -->
-            <div v-if="!host.host_type || host.host_type === 'ssh'" class="card h-100 shadow-sm">
+            <div v-if="!host.host_type || host.host_type === 'ssh'" class="card h-full shadow-sm">
               <div class="card-header bg-white">
                 <div class="mb-2">
                   <h5 class="card-title mb-1">
                     <strong>{{ host.name }}</strong>
                   </h5>
-                  <div class="small text-muted mb-1">
-                    <i class="fas fa-network-wired me-1"></i>{{ host.host }}<span class="ms-1">:{{ host.port }}</span>
+                  <div class="small text-slate-500 mb-1">
+                    <i class="fas fa-network-wired mr-1"></i>{{ host.host }}<span class="ml-1">:{{ host.port }}</span>
                   </div>
-                  <div class="d-flex align-items-center justify-content-between mb-1">
+                  <div class="flex items-center justify-between mb-1">
                     <div>
                       <span class="badge bg-secondary">
                         <i class="fas fa-server"></i> SSH主机
                       </span>
-                      <span v-if="host.has_private_key" class="badge bg-info ms-1">
+                      <span v-if="host.has_private_key" class="badge bg-info ml-1">
                         <i class="fas fa-key"></i> 密钥
                       </span>
-                      <span v-else-if="host.has_password" class="badge bg-secondary ms-1">
+                      <span v-else-if="host.has_password" class="badge bg-secondary ml-1">
                         <i class="fas fa-lock"></i> 密码
                       </span>
                     </div>
                   </div>
-                  <p class="text-muted mb-0 mt-1" v-if="host.description" style="font-size: 0.9rem">
+                  <p class="text-slate-500 mb-0 mt-1" v-if="host.description" style="font-size: 0.9rem">
                     {{ host.description }}
                   </p>
                 </div>
-                <div class="btn-group btn-group-sm w-100">
-                  <button class="btn btn-outline-info" @click="handleSshHostAction('test', host)" title="测试连接">
+                <div class="flex w-full gap-1">
+                  <Button variant="outline" size="sm" @click="handleSshHostAction('test', host)" title="测试连接">
                     <i class="fas fa-plug"></i>
-                  </button>
-                  <button class="btn btn-outline-primary" @click="handleSshHostAction('edit', host)" title="编辑">
+                  </Button>
+                  <Button variant="outline" size="sm" @click="handleSshHostAction('edit', host)" title="编辑">
                     <i class="fas fa-edit"></i>
-                  </button>
-                  <button class="btn btn-outline-danger" @click="handleSshHostAction('delete', host)" title="删除">
+                  </Button>
+                  <Button variant="destructive" size="sm" @click="handleSshHostAction('delete', host)" title="删除">
                     <i class="fas fa-trash"></i>
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div class="card-body">
                 <div class="mb-3">
-                  <div class="d-flex align-items-center mb-2">
-                    <i class="fas fa-user text-muted me-2" style="width: 18px;"></i>
-                    <div class="flex-grow-1 small text-muted">
+                  <div class="flex items-center mb-2">
+                    <i class="fas fa-user text-slate-500 mr-2" style="width: 18px;"></i>
+                    <div class="flex-1 small text-slate-500">
                       {{ host.username }}
                     </div>
                   </div>
                 </div>
                 <div v-if="host.docker_version" class="mb-3">
                   <span class="badge bg-success">
-                    <i class="fab fa-docker me-1"></i>Docker可用
+                    <i class="fab fa-docker mr-1"></i>Docker可用
                   </span>
-                  <div class="small text-muted mt-1">
+                  <div class="small text-slate-500 mt-1">
                     Docker {{ host.docker_version }}
                   </div>
                 </div>
@@ -186,56 +185,56 @@
             </div>
 
             <!-- Agent主机卡片 -->
-            <div v-else class="card h-100 shadow-sm">
+            <div v-else class="card h-full shadow-sm">
               <div class="card-header bg-white">
                 <div class="mb-2">
                   <h5 class="card-title mb-1">
                     <strong>{{ host.name }}</strong>
                   </h5>
-                  <div v-if="host.host_info && host.host_info.ip" class="small text-muted mb-1">
-                    <i class="fas fa-network-wired me-1"></i>{{ host.host_info.ip }}
+                  <div v-if="host.host_info && host.host_info.ip" class="small text-slate-500 mb-1">
+                    <i class="fas fa-network-wired mr-1"></i>{{ host.host_info.ip }}
                   </div>
-                  <div class="d-flex align-items-center justify-content-between mb-1">
+                  <div class="flex items-center justify-between mb-1">
                     <div>
                       <span class="badge" :class="host.host_type === 'portainer' ? 'bg-primary' : 'bg-secondary'">
                         <i class="fas fa-network-wired"></i> {{ host.host_type === 'portainer' ? 'Portainer' : 'Agent' }}
                       </span>
-                      <span :class="getStatusBadgeClass(host.status)" class="badge ms-1">
+                      <span :class="getStatusBadgeClass(host.status)" class="badge ml-1">
                         <i :class="getStatusIcon(host.status)"></i>
                         {{ getStatusText(host.status) }}
                       </span>
                     </div>
                   </div>
-                  <p class="text-muted mb-0 mt-1" v-if="host.description" style="font-size: 0.9rem">
+                  <p class="text-slate-500 mb-0 mt-1" v-if="host.description" style="font-size: 0.9rem">
                     {{ host.description }}
                   </p>
                 </div>
-                <div class="btn-group btn-group-sm w-100">
-                  <button class="btn btn-outline-info" @click="viewHost(host)" title="查看详情">
+                <div class="flex w-full gap-1">
+                  <Button variant="outline" size="sm" @click="viewHost(host)" title="查看详情">
                     <i class="fas fa-info-circle"></i>
-                  </button>
-                  <button class="btn btn-outline-primary" @click="editHost(host)" title="编辑">
+                  </Button>
+                  <Button variant="outline" size="sm" @click="editHost(host)" title="编辑">
                     <i class="fas fa-edit"></i>
-                  </button>
-                  <button class="btn btn-outline-danger" @click="deleteHost(host)" title="删除">
+                  </Button>
+                  <Button variant="destructive" size="sm" @click="deleteHost(host)" title="删除">
                     <i class="fas fa-trash"></i>
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div class="card-body">
                 <div v-if="host.host_info && Object.keys(host.host_info).length > 0" class="mb-3">
-                  <div class="d-flex align-items-center mb-2">
-                    <i class="fas fa-desktop text-muted me-2" style="width: 18px;"></i>
-                    <div class="flex-grow-1">
-                      <div class="small text-muted" v-if="host.host_info.os">
-                        <i class="fas fa-desktop me-1"></i>{{ host.host_info.os }}
+                  <div class="flex items-center mb-2">
+                    <i class="fas fa-desktop text-slate-500 mr-2" style="width: 18px;"></i>
+                    <div class="flex-1">
+                      <div class="small text-slate-500" v-if="host.host_info.os">
+                        <i class="fas fa-desktop mr-1"></i>{{ host.host_info.os }}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div v-if="host.docker_info && Object.keys(host.docker_info).length > 0" class="mb-3">
                   <span v-if="host.docker_info.version" class="badge bg-info">
-                    <i class="fab fa-docker me-1"></i>{{ host.docker_info.version }}
+                    <i class="fab fa-docker mr-1"></i>{{ host.docker_info.version }}
                   </span>
                 </div>
               </div>
@@ -252,39 +251,38 @@
         <!-- Agent主机列表 -->
         <div v-if="filterType === 'agent'">
           <!-- Agent主机列表 - 卡片式布局 -->
-          <div v-if="loading" class="text-center py-5">
-            <span class="spinner-border spinner-border-sm"></span> 加载中...
+          <div v-if="loading" class="text-center py-12">
+            <i class="fas fa-spinner fa-spin"></i> 加载中...
           </div>
-          <div v-else-if="filteredHosts.length === 0" class="text-center py-5 text-muted">
-            <i class="fas fa-network-wired fa-3x mb-3"></i>
+          <div v-else-if="filteredHosts.length === 0" class="text-center py-12 text-slate-500">
+            <i class="fas fa-network-wired text-4xl mb-3"></i>
             <p class="mb-0">暂无Agent主机</p>
           </div>
-          <div v-else class="row g-4">
+          <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div
               v-for="host in filteredHosts"
               :key="host.host_id"
-              class="col-12 col-md-6 col-xl-4"
-            >
-              <div class="card h-100 shadow-sm">
+              >
+              <div class="card h-full shadow-sm">
                 <!-- 卡片头部 -->
                 <div class="card-header bg-white">
                   <div class="mb-2">
                     <h5 class="card-title mb-2">
                       <strong>{{ host.name }}</strong>
                     </h5>
-                    <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="flex items-center justify-between mb-1">
                       <div>
                         <span class="badge" :class="host.host_type === 'portainer' ? 'bg-primary' : 'bg-secondary'">
                           <i class="fas fa-network-wired"></i> {{ host.host_type === 'portainer' ? 'Portainer' : 'Agent' }}
                         </span>
-                        <span :class="getStatusBadgeClass(host.status)" class="badge ms-1">
+                        <span :class="getStatusBadgeClass(host.status)" class="badge ml-1">
                           <i :class="getStatusIcon(host.status)"></i>
                           {{ getStatusText(host.status) }}
                         </span>
                       </div>
                     </div>
                     <p
-                      class="text-muted mb-0 mt-1"
+                      class="text-slate-500 mb-0 mt-1"
                       v-if="host.description"
                       style="font-size: 0.9rem"
                     >
@@ -292,42 +290,42 @@
                     </p>
                   </div>
                   <!-- 操作按钮行 -->
-                  <div class="btn-group btn-group-sm w-100">
-                    <button
-                      class="btn btn-outline-info"
+                  <div class="flex w-full gap-1">
+                    <Button
+                      variant="outline" size="sm"
                       @click="viewHost(host)"
                       title="查看详情"
                     >
                       <i class="fas fa-info-circle"></i>
-                    </button>
-                    <button
-                      class="btn btn-outline-primary"
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
                       @click="showDeployCommand(host)"
                       title="部署命令"
                     >
                       <i class="fas fa-code"></i>
-                    </button>
-                    <button
-                      class="btn btn-outline-success"
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
                       @click="refreshHostStatus(host)"
                       title="刷新状态"
                     >
                       <i class="fas fa-sync-alt"></i>
-                    </button>
-                    <button
-                      class="btn btn-outline-primary"
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
                       @click="editHost(host)"
                       title="编辑"
                     >
                       <i class="fas fa-edit"></i>
-                    </button>
-                    <button
-                      class="btn btn-outline-danger"
+                    </Button>
+                    <Button
+                      variant="destructive" size="sm"
                       @click="deleteHost(host)"
                       title="删除"
                     >
                       <i class="fas fa-trash"></i>
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -336,27 +334,27 @@
                   <!-- 主机信息 -->
                   <div class="mb-3">
                     <div v-if="host.host_info && Object.keys(host.host_info).length > 0">
-                      <div class="d-flex align-items-center mb-2">
-                        <i class="fas fa-network-wired text-muted me-2" style="width: 18px;"></i>
-                        <div class="flex-grow-1">
+                      <div class="flex items-center mb-2">
+                        <i class="fas fa-network-wired text-slate-500 mr-2" style="width: 18px;"></i>
+                        <div class="flex-1">
                           <div class="small" v-if="host.host_info.ip">
                             <strong>{{ host.host_info.ip }}</strong>
                           </div>
-                          <div class="small text-muted mt-1" v-if="host.host_info.os">
-                            <i class="fas fa-desktop me-1"></i>{{ host.host_info.os }}
+                          <div class="small text-slate-500 mt-1" v-if="host.host_info.os">
+                            <i class="fas fa-desktop mr-1"></i>{{ host.host_info.os }}
                           </div>
                         </div>
                       </div>
-                      <div v-if="host.host_info.cpu_usage !== undefined" class="small text-muted mt-2">
-                        <div class="d-flex justify-content-between mb-1">
+                      <div v-if="host.host_info.cpu_usage !== undefined" class="small text-slate-500 mt-2">
+                        <div class="flex justify-between mb-1">
                           <span>CPU: {{ host.host_info.cpu_usage }}%</span>
                           <span>内存: {{ host.host_info.memory_usage }}%</span>
                         </div>
                         <div>磁盘: {{ host.host_info.disk_usage }}%</div>
                       </div>
                     </div>
-                    <div v-else class="text-muted small">
-                      <i class="fas fa-exclamation-circle me-1"></i>未连接
+                    <div v-else class="text-slate-500 small">
+                      <i class="fas fa-exclamation-circle mr-1"></i>未连接
                     </div>
                   </div>
 
@@ -365,30 +363,30 @@
                     <div v-if="host.docker_info && Object.keys(host.docker_info).length > 0">
                       <div class="mb-2">
                         <span v-if="host.docker_info.version" class="badge bg-info">
-                          <i class="fab fa-docker me-1"></i>{{ host.docker_info.version }}
+                          <i class="fab fa-docker mr-1"></i>{{ host.docker_info.version }}
                         </span>
                       </div>
-                      <div class="small text-muted">
+                      <div class="small text-slate-500">
                         <span v-if="host.docker_info.containers !== undefined">
                           容器: {{ host.docker_info.containers }}
                         </span>
-                        <span v-if="host.docker_info.images !== undefined" class="ms-2">
+                        <span v-if="host.docker_info.images !== undefined" class="ml-2">
                           镜像: {{ host.docker_info.images }}
                         </span>
                       </div>
                     </div>
-                    <div v-else class="text-muted small">
-                      <i class="fas fa-exclamation-circle me-1"></i>未检测
+                    <div v-else class="text-slate-500 small">
+                      <i class="fas fa-exclamation-circle mr-1"></i>未检测
                     </div>
                   </div>
 
                   <!-- 最后心跳和创建时间 -->
-                  <div class="small text-muted border-top pt-2">
+                  <div class="small text-slate-500 border-t border-slate-200 pt-2">
                     <div v-if="host.last_heartbeat" class="mb-1">
-                      <i class="fas fa-heartbeat me-1"></i>最后心跳: {{ formatTime(host.last_heartbeat) }}
+                      <i class="fas fa-heartbeat mr-1"></i>最后心跳: {{ formatTime(host.last_heartbeat) }}
                     </div>
                     <div>
-                      <i class="fas fa-clock me-1"></i>{{ formatTime(host.created_at) }}
+                      <i class="fas fa-clock mr-1"></i>{{ formatTime(host.created_at) }}
                     </div>
                   </div>
                 </div>
@@ -403,29 +401,29 @@
     <div v-show="activeTab === 'secrets'">
       <div class="card mb-3">
         <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center">
-            <h6 class="mb-0"><i class="fas fa-key me-2"></i>Agent连接密钥</h6>
-            <button class="btn btn-primary btn-sm" @click="showAddSecretModal = true">
-              <i class="fas fa-plus me-1"></i> 生成新密钥
-            </button>
+          <div class="flex justify-between items-center">
+            <h6 class="mb-0"><i class="fas fa-key mr-2"></i>Agent连接密钥</h6>
+            <Button size="sm" @click="showAddSecretModal = true">
+              <i class="fas fa-plus mr-1"></i> 生成新密钥
+            </Button>
           </div>
         </div>
       </div>
 
-      <div v-if="loadingSecrets" class="text-center py-5">
-        <span class="spinner-border spinner-border-sm"></span> 加载中...
+      <div v-if="loadingSecrets" class="text-center py-12">
+        <i class="fas fa-spinner fa-spin"></i> 加载中...
       </div>
-      <div v-else-if="secrets.length === 0" class="text-center py-5 text-muted">
-        <i class="fas fa-key fa-3x mb-3"></i>
+      <div v-else-if="secrets.length === 0" class="text-center py-12 text-slate-500">
+        <i class="fas fa-key text-4xl mb-3"></i>
         <p class="mb-0">暂无密钥</p>
-        <button class="btn btn-primary btn-sm mt-2" @click="showAddSecretModal = true">
+        <Button size="sm" @click="showAddSecretModal = true">
           <i class="fas fa-plus"></i> 生成新密钥
-        </button>
+        </Button>
       </div>
       <div v-else class="card">
         <div class="card-body">
           <div class="table-responsive">
-            <table class="table table-hover table-sm mb-0">
+            <table class="w-full border-collapse text-sm">
               <thead class="table-light">
                 <tr>
                   <th style="width: 15%;">密钥名称</th>
@@ -441,44 +439,44 @@
                     <div v-if="editingSecretId === secret.secret_id" class="input-group input-group-sm">
                       <input
                         type="text"
-                        class="form-control"
+                        class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                         v-model="editingSecretName"
                         placeholder="请输入密钥名称"
                         @keyup.enter="saveSecretName(secret)"
                         @blur="saveSecretName(secret)"
                       />
-                      <button
-                        class="btn btn-outline-success"
+                      <Button
+                        variant="outline" size="sm"
                         type="button"
                         @click.stop="saveSecretName(secret)"
                         title="保存名称"
                       >
                         <i class="fas fa-check"></i>
-                      </button>
+                      </Button>
                     </div>
-                    <div v-else class="d-flex align-items-center">
+                    <div v-else class="flex items-center">
                       <strong>{{ secret.name || '未命名' }}</strong>
-                      <button
-                        class="btn btn-sm btn-link text-decoration-none ms-1 p-0"
+                      <Button
+                        variant="ghost" size="sm"
                         type="button"
                         @click.stop="startEditSecretName(secret)"
                         title="编辑名称"
                       >
                         <i class="fas fa-edit"></i>
-                      </button>
+                      </Button>
                     </div>
                   </td>
                   <td>
-                    <div class="d-flex align-items-center">
-                      <code class="small text-break me-2" style="max-width: 200px;">{{ secret.secret_key }}</code>
-                      <button
-                        class="btn btn-sm btn-outline-secondary"
+                    <div class="flex items-center">
+                      <code class="small break-all mr-2" style="max-width: 200px;">{{ secret.secret_key }}</code>
+                      <Button
+                        variant="outline" size="sm"
                         type="button"
                         @click="copyToClipboard(secret.secret_key, '密钥已复制到剪贴板')"
                         title="复制密钥"
                       >
                         <i class="fas fa-copy"></i>
-                      </button>
+                      </Button>
                     </div>
                   </td>
                   <td>
@@ -486,39 +484,39 @@
                       {{ secret.enabled ? '启用' : '禁用' }}
                     </span>
                   </td>
-                  <td class="small text-muted">{{ formatTime(secret.created_at) }}</td>
+                  <td class="small text-slate-500">{{ formatTime(secret.created_at) }}</td>
                   <td>
-                    <div class="btn-group btn-group-sm" role="group">
-                      <button 
-                        class="btn btn-outline-primary" 
+                    <div class="flex gap-1" role="group">
+                      <Button 
+                        variant="outline" size="sm" 
                         @click="showSecretDeployCommand(secret)"
                         title="生成部署命令"
                       >
-                        <i class="fas fa-code me-1"></i>部署
-                      </button>
-                      <button 
+                        <i class="fas fa-code mr-1"></i>部署
+                      </Button>
+                      <Button 
                         v-if="secret.enabled"
-                        class="btn btn-outline-warning" 
+                        variant="outline" size="sm" 
                         @click="disableSecret(secret)"
                         title="禁用"
                       >
                         <i class="fas fa-ban"></i>
-                      </button>
-                      <button 
+                      </Button>
+                      <Button 
                         v-else
-                        class="btn btn-outline-success" 
+                        variant="outline" size="sm" 
                         @click="enableSecret(secret)"
                         title="启用"
                       >
                         <i class="fas fa-check"></i>
-                      </button>
-                      <button 
-                        class="btn btn-outline-danger" 
+                      </Button>
+                      <Button 
+                        variant="destructive" size="sm" 
                         @click="deleteSecret(secret)"
                         title="删除"
                       >
                         <i class="fas fa-trash"></i>
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -533,113 +531,112 @@
     <div v-show="activeTab === 'pending'">
       <div class="card mb-3">
         <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center">
+          <div class="flex justify-between items-center">
             <h6 class="mb-0">
-              <i class="fas fa-clock me-2"></i>待加入主机
-              <span v-if="pendingHostsCount > 0" class="badge bg-danger ms-2">{{ pendingHostsCount }}</span>
+              <i class="fas fa-clock mr-2"></i>待加入主机
+              <span v-if="pendingHostsCount > 0" class="badge bg-danger ml-2">{{ pendingHostsCount }}</span>
             </h6>
-            <button class="btn btn-sm btn-outline-secondary" @click="loadPendingHosts" title="刷新">
+            <Button variant="outline" size="sm" @click="loadPendingHosts" title="刷新">
               <i class="fas fa-sync-alt"></i>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
 
       <div v-if="loadingPendingHosts" class="card">
-        <div class="card-body text-center py-5">
-          <span class="spinner-border spinner-border-sm me-2"></span> 加载中...
+        <div class="card-body text-center py-12">
+          <i class="fas fa-spinner fa-spin"></i> 加载中...
         </div>
       </div>
       <div v-else-if="pendingHosts.length === 0" class="card">
-        <div class="card-body text-center py-5 text-muted">
-          <i class="fas fa-clock fa-3x mb-3"></i>
+        <div class="card-body text-center py-12 text-slate-500">
+          <i class="fas fa-clock text-4xl mb-3"></i>
           <p class="mb-0">暂无待加入主机</p>
-          <small class="d-block mt-2">使用密钥部署Agent后，主机将自动出现在这里</small>
+          <small class="block mt-2">使用密钥部署Agent后，主机将自动出现在这里</small>
         </div>
       </div>
-      <div v-else class="row g-3">
+      <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <div
           v-for="host in pendingHosts"
           :key="host.agent_token"
-          class="col-12 col-md-6 col-xl-4"
-        >
-            <div class="card h-100 border-warning shadow-sm">
+          >
+            <div class="card h-full border-warning shadow-sm">
             <div class="card-header bg-warning bg-opacity-10">
-              <div class="d-flex justify-content-between align-items-center mb-1">
+              <div class="flex justify-between items-center mb-1">
                 <h6 class="mb-0">
-                  <i class="fas fa-clock me-2"></i>待加入主机
+                  <i class="fas fa-clock mr-2"></i>待加入主机
                 </h6>
-                <span class="badge bg-warning text-dark">待批准</span>
+                <span class="badge bg-warning text-slate-900">待批准</span>
               </div>
-              <div v-if="host.host_info && host.host_info.ip" class="small text-muted">
-                <i class="fas fa-network-wired me-1"></i>{{ host.host_info.ip }}
+              <div v-if="host.host_info && host.host_info.ip" class="small text-slate-500">
+                <i class="fas fa-network-wired mr-1"></i>{{ host.host_info.ip }}
               </div>
             </div>
             <div class="card-body">
 
               <div class="mb-3">
-                <label class="small text-muted d-block mb-1">唯一标识</label>
-                <div class="d-flex align-items-center">
-                  <code class="small text-break me-2 flex-grow-1">{{ host.agent_token || '生成中...' }}</code>
-                  <button
-                    class="btn btn-sm btn-outline-secondary"
+                <label class="small text-slate-500 block mb-1">唯一标识</label>
+                <div class="flex items-center">
+                  <code class="small break-all mr-2 flex-1">{{ host.agent_token || '生成中...' }}</code>
+                  <Button
+                    variant="outline" size="sm"
                     @click="copyToClipboard(host.agent_token, '唯一标识已复制到剪贴板')"
                     title="复制"
                   >
                     <i class="fas fa-copy"></i>
-                  </button>
+                  </Button>
                 </div>
               </div>
               
-              <div v-if="host.host_info && Object.keys(host.host_info).length > 0" class="mb-3 border-top pt-3">
-                <h6 class="small text-muted mb-2">主机信息</h6>
-                <div v-if="host.host_info.ip" class="small text-muted mb-1">
-                  <i class="fas fa-network-wired me-1"></i>IP: {{ host.host_info.ip }}
+              <div v-if="host.host_info && Object.keys(host.host_info).length > 0" class="mb-3 border-t border-slate-200 pt-3">
+                <h6 class="small text-slate-500 mb-2">主机信息</h6>
+                <div v-if="host.host_info.ip" class="small text-slate-500 mb-1">
+                  <i class="fas fa-network-wired mr-1"></i>IP: {{ host.host_info.ip }}
                 </div>
-                <div v-if="host.host_info.os" class="small text-muted mb-1">
-                  <i class="fas fa-desktop me-1"></i>{{ host.host_info.os }}
+                <div v-if="host.host_info.os" class="small text-slate-500 mb-1">
+                  <i class="fas fa-desktop mr-1"></i>{{ host.host_info.os }}
                 </div>
-                <div v-if="host.host_info.hostname" class="small text-muted">
-                  <i class="fas fa-server me-1"></i>{{ host.host_info.hostname }}
+                <div v-if="host.host_info.hostname" class="small text-slate-500">
+                  <i class="fas fa-server mr-1"></i>{{ host.host_info.hostname }}
                 </div>
               </div>
               
-              <div v-if="host.docker_info && Object.keys(host.docker_info).length > 0" class="mb-3 border-top pt-3">
-                <h6 class="small text-muted mb-2">Docker信息</h6>
+              <div v-if="host.docker_info && Object.keys(host.docker_info).length > 0" class="mb-3 border-t border-slate-200 pt-3">
+                <h6 class="small text-slate-500 mb-2">Docker信息</h6>
                 <div v-if="host.docker_info.version" class="small mb-1">
-                  <i class="fab fa-docker me-1 text-info"></i>
+                  <i class="fab fa-docker mr-1 text-sky-600"></i>
                   <strong>版本:</strong> {{ host.docker_info.version }}
                 </div>
-                <div v-if="host.docker_info.containers !== undefined" class="small text-muted">
-                  <i class="fas fa-box me-1"></i>容器: {{ host.docker_info.containers }}
+                <div v-if="host.docker_info.containers !== undefined" class="small text-slate-500">
+                  <i class="fas fa-box mr-1"></i>容器: {{ host.docker_info.containers }}
                 </div>
               </div>
               
-              <div class="small text-muted border-top pt-2">
+              <div class="small text-slate-500 border-t border-slate-200 pt-2">
                 <div class="mb-1">
-                  <i class="fas fa-clock me-1"></i>连接: {{ formatTime(host.connected_at) }}
+                  <i class="fas fa-clock mr-1"></i>连接: {{ formatTime(host.connected_at) }}
                 </div>
                 <div>
-                  <i class="fas fa-heartbeat me-1"></i>心跳: {{ formatTime(host.last_heartbeat) }}
+                  <i class="fas fa-heartbeat mr-1"></i>心跳: {{ formatTime(host.last_heartbeat) }}
                 </div>
               </div>
             </div>
             <div class="card-footer bg-white">
-              <div class="d-grid gap-2 d-md-flex">
-                <button 
-                  class="btn btn-success btn-sm flex-fill" 
+              <div class="grid gap-2 md:flex">
+                <Button 
+                  size="sm" 
                   @click="approvePendingHost(host)"
                   title="批准加入"
                 >
-                  <i class="fas fa-check me-1"></i>批准加入
-                </button>
-                <button 
-                  class="btn btn-danger btn-sm" 
+                  <i class="fas fa-check mr-1"></i>批准加入
+                </Button>
+                <Button 
+                  variant="destructive" size="sm" 
                   @click="rejectPendingHost(host)"
                   title="拒绝"
                 >
                   <i class="fas fa-times"></i>
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -648,29 +645,29 @@
     </div>
 
     <!-- 添加/编辑主机模态框 -->
-    <div v-if="showAddModal || showEditModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="closeModal">
-      <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showAddModal || showEditModal" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="closeModal">
+      <div class="relative z-10 w-full max-w-3xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-network-wired me-2"></i> {{ editingHost ? '编辑主机' : (hostForm.host_type === 'agent' ? '新建Agent主机' : '新建Portainer主机') }}
+              <i class="fas fa-network-wired mr-2"></i> {{ editingHost ? '编辑主机' : (hostForm.host_type === 'agent' ? '新建Agent主机' : '新建Portainer主机') }}
             </h5>
-            <button type="button" class="btn-close" @click="closeModal"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeModal"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <form @submit.prevent="saveHost" novalidate>
               <div class="mb-3" v-if="!editingHost">
-                <label class="form-label">
-                  主机类型 <span class="text-danger">*</span>
+                <label class="block text-sm font-medium text-slate-700">
+                  主机类型 <span class="text-red-500">*</span>
                 </label>
                 <div class="alert alert-info py-2 mb-0">
                   <i :class="hostForm.host_type === 'agent' ? 'fas fa-network-wired' : 'fab fa-docker'"></i>
-                  <strong class="ms-2">{{ hostForm.host_type === 'agent' ? 'Agent主机' : 'Portainer主机' }}</strong>
+                  <strong class="ml-2">{{ hostForm.host_type === 'agent' ? 'Agent主机' : 'Portainer主机' }}</strong>
                 </div>
               </div>
               <div class="mb-3" v-else>
-                <label class="form-label">主机类型</label>
-                <div class="form-control-plaintext">
+                <label class="block text-sm font-medium text-slate-700">主机类型</label>
+                <div class="text-sm text-slate-700">
                   <span class="badge" :class="hostForm.host_type === 'portainer' ? 'bg-primary' : 'bg-secondary'">
                     <i :class="hostForm.host_type === 'agent' ? 'fas fa-network-wired' : 'fab fa-docker'"></i>
                     {{ hostForm.host_type === 'portainer' ? 'Portainer' : 'Agent' }}
@@ -678,22 +675,22 @@
                 </div>
               </div>
               <div class="mb-3">
-                <label class="form-label">
-                  主机名称 <span class="text-danger">*</span>
+                <label class="block text-sm font-medium text-slate-700">
+                  主机名称 <span class="text-red-500">*</span>
                 </label>
                 <input 
                   type="text" 
-                  class="form-control form-control-sm" 
+                  class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                   v-model="hostForm.name"
                   placeholder="例如：生产服务器-Agent"
                   required
                 />
               </div>
               <div class="mb-3">
-                <label class="form-label">描述（可选）</label>
+                <label class="block text-sm font-medium text-slate-700">描述（可选）</label>
                 <input 
                   type="text" 
-                  class="form-control form-control-sm" 
+                  class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                   v-model="hostForm.description"
                   placeholder="请输入主机描述信息..."
                 />
@@ -702,42 +699,42 @@
               <!-- Portainer 配置 -->
               <div v-if="hostForm.host_type === 'portainer'">
                 <div class="mb-3">
-                  <label class="form-label">
-                    Portainer API URL <span class="text-danger">*</span>
+                  <label class="block text-sm font-medium text-slate-700">
+                    Portainer API URL <span class="text-red-500">*</span>
                   </label>
                   <input 
                     type="text" 
-                    class="form-control form-control-sm" 
+                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                     v-model="hostForm.portainer_url"
                     placeholder="http://portainer.example.com:9000"
                     required
                   />
-                  <small class="text-muted">Portainer 服务器的 API 地址</small>
+                  <small class="text-slate-500">Portainer 服务器的 API 地址</small>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label">
-                    Portainer API Key <span v-if="!editingHost" class="text-danger">*</span>
+                  <label class="block text-sm font-medium text-slate-700">
+                    Portainer API Key <span v-if="!editingHost" class="text-red-500">*</span>
                   </label>
                   <input 
                     type="password" 
-                    class="form-control form-control-sm" 
+                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                     v-model="hostForm.portainer_api_key"
                     placeholder="ptc_xxxxxxxxxxxxx"
                     @blur="autoLoadEndpoints"
                     :required="!editingHost"
                   />
-                  <small class="text-muted" v-if="editingHost">
+                  <small class="text-slate-500" v-if="editingHost">
                     留空表示继续使用已保存的 API Key；填写则更新为新 Key。
                   </small>
-                  <small class="text-muted" v-else>在 Portainer 设置中生成的 API Key</small>
+                  <small class="text-slate-500" v-else>在 Portainer 设置中生成的 API Key</small>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label">
-                    Endpoint <span class="text-danger">*</span>
+                  <label class="block text-sm font-medium text-slate-700">
+                    Endpoint <span class="text-red-500">*</span>
                   </label>
                   <div class="input-group">
                     <select 
-                      class="form-select form-control-sm" 
+                      class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                       v-model.number="hostForm.portainer_endpoint_id"
                       :disabled="loadingEndpoints"
                       required
@@ -759,18 +756,18 @@
                         {{ ep.name }} (ID: {{ ep.id }})
                       </option>
                     </select>
-                    <button 
+                    <Button 
                       type="button" 
-                      class="btn btn-sm btn-outline-secondary" 
+                      variant="outline" size="sm" 
                       @click="loadEndpoints"
                       :disabled="loadingEndpoints || !hostForm.portainer_url || (!editingHost && !hostForm.portainer_api_key)"
                       title="刷新 Endpoints 列表"
                     >
-                      <span v-if="loadingEndpoints" class="spinner-border spinner-border-sm"></span>
+                      <span v-if="loadingEndpoints" class="fas fa-spinner fa-spin"></span>
                       <i v-else class="fas fa-sync-alt"></i>
-                    </button>
+                    </Button>
                   </div>
-                  <small class="text-muted">
+                  <small class="text-slate-500">
                     <span v-if="availableEndpoints.length > 0">
                       已加载 {{ availableEndpoints.length }} 个 Endpoint
                     </span>
@@ -780,63 +777,63 @@
                   </small>
                 </div>
                 <div class="mb-3">
-                  <button 
+                  <Button 
                     type="button" 
-                    class="btn btn-sm btn-outline-info" 
+                    variant="outline" size="sm" 
                     @click="testPortainerConnection"
                     :disabled="testingConnection"
                   >
-                    <span v-if="testingConnection" class="spinner-border spinner-border-sm me-1"></span>
-                    <i v-else class="fas fa-plug me-1"></i>
+                    <span v-if="testingConnection" class="fas fa-spinner fa-spin mr-1"></span>
+                    <i v-else class="fas fa-plug mr-1"></i>
                     {{ testingConnection ? '测试中...' : '测试连接' }}
-                  </button>
+                  </Button>
                 </div>
               </div>
               
               <div v-if="!editingHost && hostForm.host_type === 'agent'" class="alert alert-info py-2 mb-0">
-                <i class="fas fa-info-circle me-2"></i>
+                <i class="fas fa-info-circle mr-2"></i>
                 创建后将自动生成Token和部署命令，请按照部署命令在目标主机上部署Agent。
               </div>
               <div v-if="hostForm.host_type === 'portainer'" class="alert alert-info py-2 mb-0">
-                <i class="fas fa-info-circle me-2"></i>
+                <i class="fas fa-info-circle mr-2"></i>
                 Portainer 主机通过 Portainer API 进行连接和部署，无需在目标主机上部署 Agent。
               </div>
             </form>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="closeModal">
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="closeModal">
               取消
-            </button>
-            <button 
+            </Button>
+            <Button 
               type="button" 
-              class="btn btn-primary btn-sm" 
+              size="sm" 
               @click="saveHost"
               :disabled="saving"
             >
-              <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
-              <i v-else class="fas fa-save me-1"></i>
+              <span v-if="saving" class="fas fa-spinner fa-spin mr-1"></span>
+              <i v-else class="fas fa-save mr-1"></i>
               {{ saving ? '保存中...' : '保存' }}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 主机详情模态框 -->
-    <div v-if="showDetailModal && selectedHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showDetailModal = false">
-      <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showDetailModal && selectedHost" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showDetailModal = false">
+      <div class="relative z-10 w-full max-w-3xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-info-circle me-2"></i> Agent主机详情
+              <i class="fas fa-info-circle mr-2"></i> Agent主机详情
             </h5>
-            <button type="button" class="btn-close" @click="showDetailModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showDetailModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <div class="row">
               <div class="col-md-6">
-                <h6 class="border-bottom pb-2">基本信息</h6>
-                <table class="table table-sm">
+                <h6 class="border-b border-slate-200 pb-2">基本信息</h6>
+                <table class="w-full border-collapse text-sm">
                   <tbody>
                     <tr>
                       <td width="40%"><strong>主机名称:</strong></td>
@@ -855,9 +852,9 @@
                       <td><strong>Token:</strong></td>
                       <td>
                         <code class="small">{{ selectedHost.token }}</code>
-                        <button class="btn btn-sm btn-outline-secondary ms-2" @click="copyToClipboard(selectedHost.token)">
+                        <Button variant="outline" size="sm" @click="copyToClipboard(selectedHost.token)">
                           <i class="fas fa-copy"></i>
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                     <tr>
@@ -876,9 +873,9 @@
                 </table>
               </div>
               <div class="col-md-6">
-                <h6 class="border-bottom pb-2">主机信息</h6>
+                <h6 class="border-b border-slate-200 pb-2">主机信息</h6>
                 <div v-if="selectedHost.host_info && Object.keys(selectedHost.host_info).length > 0">
-                  <table class="table table-sm">
+                  <table class="w-full border-collapse text-sm">
                     <tbody>
                       <tr v-if="selectedHost.host_info.hostname">
                         <td width="40%"><strong>主机名:</strong></td>
@@ -929,16 +926,16 @@
                     </tbody>
                   </table>
                 </div>
-                <div v-else class="text-muted">
+                <div v-else class="text-slate-500">
                   <i class="fas fa-info-circle"></i> 主机未连接，暂无信息
                 </div>
               </div>
             </div>
             <div class="row mt-3">
               <div class="col-12">
-                <h6 class="border-bottom pb-2">Docker信息</h6>
+                <h6 class="border-b border-slate-200 pb-2">Docker信息</h6>
                 <div v-if="selectedHost.docker_info && Object.keys(selectedHost.docker_info).length > 0">
-                  <table class="table table-sm">
+                  <table class="w-full border-collapse text-sm">
                     <tbody>
                       <tr v-if="selectedHost.docker_info.version">
                         <td width="40%"><strong>Docker版本:</strong></td>
@@ -959,34 +956,34 @@
                     </tbody>
                   </table>
                 </div>
-                <div v-else class="text-muted">
+                <div v-else class="text-slate-500">
                   <i class="fas fa-info-circle"></i> Docker信息未检测
                 </div>
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showDetailModal = false">
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showDetailModal = false">
               关闭
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 部署命令模态框 -->
-    <div v-if="showDeployModal && selectedHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showDeployModal = false">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showDeployModal && selectedHost" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showDeployModal = false">
+      <div class="relative z-10 w-full max-w-5xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-code me-2"></i> {{ selectedHost.name }}
+              <i class="fas fa-code mr-2"></i> {{ selectedHost.name }}
             </h5>
-            <button type="button" class="btn-close" @click="showDeployModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showDeployModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <div class="mb-3">
-              <div class="btn-group w-100" role="group">
+              <div class="btn-group w-full" role="group">
                 <input 
                   type="radio" 
                   class="btn-check" 
@@ -996,8 +993,8 @@
                   v-model="deployType"
                   @change="loadDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="deployCompose">
-                  <i class="fab fa-docker me-1"></i> docker-compose
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deployCompose">
+                  <i class="fab fa-docker mr-1"></i> docker-compose
                 </label>
                 
                 <input 
@@ -1009,8 +1006,8 @@
                   v-model="deployType"
                   @change="loadDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="deploySingle">
-                  <i class="fas fa-server me-1"></i> 单机
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploySingle">
+                  <i class="fas fa-server mr-1"></i> 单机
                 </label>
                 
                 <input 
@@ -1022,165 +1019,165 @@
                   v-model="deployType"
                   @change="loadDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="deploySwarm">
-                  <i class="fas fa-layer-group me-1"></i> Swarm
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploySwarm">
+                  <i class="fas fa-layer-group mr-1"></i> Swarm
                 </label>
               </div>
             </div>
             <div class="mb-3">
-              <label class="form-label">Agent镜像</label>
+              <label class="block text-sm font-medium text-slate-700">Agent镜像</label>
               <input 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                 v-model="agentImage"
                 @change="loadDeployCommand"
                 placeholder="registry.cn-shanghai.aliyuncs.com/51jbm/app2docker-agent:latest"
               />
             </div>
             <div v-if="deployCommand" class="mb-3">
-              <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="flex justify-between items-center mb-2">
                 <label class="form-label mb-0">
                   <span v-if="deployType === 'single'">Docker Run 命令</span>
                   <span v-else-if="deployType === 'compose'">Docker Compose 命令</span>
                   <span v-else-if="deployType === 'swarm'">Docker Stack 部署命令</span>
                 </label>
-                <button class="btn btn-sm btn-outline-primary" @click="copyDeployCommand">
-                  <i class="fas fa-copy me-1"></i> 复制
-                </button>
+                <Button variant="outline" size="sm" @click="copyDeployCommand">
+                  <i class="fas fa-copy mr-1"></i> 复制
+                </Button>
               </div>
               <pre class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ deployCommand }}</code></pre>
             </div>
             <div v-if="loadingDeployCommand" class="text-center py-3">
-              <div class="spinner-border spinner-border-sm me-2"></div>
+              <div class="fas fa-spinner fa-spin mr-2"></div>
               加载中...
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showDeployModal = false">
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showDeployModal = false">
               关闭
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 生成密钥模态框 -->
-    <div v-if="showAddSecretModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showAddSecretModal = false">
-      <div class="modal-dialog modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showAddSecretModal" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showAddSecretModal = false">
+      <div class="relative z-10 w-full max-w-lg">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-key me-2"></i> 生成新密钥
+              <i class="fas fa-key mr-2"></i> 生成新密钥
             </h5>
-            <button type="button" class="btn-close" @click="showAddSecretModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showAddSecretModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <div class="mb-3">
-              <label class="form-label">密钥名称（可选）</label>
+              <label class="block text-sm font-medium text-slate-700">密钥名称（可选）</label>
               <input 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                 v-model="secretForm.name"
                 placeholder="例如：生产环境密钥"
               />
             </div>
             <div class="alert alert-info py-2 mb-0">
-              <i class="fas fa-info-circle me-2"></i>
+              <i class="fas fa-info-circle mr-2"></i>
               密钥用于Agent连接认证，生成后请妥善保管。
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showAddSecretModal = false">
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showAddSecretModal = false">
               取消
-            </button>
-            <button 
+            </Button>
+            <Button 
               type="button" 
-              class="btn btn-primary btn-sm" 
+              size="sm" 
               @click="createSecret"
               :disabled="creatingSecret"
             >
-              <span v-if="creatingSecret" class="spinner-border spinner-border-sm me-1"></span>
-              <i v-else class="fas fa-key me-1"></i>
+              <span v-if="creatingSecret" class="fas fa-spinner fa-spin mr-1"></span>
+              <i v-else class="fas fa-key mr-1"></i>
               {{ creatingSecret ? '生成中...' : '生成密钥' }}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 批准待加入主机模态框 -->
-    <div v-if="showApproveModal && selectedPendingHost" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showApproveModal = false">
-      <div class="modal-dialog modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showApproveModal && selectedPendingHost" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showApproveModal = false">
+      <div class="relative z-10 w-full max-w-lg">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-check-circle me-2"></i> 批准待加入主机
+              <i class="fas fa-check-circle mr-2"></i> 批准待加入主机
             </h5>
-            <button type="button" class="btn-close" @click="showApproveModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showApproveModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <div class="mb-3">
-              <label class="form-label">
-                主机名称 <span class="text-danger">*</span>
+              <label class="block text-sm font-medium text-slate-700">
+                主机名称 <span class="text-red-500">*</span>
               </label>
               <input 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                 v-model="approveForm.name"
                 placeholder="例如：生产服务器-Agent"
                 required
               />
             </div>
             <div class="mb-3">
-              <label class="form-label">描述（可选）</label>
+              <label class="block text-sm font-medium text-slate-700">描述（可选）</label>
               <input 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                 v-model="approveForm.description"
                 placeholder="请输入主机描述信息..."
               />
             </div>
             <div class="alert alert-info py-2 mb-0">
-              <i class="fas fa-info-circle me-2"></i>
+              <i class="fas fa-info-circle mr-2"></i>
               唯一标识: <code>{{ selectedPendingHost.agent_token }}</code>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showApproveModal = false">
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showApproveModal = false">
               取消
-            </button>
-            <button 
+            </Button>
+            <Button 
               type="button" 
-              class="btn btn-success btn-sm" 
+              size="sm" 
               @click="confirmApprovePendingHost"
               :disabled="approving"
             >
-              <span v-if="approving" class="spinner-border spinner-border-sm me-1"></span>
-              <i v-else class="fas fa-check me-1"></i>
+              <span v-if="approving" class="fas fa-spinner fa-spin mr-1"></span>
+              <i v-else class="fas fa-check mr-1"></i>
               {{ approving ? '批准中...' : '批准加入' }}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 密钥部署命令模态框 -->
-    <div v-if="showSecretDeployModal && selectedSecret" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" @click.self="showSecretDeployModal = false">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showSecretDeployModal && selectedSecret" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showSecretDeployModal = false">
+      <div class="relative z-10 w-full max-w-5xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title mb-0">
-              <i class="fas fa-code me-2"></i> {{ selectedSecret.name || '未命名密钥' }}
+              <i class="fas fa-code mr-2"></i> {{ selectedSecret.name || '未命名密钥' }}
             </h5>
-            <button type="button" class="btn-close" @click="showSecretDeployModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showSecretDeployModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <div class="alert alert-info py-2 mb-3">
-              <i class="fas fa-info-circle me-2"></i>
+              <i class="fas fa-info-circle mr-2"></i>
               <strong>使用密钥部署Agent：</strong>部署后Agent会自动生成唯一标识并加入待加入列表，您可以在"待加入主机"标签页中批准加入。
             </div>
             <div class="mb-3">
-              <div class="btn-group w-100" role="group">
+              <div class="btn-group w-full" role="group">
                 <input 
                   type="radio" 
                   class="btn-check" 
@@ -1190,8 +1187,8 @@
                   v-model="secretDeployType"
                   @change="loadSecretDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="secretDeployCompose">
-                  <i class="fab fa-docker me-1"></i> docker-compose
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="secretDeployCompose">
+                  <i class="fab fa-docker mr-1"></i> docker-compose
                 </label>
                 
                 <input 
@@ -1203,8 +1200,8 @@
                   v-model="secretDeployType"
                   @change="loadSecretDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="secretDeploySingle">
-                  <i class="fas fa-server me-1"></i> 单机
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="secretDeploySingle">
+                  <i class="fas fa-server mr-1"></i> 单机
                 </label>
                 
                 <input 
@@ -1216,54 +1213,54 @@
                   v-model="secretDeployType"
                   @change="loadSecretDeployCommand"
                 />
-                <label class="btn btn-outline-primary" for="secretDeploySwarm">
-                  <i class="fas fa-layer-group me-1"></i> Swarm
+                <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="secretDeploySwarm">
+                  <i class="fas fa-layer-group mr-1"></i> Swarm
                 </label>
               </div>
             </div>
             <div class="mb-3">
-              <label class="form-label">Agent镜像</label>
+              <label class="block text-sm font-medium text-slate-700">Agent镜像</label>
               <input 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                 v-model="agentImage"
                 @change="loadSecretDeployCommand"
                 placeholder="registry.cn-shanghai.aliyuncs.com/51jbm/app2docker-agent:latest"
               />
             </div>
             <div class="mb-3">
-              <label class="form-label">服务器地址（可选，留空自动检测）</label>
+              <label class="block text-sm font-medium text-slate-700">服务器地址（可选，留空自动检测）</label>
               <input 
                 type="text" 
-                class="form-control form-control-sm" 
+                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
                 v-model="serverUrl"
                 @change="loadSecretDeployCommand"
                 placeholder="ws://192.168.1.100:8000"
               />
-              <small class="text-muted">WebSocket地址，格式：ws://IP:端口 或 wss://域名:端口</small>
+              <small class="text-slate-500">WebSocket地址，格式：ws://IP:端口 或 wss://域名:端口</small>
             </div>
             <div v-if="secretDeployCommand" class="mb-3">
-              <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="flex justify-between items-center mb-2">
                 <label class="form-label mb-0">
                   <span v-if="secretDeployType === 'single'">Docker Run 命令</span>
                   <span v-else-if="secretDeployType === 'compose'">Docker Compose 命令</span>
                   <span v-else-if="secretDeployType === 'swarm'">Docker Stack 部署命令</span>
                 </label>
-                <button class="btn btn-sm btn-outline-primary" @click="copySecretDeployCommand">
-                  <i class="fas fa-copy me-1"></i> 复制
-                </button>
+                <Button variant="outline" size="sm" @click="copySecretDeployCommand">
+                  <i class="fas fa-copy mr-1"></i> 复制
+                </Button>
               </div>
               <pre class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ secretDeployCommand }}</code></pre>
             </div>
             <div v-if="loadingSecretDeployCommand" class="text-center py-3">
-              <div class="spinner-border spinner-border-sm me-2"></div>
+              <div class="fas fa-spinner fa-spin mr-2"></div>
               加载中...
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showSecretDeployModal = false">
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showSecretDeployModal = false">
               关闭
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1272,6 +1269,7 @@
 </template>
 
 <script>
+import Button from "@/components/ui/button/Button.vue";
 import axios from 'axios';
 import HostManager from './HostManager.vue';
 import { copyToClipboard as doCopy } from '../utils/clipboard.js';
@@ -1279,7 +1277,8 @@ import { copyToClipboard as doCopy } from '../utils/clipboard.js';
 export default {
   name: 'AgentHostManager',
   components: {
-    HostManager
+    HostManager,
+    Button,
   },
   data() {
     return {

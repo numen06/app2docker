@@ -1,5 +1,10 @@
 /**
  * 认证工具函数
+ *
+ * usesCookie: 后端同时通过 Set-Cookie 写入 httpOnly 的 app2docker_token，
+ * 与 Bearer 并行；浏览器无法读取该 Cookie，需 axios.defaults.withCredentials=true。
+ *
+ * localStorage/sessionStorage 仍保留 token，供 Authorization 头向后兼容。
  */
 
 /**

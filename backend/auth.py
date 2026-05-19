@@ -9,8 +9,14 @@ from datetime import datetime, timedelta
 from functools import wraps
 from typing import List, Set, Optional
 
+from starlette.requests import Request
+from starlette.responses import Response
+
 # 配置
 TOKEN_EXPIRE_HOURS = 24
+
+# httpOnly Cookie（与 JWT 并行）
+AUTH_COOKIE_NAME = "app2docker_token"
 
 # SECRET_KEY 文件路径
 SECRET_KEY_FILE = "data/secret_key.txt"
@@ -62,13 +68,15 @@ def verify_password(password: str, hashed: str) -> bool:
     return hash_password(password) == hashed
 
 
-def create_token(username: str) -> str:
-    """创建 JWT token"""
+def create_token(username: str, user_id: Optional[str] = None) -> str:
+    """创建 JWT token；若已知数据库 user_id 则写入 payload。"""
     payload = {
         'username': username,
         'exp': datetime.now() + timedelta(hours=TOKEN_EXPIRE_HOURS),
         'iat': datetime.now()
     }
+    if user_id:
+        payload['user_id'] = user_id
     return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
 
@@ -78,7 +86,11 @@ def verify_token(token: str) -> dict:
         # 使用 options 参数，不验证 iat（issued at）时间，避免时间不匹配问题
         # JWT 库默认使用 UTC 时间，但我们的系统使用本地时间
         payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'], options={'verify_iat': False})
-        return {'valid': True, 'username': payload['username']}
+        out = {'valid': True, 'username': payload['username']}
+        uid = payload.get('user_id')
+        if uid:
+            out['user_id'] = uid
+        return out
     except jwt.ExpiredSignatureError:
         return {'valid': False, 'error': 'Token 已过期'}
     except jwt.InvalidTokenError:
@@ -92,6 +104,50 @@ def verify_token(token: str) -> dict:
         except Exception:
             pass
         return {'valid': False, 'error': 'Token 无效'}
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    """登录成功后下发 httpOnly JWT Cookie。"""
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        max_age=int(TOKEN_EXPIRE_HOURS * 3600),
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    """登出时清除认证 Cookie（path 须与写入时一致）。"""
+    response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
+
+
+def extract_jwt_token_from_request(request: Request) -> str:
+    """优先 Cookie，再 Authorization Bearer。"""
+    raw = request.cookies.get(AUTH_COOKIE_NAME)
+    if raw and str(raw).strip():
+        return str(raw).strip()
+
+    auth_header = request.headers.get("authorization", "") or ""
+    if not auth_header:
+        for key in request.headers.keys():
+            if key.lower() == "authorization":
+                auth_header = request.headers[key] or ""
+                break
+
+    auth_header_lower = auth_header.lower()
+    if auth_header_lower.startswith("bearer "):
+        return auth_header[7:].strip()
+    return auth_header.strip()
+
+
+def verify_auth_from_request(request: Request) -> dict:
+    """从请求中解析 JWT（Cookie 或 Bearer）并 verify_token。"""
+    token = extract_jwt_token_from_request(request)
+    if not token:
+        return {'valid': False, 'error': '未授权，请重新登录'}
+    return verify_token(token)
 
 
 def authenticate(username: str, password: str) -> dict:
@@ -123,8 +179,9 @@ def authenticate(username: str, password: str) -> dict:
         # 检查是否使用默认密码
         default_password_hash = hash_password("admin")
         is_default_password = verify_password("admin", user.password_hash)
-    
-    token = create_token(username)
+
+    user_id = user.user_id if user else None
+    token = create_token(username, user_id=user_id)
     return {
         'success': True,
         'token': token,
@@ -287,7 +344,7 @@ def require_permission(permission_code: str):
                 raise HTTPException(status_code=500, detail="无法获取请求对象")
             
             # 获取当前用户名
-            from backend.routes import require_auth
+            from backend.route_definitions import require_auth
             username = require_auth(request)
             
             # 检查权限
@@ -322,7 +379,7 @@ def require_role(role_name: str):
                 raise HTTPException(status_code=500, detail="无法获取请求对象")
             
             # 获取当前用户名
-            from backend.routes import require_auth
+            from backend.route_definitions import require_auth
             username = require_auth(request)
             
             # 检查角色

@@ -1,307 +1,314 @@
 <template>
-  <div class="role-management">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
-        <i class="fas fa-user-shield"></i> 角色管理
-      </h5>
-      <div class="btn-group">
-        <button class="btn btn-outline-secondary btn-sm" @click="loadRoles" title="刷新">
-          <i class="fas fa-sync-alt"></i> 刷新
-        </button>
-        <button class="btn btn-primary btn-sm" @click="showCreateModal = true">
-          <i class="fas fa-plus"></i> 创建角色
-        </button>
-      </div>
-    </div>
+  <div>
+    <PageToolbar title="角色管理" icon="fa-user-shield">
+      <template #actions>
+        <Button variant="outline" size="sm" @click="loadRoles">
+          <i class="fas fa-sync-alt"></i>
+          刷新
+        </Button>
+        <Button size="sm" @click="openCreate">
+          <i class="fas fa-plus"></i>
+          创建角色
+        </Button>
+      </template>
+    </PageToolbar>
 
-    <!-- 角色列表 -->
-    <div class="table-responsive">
-      <table class="table table-hover">
-        <thead>
-          <tr>
-            <th>角色名称</th>
-            <th>描述</th>
-            <th>权限数量</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="role in roles" :key="role.role_id">
-            <td>
-              <strong>{{ role.name }}</strong>
-              <span v-if="isSystemRole(role.name)" class="badge bg-info ms-2">系统角色</span>
-            </td>
-            <td>{{ role.description || '-' }}</td>
-            <td>
-              <span class="badge bg-secondary">{{ role.permissions?.length || 0 }}</span>
-            </td>
-            <td>
-              <div class="btn-group btn-group-sm">
-                <button 
-                  class="btn btn-outline-primary" 
-                  @click="editRole(role)"
-                  title="编辑"
-                >
+    <Table min-width-class="min-w-[40rem]">
+        <TableHeader>
+          <TableRow>
+            <TableHead>角色名称</TableHead>
+            <TableHead>描述</TableHead>
+            <TableHead>权限数量</TableHead>
+            <TableHead class="text-end">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="role in roles" :key="role.role_id">
+            <TableCell class="font-medium text-slate-900">
+              {{ role.name }}
+              <Badge v-if="isSystemRole(role.name)" variant="info" class="ml-2">系统角色</Badge>
+            </TableCell>
+            <TableCell class="text-slate-600">{{ role.description || "—" }}</TableCell>
+            <TableCell>
+              <Badge>{{ role.permissions?.length || 0 }}</Badge>
+            </TableCell>
+            <TableCell class="text-end">
+              <div class="flex justify-end gap-1">
+                <Button variant="outline" size="sm" title="编辑" @click="editRole(role)">
                   <i class="fas fa-edit"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-info" 
-                  @click="viewPermissions(role)"
-                  title="查看权限"
-                >
+                </Button>
+                <Button variant="outline" size="sm" title="查看权限" @click="viewPermissions(role)">
                   <i class="fas fa-eye"></i>
-                </button>
-                <button 
+                </Button>
+                <Button
                   v-if="!isSystemRole(role.name)"
-                  class="btn btn-outline-danger" 
-                  @click="deleteRole(role)"
+                  variant="destructive"
+                  size="sm"
                   title="删除"
+                  @click="deleteRole(role)"
                 >
                   <i class="fas fa-trash"></i>
-                </button>
+                </Button>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+    </Table>
 
-    <!-- 创建/编辑角色模态框 -->
-    <div v-if="showCreateModal || showEditModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              {{ showCreateModal ? '创建角色' : '编辑角色' }}
-            </h5>
-            <button type="button" class="btn-close" @click="closeModal"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="saveRole">
-              <div class="mb-3">
-                <label class="form-label">角色名称 <span class="text-danger">*</span></label>
-                <input 
-                  v-model="form.name" 
-                  type="text" 
-                  class="form-control" 
-                  required
-                  :disabled="showEditModal && isSystemRole(form.name)"
-                  placeholder="例如: developer, tester"
-                />
-                <div v-if="showEditModal && isSystemRole(form.name)" class="form-text text-warning">
-                  系统默认角色不能修改名称
-                </div>
-              </div>
-              
-              <div class="mb-3">
-                <label class="form-label">描述</label>
-                <textarea 
-                  v-model="form.description" 
-                  class="form-control" 
-                  rows="2"
-                  placeholder="角色描述"
-                ></textarea>
-              </div>
-              
-              <div class="mb-3">
-                <label class="form-label">权限配置 <span class="text-danger">*</span></label>
-                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
-                  <div v-for="permission in availablePermissions" :key="permission.permission_id" class="form-check mb-2">
-                    <input 
-                      class="form-check-input" 
-                      type="checkbox" 
-                      :value="permission.code"
-                      v-model="form.permissions"
-                      :id="`perm-${permission.permission_id}`"
-                    />
-                    <label class="form-check-label" :for="`perm-${permission.permission_id}`">
-                      <strong>{{ permission.name }}</strong>
-                      <small class="text-muted ms-2">({{ permission.code }})</small>
-                    </label>
-                  </div>
-                  <div v-if="availablePermissions.length === 0" class="text-muted text-center py-3">
-                    暂无权限数据
-                  </div>
-                </div>
-                <div class="form-text">
-                  已选择 <strong>{{ form.permissions.length }}</strong> 个权限
-                </div>
-              </div>
-              
-              <div v-if="error" class="alert alert-danger mb-0">
-                {{ error }}
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="closeModal">取消</button>
-            <button type="button" class="btn btn-primary" @click="saveRole">保存</button>
-          </div>
+    <!-- 创建/编辑 -->
+    <BaseDialog v-model="formDialogOpen">
+      <div class="flex max-h-[90vh] w-full max-w-2xl flex-col">
+        <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h3 class="text-lg font-semibold text-slate-900">
+            {{ showCreateModal ? "创建角色" : "编辑角色" }}
+          </h3>
+          <button
+            type="button"
+            class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+            @click="closeModal"
+          >
+            <i class="fas fa-times"></i>
+          </button>
         </div>
-      </div>
-    </div>
-
-    <!-- 查看权限模态框 -->
-    <div v-if="showViewModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">角色权限 - {{ viewRole.name }}</h5>
-            <button type="button" class="btn-close" @click="showViewModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <div v-if="viewRole.permissions && viewRole.permissions.length > 0">
-              <ul class="list-group">
-                <li 
-                  v-for="permCode in viewRole.permissions" 
-                  :key="permCode"
-                  class="list-group-item"
+        <div class="overflow-y-auto px-4 py-4">
+          <form class="space-y-4" @submit.prevent="saveRole">
+            <div class="space-y-2">
+              <Label>角色名称 <span class="text-red-500">*</span></Label>
+              <Input
+                v-model="form.name"
+                required
+                :disabled="showEditModal && isSystemRole(form.name)"
+                placeholder="例如: developer, tester"
+              />
+              <p
+                v-if="showEditModal && isSystemRole(form.name)"
+                class="text-xs text-amber-700"
+              >
+                系统默认角色不能修改名称
+              </p>
+            </div>
+            <div class="space-y-2">
+              <Label>描述</Label>
+              <textarea
+                v-model="form.description"
+                rows="2"
+                class="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                placeholder="角色描述"
+              />
+            </div>
+            <div class="space-y-2">
+              <Label>权限配置 <span class="text-red-500">*</span></Label>
+              <div
+                class="max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+              >
+                <label
+                  v-for="permission in availablePermissions"
+                  :key="permission.permission_id"
+                  class="mb-2 flex cursor-pointer items-start gap-2 text-sm"
                 >
-                  <strong>{{ getPermissionName(permCode) }}</strong>
-                  <small class="text-muted ms-2">({{ permCode }})</small>
-                </li>
-              </ul>
+                  <input
+                    v-model="form.permissions"
+                    type="checkbox"
+                    class="mt-1 h-4 w-4 rounded border-slate-300"
+                    :value="permission.code"
+                  />
+                  <span>
+                    <span class="font-medium text-slate-900">{{ permission.name }}</span>
+                    <span class="ml-2 text-slate-500">({{ permission.code }})</span>
+                  </span>
+                </label>
+                <p
+                  v-if="availablePermissions.length === 0"
+                  class="py-4 text-center text-sm text-slate-500"
+                >
+                  暂无权限数据
+                </p>
+              </div>
+              <p class="text-xs text-slate-500">
+                已选择 <strong class="text-slate-800">{{ form.permissions.length }}</strong> 个权限
+              </p>
             </div>
-            <div v-else class="text-muted text-center py-3">
-              该角色暂无权限
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showViewModal = false">关闭</button>
-          </div>
+            <AlertBanner :message="error" />
+          </form>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <Button variant="outline" type="button" @click="closeModal">取消</Button>
+          <Button type="button" @click="saveRole">保存</Button>
         </div>
       </div>
-    </div>
+    </BaseDialog>
+
+    <!-- 查看权限 -->
+    <BaseDialog v-model="showViewModal">
+      <div class="flex w-full max-w-lg flex-col">
+        <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h3 class="text-lg font-semibold text-slate-900">
+            角色权限 — {{ viewRole.name }}
+          </h3>
+          <button
+            type="button"
+            class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+            @click="showViewModal = false"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="max-h-[60vh] overflow-y-auto px-4 py-4">
+          <ul
+            v-if="viewRole.permissions?.length"
+            class="divide-y divide-slate-100 rounded-lg border border-slate-200"
+          >
+            <li
+              v-for="permCode in viewRole.permissions"
+              :key="permCode"
+              class="px-3 py-2 text-sm"
+            >
+              <span class="font-medium text-slate-900">{{ getPermissionName(permCode) }}</span>
+              <span class="ml-2 text-slate-500">({{ permCode }})</span>
+            </li>
+          </ul>
+          <EmptyState v-else message="该角色暂无权限" icon="fa-shield-halved" />
+        </div>
+        <div class="flex justify-end border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <Button variant="outline" @click="showViewModal = false">关闭</Button>
+        </div>
+      </div>
+    </BaseDialog>
   </div>
 </template>
 
 <script setup>
-import axios from 'axios'
-import { onMounted, ref } from 'vue'
+import axios from "axios";
+import { computed, onMounted, ref } from "vue";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import BaseDialog from "@/components/ui/dialog/BaseDialog.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import { Badge } from "@/components/ui/badge";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
 
-const roles = ref([])
-const availablePermissions = ref([])
-const showCreateModal = ref(false)
-const showEditModal = ref(false)
-const showViewModal = ref(false)
-const viewRole = ref({})
-const error = ref('')
+const roles = ref([]);
+const availablePermissions = ref([]);
+const showCreateModal = ref(false);
+const showEditModal = ref(false);
+const showViewModal = ref(false);
+const viewRole = ref({});
+const error = ref("");
 
 const form = ref({
-  role_id: '',
-  name: '',
-  description: '',
-  permissions: []
-})
+  role_id: "",
+  name: "",
+  description: "",
+  permissions: [],
+});
+
+const formDialogOpen = computed({
+  get: () => showCreateModal.value || showEditModal.value,
+  set: (v) => {
+    if (!v) closeModal();
+  },
+});
 
 onMounted(async () => {
-  await loadRoles()
-  await loadPermissions()
-})
+  await loadRoles();
+  await loadPermissions();
+});
+
+function openCreate() {
+  showCreateModal.value = true;
+  error.value = "";
+}
 
 async function loadRoles() {
   try {
-    const res = await axios.get('/api/roles')
-    roles.value = res.data.roles || []
-  } catch (error) {
-    console.error('加载角色列表失败:', error)
-    alert('加载角色列表失败: ' + (error.response?.data?.detail || error.message))
+    const res = await axios.get("/api/roles");
+    roles.value = res.data.roles || [];
+  } catch (err) {
+    alert("加载角色列表失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
 async function loadPermissions() {
   try {
-    const res = await axios.get('/api/permissions')
-    availablePermissions.value = res.data.permissions || []
-  } catch (error) {
-    console.error('加载权限列表失败:', error)
+    const res = await axios.get("/api/permissions");
+    availablePermissions.value = res.data.permissions || [];
+  } catch (err) {
+    console.error("加载权限列表失败:", err);
   }
 }
 
 function isSystemRole(roleName) {
-  return ['admin', 'user', 'readonly'].includes(roleName)
+  return ["admin", "user", "readonly"].includes(roleName);
 }
 
 function editRole(role) {
   form.value = {
     role_id: role.role_id,
     name: role.name,
-    description: role.description || '',
-    permissions: [...(role.permissions || [])]
-  }
-  showEditModal.value = true
-  error.value = ''
+    description: role.description || "",
+    permissions: [...(role.permissions || [])],
+  };
+  showEditModal.value = true;
+  error.value = "";
 }
 
 function viewPermissions(role) {
-  viewRole.value = role
-  showViewModal.value = true
+  viewRole.value = role;
+  showViewModal.value = true;
 }
 
 function getPermissionName(permCode) {
-  const perm = availablePermissions.value.find(p => p.code === permCode)
-  return perm ? perm.name : permCode
+  const perm = availablePermissions.value.find((p) => p.code === permCode);
+  return perm ? perm.name : permCode;
 }
 
 async function saveRole() {
-  error.value = ''
-  
+  error.value = "";
   try {
     if (showCreateModal.value) {
-      // 创建角色
-      await axios.post('/api/roles', {
+      await axios.post("/api/roles", {
         name: form.value.name,
         description: form.value.description || null,
-        permissions: form.value.permissions
-      })
-      alert('角色创建成功')
+        permissions: form.value.permissions,
+      });
+      alert("角色创建成功");
     } else {
-      // 更新角色
       await axios.put(`/api/roles/${form.value.role_id}`, {
         description: form.value.description || null,
-        permissions: form.value.permissions
-      })
-      alert('角色更新成功')
+        permissions: form.value.permissions,
+      });
+      alert("角色更新成功");
     }
-    
-    closeModal()
-    await loadRoles()
+    closeModal();
+    await loadRoles();
   } catch (err) {
-    console.error('保存角色失败:', err)
-    error.value = err.response?.data?.detail || err.message || '操作失败'
+    error.value = err.response?.data?.detail || err.message || "操作失败";
   }
 }
 
 async function deleteRole(role) {
-  if (!confirm(`确定要删除角色 "${role.name}" 吗？此操作不可恢复！`)) {
-    return
-  }
-  
+  if (!confirm(`确定要删除角色 "${role.name}" 吗？此操作不可恢复！`)) return;
   try {
-    await axios.delete(`/api/roles/${role.role_id}`)
-    alert('角色删除成功')
-    await loadRoles()
-  } catch (error) {
-    console.error('删除角色失败:', error)
-    alert('删除失败: ' + (error.response?.data?.detail || error.message))
+    await axios.delete(`/api/roles/${role.role_id}`);
+    alert("角色删除成功");
+    await loadRoles();
+  } catch (err) {
+    alert("删除失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
 function closeModal() {
-  showCreateModal.value = false
-  showEditModal.value = false
-  form.value = {
-    role_id: '',
-    name: '',
-    description: '',
-    permissions: []
-  }
-  error.value = ''
+  showCreateModal.value = false;
+  showEditModal.value = false;
+  form.value = { role_id: "", name: "", description: "", permissions: [] };
+  error.value = "";
 }
 </script>
-
-<style scoped>
-.role-management {
-  padding: 1rem;
-}
-</style>

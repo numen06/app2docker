@@ -136,6 +136,12 @@ def init_db():
     migrate_deploy_task_architecture()
     migrate_init_system_settings()
 
+    # 迁移：团队/成员/邀请表
+    migrate_add_teams_tables()
+
+    # 迁移：团队资源权限与分组
+    migrate_add_team_resource_permissions()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -1070,6 +1076,253 @@ def migrate_init_system_settings():
         print("✅ system_settings 默认配置已初始化")
     except Exception as e:
         print(f"⚠️ 初始化 system_settings 失败: {e}")
+
+
+def migrate_add_teams_tables():
+    """迁移：创建 teams / team_members / team_invitations 表"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='teams'"
+        )
+        if not cursor.fetchone():
+            print("🔄 创建 teams 表...")
+            cursor.execute(
+                """
+                CREATE TABLE teams (
+                    team_id VARCHAR(36) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    slug VARCHAR(255) NOT NULL UNIQUE,
+                    description TEXT DEFAULT '',
+                    avatar_url VARCHAR(512),
+                    created_by VARCHAR(36) NOT NULL,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    FOREIGN KEY(created_by) REFERENCES users(user_id)
+                )
+            """
+            )
+            cursor.execute("CREATE INDEX idx_team_slug ON teams(slug)")
+            conn.commit()
+            print("✅ teams 表创建成功")
+        else:
+            print("✅ teams 表已存在")
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='team_members'"
+        )
+        if not cursor.fetchone():
+            print("🔄 创建 team_members 表...")
+            cursor.execute(
+                """
+                CREATE TABLE team_members (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    role VARCHAR(20) NOT NULL DEFAULT 'member',
+                    joined_at DATETIME,
+                    FOREIGN KEY(team_id) REFERENCES teams(team_id),
+                    FOREIGN KEY(user_id) REFERENCES users(user_id),
+                    UNIQUE(team_id, user_id)
+                )
+            """
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_member_team ON team_members(team_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_member_user ON team_members(user_id)"
+            )
+            conn.commit()
+            print("✅ team_members 表创建成功")
+        else:
+            print("✅ team_members 表已存在")
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='team_invitations'"
+        )
+        if not cursor.fetchone():
+            print("🔄 创建 team_invitations 表...")
+            cursor.execute(
+                """
+                CREATE TABLE team_invitations (
+                    invitation_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    role VARCHAR(20) NOT NULL DEFAULT 'member',
+                    token VARCHAR(64) NOT NULL UNIQUE,
+                    invited_by VARCHAR(36) NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    accepted_at DATETIME,
+                    created_at DATETIME,
+                    FOREIGN KEY(team_id) REFERENCES teams(team_id),
+                    FOREIGN KEY(invited_by) REFERENCES users(user_id)
+                )
+            """
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_invitation_team ON team_invitations(team_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_invitation_token ON team_invitations(token)"
+            )
+            conn.commit()
+            print("✅ team_invitations 表创建成功")
+        else:
+            print("✅ team_invitations 表已存在")
+
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ 创建团队相关表失败: {e}")
+
+
+def migrate_add_team_resource_permissions():
+    """迁移：资源 team_id、权限表、分组表"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        resource_tables = [
+            ("pipelines", "team_id VARCHAR(36)"),
+            ("pipelines", "group_id VARCHAR(36)"),
+            ("pipelines", "created_by VARCHAR(36)"),
+            ("deploy_configs", "team_id VARCHAR(36)"),
+            ("deploy_configs", "created_by VARCHAR(36)"),
+            ("git_sources", "team_id VARCHAR(36)"),
+            ("git_sources", "created_by VARCHAR(36)"),
+            ("agent_hosts", "team_id VARCHAR(36)"),
+            ("agent_hosts", "group_id VARCHAR(36)"),
+            ("agent_hosts", "created_by VARCHAR(36)"),
+        ]
+        for table, col_def in resource_tables:
+            col_name = col_def.split()[0]
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            )
+            if cursor.fetchone():
+                _add_column_if_missing(cursor, table, col_name, col_def)
+
+        new_tables = {
+            "pipeline_permissions": """
+                CREATE TABLE pipeline_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pipeline_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(pipeline_id, user_id)
+                )
+            """,
+            "host_permissions": """
+                CREATE TABLE host_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    host_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(host_id, user_id)
+                )
+            """,
+            "deploy_config_permissions": """
+                CREATE TABLE deploy_config_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(config_id, user_id)
+                )
+            """,
+            "git_source_permissions": """
+                CREATE TABLE git_source_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(source_id, user_id)
+                )
+            """,
+            "pipeline_groups": """
+                CREATE TABLE pipeline_groups (
+                    group_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT DEFAULT '',
+                    created_at DATETIME
+                )
+            """,
+            "pipeline_group_permissions": """
+                CREATE TABLE pipeline_group_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(group_id, user_id)
+                )
+            """,
+            "host_groups": """
+                CREATE TABLE host_groups (
+                    group_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT DEFAULT '',
+                    created_at DATETIME
+                )
+            """,
+            "host_group_permissions": """
+                CREATE TABLE host_group_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(group_id, user_id)
+                )
+            """,
+        }
+
+        for table_name, ddl in new_tables.items():
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            )
+            if not cursor.fetchone():
+                print(f"🔄 创建 {table_name} 表...")
+                cursor.execute(ddl)
+                print(f"✅ {table_name} 表创建成功")
+
+        conn.commit()
+        conn.close()
+        print("✅ 团队资源权限迁移完成")
+    except Exception as e:
+        print(f"⚠️ 团队资源权限迁移失败: {e}")
+
+
+def _add_column_if_missing(cursor, table: str, column: str, ddl: str):
+    cursor.execute(f"PRAGMA table_info({table})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column not in columns:
+        print(f"🔄 添加 {column} 字段到 {table} 表...")
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+        print(f"✅ {column} 字段添加成功")
+    else:
+        print(f"✅ {table}.{column} 已存在")
 
 
 def close_db():

@@ -11,7 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any
 
-from backend.routes import router
+from backend.route_definitions import router
+from backend.routes.teams import router as teams_router
+from backend.routes.resource_permissions import router as resource_permissions_router
 from backend.utils import ensure_dirs
 from backend.version import get_version as _get_app_version
 
@@ -33,6 +35,8 @@ app.add_middleware(
 
 # 注册路由（添加 /api 前缀）
 app.include_router(router, prefix="/api")
+app.include_router(teams_router, prefix="/api")
+app.include_router(resource_permissions_router, prefix="/api")
 
 # 静态文件服务（前端构建产物）
 if os.path.exists("dist/assets"):

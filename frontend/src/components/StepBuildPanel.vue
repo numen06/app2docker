@@ -1,6 +1,10 @@
 <template>
   <div class="step-build-panel">
 
+    <p class="steps-mobile-hint mb-2 text-center text-sm text-slate-500 md:hidden">
+      步骤 {{ currentStep }} / 5
+    </p>
+
     <!-- 步骤指示器 -->
     <div class="steps-indicator mb-4">
       <div
@@ -74,14 +78,14 @@
       <!-- 步骤1: 选择数据源 -->
       <div v-if="currentStep === 1" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-database text-primary"></i> 步骤 1：选择数据源
+          <i class="fas fa-database text-blue-600"></i> 步骤 1：选择数据源
         </h5>
 
         <div class="mb-3">
-          <label class="form-label">
-            数据源类型 <span class="text-danger">*</span>
+          <label class="block text-sm font-medium text-slate-700">
+            数据源类型 <span class="text-red-500">*</span>
           </label>
-          <div class="btn-group w-100" role="group">
+          <div class="btn-group w-full" role="group">
             <button
               type="button"
               class="btn"
@@ -111,12 +115,12 @@
 
         <!-- 文件上传 -->
         <div v-if="buildConfig.sourceType === 'file'" class="mb-3">
-          <label class="form-label">
-            选择文件 <span class="text-danger">*</span>
+          <label class="block text-sm font-medium text-slate-700">
+            选择文件 <span class="text-red-500">*</span>
           </label>
           <input
             type="file"
-            class="form-control"
+            class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
             :accept="fileAccept"
             @change="handleFileChange"
             required
@@ -144,11 +148,11 @@
             <label class="form-check-label" for="extractArchiveCheck">
               <i class="fas fa-folder-open"></i> 解压到构建根目录
             </label>
-            <div class="form-text small text-muted">
+            <div class="form-text small text-slate-500">
               解压后压缩包内容将提取到构建根目录，压缩包文件将被删除
             </div>
           </div>
-          <div class="form-text small text-muted">
+          <div class="form-text small text-slate-500">
             <i class="fas fa-info-circle"></i> 支持 .jar 文件或
             .zip、.tar、.tar.gz 压缩包
           </div>
@@ -156,15 +160,15 @@
 
         <!-- Git 数据源 -->
         <div v-if="buildConfig.sourceType === 'git'" class="mb-3">
-          <label class="form-label">
-            Git 数据源 <span class="text-danger">*</span>
+          <label class="block text-sm font-medium text-slate-700">
+            Git 数据源 <span class="text-red-500">*</span>
           </label>
-          <div class="position-relative">
+          <div class="relative">
             <div class="input-group">
               <input
                 v-model="gitSourceSearchQuery"
                 type="text"
-                class="form-control"
+                class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                 placeholder="搜索数据源..."
                 @input="searchGitSources($event.target.value)"
                 @focus="gitSourceDropdownOpen = true"
@@ -172,12 +176,12 @@
                 required
               />
               <span v-if="gitSourceSearchLoading" class="input-group-text">
-                <span class="spinner-border spinner-border-sm"></span>
+                <i class="fas fa-spinner fa-spin"></i>
               </span>
             </div>
             <div
               v-if="gitSourceDropdownOpen && gitSourceSearchResults.length > 0"
-              class="dropdown-menu show w-100"
+              class="dropdown-menu show w-full"
               style="max-height: 300px; overflow-y: auto;"
             >
               <a
@@ -190,15 +194,15 @@
                 <div>
                   <strong>{{ source.name }}</strong>
                   <br />
-                  <small class="text-muted">{{ formatGitUrl(source.git_url) }}</small>
+                  <small class="text-slate-500">{{ formatGitUrl(source.git_url) }}</small>
                 </div>
               </a>
             </div>
             <div
               v-if="gitSourceDropdownOpen && !gitSourceSearchLoading && gitSourceSearchResults.length === 0 && gitSourceSearchQuery"
-              class="dropdown-menu show w-100"
+              class="dropdown-menu show w-full"
             >
-              <div class="dropdown-item text-muted">无匹配结果</div>
+              <div class="dropdown-item text-slate-500">无匹配结果</div>
             </div>
           </div>
           <div
@@ -215,14 +219,14 @@
 
         <!-- 分支选择（仅Git数据源） -->
         <div v-if="buildConfig.sourceType === 'git' && buildConfig.sourceId" class="mb-3">
-          <label class="form-label">
-            分支/标签 <span class="text-danger">*</span>
+          <label class="block text-sm font-medium text-slate-700">
+            分支/标签 <span class="text-red-500">*</span>
           </label>
           <div class="input-group">
             <select
               v-if="repoVerified"
               v-model="buildConfig.branch"
-              class="form-select"
+              class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               @change="onBranchChanged"
               required
               :disabled="refreshingBranches"
@@ -252,13 +256,13 @@
             <input
               v-else
               type="text"
-              class="form-control"
+              class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               placeholder="请先选择数据源"
               disabled
             />
-            <button
+            <Button
               v-if="repoVerified"
-              class="btn btn-outline-secondary"
+              variant="outline" size="sm"
               type="button"
               @click="refreshBranches(true)"
               :disabled="refreshingBranches"
@@ -266,35 +270,35 @@
             >
               <i v-if="refreshingBranches" class="fas fa-spinner fa-spin"></i>
               <i v-else class="fas fa-sync-alt"></i>
-            </button>
+            </Button>
           </div>
-          <div class="form-text small text-muted">
+          <div class="form-text small text-slate-500">
             <i class="fas fa-info-circle"></i> 选择要构建的分支或标签
           </div>
         </div>
 
-        <div class="d-flex justify-content-end mt-4">
-          <button
-            class="btn btn-primary"
+        <div class="flex justify-end mt-4">
+          <Button
+            size="sm"
             @click="nextStep"
             :disabled="!canProceedStep1"
           >
-            下一步 <i class="fas fa-arrow-right ms-1"></i>
-          </button>
+            下一步 <i class="fas fa-arrow-right ml-1"></i>
+          </Button>
         </div>
       </div>
 
       <!-- 步骤2: Dockerfile配置 -->
       <div v-if="currentStep === 2" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-layer-group text-primary"></i> 步骤 2：Dockerfile 配置
+          <i class="fas fa-layer-group text-blue-600"></i> 步骤 2：Dockerfile 配置
         </h5>
 
         <div class="mb-3">
-          <label class="form-label">
-            项目类型 <span class="text-danger">*</span>
+          <label class="block text-sm font-medium text-slate-700">
+            项目类型 <span class="text-red-500">*</span>
           </label>
-          <div class="btn-group w-100" role="group">
+          <div class="btn-group w-full" role="group">
             <button
               v-for="type in projectTypes"
               :key="type.value"
@@ -309,16 +313,16 @@
             >
               <i :class="getProjectTypeIcon(type.value)"></i>
               {{ type.label }}
-            </button>
+            </Button>
           </div>
         </div>
 
         <!-- Dockerfile 来源选择（仅Git数据源） -->
         <div v-if="buildConfig.sourceType === 'git'" class="mb-4">
-          <label class="form-label">
-            Dockerfile 来源 <span class="text-danger">*</span>
+          <label class="block text-sm font-medium text-slate-700">
+            Dockerfile 来源 <span class="text-red-500">*</span>
           </label>
-          <div class="btn-group w-100" role="group">
+          <div class="btn-group w-full" role="group">
             <input
               type="radio"
               class="btn-check"
@@ -327,7 +331,7 @@
               v-model="buildConfig.useProjectDockerfile"
               @change="onUseProjectDockerfileChange"
             />
-            <label class="btn btn-outline-primary" for="dockerfile-from-project">
+            <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="dockerfile-from-project">
               <i class="fas fa-file-code"></i> 从项目中选择
             </label>
             
@@ -339,11 +343,11 @@
               v-model="buildConfig.useProjectDockerfile"
               @change="onUseProjectDockerfileChange"
             />
-            <label class="btn btn-outline-primary" for="dockerfile-from-template">
+            <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="dockerfile-from-template">
               <i class="fas fa-layer-group"></i> 从模板库中选择
             </label>
           </div>
-          <div class="form-text small text-muted mt-1">
+          <div class="form-text small text-slate-500 mt-1">
             <i class="fas fa-info-circle"></i> 选择 Dockerfile 的来源方式
           </div>
         </div>
@@ -358,27 +362,27 @@
           <div class="card border-primary">
             <div class="card-header bg-light">
               <h6 class="mb-0">
-                <i class="fas fa-file-code text-primary"></i> 从项目中选择 Dockerfile
+                <i class="fas fa-file-code text-blue-600"></i> 从项目中选择 Dockerfile
               </h6>
             </div>
             <div class="card-body">
               <div class="mb-2">
-                <label class="form-label">Dockerfile 文件 <span class="text-danger">*</span></label>
+                <label class="block text-sm font-medium text-slate-700">Dockerfile 文件 <span class="text-red-500">*</span></label>
                 
                 <!-- 当前选择提示 -->
                 <div v-if="buildConfig.dockerfileName && buildConfig.dockerfileName !== ''" class="alert alert-success alert-sm py-2 mb-2">
-                  <i class="fas fa-check-circle me-2"></i>
+                  <i class="fas fa-check-circle mr-2"></i>
                   <strong>当前选择：</strong>{{ buildConfig.dockerfileName }}
                 </div>
                 
                 <div v-if="scanningDockerfiles" class="mb-2">
-                  <span class="spinner-border spinner-border-sm me-2"></span>
-                  <small class="text-muted">正在扫描项目中的 Dockerfile...</small>
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <small class="text-slate-500">正在扫描项目中的 Dockerfile...</small>
                 </div>
                 <div class="input-group input-group-sm">
                   <select
                     v-model="buildConfig.dockerfileName"
-                    class="form-select form-select-sm"
+                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                     :disabled="scanningDockerfiles || !buildConfig.branch"
                     required
                   >
@@ -392,8 +396,8 @@
                       {{ dockerfile.path }} {{ dockerfile.path !== dockerfile.name ? `(${dockerfile.name})` : '' }}
                     </option>
                   </select>
-                  <button
-                    class="btn btn-outline-secondary"
+                  <Button
+                    variant="outline" size="sm"
                     type="button"
                     @click="scanDockerfiles(true)"
                     :disabled="scanningDockerfiles || (!buildConfig.branch && !branchesAndTags.default_branch)"
@@ -401,15 +405,15 @@
                   >
                     <i v-if="scanningDockerfiles" class="fas fa-spinner fa-spin"></i>
                     <i v-else class="fas fa-sync-alt"></i>
-                  </button>
+                  </Button>
                 </div>
-                <small v-if="dockerfilesError" class="text-danger d-block mt-1">
+                <small v-if="dockerfilesError" class="text-red-500 block mt-1">
                   <i class="fas fa-exclamation-triangle"></i> {{ dockerfilesError }}
                 </small>
-                <small v-else-if="availableDockerfiles.length > 0" class="text-muted d-block mt-1">
+                <small v-else-if="availableDockerfiles.length > 0" class="text-slate-500 block mt-1">
                   <i class="fas fa-check-circle"></i> 已扫描到 {{ availableDockerfiles.length }} 个 Dockerfile
                 </small>
-                <small v-else-if="buildConfig.branch" class="text-muted d-block mt-1">
+                <small v-else-if="buildConfig.branch" class="text-slate-500 block mt-1">
                   <i class="fas fa-info-circle"></i> 请先选择分支，然后点击刷新按钮扫描项目中的 Dockerfile
                 </small>
               </div>
@@ -422,29 +426,29 @@
           <div class="card border-primary">
             <div class="card-header bg-light">
               <h6 class="mb-0">
-                <i class="fas fa-layer-group text-primary"></i> 从模板库中选择
+                <i class="fas fa-layer-group text-blue-600"></i> 从模板库中选择
               </h6>
             </div>
             <div class="card-body">
               <div class="mb-2">
-                <label class="form-label">模板 <span class="text-danger">*</span></label>
+                <label class="block text-sm font-medium text-slate-700">模板 <span class="text-red-500">*</span></label>
                 
                 <!-- 当前选择提示 -->
                 <div v-if="buildConfig.template && buildConfig.template !== ''" class="alert alert-success alert-sm py-2 mb-2">
-                  <i class="fas fa-check-circle me-2"></i>
+                  <i class="fas fa-check-circle mr-2"></i>
                   <strong>当前选择：</strong>{{ buildConfig.template }}
                   <span v-if="templateSearchResults.find(t => t.name === buildConfig.template) || templates.find(t => t.name === buildConfig.template)">
                     ({{ getProjectTypeLabel((templateSearchResults.find(t => t.name === buildConfig.template) || templates.find(t => t.name === buildConfig.template)).project_type) }})
                   </span>
                 </div>
                 
-                <div class="position-relative">
+                <div class="relative">
                   <div class="input-group input-group-sm mb-1">
                     <span class="input-group-text"><i class="fas fa-search"></i></span>
                     <input
                       v-model="templateSearchQuery"
                       type="text"
-                      class="form-control"
+                      class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                       placeholder="搜索模板..."
                       @input="searchTemplates($event.target.value)"
                       @focus="templateDropdownOpen = true"
@@ -452,12 +456,12 @@
                       required
                     />
                     <span v-if="templateSearchLoading" class="input-group-text">
-                      <span class="spinner-border spinner-border-sm"></span>
+                      <i class="fas fa-spinner fa-spin"></i>
                     </span>
                   </div>
                   <div
                     v-if="templateDropdownOpen && templateSearchResults.length > 0"
-                    class="dropdown-menu show w-100"
+                    class="dropdown-menu show w-full"
                     style="max-height: 300px; overflow-y: auto;"
                   >
                     <a
@@ -470,7 +474,7 @@
                       <div>
                         <strong>{{ tpl.name }}</strong>
                         <br />
-                        <small class="text-muted">
+                        <small class="text-slate-500">
                           {{ getProjectTypeLabel(tpl.project_type)
                           }}{{ tpl.type === "builtin" ? " · 内置" : "" }}
                         </small>
@@ -479,12 +483,12 @@
                   </div>
                   <div
                     v-if="templateDropdownOpen && !templateSearchLoading && templateSearchResults.filter(t => t.project_type === buildConfig.projectType).length === 0 && templateSearchQuery"
-                    class="dropdown-menu show w-100"
+                    class="dropdown-menu show w-full"
                   >
-                    <div class="dropdown-item text-muted">无匹配结果</div>
+                    <div class="dropdown-item text-slate-500">无匹配结果</div>
                   </div>
                 </div>
-                <div class="form-text small text-muted mt-1">
+                <div class="form-text small text-slate-500 mt-1">
                   <i class="fas fa-info-circle"></i> 已按项目类型过滤，可在模板管理中维护
                 </div>
               </div>
@@ -492,31 +496,31 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between mt-4">
-          <button class="btn btn-outline-secondary" @click="prevStep">
-            <i class="fas fa-arrow-left me-1"></i> 上一步
-          </button>
-          <button
-            class="btn btn-primary"
+        <div class="step-nav flex justify-between mt-4">
+          <Button variant="outline" size="sm" @click="prevStep">
+            <i class="fas fa-arrow-left mr-1"></i> 上一步
+          </Button>
+          <Button
+            size="sm"
             @click="nextStep"
             :disabled="
               !buildConfig.projectType ||
               (!buildConfig.template && !buildConfig.useProjectDockerfile)
             "
           >
-            下一步 <i class="fas fa-arrow-right ms-1"></i>
-          </button>
+            下一步 <i class="fas fa-arrow-right ml-1"></i>
+          </Button>
         </div>
       </div>
 
       <!-- 步骤4: 选择服务（单应用/多服务） -->
       <div v-if="currentStep === 3" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-server text-primary"></i> 步骤 3：选择服务
+          <i class="fas fa-server text-blue-600"></i> 步骤 3：选择服务
         </h5>
 
         <div v-if="parsingServices" class="text-center py-4">
-          <span class="spinner-border spinner-border-sm me-2"></span>
+          <i class="fas fa-spinner fa-spin"></i>
           正在分析模板...
         </div>
 
@@ -528,13 +532,13 @@
           <i class="fas fa-info-circle"></i>
           <span v-if="forceSingleAppMode && services.length > 0">
             已切换为单应用模式，忽略解析出的多服务。
-            <button 
+            <Button 
               type="button" 
-              class="btn btn-sm btn-link p-0 ms-2" 
+              variant="ghost" size="sm" 
               @click="forceSingleAppMode = false"
             >
               <i class="fas fa-undo"></i> 切换回多服务模式
-            </button>
+            </Button>
           </span>
           <span v-else>
             当前模板为单应用模式，无需选择服务。
@@ -545,18 +549,19 @@
         <div v-else class="mb-3">
           <!-- 切换为单应用模式按钮 -->
           <div class="alert alert-warning alert-sm mb-3">
-            <div class="d-flex justify-content-between align-items-center">
+            <div class="step-alert-row flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <i class="fas fa-info-circle"></i>
                 已解析为多阶段构建（{{ services.length }} 个服务）
               </div>
-              <button 
-                type="button" 
-                class="btn btn-sm btn-outline-warning" 
+              <Button
+                type="button"
+                variant="outline" size="sm"
+                class="w-full shrink-0 sm:w-auto"
                 @click="switchToSingleAppMode"
               >
                 <i class="fas fa-exchange-alt"></i> 切换为单应用模式
-              </button>
+              </Button>
             </div>
           </div>
           <!-- 推送模式选择（仅模板模式且非文件上传，项目 Dockerfile 总是多阶段推送） -->
@@ -567,10 +572,10 @@
             "
             class="mb-3"
           >
-            <label class="form-label"
-              >推送模式 <span class="text-danger">*</span></label
+            <label class="block text-sm font-medium text-slate-700"
+              >推送模式 <span class="text-red-500">*</span></label
             >
-            <div class="btn-group w-100" role="group">
+            <div class="btn-group w-full" role="group">
               <button
                 type="button"
                 class="btn"
@@ -596,7 +601,7 @@
                 <i class="fas fa-boxes"></i> 多服务推送
               </button>
             </div>
-            <div class="form-text small text-muted">
+            <div class="form-text small text-slate-500">
               <i class="fas fa-info-circle"></i>
               <span v-if="buildConfig.pushMode === 'single'">
                 单服务推送：只能选择一个服务，定义镜像名和标签
@@ -624,13 +629,13 @@
             <div class="card border-primary">
               <div class="card-header bg-primary bg-opacity-10">
                 <h6 class="mb-0">
-                  <i class="fas fa-box text-primary"></i> 单服务推送模式
+                  <i class="fas fa-box text-blue-600"></i> 单服务推送模式
                 </h6>
               </div>
               <div class="card-body">
                 <div class="mb-3">
-                  <label class="form-label"
-                    >选择服务 <span class="text-danger">*</span></label
+                  <label class="block text-sm font-medium text-slate-700"
+                    >选择服务 <span class="text-red-500">*</span></label
                   >
                   <div class="list-group">
                     <label
@@ -642,19 +647,19 @@
                       }"
                       style="cursor: pointer"
                     >
-                      <div class="d-flex align-items-center">
+                      <div class="flex items-center">
                         <input
                           type="radio"
                           :value="service.name"
                           v-model="buildConfig.selectedService"
-                          class="form-check-input me-3"
+                          class="form-check-input mr-3"
                           @change="onSingleServiceSelected"
                         />
-                        <div class="flex-grow-1">
+                        <div class="flex-1">
                           <div class="fw-bold">
                             <code>{{ service.name }}</code>
                           </div>
-                          <small class="text-muted">
+                          <small class="text-slate-500">
                             <span v-if="service.port"
                               >端口: {{ service.port }}</span
                             >
@@ -669,29 +674,29 @@
                   </div>
                 </div>
 
-                <div v-if="buildConfig.selectedService" class="row g-3">
+                <div v-if="buildConfig.selectedService" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <div class="col-md-6">
-                    <label class="form-label">
-                      镜像前缀 <span class="text-danger">*</span>
+                    <label class="block text-sm font-medium text-slate-700">
+                      镜像前缀 <span class="text-red-500">*</span>
                     </label>
-                    <div class="position-relative">
+                    <div class="relative">
                       <div class="input-group mb-2">
                         <input
                           v-model="registrySearchQuery"
                           type="text"
-                          class="form-control"
+                          class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                           placeholder="搜索仓库或手动输入..."
                           @input="searchRegistries($event.target.value)"
                           @focus="registryDropdownOpen = true"
                           @blur="handleRegistryBlur"
                         />
                         <span v-if="registrySearchLoading" class="input-group-text">
-                          <span class="spinner-border spinner-border-sm"></span>
+                          <i class="fas fa-spinner fa-spin"></i>
                         </span>
                       </div>
                       <div
                         v-if="registryDropdownOpen && registrySearchResults.length > 0"
-                        class="dropdown-menu show w-100"
+                        class="dropdown-menu show w-full"
                         style="max-height: 300px; overflow-y: auto;"
                       >
                         <a
@@ -704,55 +709,55 @@
                           <div>
                             <strong>{{ reg.name }}</strong>
                             <br />
-                            <small class="text-muted">{{ reg.registry_prefix || reg.registry }}</small>
+                            <small class="text-slate-500">{{ reg.registry_prefix || reg.registry }}</small>
                           </div>
                         </a>
                       </div>
                       <div
                         v-if="registryDropdownOpen && !registrySearchLoading && registrySearchResults.length === 0 && registrySearchQuery"
-                        class="dropdown-menu show w-100"
+                        class="dropdown-menu show w-full"
                       >
-                        <div class="dropdown-item text-muted">无匹配结果</div>
+                        <div class="dropdown-item text-slate-500">无匹配结果</div>
                       </div>
                     </div>
                     <input
                       v-if="!isRegistrySelected(buildConfig.imagePrefix)"
                       v-model="buildConfig.imagePrefix"
                       type="text"
-                      class="form-control mb-2"
+                      class="mb-2 flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                       placeholder="myapp/demo"
                       required
                     />
-                    <label class="form-label">
-                      完整镜像名 <small class="text-muted">(可编辑)</small>
+                    <label class="block text-sm font-medium text-slate-700">
+                      完整镜像名 <small class="text-slate-500">(可编辑)</small>
                     </label>
                     <input
                       :value="getSingleServiceImageNameDisplay()"
                       @input="onSingleServiceImageNameInput($event)"
                       type="text"
-                      class="form-control"
+                      class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     />
-                    <div class="form-text small text-muted">
+                    <div class="form-text small text-slate-500">
                       <i class="fas fa-info-circle"></i>
                       格式: 前缀/服务名 或 完整镜像名
-                      <button
+                      <Button
                         v-if="buildConfig.customImageName"
                         type="button"
-                        class="btn btn-link btn-sm p-0 ms-2"
+                        variant="ghost" size="sm"
                         style="font-size: 0.75rem; vertical-align: baseline"
                         @click="buildConfig.customImageName = ''"
                         title="恢复默认"
                       >
                         <i class="fas fa-undo"></i> 恢复默认
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   <div class="col-md-6">
-                    <label class="form-label">标签</label>
+                    <label class="block text-sm font-medium text-slate-700">标签</label>
                     <input
                       v-model="buildConfig.tag"
                       type="text"
-                      class="form-control"
+                      class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                       placeholder="latest"
                     />
                   </div>
@@ -779,14 +784,14 @@
           <div v-else class="mb-3">
             <div class="card border-info">
               <div
-                class="card-header bg-info bg-opacity-10 d-flex justify-content-between align-items-center"
+                class="card-header bg-info bg-opacity-10 flex justify-between items-center"
               >
                 <div>
                   <i class="fas fa-server"></i> 服务选择
-                  <span class="badge bg-info ms-2"
+                  <span class="badge bg-info ml-2"
                     >{{ services.length }} 个服务</span
                   >
-                  <small class="text-muted ms-2">
+                  <small class="text-slate-500 ml-2">
                     <i
                       v-if="buildConfig.useProjectDockerfile"
                       class="fas fa-file-code"
@@ -800,20 +805,20 @@
                   </small>
                 </div>
                 <div>
-                  <button
+                  <Button
                     type="button"
-                    class="btn btn-sm btn-outline-info me-2"
+                    variant="outline" size="sm"
                     @click="selectAllServices"
                   >
                     <i class="fas fa-check-square"></i> 全选
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    class="btn btn-sm btn-outline-info"
+                    variant="outline" size="sm"
                     @click="deselectAllServices"
                   >
                     <i class="fas fa-square"></i> 全不选
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div class="card-body">
@@ -823,21 +828,21 @@
                   class="mb-3 p-3 bg-light rounded"
                 >
                   <h6 class="mb-3"><i class="fas fa-cog"></i> 全局模板参数</h6>
-                  <div class="row g-3">
+                  <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <div
                       v-for="param in templateParams"
                       :key="param.name"
                       class="col-md-6"
                     >
-                      <label class="form-label">
+                      <label class="block text-sm font-medium text-slate-700">
                         {{ param.description || param.name }}
-                        <span v-if="param.required" class="text-danger">*</span>
+                        <span v-if="param.required" class="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         v-model="buildConfig.templateParams[param.name]"
                         :placeholder="param.default || ''"
-                        class="form-control"
+                        class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                         :required="param.required"
                       />
                     </div>
@@ -853,27 +858,27 @@
                     <i class="fas fa-magic"></i> 批量操作（快速设置已选中的
                     {{ selectedServices.length }} 个服务）
                   </h6>
-                  <div class="row g-3">
+                  <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <div class="col-md-4">
-                      <label class="form-label">批量设置镜像前缀</label>
-                      <div class="position-relative">
+                      <label class="block text-sm font-medium text-slate-700">批量设置镜像前缀</label>
+                      <div class="relative">
                         <div class="input-group input-group-sm mb-2">
                           <input
                             v-model="batchRegistrySearchQuery"
                             type="text"
-                            class="form-control"
+                            class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                             placeholder="搜索仓库或手动输入..."
                             @input="searchBatchRegistries($event.target.value)"
                             @focus="batchRegistryDropdownOpen = true"
                             @blur="handleBatchRegistryBlur"
                           />
                           <span v-if="batchRegistrySearchLoading" class="input-group-text">
-                            <span class="spinner-border spinner-border-sm"></span>
+                            <i class="fas fa-spinner fa-spin"></i>
                           </span>
                         </div>
                         <div
                           v-if="batchRegistryDropdownOpen && batchRegistrySearchResults.length > 0"
-                          class="dropdown-menu show w-100"
+                          class="dropdown-menu show w-full"
                           style="max-height: 300px; overflow-y: auto;"
                         >
                           <a
@@ -886,15 +891,15 @@
                             <div>
                               <strong>{{ reg.name }}</strong>
                               <br />
-                              <small class="text-muted">{{ reg.registry_prefix || reg.registry }}</small>
+                              <small class="text-slate-500">{{ reg.registry_prefix || reg.registry }}</small>
                             </div>
                           </a>
                         </div>
                         <div
                           v-if="batchRegistryDropdownOpen && !batchRegistrySearchLoading && batchRegistrySearchResults.length === 0 && batchRegistrySearchQuery"
-                          class="dropdown-menu show w-100"
+                          class="dropdown-menu show w-full"
                         >
-                          <div class="dropdown-item text-muted">无匹配结果</div>
+                          <div class="dropdown-item text-slate-500">无匹配结果</div>
                         </div>
                       </div>
                       <div class="input-group input-group-sm">
@@ -902,73 +907,73 @@
                           v-if="!isRegistrySelected(batchImagePrefix)"
                           v-model="batchImagePrefix"
                           type="text"
-                          class="form-control"
+                          class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                           placeholder="myapp/demo"
                         />
-                        <button
-                          class="btn btn-outline-secondary"
+                        <Button
+                          variant="outline" size="sm"
                           type="button"
                           @click="batchSetImagePrefix"
                           :disabled="!batchImagePrefix.trim()"
                         >
                           <i class="fas fa-check"></i> 应用
-                        </button>
+                        </Button>
                       </div>
-                      <small class="text-muted d-block mt-1">
+                      <small class="text-slate-500 block mt-1">
                         <i class="fas fa-info-circle"></i>
                         前缀会自动与服务名称拼接
                       </small>
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">批量设置标签</label>
+                      <label class="block text-sm font-medium text-slate-700">批量设置标签</label>
                       <div class="input-group input-group-sm">
                         <input
                           v-model="batchTag"
                           type="text"
-                          class="form-control"
+                          class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                           placeholder="latest"
                         />
-                        <button
-                          class="btn btn-outline-secondary"
+                        <Button
+                          variant="outline" size="sm"
                           type="button"
                           @click="batchSetTag"
                           :disabled="!batchTag.trim()"
                         >
                           <i class="fas fa-check"></i> 应用
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">批量设置推送</label>
-                      <div class="btn-group w-100" role="group">
-                        <button
-                          class="btn btn-sm btn-outline-success"
+                      <label class="block text-sm font-medium text-slate-700">批量设置推送</label>
+                      <div class="btn-group w-full" role="group">
+                        <Button
+                          variant="outline" size="sm"
                           type="button"
                           @click="batchSetPush(true)"
                         >
                           <i class="fas fa-check"></i> 全部推送
-                        </button>
-                        <button
-                          class="btn btn-sm btn-outline-danger"
+                        </Button>
+                        <Button
+                          variant="destructive" size="sm"
                           type="button"
                           @click="batchSetPush(false)"
                         >
                           <i class="fas fa-times"></i> 全部不推送
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- 服务卡片列表 -->
-                <div class="row g-3">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <div
                     v-for="service in services"
                     :key="service.name"
                     class="col-md-6 col-lg-4"
                   >
                     <div
-                      class="card h-100"
+                      class="card h-full"
                       :class="{
                         'border-success': selectedServices.includes(
                           service.name
@@ -979,7 +984,7 @@
                       }"
                     >
                       <div
-                        class="card-header d-flex justify-content-between align-items-center"
+                        class="card-header flex justify-between items-center"
                       >
                         <div class="form-check mb-0">
                           <input
@@ -1026,7 +1031,7 @@
                           >
                             <label class="form-label small mb-1">
                               {{ param.description || param.name }}
-                              <span v-if="param.required" class="text-danger"
+                              <span v-if="param.required" class="text-red-500"
                                 >*</span
                               >
                             </label>
@@ -1046,7 +1051,7 @@
                                 )
                               "
                               :placeholder="param.default || ''"
-                              class="form-control form-control-sm"
+                              class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                               :required="param.required"
                             />
                           </div>
@@ -1058,17 +1063,17 @@
                             buildConfig.sourceType === 'git' &&
                             selectedServices.includes(service.name)
                           "
-                          class="border-top pt-3"
+                          class="border-t border-slate-200 pt-3"
                         >
                           <!-- 镜像名：每个服务可以自定义，如果为空则使用全局前缀+服务名 -->
                           <div class="mb-2">
                             <label class="form-label small mb-1">
                               镜像名
-                              <span class="text-muted small"
+                              <span class="text-slate-500 small"
                                 >(可选，默认使用全局前缀)</span
                               >
                             </label>
-                            <div class="d-flex align-items-center gap-1">
+                            <div class="flex items-center gap-1">
                               <input
                                 type="text"
                                 v-model="
@@ -1077,21 +1082,21 @@
                                 :placeholder="
                                   getServiceDefaultImageName(service.name)
                                 "
-                                class="form-control form-control-sm flex-grow-1"
+                                class="flex h-9 flex-1 rounded-md border border-slate-200 px-3 py-1 text-sm"
                                 @blur="onServiceImageNameBlur(service.name)"
                               />
-                              <button
+                              <Button
                                 v-if="
                                   getServiceConfig(service.name).customImageName
                                 "
                                 type="button"
-                                class="btn btn-link btn-sm p-0"
+                                variant="ghost" size="sm"
                                 style="font-size: 0.75rem; flex-shrink: 0"
                                 @click="resetServiceImageName(service.name)"
                                 title="恢复默认"
                               >
                                 <i class="fas fa-undo"></i>
-                              </button>
+                              </Button>
                             </div>
                           </div>
                           <!-- 是否推送：每个服务单独配置 -->
@@ -1112,7 +1117,7 @@
                         </div>
                         <div
                           v-else-if="buildConfig.sourceType === 'git'"
-                          class="border-top pt-3 text-muted small text-center"
+                          class="border-t border-slate-200 pt-3 text-slate-500 small text-center"
                         >
                           <i class="fas fa-info-circle"></i>
                           请先选择此服务以配置构建选项
@@ -1123,7 +1128,7 @@
                 </div>
                 <div
                   v-if="selectedServices.length > 0"
-                  class="mt-3 text-muted small"
+                  class="mt-3 text-slate-500 small"
                 >
                   <i class="fas fa-info-circle"></i>
                   已选择 {{ selectedServices.length }} 个服务进行构建
@@ -1146,23 +1151,23 @@
           class="row g-3 mb-3"
         >
           <div class="col-md-6">
-            <label class="form-label">
-              镜像名称 <span class="text-danger">*</span>
+            <label class="block text-sm font-medium text-slate-700">
+              镜像名称 <span class="text-red-500">*</span>
             </label>
             <input
               v-model="buildConfig.imageName"
               type="text"
-              class="form-control"
+              class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               placeholder="myapp/demo"
               required
             />
           </div>
           <div class="col-md-6">
-            <label class="form-label">标签</label>
+            <label class="block text-sm font-medium text-slate-700">标签</label>
             <input
               v-model="buildConfig.tag"
               type="text"
-              class="form-control"
+              class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
               placeholder="latest"
             />
           </div>
@@ -1193,12 +1198,12 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between mt-4">
-          <button class="btn btn-outline-secondary" @click="prevStep">
-            <i class="fas fa-arrow-left me-1"></i> 上一步
-          </button>
-          <button
-            class="btn btn-primary"
+        <div class="step-nav flex justify-between mt-4">
+          <Button variant="outline" size="sm" @click="prevStep">
+            <i class="fas fa-arrow-left mr-1"></i> 上一步
+          </Button>
+          <Button
+            size="sm"
             @click="nextStep"
             :disabled="
               !buildConfig.imageName ||
@@ -1210,20 +1215,20 @@
                 selectedServices.length === 0)
             "
           >
-            下一步 <i class="fas fa-arrow-right ms-1"></i>
-          </button>
+            下一步 <i class="fas fa-arrow-right ml-1"></i>
+          </Button>
         </div>
       </div>
 
       <!-- 步骤4: 选择资源包 -->
       <div v-if="currentStep === 4" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-archive text-primary"></i> 步骤 4：选择资源包
+          <i class="fas fa-archive text-blue-600"></i> 步骤 4：选择资源包
         </h5>
 
         <div class="mb-3">
-          <label class="form-label">
-            <i class="fas fa-info-circle text-info"></i> 资源包说明
+          <label class="block text-sm font-medium text-slate-700">
+            <i class="fas fa-info-circle text-sky-600"></i> 资源包说明
           </label>
           <div class="alert alert-info small mb-3">
             <p class="mb-1">
@@ -1239,9 +1244,9 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label">选择资源包</label>
+          <label class="block text-sm font-medium text-slate-700">选择资源包</label>
           <div v-if="loadingPackages" class="text-center py-2">
-            <span class="spinner-border spinner-border-sm me-2"></span>
+            <i class="fas fa-spinner fa-spin"></i>
             加载资源包列表...
           </div>
           <div v-else-if="packages.length === 0" class="alert alert-warning">
@@ -1249,7 +1254,7 @@
             暂无资源包，请先在"资源包"标签页上传资源包
           </div>
           <div v-else class="table-responsive">
-            <table class="table table-sm table-hover">
+            <table class="w-full border-collapse text-sm">
               <thead>
                 <tr>
                   <th style="width: 40px">
@@ -1281,12 +1286,12 @@
                     <strong>{{ pkg.name }}</strong>
                     <i
                       v-if="pkg.extracted"
-                      class="fas fa-folder-open text-info ms-1"
+                      class="fas fa-folder-open text-sky-600 ml-1"
                       title="已解压"
                     ></i>
                   </td>
                   <td>
-                    <span class="text-muted small">{{
+                    <span class="text-slate-500 small">{{
                       pkg.description || "无描述"
                     }}</span>
                   </td>
@@ -1294,14 +1299,14 @@
                   <td>
                     <div class="input-group input-group-sm">
                       <span
-                        class="input-group-text bg-light text-muted"
+                        class="input-group-text bg-light text-slate-500"
                         style="font-size: 0.75rem"
                       >
                         <i class="fas fa-folder"></i>
                       </span>
                       <input
                         type="text"
-                        class="form-control form-control-sm"
+                        class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                         :value="
                           resourcePackagePaths[pkg.package_id] ||
                           getDefaultResourcePath(pkg)
@@ -1314,7 +1319,7 @@
                         "
                       />
                     </div>
-                    <small class="text-muted d-block mt-1">
+                    <small class="text-slate-500 block mt-1">
                       <i class="fas fa-info-circle"></i>
                       相对路径，如：<code>test/b.txt</code> 或
                       <code>config/app.conf</code>
@@ -1334,48 +1339,48 @@
           <strong>{{ selectedResourcePackages.length }}</strong> 个资源包
         </div>
 
-        <div class="d-flex justify-content-between mt-4">
-          <button class="btn btn-outline-secondary" @click="prevStep">
-            <i class="fas fa-arrow-left me-1"></i> 上一步
-          </button>
-          <button class="btn btn-primary" @click="nextStep">
-            下一步 <i class="fas fa-arrow-right ms-1"></i>
-          </button>
+        <div class="step-nav flex justify-between mt-4">
+          <Button variant="outline" size="sm" @click="prevStep">
+            <i class="fas fa-arrow-left mr-1"></i> 上一步
+          </Button>
+          <Button size="sm" @click="nextStep">
+            下一步 <i class="fas fa-arrow-right ml-1"></i>
+          </Button>
         </div>
       </div>
 
       <!-- 步骤6: 开始构建 -->
       <div v-if="currentStep === 5" class="step-panel">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="step-panel-header flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
           <h5 class="mb-0">
-            <i class="fas fa-play-circle text-primary"></i> 步骤 5：开始构建
+            <i class="fas fa-play-circle text-blue-600"></i> 步骤 5：开始构建
           </h5>
-          <button
+          <Button
             type="button"
-            class="btn btn-sm btn-outline-info"
+            variant="outline" size="sm"
             @click="showBuildConfigJsonModal = true"
           >
             <i class="fas fa-code"></i> 查看构建JSON
-          </button>
+          </Button>
         </div>
 
         <!-- 构建配置摘要 -->
         <div class="card mb-3 border-primary">
           <div class="card-header bg-primary text-white">
             <h6 class="mb-0">
-              <i class="fas fa-list-check me-2"></i> 构建配置摘要
+              <i class="fas fa-list-check mr-2"></i> 构建配置摘要
             </h6>
           </div>
           <div class="card-body">
-            <div class="row g-3">
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <!-- 数据源信息 -->
               <div class="col-md-6">
-                <div class="border rounded p-3 h-100">
-                  <h6 class="text-primary mb-3">
-                    <i class="fas fa-database me-2"></i> 数据源信息
+                <div class="border rounded p-3 h-full">
+                  <h6 class="text-blue-600 mb-3">
+                    <i class="fas fa-database mr-2"></i> 数据源信息
                   </h6>
                   <div class="mb-2">
-                    <span class="badge bg-info me-2">类型</span>
+                    <span class="badge bg-info mr-2">类型</span>
                     <strong>{{
                       buildConfig.sourceType === "file"
                         ? "文件上传"
@@ -1383,19 +1388,19 @@
                     }}</strong>
                   </div>
                   <div v-if="buildConfig.sourceType === 'file'" class="mb-2">
-                    <span class="badge bg-info me-2">文件</span>
+                    <span class="badge bg-info mr-2">文件</span>
                     <code class="small">{{ buildConfig.file?.name }}</code>
-                    <span class="text-muted small ms-2"
+                    <span class="text-slate-500 small ml-2"
                       >({{ formatFileSize(buildConfig.file?.size) }})</span
                     >
                   </div>
                   <div v-if="buildConfig.sourceType === 'git'">
                     <div class="mb-2">
-                      <span class="badge bg-info me-2">数据源</span>
+                      <span class="badge bg-info mr-2">数据源</span>
                       <strong>{{ getSourceName(buildConfig.sourceId) }}</strong>
                     </div>
                     <div>
-                      <span class="badge bg-info me-2">分支</span>
+                      <span class="badge bg-info mr-2">分支</span>
                       <code>{{
                         buildConfig.branch ||
                         branchesAndTags.default_branch ||
@@ -1408,18 +1413,18 @@
 
               <!-- 构建、镜像、推送配置（合并） -->
               <div class="col-md-6">
-                <div class="border rounded p-3 h-100">
-                  <h6 class="text-success mb-3">
-                    <i class="fas fa-cogs me-2"></i> 构建配置
+                <div class="border rounded p-3 h-full">
+                  <h6 class="text-green-600 mb-3">
+                    <i class="fas fa-cogs mr-2"></i> 构建配置
                   </h6>
                   <div class="mb-2">
-                    <span class="badge bg-success me-2">项目类型</span>
+                    <span class="badge bg-success mr-2">项目类型</span>
                     <strong>{{
                       getProjectTypeLabel(buildConfig.projectType)
                     }}</strong>
                   </div>
                   <div class="mb-2">
-                    <span class="badge bg-success me-2">模板</span>
+                    <span class="badge bg-success mr-2">模板</span>
                     <code>{{
                       buildConfig.useProjectDockerfile
                         ? "项目 Dockerfile"
@@ -1427,7 +1432,7 @@
                     }}</code>
                   </div>
                   <div v-if="services.length > 0" class="mb-2">
-                    <span class="badge bg-success me-2">服务</span>
+                    <span class="badge bg-success mr-2">服务</span>
                     <span
                       v-if="
                         buildConfig.pushMode === 'single' &&
@@ -1435,7 +1440,7 @@
                       "
                     >
                       <code>{{ buildConfig.selectedService }}</code>
-                      <span class="badge bg-warning text-dark ms-2"
+                      <span class="badge bg-warning text-slate-900 ml-2"
                         >单服务推送</span
                       >
                     </span>
@@ -1443,17 +1448,17 @@
                       <span class="badge bg-primary"
                         >{{ selectedServices.length }}个服务</span
                       >
-                      <span class="badge bg-warning text-dark ms-2"
+                      <span class="badge bg-warning text-slate-900 ml-2"
                         >多服务推送</span
                       >
                     </span>
-                    <span v-else class="text-muted">未选择</span>
+                    <span v-else class="text-slate-500">未选择</span>
                   </div>
                   
                   <!-- 镜像配置 -->
-                  <div class="mb-2 border-top pt-2 mt-2">
-                    <h6 class="text-warning mb-2 small">
-                      <i class="fas fa-docker me-2"></i> 镜像配置
+                  <div class="mb-2 border-t border-slate-200 pt-2 mt-2">
+                    <h6 class="text-amber-600 mb-2 small">
+                      <i class="fas fa-docker mr-2"></i> 镜像配置
                     </h6>
                     <div
                       v-if="
@@ -1465,7 +1470,7 @@
                         :key="serviceName"
                         class="mb-1 small"
                       >
-                        <span class="badge bg-warning text-dark me-2">{{
+                        <span class="badge bg-warning text-slate-900 mr-2">{{
                           serviceName
                         }}</span>
                         <code class="small">
@@ -1476,14 +1481,14 @@
                         </code>
                         <span
                           v-if="getServiceConfig(serviceName).push"
-                          class="badge bg-success ms-1"
+                          class="badge bg-success ml-1"
                           >推送</span
                         >
                       </div>
                     </div>
                     <div v-else>
                       <div class="mb-1">
-                        <span class="badge bg-warning text-dark me-2"
+                        <span class="badge bg-warning text-slate-900 mr-2"
                           >镜像名</span
                         >
                         <code class="small">{{
@@ -1497,16 +1502,16 @@
                         }}</code>
                       </div>
                       <div>
-                        <span class="badge bg-warning text-dark me-2">标签</span>
+                        <span class="badge bg-warning text-slate-900 mr-2">标签</span>
                         <code class="small">{{ buildConfig.tag || "latest" }}</code>
                       </div>
                     </div>
                   </div>
                   
                   <!-- 推送配置 -->
-                  <div class="border-top pt-2 mt-2">
-                    <h6 class="text-danger mb-2 small">
-                      <i class="fas fa-cloud-upload-alt me-2"></i> 推送配置
+                  <div class="border-t border-slate-200 pt-2 mt-2">
+                    <h6 class="text-red-500 mb-2 small">
+                      <i class="fas fa-cloud-upload-alt mr-2"></i> 推送配置
                     </h6>
                     <div
                       v-if="
@@ -1514,11 +1519,11 @@
                       "
                     >
                       <div class="mb-1">
-                        <span class="badge bg-danger me-2">推送模式</span>
+                        <span class="badge bg-danger mr-2">推送模式</span>
                         <strong class="small">多服务推送</strong>
                       </div>
                       <div>
-                        <span class="badge bg-danger me-2">推送服务数</span>
+                        <span class="badge bg-danger mr-2">推送服务数</span>
                         <strong class="small"
                           >{{
                             selectedServices.filter(
@@ -1529,7 +1534,7 @@
                       </div>
                     </div>
                     <div v-else>
-                      <span class="badge bg-danger me-2">推送</span>
+                      <span class="badge bg-danger mr-2">推送</span>
                       <span
                         :class="
                           buildConfig.push
@@ -1553,12 +1558,12 @@
                 class="col-12"
               >
                 <div class="border rounded p-3">
-                  <h6 class="text-info mb-3">
-                    <i class="fas fa-sliders-h me-2"></i> 模板参数
+                  <h6 class="text-sky-600 mb-3">
+                    <i class="fas fa-sliders-h mr-2"></i> 模板参数
                   </h6>
                   <div v-if="templateParams.length > 0" class="mb-3">
-                    <div class="small text-muted mb-2">全局参数:</div>
-                    <div class="d-flex flex-wrap gap-2">
+                    <div class="small text-slate-500 mb-2">全局参数:</div>
+                    <div class="flex flex-wrap gap-2">
                       <span
                         v-for="param in templateParams"
                         :key="param.name"
@@ -1578,7 +1583,7 @@
                       Object.keys(buildConfig.serviceTemplateParams).length > 0
                     "
                   >
-                    <div class="small text-muted mb-2">服务参数:</div>
+                    <div class="small text-slate-500 mb-2">服务参数:</div>
                     <div
                       v-for="(
                         params, serviceName
@@ -1586,13 +1591,13 @@
                       :key="serviceName"
                       class="mb-2"
                     >
-                      <span class="badge bg-secondary me-2">{{
+                      <span class="badge bg-secondary mr-2">{{
                         serviceName
                       }}</span>
                       <span
                         v-for="(value, paramName) in params"
                         :key="paramName"
-                        class="badge bg-info me-1"
+                        class="badge bg-info mr-1"
                       >
                         {{ paramName }}:
                         <code class="text-white">{{ value || "(空)" }}</code>
@@ -1612,10 +1617,10 @@
               >
                 <div class="border rounded p-3">
                   <h6 class="text-secondary mb-3">
-                    <i class="fas fa-archive me-2"></i> 资源包
+                    <i class="fas fa-archive mr-2"></i> 资源包
                   </h6>
                   <div class="table-responsive">
-                    <table class="table table-sm table-borderless mb-0">
+                    <table class="w-full border-collapse text-sm">
                       <thead>
                         <tr>
                           <th style="width: 30%">资源包名称</th>
@@ -1635,12 +1640,12 @@
                             }}</strong>
                           </td>
                           <td>
-                            <code class="text-primary">{{
+                            <code class="text-blue-600">{{
                               pkgConfig.target_path ||
                               pkgConfig.target_dir ||
                               "resources"
                             }}</code>
-                            <small class="text-muted ms-2"
+                            <small class="text-slate-500 ml-2"
                               >(相对构建上下文)</small
                             >
                           </td>
@@ -1654,16 +1659,16 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between mt-4">
-          <button
-            class="btn btn-outline-secondary"
+        <div class="step-nav flex justify-between mt-4">
+          <Button
+            variant="outline" size="sm"
             @click="prevStep"
             :disabled="building"
           >
-            <i class="fas fa-arrow-left me-1"></i> 上一步
-          </button>
-          <button
-            class="btn btn-success btn-lg"
+            <i class="fas fa-arrow-left mr-1"></i> 上一步
+          </Button>
+          <Button
+            size="sm"
             @click="startBuild"
             :disabled="building"
           >
@@ -1671,32 +1676,33 @@
             {{ building ? "构建中..." : "开始构建" }}
             <span
               v-if="building"
-              class="spinner-border spinner-border-sm ms-2"
+              class="fas fa-spinner fa-spin ml-2"
             ></span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>
 
     <!-- 构建配置JSON模态框 -->
-    <div v-if="showBuildConfigJsonModal" class="modal fade show" style="display: block; z-index: 1055;" tabindex="-1">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
+    <div v-if="showBuildConfigJsonModal" class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4" @click.self="showBuildConfigJsonModal = false"
+    >
+      <div class="relative z-10 mx-auto w-full max-w-3xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title">
               <i class="fas fa-code"></i> 构建配置JSON
             </h5>
-            <button type="button" class="btn-close" @click="showBuildConfigJsonModal = false"></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showBuildConfigJsonModal = false"><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body">
-            <div class="d-flex justify-content-end mb-2">
-              <button 
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div class="flex justify-end mb-2">
+              <Button 
                 type="button"
-                class="btn btn-sm btn-outline-primary"
+                variant="outline" size="sm"
                 @click="copyBuildConfigJson"
               >
                 <i class="fas fa-copy"></i> 复制JSON
-              </button>
+              </Button>
             </div>
             <codemirror
               v-model="buildConfigJsonText"
@@ -1705,26 +1711,25 @@
               :extensions="jsonEditorExtensions"
             />
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" @click="showBuildConfigJsonModal = false">关闭</button>
+          <div class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button type="button" variant="outline" size="sm" @click="showBuildConfigJsonModal = false">关闭</Button>
           </div>
         </div>
       </div>
     </div>
-    <div v-if="showBuildConfigJsonModal" class="modal-backdrop fade show" style="z-index: 1050;"></div>
-
-    <!-- 上传进度对话框 -->
-    <div v-if="showUploadProgressModal" class="modal fade show" style="display: block; z-index: 1060;" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
+<!-- 上传进度对话框 -->
+    <div v-if="showUploadProgressModal"       class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+    >
+      <div class="relative z-10 mx-auto w-full max-w-md">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title">
               <i class="fas fa-upload"></i> 正在上传文件
             </h5>
           </div>
-          <div class="modal-body">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="mb-3">
-              <div class="d-flex justify-content-between mb-2">
+              <div class="flex justify-between mb-2">
                 <span>上传进度</span>
                 <span class="fw-bold">{{ uploadProgress.toFixed(1) }}%</span>
               </div>
@@ -1741,7 +1746,7 @@
                 </div>
               </div>
             </div>
-            <div class="text-muted small text-center">
+            <div class="text-slate-500 small text-center">
               <div>已上传: {{ formatFileSize(uploadLoaded) }} / {{ formatFileSize(uploadTotal) }}</div>
               <div v-if="uploadProgress > 0 && uploadProgress < 100" class="mt-2">
                 <i class="fas fa-spinner fa-spin"></i> 请稍候，文件较大时可能需要较长时间...
@@ -1751,12 +1756,11 @@
         </div>
       </div>
     </div>
-    <div v-if="showUploadProgressModal" class="modal-backdrop fade show" style="z-index: 1055;"></div>
-
-  </div>
+</div>
 </template>
 
 <script setup>
+import Button from "@/components/ui/button/Button.vue";
 import axios from "axios";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
@@ -3822,6 +3826,9 @@ onMounted(() => {
 <style scoped>
 .step-build-panel {
   animation: fadeIn 0.3s;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 @keyframes fadeIn {
@@ -3837,9 +3844,10 @@ onMounted(() => {
 
 .steps-indicator {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 20px 0;
+  max-width: 100%;
 }
 
 .step-item {
@@ -3936,5 +3944,83 @@ onMounted(() => {
 .alert-sm {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
+}
+
+@media (max-width: 767px) {
+  .steps-indicator {
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 12px 4px;
+    margin-left: -4px;
+    margin-right: -4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .step-item {
+    flex-shrink: 0;
+  }
+
+  .step-number {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8125rem;
+  }
+
+  .step-label {
+    margin-top: 6px;
+    font-size: 0.625rem;
+    max-width: 3.5rem;
+    text-align: center;
+    line-height: 1.2;
+    word-break: keep-all;
+  }
+
+  .step-connector {
+    width: 20px;
+    margin: 16px 4px 0;
+    flex-shrink: 0;
+  }
+
+  .step-panel {
+    min-height: 0;
+    padding: 12px 0;
+  }
+
+  .step-build-panel .btn-group {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .step-build-panel .btn-group > .btn,
+  .step-build-panel .btn-group > button {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+
+  .step-nav {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .step-nav > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .step-panel-header > :last-child {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .step-alert-row > button {
+    align-self: stretch;
+  }
 }
 </style>

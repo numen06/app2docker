@@ -1,203 +1,174 @@
 <template>
-  <div class="resource-package-panel">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h6 class="mb-0">
-        <i class="fas fa-archive"></i> 资源包管理
-      </h6>
-      <button class="btn btn-primary btn-sm" @click="showUploadModal = true">
-        <i class="fas fa-upload"></i> 上传资源包
-      </button>
-    </div>
+  <div>
+    <PageToolbar title="资源包管理" icon="fa-archive">
+      <template #actions>
+        <Button size="sm" @click="showUploadModal = true">
+          <i class="fas fa-upload"></i>
+          上传资源包
+        </Button>
+      </template>
+    </PageToolbar>
 
-    <!-- 资源包列表 -->
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>名称</th>
-            <th>描述</th>
-            <th>文件大小</th>
-            <th>上传时间</th>
-            <th class="text-end">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="5" class="text-center py-4">
-              <div class="spinner-border spinner-border-sm me-2"></div>
-              加载中...
-            </td>
-          </tr>
-          <tr v-else-if="packages.length === 0">
-            <td colspan="5" class="text-center text-muted py-4">
-              <i class="fas fa-archive fa-2x mb-2 d-block"></i>
-              暂无资源包，请点击"上传资源包"添加
-            </td>
-          </tr>
-          <tr v-for="pkg in packages" :key="pkg.package_id">
-            <td>
-              <strong>{{ pkg.name }}</strong>
-              <i v-if="pkg.extracted" class="fas fa-folder-open text-info ms-1" title="已解压"></i>
-            </td>
-            <td>
-              <span class="text-muted small">{{ pkg.description || '无描述' }}</span>
-            </td>
-            <td>{{ formatBytes(pkg.size) }}</td>
-            <td>{{ formatTime(pkg.created_at) }}</td>
-            <td class="text-end">
-              <div class="btn-group btn-group-sm">
-                <button 
+    <Table min-width-class="min-w-[44rem]">
+        <TableHeader>
+          <TableRow>
+            <TableHead>名称</TableHead>
+            <TableHead>描述</TableHead>
+            <TableHead>文件大小</TableHead>
+            <TableHead>上传时间</TableHead>
+            <TableHead class="text-end">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-if="loading">
+            <TableCell colspan="5" class="py-8 text-center text-slate-500">
+              <i class="fas fa-spinner fa-spin mr-2"></i>
+              加载中…
+            </TableCell>
+          </TableRow>
+          <TableRow v-else-if="packages.length === 0">
+            <TableCell colspan="5" class="p-0">
+              <EmptyState message='暂无资源包，请点击「上传资源包」添加' icon="fa-archive" />
+            </TableCell>
+          </TableRow>
+          <TableRow v-for="pkg in packages" :key="pkg.package_id">
+            <TableCell class="font-medium text-slate-900">
+              {{ pkg.name }}
+              <i
+                v-if="pkg.extracted"
+                class="fas fa-folder-open ml-1 text-sky-600"
+                title="已解压"
+              ></i>
+            </TableCell>
+            <TableCell class="text-slate-600">{{ pkg.description || "无描述" }}</TableCell>
+            <TableCell>{{ formatBytes(pkg.size) }}</TableCell>
+            <TableCell class="text-slate-600">{{ formatTime(pkg.created_at) }}</TableCell>
+            <TableCell class="text-end">
+              <div class="flex justify-end gap-1">
+                <Button
                   v-if="isTextFile(pkg.name)"
-                  class="btn btn-outline-primary" 
-                  @click="editPackage(pkg)"
+                  variant="outline"
+                  size="sm"
                   title="编辑"
+                  @click="editPackage(pkg)"
                 >
                   <i class="fas fa-edit"></i>
-                </button>
-                <button 
-                  class="btn btn-outline-danger" 
-                  @click="deletePackage(pkg)"
-                  title="删除"
-                >
+                </Button>
+                <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
                   <i class="fas fa-trash"></i>
-                </button>
+                </Button>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+    </Table>
 
-    <!-- 上传模态框 -->
-    <div v-if="showUploadModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-upload"></i> 上传资源包
-            </h5>
-            <button type="button" class="btn-close" @click="showUploadModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <form @submit.prevent="uploadPackage">
-              <div class="mb-3">
-                <label class="form-label">选择文件</label>
-                <input 
-                  type="file" 
-                  class="form-control" 
-                  ref="fileInput"
-                  @change="handleFileSelect"
-                  required
-                />
-                <small class="text-muted">支持任意类型的文件（配置文件、密钥、证书等）</small>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">描述（可选）</label>
-                <textarea 
-                  class="form-control" 
-                  v-model="uploadForm.description"
-                  rows="3"
-                  placeholder="请输入资源包的描述信息..."
-                ></textarea>
-              </div>
-              <div class="mb-3" v-if="isArchiveFile">
-                <div class="form-check">
-                  <input 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    v-model="uploadForm.extract"
-                    id="extractCheck"
-                  />
-                  <label class="form-check-label" for="extractCheck">
-                    自动解压（检测到压缩包格式）
-                  </label>
-                </div>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showUploadModal = false">
-              取消
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-primary" 
-              @click="uploadPackage"
-              :disabled="uploading || !selectedFile"
-            >
-              <span v-if="uploading" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="fas fa-upload me-2"></i>
-              {{ uploading ? '上传中...' : '上传' }}
-            </button>
-          </div>
+    <FormDialog v-model="showUploadModal" title="上传资源包" icon="fa-upload">
+      <form class="space-y-4" @submit.prevent="uploadPackage">
+        <div class="space-y-2">
+          <Label>选择文件</Label>
+          <input
+            ref="fileInput"
+            type="file"
+            class="block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+            required
+            @change="handleFileSelect"
+          />
+          <p class="text-xs text-slate-500">支持任意类型的文件（配置文件、密钥、证书等）</p>
         </div>
-      </div>
-    </div>
+        <div class="space-y-2">
+          <Label>描述（可选）</Label>
+          <textarea
+            v-model="uploadForm.description"
+            rows="3"
+            class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="请输入资源包的描述信息…"
+          ></textarea>
+        </div>
+        <label v-if="isArchiveFile" class="flex cursor-pointer items-center gap-2 text-sm">
+          <input v-model="uploadForm.extract" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+          自动解压（检测到压缩包格式）
+        </label>
+      </form>
+      <template #footer>
+        <Button variant="outline" type="button" @click="showUploadModal = false">取消</Button>
+        <Button type="button" :disabled="uploading || !selectedFile" @click="uploadPackage">
+          <i v-if="uploading" class="fas fa-spinner fa-spin"></i>
+          <i v-else class="fas fa-upload"></i>
+          {{ uploading ? "上传中…" : "上传" }}
+        </Button>
+      </template>
+    </FormDialog>
 
-    <!-- 编辑模态框 -->
-    <div v-if="showEditModal" class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-edit"></i> 编辑资源包: {{ editingPackage?.name }}
-            </h5>
-            <button type="button" class="btn-close" @click="showEditModal = false"></button>
-          </div>
-          <div class="modal-body">
-            <div v-if="loadingContent" class="text-center py-4">
-              <div class="spinner-border spinner-border-sm me-2"></div>
-              加载文件内容...
-            </div>
-            <div v-else>
-              <div class="mb-3">
-                <label class="form-label">文件内容</label>
-                <codemirror
-                  v-model="editContent"
-                  :style="{ height: '500px', fontSize: '13px' }"
-                  :autofocus="true"
-                  :indent-with-tab="false"
-                  :tab-size="2"
-                  :extensions="editorExtensions"
-                />
-                <small class="text-muted">支持编辑文本文件，文件大小限制为 1MB</small>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showEditModal = false">
-              取消
-            </button>
-            <button 
-              type="button" 
-              class="btn btn-primary" 
-              @click="savePackageContent"
-              :disabled="saving || loadingContent"
-            >
-              <span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="fas fa-save me-2"></i>
-              {{ saving ? '保存中...' : '保存' }}
-            </button>
-          </div>
-        </div>
+    <FormDialog
+      v-model="showEditModal"
+      :title="`编辑资源包: ${editingPackage?.name || ''}`"
+      icon="fa-edit"
+      size="xl"
+    >
+      <div v-if="loadingContent" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+        <i class="fas fa-spinner fa-spin"></i>
+        加载文件内容…
       </div>
-    </div>
+      <div v-else class="space-y-2">
+        <Label>文件内容</Label>
+        <Codemirror
+          v-model="editContent"
+          :style="{ height: '500px', fontSize: '13px' }"
+          :autofocus="true"
+          :indent-with-tab="false"
+          :tab-size="2"
+          :extensions="editorExtensions"
+        />
+        <p class="text-xs text-slate-500">支持编辑文本文件，文件大小限制为 1MB</p>
+      </div>
+      <template #footer>
+        <Button variant="outline" type="button" @click="showEditModal = false">取消</Button>
+        <Button type="button" :disabled="saving || loadingContent" @click="savePackageContent">
+          <i v-if="saving" class="fas fa-spinner fa-spin"></i>
+          <i v-else class="fas fa-save"></i>
+          {{ saving ? "保存中…" : "保存" }}
+        </Button>
+      </template>
+    </FormDialog>
   </div>
 </template>
 
 <script>
-import axios from 'axios'
-import { Codemirror } from 'vue-codemirror'
-import { oneDark } from '@codemirror/theme-one-dark'
-import { StreamLanguage } from '@codemirror/language'
-import { shell } from '@codemirror/legacy-modes/mode/shell'
-import { javascript } from '@codemirror/legacy-modes/mode/javascript'
-import { yaml as yamlLang } from '@codemirror/lang-yaml'
+import axios from "axios";
+import { Codemirror } from "vue-codemirror";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { StreamLanguage } from "@codemirror/language";
+import { shell } from "@codemirror/legacy-modes/mode/shell";
+import { javascript } from "@codemirror/legacy-modes/mode/javascript";
+import { yaml as yamlLang } from "@codemirror/lang-yaml";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Label from "@/components/ui/label/Label.vue";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
 
 export default {
-  name: 'ResourcePackagePanel',
+  name: "ResourcePackagePanel",
   components: {
-    Codemirror
+    Codemirror,
+    PageToolbar,
+    EmptyState,
+    FormDialog,
+    Button,
+    Label,
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
   },
   data() {
     return {
@@ -207,200 +178,226 @@ export default {
       uploading: false,
       selectedFile: null,
       uploadForm: {
-        description: '',
-        extract: true
+        description: "",
+        extract: true,
       },
       showEditModal: false,
       editingPackage: null,
-      editContent: '',
+      editContent: "",
       loadingContent: false,
-      saving: false
-    }
+      saving: false,
+    };
   },
   computed: {
     isArchiveFile() {
-      if (!this.selectedFile) return false
-      const fileName = this.selectedFile.name.toLowerCase()
-      return fileName.endsWith('.zip') || 
-             fileName.endsWith('.tar') || 
-             fileName.endsWith('.tar.gz') || 
-             fileName.endsWith('.tgz')
+      if (!this.selectedFile) return false;
+      const fileName = this.selectedFile.name.toLowerCase();
+      return (
+        fileName.endsWith(".zip") ||
+        fileName.endsWith(".tar") ||
+        fileName.endsWith(".tar.gz") ||
+        fileName.endsWith(".tgz")
+      );
     },
     editorExtensions() {
       if (!this.editingPackage) {
-        return [oneDark]
+        return [oneDark];
       }
-      
-      const filename = this.editingPackage.name.toLowerCase()
-      const extensions = [oneDark]
-      
-      // 根据文件扩展名选择语言模式
-      if (filename.endsWith('.json')) {
-        // JSON 使用 JavaScript 模式
-        extensions.push(StreamLanguage.define(javascript))
-      } else if (filename.endsWith('.yaml') || filename.endsWith('.yml')) {
-        extensions.push(yamlLang())
-      } else if (filename.endsWith('.js') || filename.endsWith('.jsx') || filename.endsWith('.mjs') || 
-                 filename.endsWith('.ts') || filename.endsWith('.tsx')) {
-        extensions.push(StreamLanguage.define(javascript))
-      } else if (filename.endsWith('.sh') || filename.endsWith('.bash') || filename.endsWith('.dockerfile')) {
-        extensions.push(StreamLanguage.define(shell))
+
+      const filename = this.editingPackage.name.toLowerCase();
+      const extensions = [oneDark];
+
+      if (filename.endsWith(".json")) {
+        extensions.push(StreamLanguage.define(javascript));
+      } else if (filename.endsWith(".yaml") || filename.endsWith(".yml")) {
+        extensions.push(yamlLang());
+      } else if (
+        filename.endsWith(".js") ||
+        filename.endsWith(".jsx") ||
+        filename.endsWith(".mjs") ||
+        filename.endsWith(".ts") ||
+        filename.endsWith(".tsx")
+      ) {
+        extensions.push(StreamLanguage.define(javascript));
+      } else if (
+        filename.endsWith(".sh") ||
+        filename.endsWith(".bash") ||
+        filename.endsWith(".dockerfile")
+      ) {
+        extensions.push(StreamLanguage.define(shell));
       } else {
-        // 默认使用 shell 模式（适合配置文件）
-        extensions.push(StreamLanguage.define(shell))
+        extensions.push(StreamLanguage.define(shell));
       }
-      
-      return extensions
-    }
+
+      return extensions;
+    },
   },
   mounted() {
-    this.loadPackages()
+    this.loadPackages();
   },
   methods: {
     async loadPackages() {
-      this.loading = true
+      this.loading = true;
       try {
-        const res = await axios.get('/api/resource-packages')
+        const res = await axios.get("/api/resource-packages");
         if (res.data.success) {
-          this.packages = res.data.packages || []
+          this.packages = res.data.packages || [];
         }
       } catch (error) {
-        console.error('加载资源包列表失败:', error)
-        alert('加载资源包列表失败: ' + (error.response?.data?.detail || error.message))
+        console.error("加载资源包列表失败:", error);
+        alert("加载资源包列表失败: " + (error.response?.data?.detail || error.message));
       } finally {
-        this.loading = false
+        this.loading = false;
       }
     },
     handleFileSelect(event) {
-      this.selectedFile = event.target.files[0]
+      this.selectedFile = event.target.files[0];
     },
     async uploadPackage() {
       if (!this.selectedFile) {
-        alert('请选择文件')
-        return
+        alert("请选择文件");
+        return;
       }
 
-      this.uploading = true
+      this.uploading = true;
       try {
-        const formData = new FormData()
-        formData.append('package_file', this.selectedFile)
-        formData.append('description', this.uploadForm.description)
-        formData.append('extract', this.uploadForm.extract)
+        const formData = new FormData();
+        formData.append("package_file", this.selectedFile);
+        formData.append("description", this.uploadForm.description);
+        formData.append("extract", this.uploadForm.extract);
 
-        const res = await axios.post('/api/resource-packages/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
+        const res = await axios.post("/api/resource-packages/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
 
         if (res.data.success) {
-          alert('资源包上传成功')
-          this.showUploadModal = false
-          this.selectedFile = null
-          this.uploadForm = { description: '', extract: true }
+          alert("资源包上传成功");
+          this.showUploadModal = false;
+          this.selectedFile = null;
+          this.uploadForm = { description: "", extract: true };
           if (this.$refs.fileInput) {
-            this.$refs.fileInput.value = ''
+            this.$refs.fileInput.value = "";
           }
-          this.loadPackages()
+          this.loadPackages();
         }
       } catch (error) {
-        console.error('上传资源包失败:', error)
-        alert('上传资源包失败: ' + (error.response?.data?.detail || error.message))
+        console.error("上传资源包失败:", error);
+        alert("上传资源包失败: " + (error.response?.data?.detail || error.message));
       } finally {
-        this.uploading = false
+        this.uploading = false;
       }
     },
     async deletePackage(pkg) {
       if (!confirm(`确定要删除资源包 "${pkg.name}" 吗？`)) {
-        return
+        return;
       }
 
       try {
-        const res = await axios.delete(`/api/resource-packages/${pkg.package_id}`)
+        const res = await axios.delete(`/api/resource-packages/${pkg.package_id}`);
         if (res.data.success) {
-          alert('资源包已删除')
-          this.loadPackages()
+          alert("资源包已删除");
+          this.loadPackages();
         }
       } catch (error) {
-        console.error('删除资源包失败:', error)
-        alert('删除资源包失败: ' + (error.response?.data?.detail || error.message))
+        console.error("删除资源包失败:", error);
+        alert("删除资源包失败: " + (error.response?.data?.detail || error.message));
       }
     },
     formatBytes(bytes) {
-      if (!bytes) return '0 B'
-      const k = 1024
-      const sizes = ['B', 'KB', 'MB', 'GB']
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
-      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+      if (!bytes) return "0 B";
+      const k = 1024;
+      const sizes = ["B", "KB", "MB", "GB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
     },
     formatTime(timeStr) {
-      if (!timeStr) return '-'
-      const date = new Date(timeStr)
-      return date.toLocaleString('zh-CN')
+      if (!timeStr) return "-";
+      const date = new Date(timeStr);
+      return date.toLocaleString("zh-CN");
     },
     isTextFile(filename) {
-      if (!filename) return false
-      const textExtensions = ['.txt', '.json', '.yaml', '.yml', '.xml', '.properties', 
-                              '.conf', '.config', '.ini', '.env', '.sh', '.bash', 
-                              '.py', '.js', '.ts', '.java', '.go', '.rs', '.md', 
-                              '.log', '.sql', '.csv', '.html', '.css', '.scss', 
-                              '.less', '.vue', '.tsx', '.jsx', '.dockerfile', 
-                              '.gitignore', '.gitattributes', '.editorconfig']
-      const filenameLower = filename.toLowerCase()
-      return textExtensions.some(ext => filenameLower.endsWith(ext))
+      if (!filename) return false;
+      const textExtensions = [
+        ".txt",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".properties",
+        ".conf",
+        ".config",
+        ".ini",
+        ".env",
+        ".sh",
+        ".bash",
+        ".py",
+        ".js",
+        ".ts",
+        ".java",
+        ".go",
+        ".rs",
+        ".md",
+        ".log",
+        ".sql",
+        ".csv",
+        ".html",
+        ".css",
+        ".scss",
+        ".less",
+        ".vue",
+        ".tsx",
+        ".jsx",
+        ".dockerfile",
+        ".gitignore",
+        ".gitattributes",
+        ".editorconfig",
+      ];
+      const filenameLower = filename.toLowerCase();
+      return textExtensions.some((ext) => filenameLower.endsWith(ext));
     },
     async editPackage(pkg) {
-      this.editingPackage = pkg
-      this.showEditModal = true
-      this.loadingContent = true
-      this.editContent = ''
-      
+      this.editingPackage = pkg;
+      this.showEditModal = true;
+      this.loadingContent = true;
+      this.editContent = "";
+
       try {
-        const res = await axios.get(`/api/resource-packages/${pkg.package_id}/content`)
+        const res = await axios.get(`/api/resource-packages/${pkg.package_id}/content`);
         if (res.data.success) {
-          this.editContent = res.data.content || ''
+          this.editContent = res.data.content || "";
         }
       } catch (error) {
-        console.error('加载资源包内容失败:', error)
-        alert('加载资源包内容失败: ' + (error.response?.data?.detail || error.message))
-        this.showEditModal = false
+        console.error("加载资源包内容失败:", error);
+        alert("加载资源包内容失败: " + (error.response?.data?.detail || error.message));
+        this.showEditModal = false;
       } finally {
-        this.loadingContent = false
+        this.loadingContent = false;
       }
     },
     async savePackageContent() {
-      if (!this.editingPackage) return
-      
-      this.saving = true
+      if (!this.editingPackage) return;
+
+      this.saving = true;
       try {
-        const res = await axios.put(`/api/resource-packages/${this.editingPackage.package_id}/content`, {
-          content: this.editContent
-        })
-        
+        const res = await axios.put(
+          `/api/resource-packages/${this.editingPackage.package_id}/content`,
+          { content: this.editContent }
+        );
+
         if (res.data.success) {
-          alert('文件已保存')
-          this.showEditModal = false
-          this.editingPackage = null
-          this.editContent = ''
-          // 重新加载资源包列表以更新文件大小
-          this.loadPackages()
+          alert("文件已保存");
+          this.showEditModal = false;
+          this.editingPackage = null;
+          this.editContent = "";
+          this.loadPackages();
         }
       } catch (error) {
-        console.error('保存资源包内容失败:', error)
-        alert('保存资源包内容失败: ' + (error.response?.data?.detail || error.message))
+        console.error("保存资源包内容失败:", error);
+        alert("保存资源包内容失败: " + (error.response?.data?.detail || error.message));
       } finally {
-        this.saving = false
+        this.saving = false;
       }
-    }
-  }
-}
+    },
+  },
+};
 </script>
-
-<style scoped>
-.resource-package-panel {
-  padding: 0;
-}
-
-.modal.show {
-  display: block;
-}
-</style>
-

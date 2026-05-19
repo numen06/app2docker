@@ -1,4 +1,3 @@
-/* === Global Base Styles for Admin Layout === */
 :root {
   --admin-sidebar-width: 256px;
   --admin-sidebar-collapsed-width: 64px;
@@ -33,6 +32,7 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background-color: var(--admin-content-bg);
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
@@ -51,7 +51,11 @@ a:hover {
   color: #2563eb;
 }
 
-/* Reset card default padding (Bootstrap override in admin context) */
-.card {
-  padding: 0;
+/* 横向滚动区域隐藏滚动条（Tab 导航等） */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

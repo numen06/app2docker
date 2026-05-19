@@ -1,1135 +1,728 @@
 <template>
-  <div class="task-manager">
+  <div class="animate-in fade-in duration-300">
     <!-- 统计信息栏 -->
-    <div class="info-cards mb-3">
-      <!-- 总任务数 -->
-      <div class="card info-card info-card-primary">
-        <div class="card-body">
-          <div class="d-flex align-items-start">
-            <div class="info-icon-wrapper">
-              <div class="info-icon bg-primary">
-                <i class="fas fa-tasks"></i>
-              </div>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <div class="info-label">总任务</div>
-              <div class="info-value">{{ taskStats.total }}</div>
-              <div class="info-badges mt-2">
-                <span class="badge badge-success">{{
-                  taskStats.completed
-                }}</span>
-                <span class="badge badge-warning">{{ taskStats.running }}</span>
-                <span class="badge badge-danger">{{ taskStats.failed }}</span>
-              </div>
-            </div>
+    <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <StatCard title="总任务" :value="taskStats.total" icon="fa-tasks" accent="blue">
+        <template #footer>
+          <div class="flex flex-wrap gap-1.5">
+            <Badge variant="success">{{ taskStats.completed }}</Badge>
+            <Badge variant="warning">{{ taskStats.running }}</Badge>
+            <Badge variant="danger">{{ taskStats.failed }}</Badge>
           </div>
-        </div>
-      </div>
+        </template>
+      </StatCard>
 
-      <!-- 任务类型统计 -->
-      <div class="card info-card info-card-info">
-        <div class="card-body">
-          <div class="d-flex align-items-start">
-            <div class="info-icon-wrapper">
-              <div class="info-icon bg-info">
-                <i class="fas fa-layer-group"></i>
-              </div>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <div class="info-label">任务类型</div>
-              <div class="info-badges mt-2">
-                <span class="badge badge-primary"
-                  >{{ taskStats.build }} 构建</span
-                >
-                <span class="badge badge-success"
-                  >{{ taskStats.export }} 导出</span
-                >
-                <span class="badge badge-info"
-                  >{{ taskStats.deploy }} 部署</span
-                >
-              </div>
-            </div>
+      <StatCard
+        title="任务类型"
+        :value="taskStats.build + taskStats.export + taskStats.deploy"
+        icon="fa-layer-group"
+        accent="sky"
+      >
+        <template #footer>
+          <div class="flex flex-wrap gap-1.5">
+            <Badge variant="default">{{ taskStats.build }} 构建</Badge>
+            <Badge variant="success">{{ taskStats.export }} 导出</Badge>
+            <Badge variant="info">{{ taskStats.deploy }} 部署</Badge>
           </div>
-        </div>
-      </div>
+        </template>
+      </StatCard>
 
-      <!-- 目录统计（合并下载和编译目录） -->
-      <div class="card info-card info-card-secondary">
-        <div class="card-body">
-          <div class="d-flex align-items-start">
-            <div class="info-icon-wrapper">
-              <div class="info-icon bg-secondary">
-                <i class="fas fa-folder"></i>
-              </div>
+      <StatCard title="目录统计" value="—" icon="fa-folder" accent="slate">
+        <template #footer>
+          <div class="space-y-1 text-sm text-slate-600">
+            <div class="flex items-center gap-1.5">
+              <i class="fas fa-download text-green-600"></i>
+              <span>{{ exportDirSize }}</span>
             </div>
-            <div class="flex-grow-1 ms-3">
-              <div class="info-label">目录统计</div>
-              <div class="info-dirs mt-2">
-                <div class="info-dir-item">
-                  <i class="fas fa-download text-success"></i>
-                  <span class="ms-1">{{ exportDirSize }}</span>
-                </div>
-                <div class="info-dir-item mt-1">
-                  <i class="fas fa-folder-open text-secondary"></i>
-                  <span class="ms-1">{{ buildDirSize }}</span>
-                </div>
-              </div>
+            <div class="flex items-center gap-1.5">
+              <i class="fas fa-folder-open text-slate-500"></i>
+              <span>{{ buildDirSize }}</span>
             </div>
           </div>
-        </div>
-      </div>
+        </template>
+      </StatCard>
 
-      <!-- 成功率 -->
-      <div class="card info-card info-card-success">
-        <div class="card-body">
-          <div class="d-flex align-items-start">
-            <div class="info-icon-wrapper">
-              <div class="info-icon bg-success">
-                <i class="fas fa-chart-line"></i>
-              </div>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <div class="info-label">成功率</div>
-              <div class="info-value">{{ taskStats.successRate }}%</div>
-              <div class="info-sub mt-2">
-                <small class="text-muted"
-                  >{{ taskStats.completed }}/{{
-                    taskStats.total || 1
-                  }}
-                  完成</small
-                >
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <StatCard
+        title="成功率"
+        :value="taskStats.successRate + '%'"
+        icon="fa-chart-line"
+        accent="green"
+      >
+        <template #footer>
+          <p class="text-xs text-slate-500">
+            {{ taskStats.completed }}/{{ taskStats.total || 1 }} 完成
+          </p>
+        </template>
+      </StatCard>
 
-      <!-- 全局队列状态 -->
-      <div class="card info-card info-card-warning">
-        <div class="card-body">
-          <div class="d-flex align-items-start">
-            <div class="info-icon-wrapper">
-              <div class="info-icon bg-warning">
-                <i class="fas fa-stream"></i>
-              </div>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <div class="info-label">全局并发</div>
-              <div class="info-value">
-                {{ queueRunningCount }}/{{ maxConcurrentTasks }}
-              </div>
-              <div class="info-sub mt-2">
-                <small class="text-muted">排队中 {{ queuePendingCount }} 个任务</small>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <StatCard
+        title="全局并发"
+        :value="queueRunningCount + '/' + maxConcurrentTasks"
+        icon="fa-stream"
+        accent="amber"
+      >
+        <template #footer>
+          <p class="text-xs text-slate-500">排队中 {{ queuePendingCount }} 个任务</p>
+        </template>
+      </StatCard>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0"><i class="fas fa-tasks"></i> 任务管理</h5>
-      <div class="d-flex flex-wrap gap-2 align-items-center">
-        <!-- 状态筛选 - 平铺显示 -->
-        <div class="btn-group btn-group-sm" role="group">
-          <button
-            type="button"
-            class="btn"
-            :class="statusFilter === '' ? 'btn-primary' : 'btn-outline-primary'"
-            @click="
-              statusFilter = '';
-              handleFilterChange();
-            "
+    <PageToolbar title="任务管理" icon="fa-tasks">
+      <template #actions>
+        <div class="flex flex-wrap gap-1 rounded-md border border-slate-200 p-0.5">
+          <Button
+            size="sm"
+            :variant="statusFilter === '' ? 'default' : 'ghost'"
             title="全部状态"
+            @click="statusFilter = ''; handleFilterChange()"
           >
             全部状态
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              statusFilter === 'pending' ? 'btn-primary' : 'btn-outline-primary'
-            "
-            @click="
-              statusFilter = 'pending';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="statusFilter === 'pending' ? 'default' : 'ghost'"
             title="等待中"
+            @click="statusFilter = 'pending'; handleFilterChange()"
           >
             等待中
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              statusFilter === 'running' ? 'btn-primary' : 'btn-outline-primary'
-            "
-            @click="
-              statusFilter = 'running';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="statusFilter === 'running' ? 'default' : 'ghost'"
             title="进行中"
+            @click="statusFilter = 'running'; handleFilterChange()"
           >
             进行中
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              statusFilter === 'completed'
-                ? 'btn-primary'
-                : 'btn-outline-primary'
-            "
-            @click="
-              statusFilter = 'completed';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="statusFilter === 'completed' ? 'default' : 'ghost'"
             title="已完成"
+            @click="statusFilter = 'completed'; handleFilterChange()"
           >
             已完成
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              statusFilter === 'failed' ? 'btn-primary' : 'btn-outline-primary'
-            "
-            @click="
-              statusFilter = 'failed';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="statusFilter === 'failed' ? 'default' : 'ghost'"
             title="失败"
+            @click="statusFilter = 'failed'; handleFilterChange()"
           >
             失败
-          </button>
+          </Button>
         </div>
 
-        <!-- 类型筛选 - 平铺显示 -->
-        <div class="btn-group btn-group-sm" role="group">
-          <button
-            type="button"
-            class="btn"
-            :class="
-              categoryFilter === '' ? 'btn-success' : 'btn-outline-success'
-            "
-            @click="
-              categoryFilter = '';
-              handleFilterChange();
-            "
+        <div class="flex flex-wrap gap-1 rounded-md border border-slate-200 p-0.5">
+          <Button
+            size="sm"
+            :variant="categoryFilter === '' ? 'default' : 'ghost'"
             title="全部类型"
+            @click="categoryFilter = ''; handleFilterChange()"
           >
             全部类型
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              categoryFilter === 'build' ? 'btn-success' : 'btn-outline-success'
-            "
-            @click="
-              categoryFilter = 'build';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="categoryFilter === 'build' ? 'default' : 'ghost'"
             title="构建任务"
+            @click="categoryFilter = 'build'; handleFilterChange()"
           >
             构建任务
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              categoryFilter === 'export'
-                ? 'btn-success'
-                : 'btn-outline-success'
-            "
-            @click="
-              categoryFilter = 'export';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="categoryFilter === 'export' ? 'default' : 'ghost'"
             title="导出任务"
+            @click="categoryFilter = 'export'; handleFilterChange()"
           >
             导出任务
-          </button>
-          <button
-            type="button"
-            class="btn"
-            :class="
-              categoryFilter === 'deploy'
-                ? 'btn-success'
-                : 'btn-outline-success'
-            "
-            @click="
-              categoryFilter = 'deploy';
-              handleFilterChange();
-            "
+          </Button>
+          <Button
+            size="sm"
+            :variant="categoryFilter === 'deploy' ? 'default' : 'ghost'"
             title="部署任务"
+            @click="categoryFilter = 'deploy'; handleFilterChange()"
           >
             部署任务
-          </button>
+          </Button>
         </div>
 
-        <button class="btn btn-sm btn-outline-primary" @click="loadTasks">
-          <i class="fas fa-sync-alt"></i> 刷新
-        </button>
-        <button
-          class="btn btn-sm btn-outline-warning"
-          @click="openConcurrentModal"
+        <Button variant="outline" size="sm" @click="loadTasks">
+          <i class="fas fa-sync-alt"></i>
+          刷新
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           :disabled="savingSystemSettings"
           title="修改全局最大并发任务数"
+          @click="openConcurrentModal"
         >
-          <i class="fas fa-sliders-h"></i> 并发设置
-        </button>
-        <div class="btn-group position-relative" ref="cleanupDropdownWrap">
-          <button
-            class="btn btn-sm btn-outline-danger dropdown-toggle"
-            type="button"
+          <i class="fas fa-sliders-h"></i>
+          并发设置
+        </Button>
+
+        <div class="relative" ref="cleanupDropdownWrap">
+          <Button
+            variant="outline"
+            size="sm"
+            class="text-red-600 hover:text-red-700"
             :disabled="cleaning"
             :aria-expanded="cleanupMenuOpen ? 'true' : 'false'"
             @click.stop="toggleCleanupMenu"
           >
-            <i class="fas fa-broom"></i> 清理任务
-            <span
-              v-if="cleaning"
-              class="spinner-border spinner-border-sm ms-1"
-            ></span>
-          </button>
+            <i class="fas fa-broom"></i>
+            清理任务
+            <i v-if="cleaning" class="fas fa-spinner fa-spin"></i>
+            <i v-else class="fas fa-chevron-down text-xs opacity-70"></i>
+          </Button>
           <ul
             ref="cleanupDropdownMenu"
-            class="dropdown-menu dropdown-menu-end"
-            :class="{ show: cleanupMenuOpen }"
+            v-show="cleanupMenuOpen"
+            class="absolute right-0 z-50 mt-1 min-w-[15rem] overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
             :style="cleanupMenuStyle"
             @click.stop
           >
             <li>
-              <a
-                class="dropdown-item text-danger"
-                href="#"
-                @click.prevent="cleanupAll"
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-50"
+                @click="cleanupAll"
               >
-                <i class="fas fa-trash-alt"></i> 清理全部（非运行中）
-              </a>
+                <i class="fas fa-trash-alt w-4"></i>
+                清理全部（非运行中）
+              </button>
             </li>
-            <li><hr class="dropdown-divider" /></li>
+            <li class="my-1 border-t border-slate-100"></li>
             <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupByStatus('completed')"
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                @click="cleanupByStatus('completed')"
               >
-                <i class="fas fa-check-circle"></i> 清理已完成的任务
-              </a>
-            </li>
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupByStatus('failed')"
-              >
-                <i class="fas fa-times-circle"></i> 清理失败的任务
-              </a>
-            </li>
-            <li><hr class="dropdown-divider" /></li>
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupByDaysPrompt"
-              >
-                <i class="fas fa-calendar-alt"></i> 清理N天前的任务
-              </a>
-            </li>
-            <li><hr class="dropdown-divider" /></li>
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupOrphanDirs"
-              >
-                <i class="fas fa-exclamation-triangle"></i> 清理异常目录
-              </a>
+                <i class="fas fa-check-circle w-4"></i>
+                清理已完成的任务
+              </button>
             </li>
             <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupBuildDir"
-                :class="{ 'text-muted': buildDirCount === 0 }"
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                @click="cleanupByStatus('failed')"
               >
-                <i class="fas fa-folder-open"></i> 清理编译目录（全部）
-                <span v-if="buildDirCount > 0" class="text-muted small ms-2"
+                <i class="fas fa-times-circle w-4"></i>
+                清理失败的任务
+              </button>
+            </li>
+            <li class="my-1 border-t border-slate-100"></li>
+            <li>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                @click="cleanupByDaysPrompt"
+              >
+                <i class="fas fa-calendar-alt w-4"></i>
+                清理N天前的任务
+              </button>
+            </li>
+            <li class="my-1 border-t border-slate-100"></li>
+            <li>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                @click="cleanupOrphanDirs"
+              >
+                <i class="fas fa-exclamation-triangle w-4"></i>
+                清理异常目录
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                :class="{ 'text-slate-400': buildDirCount === 0 }"
+                @click="cleanupBuildDir"
+              >
+                <i class="fas fa-folder-open w-4"></i>
+                清理编译目录（全部）
+                <span v-if="buildDirCount > 0" class="ml-auto text-xs text-slate-400"
                   >({{ buildDirSize }})</span
                 >
-              </a>
+              </button>
             </li>
-            <li><hr class="dropdown-divider" /></li>
+            <li class="my-1 border-t border-slate-100"></li>
             <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupExportDir"
-                :class="{ 'text-muted': exportDirCount === 0 }"
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                :class="{ 'text-slate-400': exportDirCount === 0 }"
+                @click="cleanupExportDir"
               >
-                <i class="fas fa-download"></i> 清理下载目录（全部）
-                <span v-if="exportDirCount > 0" class="text-muted small ms-2"
+                <i class="fas fa-download w-4"></i>
+                清理下载目录（全部）
+                <span v-if="exportDirCount > 0" class="ml-auto text-xs text-slate-400"
                   >({{ exportDirSize }})</span
                 >
-              </a>
+              </button>
             </li>
             <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="cleanupExportDirDays"
-                :class="{ 'text-muted': exportDirCount === 0 }"
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                :class="{ 'text-slate-400': exportDirCount === 0 }"
+                @click="cleanupExportDirDays"
               >
-                <i class="fas fa-calendar-times"></i> 清理N天前的下载文件
-              </a>
+                <i class="fas fa-calendar-times w-4"></i>
+                清理N天前的下载文件
+              </button>
             </li>
           </ul>
         </div>
-      </div>
-    </div>
+      </template>
+    </PageToolbar>
 
-    <!-- 任务列表 -->
-    <div v-if="loading" class="text-center py-4">
-      <div class="spinner-border spinner-border-sm" role="status">
-        <span class="visually-hidden">加载中...</span>
-      </div>
-    </div>
-
-    <div v-else-if="filtering" class="text-center py-2">
-      <div
-        class="spinner-border spinner-border-sm me-2"
-        style="width: 1rem; height: 1rem"
-        role="status"
-      ></div>
-      <small class="text-muted">筛选中...</small>
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+      <i class="fas fa-spinner fa-spin"></i>
+      加载中…
     </div>
 
     <div
-      v-else-if="paginatedTasks.length === 0"
-      class="text-center py-4 text-muted"
+      v-else-if="filtering"
+      class="flex items-center justify-center gap-2 py-6 text-sm text-slate-500"
     >
-      <i class="fas fa-inbox fa-2x mb-2"></i>
-      <p class="mb-0">暂无任务</p>
+      <i class="fas fa-spinner fa-spin"></i>
+      筛选中…
     </div>
 
-    <div v-else class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th style="width: 100px">类型</th>
-            <th style="width: 180px">镜像/任务</th>
-            <th style="width: 120px">分支/Tag</th>
-            <th style="width: 90px">来源</th>
-            <th style="width: 100px">状态</th>
-            <th style="width: 140px">创建时间</th>
-            <th style="width: 90px">时长</th>
-            <th style="width: 90px">文件大小</th>
-            <th style="width: auto; min-width: 200px" class="text-end">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="task in paginatedTasks" :key="task.task_id">
-            <td>
-              <span v-if="task.task_category === 'build'" class="badge bg-info">
-                <i class="fas fa-hammer"></i> 构建
-              </span>
-              <span
-                v-else-if="task.task_category === 'deploy'"
-                class="badge bg-success"
+    <EmptyState v-else-if="paginatedTasks.length === 0" message="暂无任务" />
+
+    <Table v-else min-width-class="min-w-[72rem]">
+      <TableHeader>
+        <TableRow>
+          <TableHead class="w-[100px]">类型</TableHead>
+          <TableHead class="w-[180px]">镜像/任务</TableHead>
+          <TableHead class="w-[120px]">分支/Tag</TableHead>
+          <TableHead class="hidden w-[90px] xl:table-cell">来源</TableHead>
+          <TableHead class="w-[100px]">状态</TableHead>
+          <TableHead class="w-[140px]">创建时间</TableHead>
+          <TableHead class="hidden w-[90px] lg:table-cell">时长</TableHead>
+          <TableHead class="w-[90px]">文件大小</TableHead>
+          <TableHead class="min-w-[200px] text-end">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="task in paginatedTasks" :key="task.task_id">
+          <TableCell>
+            <Badge v-if="task.task_category === 'build'" variant="info">
+              <i class="fas fa-hammer mr-1"></i> 构建
+            </Badge>
+            <Badge v-else-if="task.task_category === 'deploy'" variant="success">
+              <i class="fas fa-rocket mr-1"></i> 部署
+            </Badge>
+            <Badge v-else variant="default">
+              <i class="fas fa-download mr-1"></i> 导出
+            </Badge>
+          </TableCell>
+          <TableCell>
+            <div>
+              <div class="flex items-center gap-2">
+                <div class="flex min-w-0 flex-col">
+                  <span
+                    v-if="task.source === '流水线' && task.pipeline_name"
+                    class="truncate"
+                  >
+                    <i class="fas fa-project-diagram mr-1 text-blue-600"></i>
+                    <strong>{{ task.pipeline_name }}</strong>
+                  </span>
+                  <code v-else class="mb-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs">
+                    {{ task.image || (task.task_type ? task.task_type : "未知") }}
+                  </code>
+                </div>
+                <Badge
+                  v-if="task.selected_services && task.selected_services.length > 0"
+                  variant="info"
+                  class="shrink-0 text-[0.7rem] font-semibold"
+                  :title="`多服务构建: ${task.selected_services.join(', ')}`"
+                >
+                  <i class="fas fa-layer-group mr-1"></i>
+                  {{ task.selected_services.length }} 服务
+                </Badge>
+                <Badge
+                  v-else-if="task.push_mode === 'multi' && task.task_category === 'build'"
+                  variant="default"
+                  class="shrink-0 text-[0.7rem] font-semibold"
+                >
+                  <i class="fas fa-cube mr-1"></i> 单服务
+                </Badge>
+              </div>
+              <div
+                v-if="task.task_category === 'deploy' && task.task_config?.targets"
+                class="mt-1"
               >
-                <i class="fas fa-rocket"></i> 部署
-              </span>
-              <span v-else class="badge bg-secondary">
-                <i class="fas fa-download"></i> 导出
-              </span>
-            </td>
-            <td>
-              <div>
-                <!-- 顶部主标题：镜像名 / 流水线名 / 任务类型 -->
-                <div class="d-flex align-items-center gap-2">
-                  <div class="d-flex flex-column">
-                    <!-- 如果是流水线触发的构建任务，优先显示流水线名称 -->
-                    <span
-                      v-if="task.source === '流水线' && task.pipeline_name"
-                      class="mb-0"
-                    >
-                      <i class="fas fa-project-diagram text-primary me-1"></i>
-                      <strong>{{ task.pipeline_name }}</strong>
-                    </span>
-                    <code v-else class="small mb-0">
-                      {{
-                        task.image || (task.task_type ? task.task_type : "未知")
-                      }}
-                    </code>
-                  </div>
-
-                  <!-- 多服务标识 -->
-                  <span
-                    v-if="
-                      task.selected_services &&
-                      task.selected_services.length > 0
-                    "
-                    class="badge bg-info"
-                    style="font-size: 0.7rem; font-weight: 600"
-                    :title="`多服务构建: ${task.selected_services.join(', ')}`"
+                <Badge variant="success" class="text-[0.7rem]">
+                  <i class="fas fa-server mr-1"></i>
+                  {{ task.task_config.targets.length }} 个目标
+                </Badge>
+              </div>
+              <div
+                v-else-if="task.selected_services && task.selected_services.length > 0"
+                class="mt-1"
+              >
+                <div class="flex flex-wrap gap-1">
+                  <Badge
+                    v-for="service in task.selected_services.slice(0, 8)"
+                    :key="service"
+                    variant="default"
+                    class="text-[0.65rem]"
                   >
-                    <i class="fas fa-layer-group"></i>
-                    {{ task.selected_services.length }} 服务
-                  </span>
-                  <!-- 单服务标识：push_mode=multi 但没有 selected_services -->
-                  <span
-                    v-else-if="
-                      task.push_mode === 'multi' &&
-                      task.task_category === 'build'
-                    "
-                    class="badge bg-secondary"
-                    style="font-size: 0.7rem; font-weight: 600"
+                    {{ service }}
+                  </Badge>
+                  <Badge
+                    v-if="task.selected_services.length > 8"
+                    variant="default"
+                    class="text-[0.65rem]"
+                    :title="task.selected_services.slice(8).join(', ')"
                   >
-                    <i class="fas fa-cube"></i> 单服务
-                  </span>
-                </div>
-
-                <!-- 部署任务显示目标主机 -->
-                <div
-                  v-if="
-                    task.task_category === 'deploy' && task.task_config?.targets
-                  "
-                  class="mt-1"
-                >
-                  <span class="badge bg-success me-1" style="font-size: 0.7rem">
-                    <i class="fas fa-server"></i>
-                    {{ task.task_config.targets.length }} 个目标
-                  </span>
-                </div>
-
-                <!-- 构建任务显示服务列表（多服务） -->
-                <div
-                  v-else-if="
-                    task.selected_services && task.selected_services.length > 0
-                  "
-                  class="mt-1"
-                >
-                  <div class="d-flex flex-wrap gap-1">
-                    <span
-                      v-for="service in task.selected_services.slice(0, 8)"
-                      :key="service"
-                      class="badge bg-secondary"
-                      style="font-size: 0.65rem"
-                    >
-                      {{ service }}
-                    </span>
-                    <span
-                      v-if="task.selected_services.length > 8"
-                      class="badge bg-secondary"
-                      style="font-size: 0.65rem"
-                      :title="task.selected_services.slice(8).join(', ')"
-                    >
-                      +{{ task.selected_services.length - 8 }}
-                    </span>
-                  </div>
+                    +{{ task.selected_services.length - 8 }}
+                  </Badge>
                 </div>
               </div>
-            </td>
-            <td>
-              <div>
-                <!-- 分支显示 -->
-                <div v-if="task.branch" class="mb-1">
-                  <span class="badge bg-primary" style="font-size: 0.75rem">
-                    <i class="fas fa-code-branch"></i> {{ task.branch }}
-                  </span>
-                </div>
-                <!-- Tag显示 -->
-                <div v-if="task.tag">
-                  <span class="badge bg-info" style="font-size: 0.75rem">
-                    <i class="fas fa-tag"></i> {{ task.tag }}
-                  </span>
-                </div>
-                <!-- 如果都没有，显示占位符 -->
-                <small v-if="!task.branch && !task.tag" class="text-muted"
-                  >-</small
-                >
+            </div>
+          </TableCell>
+          <TableCell>
+            <div>
+              <div v-if="task.branch" class="mb-1">
+                <Badge variant="default" class="text-[0.75rem]">
+                  <i class="fas fa-code-branch mr-1"></i> {{ task.branch }}
+                </Badge>
               </div>
-            </td>
-            <td>
-              <span
-                v-if="
-                  task.task_category === 'deploy' &&
-                  (task.trigger_source === 'webhook' || task.source === 'Webhook')
-                "
-                class="badge bg-success"
-              >
-                <i class="fas fa-link"></i> Webhook
-              </span>
-              <span
-                v-else-if="task.task_category === 'deploy'"
-                class="badge bg-success"
-              >
-                <i class="fas fa-hand-pointer"></i> 手动
-              </span>
-              <span v-else-if="task.source === '流水线'" class="badge bg-primary">
-                <i class="fas fa-project-diagram"></i> 流水线
-              </span>
-              <span v-else-if="task.source === 'Git源码'" class="badge bg-info">
-                <i class="fas fa-code-branch"></i> Git源码
-              </span>
-              <span
-                v-else-if="task.source === '文件上传'"
-                class="badge bg-success"
-              >
-                <i class="fas fa-upload"></i> 文件上传
-              </span>
-              <span
-                v-else-if="
-                  task.source === '镜像构建' || task.source === '分步构建'
-                "
-                class="badge bg-warning"
-              >
-                <i class="fas fa-list-ol"></i> 镜像构建
-              </span>
-              <span
-                v-else-if="task.source === '手动部署'"
-                class="badge bg-success"
-              >
-                <i class="fas fa-rocket"></i> 手动部署
-              </span>
-              <span
-                v-else-if="task.source === 'Webhook'"
-                class="badge bg-success"
-              >
-                <i class="fas fa-link"></i> Webhook
-              </span>
-              <span v-else-if="task.source === '手动'" class="badge bg-success">
-                <i class="fas fa-rocket"></i> 手动
-              </span>
-              <span v-else class="badge bg-secondary">
-                <i class="fas fa-hammer"></i> {{ task.source || "手动构建" }}
-              </span>
-            </td>
-            <td>
-              <div class="d-flex flex-column gap-1">
-                <span
-                  v-if="task.status === 'pending'"
-                  class="badge bg-secondary"
-                >
-                  <i class="fas fa-clock"></i> 等待中
-                </span>
-                <span
-                  v-else-if="task.status === 'running'"
-                  class="badge bg-primary"
-                >
-                  <span class="spinner-border spinner-border-sm me-1"></span>
-                  进行中
-                </span>
-                <span
-                  v-else-if="task.status === 'stopped'"
-                  class="badge bg-warning"
-                >
-                  <i class="fas fa-stop-circle"></i> 已停止
-                </span>
-                <span
-                  v-else-if="task.status === 'completed'"
-                  class="badge bg-success"
-                >
-                  <i class="fas fa-check-circle"></i> 已完成
-                </span>
-                <span
-                  v-else-if="task.status === 'failed'"
-                  class="badge bg-danger"
-                >
-                  <i class="fas fa-times-circle"></i> 失败
-                </span>
-                <!-- 多服务任务显示服务数量提示 -->
-                <small
-                  v-if="
-                    task.selected_services &&
-                    task.selected_services.length > 0 &&
-                    task.status === 'running'
-                  "
-                  class="text-muted"
-                  style="font-size: 0.7rem"
-                >
-                  <i class="fas fa-cog fa-spin"></i> 构建中...
-                </small>
-                <small
-                  v-else-if="
-                    task.selected_services &&
-                    task.selected_services.length > 0 &&
-                    task.status === 'completed'
-                  "
-                  class="text-success"
-                  style="font-size: 0.7rem"
-                >
-                  <i class="fas fa-check"></i>
-                  {{ task.selected_services.length }} 个服务已完成
-                </small>
+              <div v-if="task.tag">
+                <Badge variant="info" class="text-[0.75rem]">
+                  <i class="fas fa-tag mr-1"></i> {{ task.tag }}
+                </Badge>
               </div>
-            </td>
-            <td class="small text-muted">
-              {{ formatTime(task.created_at) }}
-            </td>
-            <td class="small">
-              <span v-if="task.status === 'running'" class="text-primary">
-                <span
-                  class="spinner-border spinner-border-sm me-1"
-                  style="width: 0.7rem; height: 0.7rem"
-                ></span>
-                {{
-                  calculateDuration(task.started_at || task.created_at, null)
-                }}
-              </span>
-              <span
-                v-else-if="task.completed_at"
-                :class="{
-                  'text-success': task.status === 'completed',
-                  'text-danger': task.status === 'failed',
-                }"
+              <span v-if="!task.branch && !task.tag" class="text-sm text-slate-400">-</span>
+            </div>
+          </TableCell>
+          <TableCell class="hidden xl:table-cell">
+            <Badge
+              v-if="task.task_category === 'deploy' && (task.trigger_source === 'webhook' || task.source === 'Webhook')"
+              variant="success"
+            >
+              <i class="fas fa-link mr-1"></i> Webhook
+            </Badge>
+            <Badge v-else-if="task.task_category === 'deploy'" variant="success">
+              <i class="fas fa-hand-pointer mr-1"></i> 手动
+            </Badge>
+            <Badge v-else-if="task.source === '流水线'" variant="default">
+              <i class="fas fa-project-diagram mr-1"></i> 流水线
+            </Badge>
+            <Badge v-else-if="task.source === 'Git源码'" variant="info">
+              <i class="fas fa-code-branch mr-1"></i> Git源码
+            </Badge>
+            <Badge v-else-if="task.source === '文件上传'" variant="success">
+              <i class="fas fa-upload mr-1"></i> 文件上传
+            </Badge>
+            <Badge
+              v-else-if="task.source === '镜像构建' || task.source === '分步构建'"
+              variant="warning"
+            >
+              <i class="fas fa-list-ol mr-1"></i> 镜像构建
+            </Badge>
+            <Badge v-else-if="task.source === '手动部署'" variant="success">
+              <i class="fas fa-rocket mr-1"></i> 手动部署
+            </Badge>
+            <Badge v-else-if="task.source === 'Webhook'" variant="success">
+              <i class="fas fa-link mr-1"></i> Webhook
+            </Badge>
+            <Badge v-else-if="task.source === '手动'" variant="success">
+              <i class="fas fa-rocket mr-1"></i> 手动
+            </Badge>
+            <Badge v-else variant="default">
+              <i class="fas fa-hammer mr-1"></i> {{ task.source || "手动构建" }}
+            </Badge>
+          </TableCell>
+          <TableCell>
+            <div class="flex flex-col gap-1">
+              <Badge v-if="task.status === 'pending'" variant="default">
+                <i class="fas fa-clock mr-1"></i> 等待中
+              </Badge>
+              <Badge v-else-if="task.status === 'running'" variant="default">
+                <i class="fas fa-spinner fa-spin mr-1"></i>
+                进行中
+              </Badge>
+              <Badge v-else-if="task.status === 'stopped'" variant="warning">
+                <i class="fas fa-stop-circle mr-1"></i> 已停止
+              </Badge>
+              <Badge v-else-if="task.status === 'completed'" variant="success">
+                <i class="fas fa-check-circle mr-1"></i> 已完成
+              </Badge>
+              <Badge v-else-if="task.status === 'failed'" variant="danger">
+                <i class="fas fa-times-circle mr-1"></i> 失败
+              </Badge>
+              <small
+                v-if="task.selected_services && task.selected_services.length > 0 && task.status === 'running'"
+                class="text-[0.7rem] text-slate-500"
               >
-                {{
-                  calculateDuration(
-                    task.started_at || task.created_at,
-                    task.completed_at
-                  )
-                }}
-              </span>
-              <span v-else class="text-muted">-</span>
-            </td>
-            <td class="small">
-              <span v-if="task.file_size">{{
-                formatFileSize(task.file_size)
-              }}</span>
-              <span v-else>-</span>
-            </td>
-            <td class="text-end">
-              <div class="d-flex gap-1 justify-content-end flex-wrap">
-                <!-- 构建任务操作 -->
-                <template v-if="task.task_category === 'build'">
-                  <button
-                    class="btn btn-sm btn-outline-info"
-                    @click="viewLogs(task)"
-                    :disabled="viewingLogs === task.task_id"
-                    :title="'查看构建日志'"
-                  >
-                    <i class="fas fa-terminal"></i>
-                  </button>
-                  <button
-                    v-if="task.source !== '流水线' && !task.pipeline_id"
-                    class="btn btn-sm btn-outline-primary"
-                    @click="saveAsPipeline(task)"
-                    :title="'另存为流水线'"
-                  >
-                    <i class="fas fa-save"></i>
-                  </button>
-                  <button
-                    v-if="
-                      task.status === 'completed' ||
-                      task.status === 'failed' ||
-                      task.status === 'stopped'
-                    "
-                    class="btn btn-sm btn-outline-warning"
-                    @click="rebuildTask(task)"
-                    :disabled="rebuilding === task.task_id"
-                    :title="'重新构建'"
-                  >
-                    <i class="fas fa-redo"></i>
-                    <span
-                      v-if="rebuilding === task.task_id"
-                      class="spinner-border spinner-border-sm ms-1"
-                    ></span>
-                  </button>
-                  <button
-                    class="btn btn-sm btn-outline-secondary"
-                    @click="viewTaskConfig(task)"
-                    :title="'查看配置JSON'"
-                  >
-                    <i class="fas fa-code"></i>
-                  </button>
-                </template>
-
-                <!-- 部署任务操作 -->
-                <template v-if="task.task_category === 'deploy'">
-                  <button
-                    class="btn btn-sm btn-outline-info"
-                    @click="viewLogs(task)"
-                    :disabled="viewingLogs === task.task_id"
-                    :title="'查看部署日志'"
-                  >
-                    <i class="fas fa-terminal"></i>
-                  </button>
-                  <button
-                    v-if="
-                      task.status === 'failed' ||
-                      task.status === 'stopped' ||
-                      task.status === 'completed'
-                    "
-                    class="btn btn-sm btn-outline-success"
-                    @click="retryDeployTask(task)"
-                    :disabled="retryingDeploy === task.task_id"
-                    :title="'重试部署'"
-                  >
-                    <i class="fas fa-redo"></i>
-                    <span
-                      v-if="retryingDeploy === task.task_id"
-                      class="spinner-border spinner-border-sm ms-1"
-                    ></span>
-                  </button>
-                  <button
-                    class="btn btn-sm btn-outline-secondary"
-                    @click="viewDeployConfig(task)"
-                    :title="'查看部署配置'"
-                  >
-                    <i class="fas fa-code"></i>
-                  </button>
-                </template>
-
-                <!-- 导出任务操作 -->
-                <template v-if="task.task_category === 'export'">
-                  <button
-                    v-if="task.status === 'completed'"
-                    class="btn btn-sm btn-success"
-                    @click="downloadTask(task)"
-                    :disabled="downloading === task.task_id"
-                    :title="'下载导出文件'"
-                  >
-                    <i class="fas fa-download"></i>
-                    <span
-                      v-if="downloading === task.task_id"
-                      class="spinner-border spinner-border-sm ms-1"
-                    ></span>
-                  </button>
-                  <button
-                    v-if="task.status === 'failed' || task.status === 'stopped'"
-                    class="btn btn-sm btn-outline-warning"
-                    @click="retryExportTask(task)"
-                    :disabled="retrying === task.task_id"
-                    :title="'重试导出'"
-                  >
-                    <i class="fas fa-redo"></i>
-                    <span
-                      v-if="retrying === task.task_id"
-                      class="spinner-border spinner-border-sm ms-1"
-                    ></span>
-                  </button>
-                </template>
-
-                <!-- 停止/删除按钮 -->
-                <button
-                  class="btn btn-sm"
-                  :class="
-                    task.status === 'running' || task.status === 'pending'
-                      ? 'btn-outline-warning'
-                      : 'btn-outline-danger'
-                  "
-                  @click="
-                    task.status === 'running' || task.status === 'pending'
-                      ? stopTask(task)
-                      : deleteTask(task)
-                  "
-                  :disabled="
-                    task.status === 'running' || task.status === 'pending'
-                      ? stopping === task.task_id
-                      : deleting === task.task_id
-                  "
-                  :title="
-                    task.status === 'running' || task.status === 'pending'
-                      ? '停止任务'
-                      : '删除任务'
-                  "
+                <i class="fas fa-cog fa-spin mr-1"></i> 构建中...
+              </small>
+              <small
+                v-else-if="task.selected_services && task.selected_services.length > 0 && task.status === 'completed'"
+                class="text-[0.7rem] text-green-600"
+              >
+                <i class="fas fa-check mr-1"></i>
+                {{ task.selected_services.length }} 个服务已完成
+              </small>
+            </div>
+          </TableCell>
+          <TableCell class="text-sm text-slate-500">{{ formatTime(task.created_at) }}</TableCell>
+          <TableCell class="hidden text-sm lg:table-cell">
+            <span v-if="task.status === 'running'" class="text-blue-600">
+              <i class="fas fa-spinner fa-spin mr-1 text-xs"></i>
+              {{ calculateDuration(task.started_at || task.created_at, null) }}
+            </span>
+            <span
+              v-else-if="task.completed_at"
+              :class="{
+                'text-green-600': task.status === 'completed',
+                'text-red-600': task.status === 'failed',
+              }"
+            >
+              {{ calculateDuration(task.started_at || task.created_at, task.completed_at) }}
+            </span>
+            <span v-else class="text-slate-400">-</span>
+          </TableCell>
+          <TableCell class="text-sm">
+            <span v-if="task.file_size">{{ formatFileSize(task.file_size) }}</span>
+            <span v-else>-</span>
+          </TableCell>
+          <TableCell class="text-end">
+            <div class="flex flex-wrap justify-end gap-1">
+              <template v-if="task.task_category === 'build'">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="查看构建日志"
+                  :disabled="viewingLogs === task.task_id"
+                  @click="viewLogs(task)"
                 >
-                  <i
-                    :class="
-                      task.status === 'running' || task.status === 'pending'
-                        ? 'fas fa-stop'
-                        : 'fas fa-trash'
-                    "
-                  ></i>
-                  <span
-                    v-if="
-                      (task.status === 'running' ||
-                        task.status === 'pending') &&
-                      stopping === task.task_id
-                    "
-                    class="spinner-border spinner-border-sm ms-1"
-                  ></span>
-                  <span
-                    v-if="
-                      task.status !== 'running' &&
-                      task.status !== 'pending' &&
-                      deleting === task.task_id
-                    "
-                    class="spinner-border spinner-border-sm ms-1"
-                  ></span>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+                  <i class="fas fa-terminal"></i>
+                </Button>
+                <Button
+                  v-if="task.source !== '流水线' && !task.pipeline_id"
+                  variant="outline"
+                  size="sm"
+                  title="另存为流水线"
+                  @click="saveAsPipeline(task)"
+                >
+                  <i class="fas fa-save"></i>
+                </Button>
+                <Button
+                  v-if="task.status === 'completed' || task.status === 'failed' || task.status === 'stopped'"
+                  variant="outline"
+                  size="sm"
+                  title="重新构建"
+                  :disabled="rebuilding === task.task_id"
+                  @click="rebuildTask(task)"
+                >
+                  <i class="fas fa-redo"></i>
+                  <i v-if="rebuilding === task.task_id" class="fas fa-spinner fa-spin"></i>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="查看配置JSON"
+                  @click="viewTaskConfig(task)"
+                >
+                  <i class="fas fa-code"></i>
+                </Button>
+              </template>
 
-    <!-- 分页控件 -->
-    <div
+              <template v-if="task.task_category === 'deploy'">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="查看部署日志"
+                  :disabled="viewingLogs === task.task_id"
+                  @click="viewLogs(task)"
+                >
+                  <i class="fas fa-terminal"></i>
+                </Button>
+                <Button
+                  v-if="task.status === 'failed' || task.status === 'stopped' || task.status === 'completed'"
+                  variant="outline"
+                  size="sm"
+                  title="重试部署"
+                  :disabled="retryingDeploy === task.task_id"
+                  @click="retryDeployTask(task)"
+                >
+                  <i class="fas fa-redo"></i>
+                  <i v-if="retryingDeploy === task.task_id" class="fas fa-spinner fa-spin"></i>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="查看部署配置"
+                  @click="viewDeployConfig(task)"
+                >
+                  <i class="fas fa-code"></i>
+                </Button>
+              </template>
+
+              <template v-if="task.task_category === 'export'">
+                <Button
+                  v-if="task.status === 'completed'"
+                  size="sm"
+                  title="下载导出文件"
+                  :disabled="downloading === task.task_id"
+                  @click="downloadTask(task)"
+                >
+                  <i class="fas fa-download"></i>
+                  <i v-if="downloading === task.task_id" class="fas fa-spinner fa-spin"></i>
+                </Button>
+                <Button
+                  v-if="task.status === 'failed' || task.status === 'stopped'"
+                  variant="outline"
+                  size="sm"
+                  title="重试导出"
+                  :disabled="retrying === task.task_id"
+                  @click="retryExportTask(task)"
+                >
+                  <i class="fas fa-redo"></i>
+                  <i v-if="retrying === task.task_id" class="fas fa-spinner fa-spin"></i>
+                </Button>
+              </template>
+
+              <Button
+                size="sm"
+                :variant="task.status === 'running' || task.status === 'pending' ? 'outline' : 'destructive'"
+                :title="task.status === 'running' || task.status === 'pending' ? '停止任务' : '删除任务'"
+                :disabled="task.status === 'running' || task.status === 'pending' ? stopping === task.task_id : deleting === task.task_id"
+                @click="task.status === 'running' || task.status === 'pending' ? stopTask(task) : deleteTask(task)"
+              >
+                <i
+                  :class="task.status === 'running' || task.status === 'pending' ? 'fas fa-stop' : 'fas fa-trash'"
+                ></i>
+                <i
+                  v-if="(task.status === 'running' || task.status === 'pending') && stopping === task.task_id"
+                  class="fas fa-spinner fa-spin"
+                ></i>
+                <i
+                  v-if="task.status !== 'running' && task.status !== 'pending' && deleting === task.task_id"
+                  class="fas fa-spinner fa-spin"
+                ></i>
+              </Button>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+
+    <PaginationBar
       v-if="!loading && !filtering && totalTasks > 0"
-      class="d-flex justify-content-between align-items-center mt-3"
-    >
-      <div class="text-muted small">
-        显示第 {{ totalTasks > 0 ? (currentPage - 1) * pageSize + 1 : 0 }} -
-        {{ Math.min(currentPage * pageSize, totalTasks) }} 条，共
-        {{ totalTasks }} 条
-      </div>
-      <nav v-if="totalPages > 1 && totalTasks > 0">
-        <ul class="pagination pagination-sm mb-0">
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-double-left"></i>
-            </button>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(currentPage - 1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-left"></i>
-            </button>
-          </li>
-          <li
-            v-for="page in visiblePages"
-            :key="page"
-            class="page-item"
-            :class="{ active: currentPage === page }"
-          >
-            <button class="page-link" @click="changePage(page)">
-              {{ page }}
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(currentPage + 1)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-right"></i>
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(totalPages)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-double-right"></i>
-            </button>
-          </li>
-        </ul>
-      </nav>
-      <div v-else class="text-muted small">
-        <span v-if="totalTasks <= pageSize"
-          >全部显示（共 {{ totalTasks }} 条）</span
-        >
-      </div>
-    </div>
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalTasks"
+      :total-pages="totalPages"
+      @update:page="changePage"
+    />
 
-    <!-- 错误提示 -->
-    <div v-if="error" class="alert alert-danger mt-3 mb-0">
-      <i class="fas fa-exclamation-circle"></i> {{ error }}
-    </div>
+    <AlertBanner :message="error || ''" />
 
-    <!-- 日志模态框 -->
     <TaskLogModal
       v-model="showLogModal"
       :task="selectedTask"
       @task-status-updated="onTaskStatusUpdated"
     />
+
+    <FormDialog
+      v-model="showConfigModal"
+      title="任务配置JSON"
+      icon="fa-code"
+      size="lg"
+    >
+      <div class="mb-3 flex justify-end">
+        <Button variant="outline" size="sm" @click="copyTaskConfigJson">
+          <i class="fas fa-copy"></i>
+          复制JSON
+        </Button>
+      </div>
+      <codemirror
+        v-model="taskConfigJsonText"
+        :style="{ height: '500px', fontSize: '13px' }"
+        :disabled="true"
+        :extensions="jsonEditorExtensions"
+      />
+      <template #footer>
+        <Button variant="outline" type="button" @click="showConfigModal = false">关闭</Button>
+      </template>
+    </FormDialog>
+
+    <FormDialog
+      v-model="showSaveAsPipelineModal"
+      title="另存为流水线"
+      icon="fa-save"
+      size="lg"
+    >
+      <div class="space-y-4">
+        <div class="space-y-2">
+          <Label>流水线名称 <span class="text-red-500">*</span></Label>
+          <Input v-model="pipelineForm.name" placeholder="请输入流水线名称" required />
+        </div>
+        <div class="space-y-2">
+          <Label>描述</Label>
+          <textarea
+            v-model="pipelineForm.description"
+            rows="2"
+            class="flex min-h-[80px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            placeholder="请输入描述（可选）"
+          ></textarea>
+        </div>
+        <AlertBanner
+          variant="info"
+          message="流水线将使用任务的完整配置，包括Git地址、分支、镜像名称、构建参数等。"
+        />
+      </div>
+      <template #footer>
+        <Button variant="outline" type="button" @click="showSaveAsPipelineModal = false"
+          >取消</Button
+        >
+        <Button type="button" :disabled="saving" @click="savePipelineFromTask">
+          <i v-if="saving" class="fas fa-spinner fa-spin"></i>
+          {{ saving ? "保存中..." : "保存" }}
+        </Button>
+      </template>
+    </FormDialog>
+
+    <FormDialog v-model="showConcurrentModal" title="并发设置" icon="fa-sliders-h" size="sm">
+      <div class="space-y-2">
+        <Label>全局最大并发任务数</Label>
+        <Input
+          v-model="concurrentInput"
+          type="number"
+          min="1"
+          step="1"
+          :disabled="savingSystemSettings"
+          @keydown.enter="submitConcurrentSetting"
+        />
+        <p class="text-xs text-slate-500">当前值：{{ maxConcurrentTasks }}</p>
+      </div>
+      <template #footer>
+        <Button
+          variant="outline"
+          type="button"
+          :disabled="savingSystemSettings"
+          @click="closeConcurrentModal"
+          >取消</Button
+        >
+        <Button type="button" :disabled="savingSystemSettings" @click="submitConcurrentSetting">
+          <i v-if="savingSystemSettings" class="fas fa-spinner fa-spin"></i>
+          保存
+        </Button>
+      </template>
+    </FormDialog>
   </div>
 
-  <!-- 任务配置JSON模态框 -->
-  <div
-    v-if="showConfigModal"
-    class="modal fade show"
-    style="display: block"
-    tabindex="-1"
-  >
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-code"></i> 任务配置JSON</h5>
-          <button
-            type="button"
-            class="btn-close"
-            @click="showConfigModal = false"
-          ></button>
-        </div>
-        <div class="modal-body">
-          <div class="d-flex justify-content-end mb-2">
-            <button
-              class="btn btn-sm btn-outline-primary"
-              @click="copyTaskConfigJson"
-            >
-              <i class="fas fa-copy"></i> 复制JSON
-            </button>
-          </div>
-          <codemirror
-            v-model="taskConfigJsonText"
-            :style="{ height: '500px', fontSize: '13px' }"
-            :disabled="true"
-            :extensions="jsonEditorExtensions"
-          />
-        </div>
-        <div class="modal-footer">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            @click="showConfigModal = false"
-          >
-            关闭
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div v-if="showConfigModal" class="modal-backdrop fade show"></div>
-
-  <!-- 另存为流水线模态框 -->
-  <div
-    v-if="showSaveAsPipelineModal"
-    class="modal fade show"
-    style="display: block"
-    tabindex="-1"
-  >
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-save"></i> 另存为流水线</h5>
-          <button
-            type="button"
-            class="btn-close"
-            @click="showSaveAsPipelineModal = false"
-          ></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label"
-              >流水线名称 <span class="text-danger">*</span></label
-            >
-            <input
-              v-model="pipelineForm.name"
-              type="text"
-              class="form-control"
-              placeholder="请输入流水线名称"
-              required
-            />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">描述</label>
-            <textarea
-              v-model="pipelineForm.description"
-              class="form-control"
-              rows="2"
-              placeholder="请输入描述（可选）"
-            ></textarea>
-          </div>
-          <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i>
-            流水线将使用任务的完整配置，包括Git地址、分支、镜像名称、构建参数等。
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            @click="showSaveAsPipelineModal = false"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            @click="savePipelineFromTask"
-            :disabled="saving"
-          >
-            <span
-              v-if="saving"
-              class="spinner-border spinner-border-sm me-1"
-            ></span>
-            {{ saving ? "保存中..." : "保存" }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div v-if="showSaveAsPipelineModal" class="modal-backdrop fade show"></div>
-
-  <!-- 并发设置弹窗 -->
-  <div
-    v-if="showConcurrentModal"
-    class="modal fade show"
-    style="display: block"
-    tabindex="-1"
-  >
-    <div class="modal-dialog modal-sm">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-sliders-h me-1"></i>并发设置</h5>
-          <button
-            type="button"
-            class="btn-close"
-            :disabled="savingSystemSettings"
-            @click="closeConcurrentModal"
-          ></button>
-        </div>
-        <div class="modal-body">
-          <label class="form-label mb-2">全局最大并发任务数</label>
-          <input
-            v-model.trim="concurrentInput"
-            type="number"
-            min="1"
-            step="1"
-            class="form-control"
-            :disabled="savingSystemSettings"
-            @keydown.enter="submitConcurrentSetting"
-          />
-          <small class="text-muted d-block mt-2"
-            >当前值：{{ maxConcurrentTasks }}</small
-          >
-        </div>
-        <div class="modal-footer">
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="savingSystemSettings"
-            @click="closeConcurrentModal"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="savingSystemSettings"
-            @click="submitConcurrentSetting"
-          >
-            <span
-              v-if="savingSystemSettings"
-              class="spinner-border spinner-border-sm me-1"
-            ></span>
-            保存
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div v-if="showConcurrentModal" class="modal-backdrop fade show"></div>
 </template>
 
 <script setup>
@@ -1141,6 +734,24 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
 import TaskLogModal from "./TaskLogModal.vue";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import StatCard from "@/components/ui/StatCard.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const tasks = ref([]);
 const loading = ref(false);
@@ -2605,268 +2216,3 @@ onUnmounted(() => {
   }
 });
 </script>
-
-<style scoped>
-.task-manager {
-  animation: fadeIn 0.3s;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 基本信息块样式 */
-.info-cards {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 1rem;
-}
-
-.info-card {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  border-radius: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-  position: relative;
-}
-
-.info-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.info-card-primary::before {
-  background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
-}
-
-.info-card-info::before {
-  background: linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%);
-}
-
-.info-card-secondary::before {
-  background: linear-gradient(90deg, #6b7280 0%, #9ca3af 100%);
-}
-
-.info-card-success::before {
-  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-}
-
-.info-card-warning::before {
-  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
-}
-
-.info-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  transform: translateY(-4px);
-}
-
-.info-card:hover::before {
-  opacity: 1;
-}
-
-.info-card .card-body {
-  padding: 1.25rem 1.5rem;
-}
-
-.info-icon-wrapper {
-  flex-shrink: 0;
-}
-
-.info-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s ease;
-}
-
-.info-card:hover .info-icon {
-  transform: scale(1.1) rotate(5deg);
-}
-
-.info-icon.bg-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.info-icon.bg-info {
-  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
-}
-
-.info-icon.bg-secondary {
-  background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
-}
-
-.info-icon.bg-success {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.info-icon.bg-warning {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-
-.info-label {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
-
-.info-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #1e293b;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
-}
-
-.info-sub {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  margin-top: 0.25rem;
-}
-
-.info-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-
-.badge-success {
-  background-color: #10b981;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-warning {
-  background-color: #f59e0b;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-danger {
-  background-color: #ef4444;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-primary {
-  background-color: #667eea;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-info {
-  background-color: #06b6d4;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.info-dirs {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.info-dir-item {
-  display: flex;
-  align-items: center;
-  font-size: 0.875rem;
-  color: #475569;
-  font-weight: 500;
-}
-
-.table {
-  font-size: 0.9rem;
-}
-
-code {
-  font-size: 0.85rem;
-  background-color: #f8f9fa;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-/* 分页样式优化 */
-.pagination .page-link {
-  min-width: 38px;
-  text-align: center;
-}
-
-.pagination .page-item.disabled .page-link {
-  cursor: not-allowed;
-}
-
-.pagination .page-item.active .page-link {
-  font-weight: 600;
-}
-
-/* 操作按钮优化 */
-.d-flex.gap-1 .btn {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-  min-width: 32px;
-}
-
-.d-flex.gap-1 .btn i {
-  font-size: 0.85rem;
-}
-
-/* 表格响应式优化 */
-@media (max-width: 1400px) {
-  .table th:nth-child(5),
-  .table td:nth-child(5) {
-    display: none;
-  }
-}
-
-@media (max-width: 1200px) {
-  .table th:nth-child(7),
-  .table td:nth-child(7) {
-    display: none;
-  }
-}
-</style>

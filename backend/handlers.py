@@ -5490,6 +5490,8 @@ class BuildTaskManager:
         webhook_allowed_branches: Optional[List[str]] = None,
         trigger_source: str = "manual",
         source: Optional[str] = None,
+        team_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> str:
         """
         创建部署配置或执行任务
@@ -5604,6 +5606,8 @@ class BuildTaskManager:
                         webhook_allowed_branches=webhook_allowed_branches,
                         execution_count=0,
                         last_executed_at=None,
+                        team_id=team_id,
+                        created_by=created_by,
                         created_at=created_at,
                         updated_at=created_at,
                     )

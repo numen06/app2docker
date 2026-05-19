@@ -1,4 +1,4 @@
-# backend/routes.py
+# backend/route_definitions.py
 """FastAPI 路由定义"""
 import os
 import shutil
@@ -63,7 +63,16 @@ from backend.config import (
     save_git_config,
 )
 from backend.utils import get_safe_filename
-from backend.auth import authenticate, verify_token
+from backend.auth import (
+    TOKEN_EXPIRE_HOURS,
+    authenticate,
+    clear_auth_cookie,
+    create_token,
+    extract_jwt_token_from_request,
+    hash_password,
+    set_auth_cookie,
+    verify_auth_from_request,
+)
 from backend.app_key_manager import (
     generate_app_key,
     validate_app_key,
@@ -77,56 +86,27 @@ import jwt
 def get_current_username(request: Request) -> str:
     """从请求中获取当前用户名（兼容旧代码，返回unknown而不是抛出异常）"""
     try:
-        # FastAPI/Starlette 会将 header 名称标准化为小写
-        # 使用小写 'authorization' 是标准做法
-        # 注意：request.headers 是 Headers 对象，支持大小写不敏感的查找
         api_key = request.headers.get("x-api-key", "").strip()
         if api_key:
             api_key_result = validate_app_key(api_key)
             if api_key_result and api_key_result.get("username"):
                 return api_key_result["username"]
 
-        auth_header = request.headers.get("authorization", "")
-
-        if not auth_header:
-            # 尝试其他可能的名称
-            for key in request.headers.keys():
-                if key.lower() == "authorization":
-                    auth_header = request.headers[key]
-                    break
-
-        if not auth_header:
-            return "unknown"
-
-        # 移除 Bearer 前缀（不区分大小写）
-        auth_header_lower = auth_header.lower()
-        if auth_header_lower.startswith("bearer "):
-            token = auth_header[7:].strip()
-        else:
-            # 没有 Bearer 前缀，直接使用
-            token = auth_header.strip()
-
-        if not token:
-            return "unknown"
-
-        # 验证 token
-        result = verify_token(token)
+        result = verify_auth_from_request(request)
         if result.get("valid"):
             username = result.get("username")
             if username:
                 return username
-            else:
-                # Token 有效但没有用户名，这不应该发生
-                print(f"⚠️ Token 有效但用户名为空")
-                return "unknown"
-        else:
-            # Token 无效或过期
-            error_msg = result.get("error", "unknown error")
-            # 调试信息：打印 token 验证失败的原因
-            print(
-                f"⚠️ Token 验证失败: {error_msg}, token 前10个字符: {token[:10] if len(token) > 10 else token}"
-            )
+            print(f"⚠️ Token 有效但用户名为空")
             return "unknown"
+
+        error_msg = result.get("error", "unknown error")
+        token_preview = extract_jwt_token_from_request(request)
+        if token_preview:
+            print(
+                f"⚠️ Token 验证失败: {error_msg}, token 前10个字符: {token_preview[:10] if len(token_preview) > 10 else token_preview}"
+            )
+        return "unknown"
     except jwt.ExpiredSignatureError:
         # Token 已过期
         return "unknown"
@@ -152,45 +132,17 @@ def require_auth(request: Request) -> str:
             if api_key_result and api_key_result.get("username"):
                 return api_key_result["username"]
 
-        auth_header = request.headers.get("authorization", "")
-
-        if not auth_header:
-            # 尝试其他可能的名称
-            for key in request.headers.keys():
-                if key.lower() == "authorization":
-                    auth_header = request.headers[key]
-                    break
-
-        if not auth_header:
-            raise HTTPException(status_code=401, detail="未授权，请重新登录")
-
-        # 移除 Bearer 前缀（不区分大小写）
-        auth_header_lower = auth_header.lower()
-        if auth_header_lower.startswith("bearer "):
-            token = auth_header[7:].strip()
-        else:
-            # 没有 Bearer 前缀，直接使用
-            token = auth_header.strip()
-
-        if not token:
-            raise HTTPException(status_code=401, detail="未授权，请重新登录")
-
-        # 验证 Bearer token（JWT 或 APP Key）
-        result = verify_token(token)
+        result = verify_auth_from_request(request)
         if result.get("valid"):
             username = result.get("username")
             if username:
                 return username
-            else:
-                # Token 有效但没有用户名，这不应该发生
-                raise HTTPException(status_code=401, detail="Token无效")
-        else:
-            # Token 无效或过期
-            error_msg = result.get("error", "Token无效")
-            if "过期" in error_msg or "expired" in error_msg.lower():
-                raise HTTPException(status_code=401, detail="Token已过期，请重新登录")
-            else:
-                raise HTTPException(status_code=401, detail="Token无效，请重新登录")
+            raise HTTPException(status_code=401, detail="Token无效")
+
+        error_msg = result.get("error", "Token无效")
+        if "过期" in error_msg or "expired" in error_msg.lower():
+            raise HTTPException(status_code=401, detail="Token已过期，请重新登录")
+        raise HTTPException(status_code=401, detail="Token无效，请重新登录")
     except HTTPException:
         raise
     except jwt.ExpiredSignatureError:
@@ -217,6 +169,12 @@ router = APIRouter()
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
 
 
 class TemplateRequest(BaseModel):
@@ -263,16 +221,92 @@ async def login(request: LoginRequest):
     if result.get("success"):
         # 记录登录日志
         OperationLogger.log(request.username, "login", {"ip": "unknown"})
-        return JSONResponse(result)
+        response = JSONResponse(result)
+        set_auth_cookie(response, result["token"])
+        return response
     raise HTTPException(status_code=401, detail=result.get("error", "用户名或密码错误"))
+
+
+@router.post("/register")
+async def register(request: RegisterRequest):
+    """自助注册：写入数据库用户并发 JWT + Cookie。"""
+    import uuid
+    from backend.database import get_db_session
+    from backend.models import User, UserRole, Role
+
+    username = request.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    if len(request.password) < 6:
+        raise HTTPException(status_code=400, detail="密码长度至少6位")
+
+    db = get_db_session()
+    try:
+        existing_user = db.query(User).filter(User.username == username).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="用户名已存在")
+
+        email_val = (request.email or "").strip() or None
+
+        new_user = User(
+            user_id=str(uuid.uuid4()),
+            username=username,
+            password_hash=hash_password(request.password),
+            email=email_val,
+            enabled=True,
+        )
+        db.add(new_user)
+        db.commit()
+
+        role = db.query(Role).filter(Role.name == "user").first()
+        if role:
+            db.add(UserRole(user_id=new_user.user_id, role_id=role.role_id))
+            db.commit()
+
+        token = create_token(new_user.username, user_id=new_user.user_id)
+        payload = {
+            "success": True,
+            "token": token,
+            "username": new_user.username,
+            "expires_in": TOKEN_EXPIRE_HOURS * 3600,
+            "require_password_change": False,
+        }
+        response = JSONResponse(payload)
+        set_auth_cookie(response, token)
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"注册失败: {str(e)}")
+    finally:
+        db.close()
 
 
 @router.post("/logout")
 async def logout(request: Request):
-    """用户登出"""
+    """用户登出（清除 Cookie；若请求带有效凭证则记日志）"""
+    auth_info = verify_auth_from_request(request)
+    if auth_info.get("valid") and auth_info.get("username"):
+        OperationLogger.log(auth_info["username"], "logout", {})
+    response = JSONResponse({"success": True, "message": "已登出"})
+    clear_auth_cookie(response)
+    return response
+
+
+@router.get("/auth/me")
+async def auth_me(request: Request):
+    """当前登录用户（支持 Cookie 与 Bearer 双模式，供前端 fetchMe）。"""
+    from backend.auth import check_role
+
     username = require_auth(request)
-    OperationLogger.log(username, "logout", {})
-    return JSONResponse({"success": True, "message": "已登出"})
+    return JSONResponse(
+        {
+            "username": username,
+            "is_global_admin": check_role(username, "admin"),
+        }
+    )
 
 
 class ChangePasswordRequest(BaseModel):
@@ -5064,12 +5098,60 @@ async def prune_containers(http_request: Request):
 
 # === 流水线管理 ===
 from backend.pipeline_manager import PipelineManager
+from backend.resource_permissions import (
+    get_effective_permission,
+    grant_creator_admin,
+    require_resource_permission,
+    user_can_access_resource,
+)
+from backend.team_permissions import get_user_id_by_username, require_team_member
 
 # === Git 数据源管理 ===
 from backend.git_source_manager import GitSourceManager
 
 
+def _resolve_user_id(http_request: Request) -> str:
+    from backend.database import get_db_session
+
+    username = require_auth(http_request)
+    db = get_db_session()
+    try:
+        return get_user_id_by_username(db, username)
+    finally:
+        db.close()
+
+
+def _filter_pipelines_by_access(
+    user_id: str, pipelines: list, team_id: str | None = None
+) -> list:
+    from backend.database import get_db_session
+    from backend.models import Pipeline
+
+    db = get_db_session()
+    try:
+        result = []
+        for p in pipelines:
+            pid = p.get("pipeline_id")
+            if not pid:
+                continue
+            row = db.query(Pipeline).filter(Pipeline.pipeline_id == pid).first()
+            if not row:
+                continue
+            if team_id and row.team_id != team_id:
+                continue
+            if user_can_access_resource(db, user_id, "pipeline", row):
+                p["my_permission"] = get_effective_permission(
+                    db, user_id, "pipeline", pid
+                )
+                result.append(p)
+        return result
+    finally:
+        db.close()
+
+
 class CreatePipelineRequest(BaseModel):
+    team_id: str
+    group_id: Optional[str] = None
     name: str
     git_url: Optional[str] = None  # 如果提供了 source_id，git_url 可以从数据源获取
     branch: Optional[str] = None
@@ -5149,7 +5231,15 @@ class UpdatePipelineRequest(BaseModel):
 async def create_pipeline(request: CreatePipelineRequest, http_request: Request):
     """创建流水线配置"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_team_member(db, request.team_id, user_id)
+        finally:
+            db.close()
         manager = PipelineManager()
 
         # 如果提供了 source_id，从数据源获取 git_url 和 branch
@@ -5209,7 +5299,16 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
             push_mode=request.push_mode or "multi",
             resource_package_configs=request.resource_package_configs,
             post_build_webhooks=request.post_build_webhooks,
+            team_id=request.team_id,
+            group_id=request.group_id,
+            created_by=user_id,
         )
+
+        db = get_db_session()
+        try:
+            grant_creator_admin(db, "pipeline", pipeline_id, user_id)
+        finally:
+            db.close()
 
         # 记录操作日志
         OperationLogger.log(
@@ -5219,10 +5318,13 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
                 "pipeline_id": pipeline_id,
                 "name": request.name,
                 "git_url": request.git_url,
+                "team_id": request.team_id,
             },
         )
 
         return JSONResponse({"pipeline_id": pipeline_id, "message": "流水线创建成功"})
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
 
@@ -5238,7 +5340,15 @@ async def create_pipeline_from_json(pipeline_data: dict, http_request: Request):
     字段定义与 CreatePipelineRequest 相同。
     """
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        if not pipeline_data.get("team_id"):
+            raise HTTPException(status_code=400, detail="创建流水线需要指定 team_id")
+        db = get_db_session()
+        try:
+            require_team_member(db, pipeline_data["team_id"], user_id)
+        finally:
+            db.close()
         manager = PipelineManager()
 
         # 验证必填字段
@@ -5336,12 +5446,16 @@ async def create_pipeline_from_json(pipeline_data: dict, http_request: Request):
 
 @router.get("/pipelines")
 async def list_pipelines(
-    enabled: Optional[bool] = Query(None, description="过滤启用状态")
+    http_request: Request,
+    enabled: Optional[bool] = Query(None, description="过滤启用状态"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """获取流水线列表"""
     try:
+        user_id = _resolve_user_id(http_request)
         manager = PipelineManager()
         pipelines = manager.list_pipelines(enabled=enabled)
+        pipelines = _filter_pipelines_by_access(user_id, pipelines, team_id=team_id)
 
         # 为每个流水线添加当前任务状态和最后一次构建状态
         build_manager = BuildManager()
@@ -5473,9 +5587,17 @@ async def list_pipelines(
 
 
 @router.get("/pipelines/{pipeline_id}")
-async def get_pipeline(pipeline_id: str):
+async def get_pipeline(pipeline_id: str, http_request: Request):
     """获取流水线详情"""
     try:
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "pipeline", pipeline_id, "view")
+        finally:
+            db.close()
         manager = PipelineManager()
         pipeline = manager.get_pipeline(pipeline_id)
         if not pipeline:
@@ -5490,6 +5612,7 @@ async def get_pipeline(pipeline_id: str):
 @router.get("/pipelines/{pipeline_id}/tasks")
 async def get_pipeline_tasks(
     pipeline_id: str,
+    http_request: Request,
     status: Optional[str] = Query(None, description="过滤任务状态"),
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(10, ge=1, le=200, description="每页数量"),
@@ -5499,6 +5622,14 @@ async def get_pipeline_tasks(
 ):
     """获取流水线关联的所有任务历史记录（支持分页）"""
     try:
+        user_id = _resolve_user_id(http_request)
+        db_perm = get_db_session()
+        try:
+            require_resource_permission(
+                db_perm, user_id, "pipeline", pipeline_id, "view"
+            )
+        finally:
+            db_perm.close()
         # 获取流水线配置
         manager = PipelineManager()
         pipeline = manager.get_pipeline(pipeline_id)
@@ -5662,7 +5793,13 @@ async def update_pipeline(
 ):
     """更新流水线配置"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "pipeline", pipeline_id, "edit")
+        finally:
+            db.close()
         manager = PipelineManager()
 
         success = manager.update_pipeline(
@@ -5718,7 +5855,13 @@ async def update_pipeline(
 async def delete_pipeline(pipeline_id: str, http_request: Request):
     """删除流水线配置"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "pipeline", pipeline_id, "admin")
+        finally:
+            db.close()
         manager = PipelineManager()
 
         success = manager.delete_pipeline(pipeline_id)
@@ -5743,7 +5886,13 @@ async def run_pipeline(
 ):
     """手动触发流水线执行"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "pipeline", pipeline_id, "run")
+        finally:
+            db.close()
         manager = PipelineManager()
 
         # 获取流水线配置
@@ -6828,6 +6977,7 @@ async def deploy_webhook_trigger(webhook_token: str, request: Request):
 
 
 class CreateGitSourceRequest(BaseModel):
+    team_id: str
     name: str
     git_url: str
     description: str = ""
@@ -6854,13 +7004,35 @@ class UpdateGitSourceRequest(BaseModel):
 @router.get("/git-sources")
 async def list_git_sources(
     http_request: Request,
-    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配名称、URL、描述")
+    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配名称、URL、描述"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """获取所有 Git 数据源，支持模糊查询"""
     try:
-        get_current_username(http_request)  # 验证登录
+        user_id = _resolve_user_id(http_request)
         manager = GitSourceManager()
         sources = manager.list_sources(query=query)
+        from backend.database import get_db_session
+        from backend.models import GitSource
+
+        db = get_db_session()
+        try:
+            filtered = []
+            for s in sources:
+                sid = s.get("source_id")
+                row = db.query(GitSource).filter(GitSource.source_id == sid).first()
+                if not row:
+                    continue
+                if team_id and row.team_id != team_id:
+                    continue
+                if user_can_access_resource(db, user_id, "git_source", row):
+                    s["my_permission"] = get_effective_permission(
+                        db, user_id, "git_source", sid
+                    )
+                    filtered.append(s)
+            sources = filtered
+        finally:
+            db.close()
         return JSONResponse({"sources": sources, "total": len(sources)})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取数据源列表失败: {str(e)}")
@@ -6870,7 +7042,14 @@ async def list_git_sources(
 async def get_git_source(source_id: str, http_request: Request):
     """获取 Git 数据源详情"""
     try:
-        get_current_username(http_request)  # 验证登录
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "git_source", source_id, "view")
+        finally:
+            db.close()
         manager = GitSourceManager()
         source = manager.get_source(source_id)
         if not source:
@@ -6886,7 +7065,15 @@ async def get_git_source(source_id: str, http_request: Request):
 async def create_git_source(request: CreateGitSourceRequest, http_request: Request):
     """创建 Git 数据源"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_team_member(db, request.team_id, user_id)
+        finally:
+            db.close()
         manager = GitSourceManager()
 
         source_id = manager.create_source(
@@ -6899,7 +7086,15 @@ async def create_git_source(request: CreateGitSourceRequest, http_request: Reque
             username=request.username,
             password=request.password,
             dockerfiles=request.dockerfiles or {},
+            team_id=request.team_id,
+            created_by=user_id,
         )
+
+        db = get_db_session()
+        try:
+            grant_creator_admin(db, "git_source", source_id, user_id)
+        finally:
+            db.close()
 
         # 记录操作日志
         OperationLogger.log(
@@ -6926,7 +7121,15 @@ async def update_git_source(
 ):
     """更新 Git 数据源"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "git_source", source_id, "edit")
+        finally:
+            db.close()
         manager = GitSourceManager()
 
         success = manager.update_source(
@@ -6970,7 +7173,15 @@ async def update_git_source(
 async def delete_git_source(source_id: str, http_request: Request):
     """删除 Git 数据源"""
     try:
-        username = get_current_username(http_request)
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "git_source", source_id, "admin")
+        finally:
+            db.close()
         manager = GitSourceManager()
 
         success = manager.delete_source(source_id)
@@ -8121,6 +8332,8 @@ async def delete_host(request: Request, host_id: str):
 
 
 class AgentHostRequest(BaseModel):
+    team_id: str
+    group_id: Optional[str] = None
     name: str
     host_type: str = "agent"  # agent 或 portainer
     description: str = ""
@@ -8168,6 +8381,7 @@ class PortainerListEndpointsByHostRequest(BaseModel):
 
 
 class DeployTaskCreateRequest(BaseModel):
+    team_id: str
     config_content: str
     registry: Optional[str] = None
     tag: Optional[str] = None
@@ -8442,7 +8656,15 @@ async def get_portainer_stack_details(request: Request, host_id: str, stack_id: 
 async def add_agent_host(request: Request, host_req: AgentHostRequest):
     """创建主机（支持 Agent 和 Portainer 类型）"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_team_member(db, host_req.team_id, user_id)
+        finally:
+            db.close()
         manager = AgentHostManager()
 
         host_info = manager.add_agent_host(
@@ -8452,7 +8674,16 @@ async def add_agent_host(request: Request, host_req: AgentHostRequest):
             portainer_url=host_req.portainer_url,
             portainer_api_key=host_req.portainer_api_key,
             portainer_endpoint_id=host_req.portainer_endpoint_id,
+            team_id=host_req.team_id,
+            group_id=host_req.group_id,
+            created_by=user_id,
         )
+
+        db = get_db_session()
+        try:
+            grant_creator_admin(db, "agent_host", host_info["host_id"], user_id)
+        finally:
+            db.close()
 
         # 如果是 Portainer 类型，创建后立即更新状态
         if host_req.host_type == "portainer" and host_info:
@@ -8489,12 +8720,36 @@ async def add_agent_host(request: Request, host_req: AgentHostRequest):
 
 
 @router.get("/agent-hosts")
-async def list_agent_hosts(request: Request):
+async def list_agent_hosts(
+    request: Request,
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
+):
     """获取Agent主机列表"""
     try:
-        username = get_current_username(request)
+        user_id = _resolve_user_id(request)
         manager = AgentHostManager()
         hosts = manager.list_agent_hosts()
+        from backend.database import get_db_session
+        from backend.models import AgentHost
+
+        db = get_db_session()
+        try:
+            filtered = []
+            for h in hosts:
+                hid = h.get("host_id")
+                row = db.query(AgentHost).filter(AgentHost.host_id == hid).first()
+                if not row:
+                    continue
+                if team_id and row.team_id != team_id:
+                    continue
+                if user_can_access_resource(db, user_id, "agent_host", row):
+                    h["my_permission"] = get_effective_permission(
+                        db, user_id, "agent_host", hid
+                    )
+                    filtered.append(h)
+            hosts = filtered
+        finally:
+            db.close()
         return JSONResponse({"hosts": hosts})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取Agent主机列表失败: {str(e)}")
@@ -8655,7 +8910,14 @@ async def reject_pending_host(request: Request, agent_token: str):
 async def get_agent_host(request: Request, host_id: str):
     """获取Agent主机详情"""
     try:
-        username = get_current_username(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "agent_host", host_id, "view")
+        finally:
+            db.close()
         manager = AgentHostManager()
         host = manager.get_agent_host(host_id)
         if not host:
@@ -8673,7 +8935,15 @@ async def update_agent_host(
 ):
     """更新Agent主机信息"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "agent_host", host_id, "edit")
+        finally:
+            db.close()
         manager = AgentHostManager()
 
         host_info = manager.update_host_info(
@@ -8752,7 +9022,15 @@ async def refresh_agent_host_status(request: Request, host_id: str):
 async def delete_agent_host(request: Request, host_id: str):
     """删除Agent主机"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "agent_host", host_id, "admin")
+        finally:
+            db.close()
         manager = AgentHostManager()
 
         success = manager.delete_agent_host(host_id)
@@ -8961,10 +9239,18 @@ async def websocket_agent_endpoint(
 async def create_deploy_task(request: Request, task_req: DeployTaskCreateRequest):
     """创建部署配置（配置触发后会在任务管理中生成任务）"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_team_member(db, task_req.team_id, user_id)
+        finally:
+            db.close()
         build_manager = BuildTaskManager()
 
-        task_id = build_manager.create_deploy_task(
+        config_id = build_manager.create_deploy_task(
             config_content=task_req.config_content,
             registry=task_req.registry,
             tag=task_req.tag,
@@ -8974,7 +9260,17 @@ async def create_deploy_task(request: Request, task_req: DeployTaskCreateRequest
             webhook_allowed_branches=task_req.webhook_allowed_branches,
             trigger_source="manual",
             source="手动部署",
+            team_id=task_req.team_id,
+            created_by=user_id,
         )
+
+        db = get_db_session()
+        try:
+            grant_creator_admin(db, "deploy_config", config_id, user_id)
+        finally:
+            db.close()
+
+        task_id = config_id
 
         # 获取任务信息
         task = build_manager.get_task(task_id)
@@ -9008,10 +9304,11 @@ async def list_deploy_tasks(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     task_type_filter: Optional[str] = Query(None, description="部署类型过滤: agent, ssh, portainer"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """列出所有部署配置（支持分页和类型过滤）"""
     try:
-        username = get_current_username(request)
+        user_id = _resolve_user_id(request)
         from backend.database import get_db_session
         from backend.models import DeployConfig, Task
         from sqlalchemy import func
@@ -9020,7 +9317,12 @@ async def list_deploy_tasks(
         try:
             # 查询部署配置（带过滤）
             query = db.query(DeployConfig).order_by(DeployConfig.created_at.desc())
-            deploy_configs = query.all()
+            deploy_configs = [
+                c
+                for c in query.all()
+                if (not team_id or c.team_id == team_id)
+                and user_can_access_resource(db, user_id, "deploy_config", c)
+            ]
 
             # 如果有过滤条件，先过滤配置
             if task_type_filter and task_type_filter != "all":
@@ -9152,7 +9454,7 @@ async def list_deploy_tasks(
 async def get_deploy_task(request: Request, config_id: str):
     """获取部署配置详情（从 DeployConfig 表查询）"""
     try:
-        username = get_current_username(request)
+        user_id = _resolve_user_id(request)
         from backend.database import get_db_session
         from backend.models import DeployConfig, Task
 
@@ -9162,6 +9464,9 @@ async def get_deploy_task(request: Request, config_id: str):
             deploy_config = db.query(DeployConfig).filter(DeployConfig.config_id == config_id).first()
             
             if deploy_config:
+                require_resource_permission(
+                    db, user_id, "deploy_config", config_id, "view"
+                )
                 # 这是配置任务
                 # 先读取所有需要的属性值（避免延迟加载导致的会话分离问题）
                 config_json = deploy_config.config_json or {}
@@ -9261,7 +9566,17 @@ async def update_deploy_task(
 ):
     """更新部署配置（DeployConfig）"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(
+                db, user_id, "deploy_config", config_id, "edit"
+            )
+        finally:
+            db.close()
         build_manager = BuildTaskManager()
 
         success = build_manager.update_deploy_task(
@@ -9327,7 +9642,17 @@ async def execute_deploy_task(
 ):
     """触发部署配置（基于 DeployConfig 创建执行任务）"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            require_resource_permission(
+                db, user_id, "deploy_config", config_id, "run"
+            )
+        finally:
+            db.close()
         build_manager = BuildTaskManager()
 
         target_names = None
@@ -9514,12 +9839,16 @@ async def export_deploy_task(request: Request, config_id: str):
 async def delete_deploy_task(request: Request, config_id: str):
     """删除部署配置（DeployConfig）"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
         from backend.database import get_db_session
         from backend.models import DeployConfig, Task
 
         db = get_db_session()
         try:
+            require_resource_permission(
+                db, user_id, "deploy_config", config_id, "admin"
+            )
             # 检查配置是否存在
             deploy_config = db.query(DeployConfig).filter(DeployConfig.config_id == config_id).first()
             if not deploy_config:

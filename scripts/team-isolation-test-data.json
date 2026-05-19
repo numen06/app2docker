@@ -1,0 +1,24 @@
+{
+    "userB":  {
+                  "password":  "test123456",
+                  "username":  "iso_user_b_1779187613"
+              },
+    "teamB":  {
+                  "source":  "ISO-SRC-B-1779187613",
+                  "name":  "Team-Isolation-B-1779187613",
+                  "id":  "d4b3e4b6-33de-4c27-8743-285a93b2a598",
+                  "pipeline":  "ISO-PIPE-B-1779187613"
+              },
+    "timestamp":  1779187613,
+    "teamA":  {
+                  "source":  "ISO-SRC-A-1779187613",
+                  "name":  "Team-Isolation-A-1779187613",
+                  "id":  "282f6e0b-4c82-490f-b0d3-c8e71a1d6281",
+                  "pipeline":  "ISO-PIPE-A-1779187613"
+              },
+    "userA":  {
+                  "password":  "test123456",
+                  "username":  "iso_user_a_1779187613"
+              },
+    "allPass":  true
+}
