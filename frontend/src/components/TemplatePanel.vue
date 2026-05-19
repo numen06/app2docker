@@ -20,62 +20,120 @@
       icon="fa-file-code"
     />
 
-    <Table v-else min-width-class="min-w-[48rem]">
-      <TableHeader>
-        <TableRow>
-          <TableHead>模板名称</TableHead>
-          <TableHead>项目类型</TableHead>
-          <TableHead>文件大小</TableHead>
-          <TableHead>更新时间</TableHead>
-          <TableHead class="text-end">操作</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow v-for="tpl in templates" :key="tpl.name">
-          <TableCell class="font-medium text-slate-900">
-            {{ tpl.name }}
-            <i
-              v-if="tpl.type === 'builtin'"
-              class="fas fa-lock ml-1 text-slate-400"
-              title="内置模板"
-            ></i>
-          </TableCell>
-          <TableCell>
-            <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
-              {{ getProjectTypeLabel(tpl.project_type) }}
-            </Badge>
-          </TableCell>
-          <TableCell class="text-slate-600">{{ formatBytes(tpl.size) }}</TableCell>
-          <TableCell class="whitespace-nowrap text-slate-600">{{ formatTime(tpl.updated_at) }}</TableCell>
-          <TableCell class="text-end">
-            <div class="flex justify-end gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                title="解析"
-                :disabled="parsing === tpl.name"
-                @click="parseTemplate(tpl)"
-              >
-                <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
-                <i v-else class="fas fa-search"></i>
-              </Button>
-              <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
-                <i class="fas fa-eye"></i>
-              </Button>
-              <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
-                <i class="fas fa-copy"></i>
-              </Button>
-              <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
-                <i class="fas fa-pen"></i>
-              </Button>
-              <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
-                <i class="fas fa-trash"></i>
-              </Button>
+    <template v-else>
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="tpl in templates"
+          :key="`mobile-${tpl.name}`"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="min-w-0">
+            <div class="font-medium text-slate-900">
+              {{ tpl.name }}
+              <i
+                v-if="tpl.type === 'builtin'"
+                class="fas fa-lock ml-1 text-slate-400"
+                title="内置模板"
+              ></i>
             </div>
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
+            <div class="mt-2">
+              <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
+                {{ getProjectTypeLabel(tpl.project_type) }}
+              </Badge>
+            </div>
+            <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
+              <dt>大小</dt>
+              <dd>{{ formatBytes(tpl.size) }}</dd>
+              <dt>更新</dt>
+              <dd>{{ formatTime(tpl.updated_at) }}</dd>
+            </dl>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              title="解析"
+              :disabled="parsing === tpl.name"
+              @click="parseTemplate(tpl)"
+            >
+              <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
+              <i v-else class="fas fa-search"></i>
+            </Button>
+            <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
+              <i class="fas fa-eye"></i>
+            </Button>
+            <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
+              <i class="fas fa-copy"></i>
+            </Button>
+            <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
+              <i class="fas fa-pen"></i>
+            </Button>
+            <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
+              <i class="fas fa-trash"></i>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden md:block">
+        <Table min-width-class="min-w-[48rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>模板名称</TableHead>
+              <TableHead>项目类型</TableHead>
+              <TableHead>文件大小</TableHead>
+              <TableHead>更新时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="tpl in templates" :key="tpl.name">
+              <TableCell class="font-medium text-slate-900">
+                {{ tpl.name }}
+                <i
+                  v-if="tpl.type === 'builtin'"
+                  class="fas fa-lock ml-1 text-slate-400"
+                  title="内置模板"
+                ></i>
+              </TableCell>
+              <TableCell>
+                <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
+                  {{ getProjectTypeLabel(tpl.project_type) }}
+                </Badge>
+              </TableCell>
+              <TableCell class="text-slate-600">{{ formatBytes(tpl.size) }}</TableCell>
+              <TableCell class="whitespace-nowrap text-slate-600">{{ formatTime(tpl.updated_at) }}</TableCell>
+              <TableCell class="text-end">
+                <div class="flex justify-end gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title="解析"
+                    :disabled="parsing === tpl.name"
+                    @click="parseTemplate(tpl)"
+                  >
+                    <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
+                    <i v-else class="fas fa-search"></i>
+                  </Button>
+                  <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
+                    <i class="fas fa-eye"></i>
+                  </Button>
+                  <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
+                    <i class="fas fa-copy"></i>
+                  </Button>
+                  <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
+                    <i class="fas fa-pen"></i>
+                  </Button>
+                  <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
+                    <i class="fas fa-trash"></i>
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    </template>
 
     <PaginationBar
       v-if="totalPages > 1"
@@ -96,9 +154,9 @@
     <TemplatePreviewModal v-model="showPreview" :template="currentTemplate" />
 
     <BaseDialog v-model="showParseModal">
-      <div class="flex max-h-[90vh] w-full max-w-3xl flex-col">
+      <div class="template-parse-dialog flex max-h-[90vh] w-full max-w-3xl flex-col">
         <div class="flex shrink-0 items-center justify-between border-b border-sky-600 bg-sky-600 px-4 py-3 text-white">
-          <h3 class="flex items-center gap-2 text-lg font-semibold">
+          <h3 class="template-parse-dialog__title flex flex-wrap items-center gap-2 text-lg font-semibold">
             <i class="fas fa-search"></i>
             模板解析信息
             <span v-if="parseTemplateData" class="font-normal opacity-90">{{ parseTemplateData.name }}</span>
@@ -427,6 +485,21 @@ onMounted(() => {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 767px) {
+  .template-parse-dialog {
+    max-width: 100%;
+  }
+
+  .template-parse-dialog__title {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+  }
+
+  .template-parse-dialog :deep(table) {
+    font-size: 0.8125rem;
   }
 }
 </style>

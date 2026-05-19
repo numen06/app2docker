@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="resource-package-panel min-w-0">
     <PageToolbar title="资源包管理" icon="fa-archive">
       <template #actions>
         <Button size="sm" @click="showUploadModal = true">
@@ -9,59 +9,103 @@
       </template>
     </PageToolbar>
 
-    <Table min-width-class="min-w-[44rem]">
-        <TableHeader>
-          <TableRow>
-            <TableHead>名称</TableHead>
-            <TableHead>描述</TableHead>
-            <TableHead>文件大小</TableHead>
-            <TableHead>上传时间</TableHead>
-            <TableHead class="text-end">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-if="loading">
-            <TableCell colspan="5" class="py-8 text-center text-slate-500">
-              <i class="fas fa-spinner fa-spin mr-2"></i>
-              加载中…
-            </TableCell>
-          </TableRow>
-          <TableRow v-else-if="packages.length === 0">
-            <TableCell colspan="5" class="p-0">
-              <EmptyState message='暂无资源包，请点击「上传资源包」添加' icon="fa-archive" />
-            </TableCell>
-          </TableRow>
-          <TableRow v-for="pkg in packages" :key="pkg.package_id">
-            <TableCell class="font-medium text-slate-900">
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+      <i class="fas fa-spinner fa-spin"></i>
+      加载中…
+    </div>
+
+    <EmptyState
+      v-else-if="packages.length === 0"
+      message='暂无资源包，请点击「上传资源包」添加'
+      icon="fa-archive"
+    />
+
+    <template v-else>
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="pkg in packages"
+          :key="`mobile-${pkg.package_id}`"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="min-w-0">
+            <div class="font-medium text-slate-900">
               {{ pkg.name }}
               <i
                 v-if="pkg.extracted"
                 class="fas fa-folder-open ml-1 text-sky-600"
                 title="已解压"
               ></i>
-            </TableCell>
-            <TableCell class="text-slate-600">{{ pkg.description || "无描述" }}</TableCell>
-            <TableCell>{{ formatBytes(pkg.size) }}</TableCell>
-            <TableCell class="text-slate-600">{{ formatTime(pkg.created_at) }}</TableCell>
-            <TableCell class="text-end">
-              <div class="flex justify-end gap-1">
-                <Button
-                  v-if="isTextFile(pkg.name)"
-                  variant="outline"
-                  size="sm"
-                  title="编辑"
-                  @click="editPackage(pkg)"
-                >
-                  <i class="fas fa-edit"></i>
-                </Button>
-                <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
-                  <i class="fas fa-trash"></i>
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-    </Table>
+            </div>
+            <p class="mt-1 text-xs text-slate-600">{{ pkg.description || "无描述" }}</p>
+            <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
+              <dt>大小</dt>
+              <dd>{{ formatBytes(pkg.size) }}</dd>
+              <dt>上传</dt>
+              <dd>{{ formatTime(pkg.created_at) }}</dd>
+            </dl>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+            <Button
+              v-if="isTextFile(pkg.name)"
+              variant="outline"
+              size="sm"
+              title="编辑"
+              @click="editPackage(pkg)"
+            >
+              <i class="fas fa-edit"></i>
+            </Button>
+            <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
+              <i class="fas fa-trash"></i>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden md:block">
+        <Table min-width-class="min-w-[44rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>描述</TableHead>
+              <TableHead>文件大小</TableHead>
+              <TableHead>上传时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="pkg in packages" :key="pkg.package_id">
+              <TableCell class="font-medium text-slate-900">
+                {{ pkg.name }}
+                <i
+                  v-if="pkg.extracted"
+                  class="fas fa-folder-open ml-1 text-sky-600"
+                  title="已解压"
+                ></i>
+              </TableCell>
+              <TableCell class="text-slate-600">{{ pkg.description || "无描述" }}</TableCell>
+              <TableCell>{{ formatBytes(pkg.size) }}</TableCell>
+              <TableCell class="text-slate-600">{{ formatTime(pkg.created_at) }}</TableCell>
+              <TableCell class="text-end">
+                <div class="flex justify-end gap-1">
+                  <Button
+                    v-if="isTextFile(pkg.name)"
+                    variant="outline"
+                    size="sm"
+                    title="编辑"
+                    @click="editPackage(pkg)"
+                  >
+                    <i class="fas fa-edit"></i>
+                  </Button>
+                  <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
+                    <i class="fas fa-trash"></i>
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    </template>
 
     <FormDialog v-model="showUploadModal" title="上传资源包" icon="fa-upload">
       <form class="space-y-4" @submit.prevent="uploadPackage">
@@ -110,7 +154,7 @@
         <i class="fas fa-spinner fa-spin"></i>
         加载文件内容…
       </div>
-      <div v-else class="space-y-2">
+      <div v-else class="resource-package-editor space-y-2">
         <Label>文件内容</Label>
         <Codemirror
           v-model="editContent"
@@ -401,3 +445,11 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+@media (max-width: 767px) {
+  .resource-package-editor :deep(.cm-editor) {
+    height: min(50vh, 360px) !important;
+  }
+}
+</style>
