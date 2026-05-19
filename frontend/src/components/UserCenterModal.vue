@@ -56,18 +56,6 @@
       >
         API 密钥
       </button>
-      <button
-        type="button"
-        class="border-b-2 px-4 py-2 text-sm font-medium transition"
-        :class="
-          activeTab === 'team'
-            ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-slate-500 hover:text-slate-800'
-        "
-        @click="switchToTeam"
-      >
-        团队
-      </button>
     </div>
 
     <div v-if="activeTab === 'password' || requirePasswordChange">
@@ -114,11 +102,6 @@
         </div>
       </form>
     </div>
-
-    <UserCenterTeamPanel
-      v-else-if="activeTab === 'team' && !requirePasswordChange"
-      @team-changed="onTeamChanged"
-    />
 
     <div v-else-if="activeTab === 'appkeys' && !requirePasswordChange">
       <div class="mb-3 flex items-center justify-between">
@@ -271,7 +254,6 @@ import TableBody from "@/components/ui/table/TableBody.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
-import UserCenterTeamPanel from "@/components/UserCenterTeamPanel.vue";
 import { useTeamStore } from "@/stores/team";
 import { useAuthStore } from "@/stores/auth";
 
@@ -294,7 +276,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:show", "password-changed", "team-changed"]);
+const emit = defineEmits(["update:show", "password-changed"]);
 
 const teamStore = useTeamStore();
 const authStore = useAuthStore();
@@ -355,8 +337,7 @@ function resetState() {
     confirmPassword: "",
   };
   const tab = props.initialTab;
-  activeTab.value =
-    tab === "appkeys" || tab === "team" ? tab : "password";
+  activeTab.value = tab === "appkeys" ? "appkeys" : "password";
   appKeys.value = [];
   showCreateForm.value = false;
   createdAppKey.value = "";
@@ -376,18 +357,6 @@ function handlePrimaryAction() {
 async function switchToAppKeys() {
   activeTab.value = "appkeys";
   await loadAppKeys();
-}
-
-async function switchToTeam() {
-  activeTab.value = "team";
-  await teamStore.fetchMyTeams();
-}
-
-function onTeamChanged(teamId) {
-  emit("team-changed", teamId);
-  window.dispatchEvent(
-    new CustomEvent("team-context-changed", { detail: { teamId } })
-  );
 }
 
 function formatTime(value) {
@@ -519,12 +488,9 @@ watch(
   (visible) => {
     if (visible) {
       const tab = props.initialTab;
-      activeTab.value =
-        tab === "appkeys" || tab === "team" ? tab : "password";
+      activeTab.value = tab === "appkeys" ? "appkeys" : "password";
       if (activeTab.value === "appkeys") {
         loadAppKeys();
-      } else if (activeTab.value === "team") {
-        teamStore.fetchMyTeams();
       }
     } else {
       resetState();

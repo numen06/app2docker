@@ -39,8 +39,6 @@
 
       <TeamMemberList :team-id="teamStore.activeTeamId" @invite="inviteOpen = true" />
 
-      <PipelinePermissionPanel :team-id="teamStore.activeTeamId" />
-
       <InviteMemberDialog
         v-model="inviteOpen"
         :team-id="teamStore.activeTeamId"
@@ -62,7 +60,6 @@ import Label from "@/components/ui/label/Label.vue";
 import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 import InviteMemberDialog from "@/components/team/InviteMemberDialog.vue";
 import TeamMemberList from "@/components/team/TeamMemberList.vue";
-import PipelinePermissionPanel from "@/components/team/PipelinePermissionPanel.vue";
 
 const router = useRouter();
 const teamStore = useTeamStore();
@@ -83,9 +80,12 @@ function roleLabel(r) {
 
 async function onPickTeam(ev) {
   const nextId = ev.target.value;
-  if (!nextId) return;
+  if (!nextId || nextId === teamStore.activeTeamId) return;
   await teamStore.setCurrentTeam(nextId);
-  await teamStore.setCurrentTeam(nextId);
+  await router.replace(`/teams/${nextId}/settings`);
+  window.dispatchEvent(
+    new CustomEvent("team-context-changed", { detail: { teamId: nextId } })
+  );
 }
 
 watch(

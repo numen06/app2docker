@@ -56,6 +56,14 @@
               >
                 <i class="fas fa-edit"></i>
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                title="成员授权"
+                @click="openResourcePermission(source)"
+              >
+                <i class="fas fa-user-shield"></i>
+              </Button>
               <Button 
                 variant="destructive" size="sm" 
                 @click="deleteSource(source)"
@@ -523,6 +531,14 @@
         </div>
       </div>
     </div>
+
+  <ResourceMemberPermissionDialog
+    v-model="permissionDialogOpen"
+    resource-type="git_source"
+    :resource-id="permissionTarget?.source_id || ''"
+    :team-id="teamStore.activeTeamId"
+    :resource-name="permissionTarget?.name || ''"
+  />
 </div>
 </template>
 
@@ -549,8 +565,20 @@ import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
 import axios from 'axios'
 import { onMounted, ref, watch } from 'vue'
+import ResourceMemberPermissionDialog from '@/components/team/ResourceMemberPermissionDialog.vue'
+import { useTeamStore } from '@/stores/team'
 import { Codemirror } from 'vue-codemirror'
 
+
+const teamStore = useTeamStore()
+
+const permissionDialogOpen = ref(false)
+const permissionTarget = ref(null)
+
+function openResourcePermission(source) {
+  permissionTarget.value = source
+  permissionDialogOpen.value = true
+}
 
 const sources = ref([])
 const loading = ref(false)

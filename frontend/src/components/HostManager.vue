@@ -34,6 +34,15 @@
             <Button variant="outline" size="sm" class="flex-1" title="编辑" @click="editHost(host)">
               <i class="fas fa-edit"></i>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              title="成员授权"
+              @click="openResourcePermission(host)"
+            >
+              <i class="fas fa-user-shield"></i>
+            </Button>
             <Button variant="destructive" size="sm" class="flex-1" title="删除" @click="deleteHost(host)">
               <i class="fas fa-trash"></i>
             </Button>
@@ -167,6 +176,7 @@
             />
           </div>
         </div>
+
       </form>
       <template #footer>
         <Button variant="secondary" size="sm" @click="closeModal">取消</Button>
@@ -177,6 +187,14 @@
         </Button>
       </template>
     </FormDialog>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="agent_host"
+      :resource-id="permissionTarget?.host_id || ''"
+      :team-id="activeTeamId"
+      :resource-name="permissionTarget?.name || ''"
+    />
   </div>
 </template>
 
@@ -193,6 +211,8 @@ import CardTitle from "@/components/ui/card/CardTitle.vue";
 import CardContent from "@/components/ui/card/CardContent.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useTeamStore } from "@/stores/team";
 
 export default {
   name: "HostManager",
@@ -208,6 +228,7 @@ export default {
     CardContent,
     EmptyState,
     AlertBanner,
+    ResourceMemberPermissionDialog,
   },
   props: { filterType: { type: String, default: "all" } },
   data() {
@@ -216,6 +237,8 @@ export default {
       loading: false,
       showAddModal: false,
       showEditModal: false,
+      permissionDialogOpen: false,
+      permissionTarget: null,
       editingHost: null,
       saving: false,
       testingConnection: null,
@@ -241,6 +264,9 @@ export default {
     },
     filteredHosts() {
       return this.shouldShow ? this.hosts : [];
+    },
+    activeTeamId() {
+      return useTeamStore().activeTeamId || "";
     },
   },
   mounted() {
@@ -300,6 +326,10 @@ export default {
         docker_version: null,
         description: "",
       };
+    },
+    openResourcePermission(host) {
+      this.permissionTarget = host;
+      this.permissionDialogOpen = true;
     },
     editHost(host) {
       this.editingHost = host;

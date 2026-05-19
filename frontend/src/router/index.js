@@ -58,7 +58,6 @@ const router = createRouter({
           path: 'settings',
           name: 'team-settings',
           component: () => import('@/components/team/TeamSettings.vue'),
-          meta: { requiresAdmin: true },
         },
       ],
     },

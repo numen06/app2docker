@@ -122,6 +122,13 @@
               </Button>
               <Button
                 variant="outline" size="sm"
+                @click="openResourcePermission(pipeline)"
+                title="成员授权"
+              >
+                <i class="fas fa-user-shield"></i>
+              </Button>
+              <Button
+                variant="outline" size="sm"
                 @click="showMultiServiceConfig(pipeline)"
                 title="多服务配置"
               >
@@ -3655,11 +3662,21 @@
         </div>
       </div>
     </div>
-</div>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="pipeline"
+      :resource-id="permissionTarget?.pipeline_id || ''"
+      :team-id="teamStore.activeTeamId"
+      :resource-name="permissionTarget?.name || ''"
+    />
+  </div>
 </template>
 
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useTeamStore } from "@/stores/team";
 import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -3695,6 +3712,16 @@ function onPostBuildWebhookBranchesInput(webhook, e) {
 
 // 项目类型相关
 const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
+
+const teamStore = useTeamStore();
+
+const permissionDialogOpen = ref(false);
+const permissionTarget = ref(null);
+
+function openResourcePermission(pipeline) {
+  permissionTarget.value = pipeline;
+  permissionDialogOpen.value = true;
+}
 
 const pipelines = ref([]);
 const templates = ref([]);

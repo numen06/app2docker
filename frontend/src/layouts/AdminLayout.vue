@@ -175,15 +175,6 @@
                   <button
                     type="button"
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    @click="openUserCenter('team')"
-                  >
-                    <i class="fas fa-people-group w-4 text-slate-400"></i>团队管理
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                     @click="openUserCenter('appkeys')"
                   >
                     <i class="fas fa-key w-4 text-slate-400"></i>APPKEY管理
@@ -258,6 +249,15 @@
             >
               <i class="fas fa-house fa-fw text-slate-500 group-hover:text-slate-700"></i>
               <span class="truncate">首页</span>
+            </button>
+            <button
+              type="button"
+              class="group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+              title="团队管理"
+              @click="goTeamSettings"
+            >
+              <i class="fas fa-people-group fa-fw text-slate-500 group-hover:text-slate-700"></i>
+              <span class="truncate">团队管理</span>
             </button>
             <div
               v-if="hasPermission('menu.dashboard') && visibleSidebarGroups.length"
@@ -345,6 +345,14 @@
               @click="goTab('dashboard')"
             >
               <i class="fas fa-house fa-fw"></i>
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              title="团队管理"
+              @click="goTeamSettings"
+            >
+              <i class="fas fa-people-group fa-fw"></i>
             </button>
             <div
               v-if="hasPermission('menu.dashboard') && visibleSidebarGroups.length"
@@ -611,7 +619,6 @@
         v-model:show="showUserCenter"
         :username="username"
         :initial-tab="userCenterInitialTab"
-        @team-changed="onUserCenterTeamChanged"
       />
 
       <transition name="fade">
@@ -1124,13 +1131,16 @@ function teamRoleLabel(role) {
   return map[role] || role;
 }
 
-async function onUserCenterTeamChanged(teamId) {
-  if (permissionsLoaded.value) {
-    await refreshEffectivePermissions();
+function goTeamSettings() {
+  closeUserMenu();
+  closeMobileSidebar();
+  const tid =
+    teamStore.activeTeamId || teamStore.memberships[0]?.team?.team_id;
+  if (!tid) {
+    router.push("/onboarding");
+    return;
   }
-  window.dispatchEvent(
-    new CustomEvent("team-context-changed", { detail: { teamId } })
-  );
+  router.push(`/teams/${tid}/settings`);
 }
 
 async function onGlobalTeamChange(ev) {
@@ -1151,7 +1161,7 @@ async function onGlobalTeamChange(ev) {
 }
 
 function openUserCenter(tab = "password") {
-  userCenterInitialTab.value = tab;
+  userCenterInitialTab.value = tab === "appkeys" ? "appkeys" : "password";
   showUserCenter.value = true;
   closeUserMenu();
 }

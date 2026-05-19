@@ -1,44 +1,14 @@
 <template>
-  <div
-    v-if="teamId"
-    class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-  >
-    <h3 class="mb-2 font-semibold text-slate-900">流水线资源权限</h3>
-    <p class="mb-4 text-xs text-slate-500">
-      选择流水线后为团队成员设置 admin / edit / run / view 权限。
-    </p>
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div class="grow space-y-2">
-        <Label for="pipeline-pick">流水线</Label>
-        <NativeSelect
-          id="pipeline-pick"
-          v-model="selectedPipelineId"
-          class="w-full"
-          @change="loadMembers"
-        >
-          <option value="">请选择流水线</option>
-          <option
-            v-for="p in pipelines"
-            :key="p.pipeline_id"
-            :value="p.pipeline_id"
-          >
-            {{ p.name }}
-          </option>
-        </NativeSelect>
-      </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        :disabled="loadingPipelines"
-        @click="fetchPipelines"
-      >
-        刷新列表
-      </Button>
+  <div v-if="resourceId" class="space-y-4">
+    <div>
+      <h4 class="text-sm font-semibold text-slate-900">成员权限</h4>
+      <p class="mt-1 text-xs text-slate-500">
+        为当前资源指定团队成员的访问级别（查看 / 运行 / 编辑 / 管理员）。
+      </p>
     </div>
 
-    <div v-if="selectedPipelineId && canManageResource" class="mt-6 space-y-4">
-      <div class="flex flex-wrap items-end gap-2 border-t border-slate-100 pt-4">
+    <div v-if="canManageResource" class="space-y-4">
+      <div class="flex flex-wrap items-end gap-2">
         <div class="min-w-[140px] grow space-y-1">
           <Label>成员</Label>
           <NativeSelect v-model="targetUserId" class="w-full">
@@ -82,7 +52,18 @@
           class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
         >
           <span class="font-medium text-slate-800">{{ row.username }}</span>
-          <span class="text-slate-600">{{ permLabel(row.permission) }}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-slate-600">{{ permLabel(row.permission) }}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              :disabled="removingId === row.user_id"
+              @click="removePermission(row)"
+            >
+              {{ removingId === row.user_id ? "…" : "移除" }}
+            </Button>
+          </div>
         </li>
         <li
           v-if="!resourceMembers.length"
@@ -93,11 +74,8 @@
       </ul>
       <p v-if="permError" class="text-sm text-amber-700">{{ permError }}</p>
     </div>
-    <p
-      v-else-if="selectedPipelineId && !canManageResource"
-      class="mt-4 text-sm text-slate-500"
-    >
-      您对该流水线无管理员权限，无法管理成员。
+    <p v-else class="text-sm text-slate-500">
+      您对该资源无管理员权限，无法管理成员。
     </p>
   </div>
 </template>
@@ -110,22 +88,36 @@ import Button from "@/components/ui/button/Button.vue";
 import Label from "@/components/ui/label/Label.vue";
 import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 
+const API_PREFIX = {
+  pipeline: "/api/pipelines",
+  git_source: "/api/git-sources",
+  agent_host: "/api/hosts",
+  deploy_config: "/api/deploy-configs",
+};
+
 const props = defineProps({
+  resourceType: {
+    type: String,
+    required: true,
+    validator: (v) =>
+      ["pipeline", "git_source", "agent_host", "deploy_config"].includes(v),
+  },
+  resourceId: { type: String, default: "" },
   teamId: { type: String, default: "" },
 });
 
 const teamStore = useTeamStore();
 
-const pipelines = ref([]);
-const selectedPipelineId = ref("");
-const loadingPipelines = ref(false);
 const resourceMembers = ref([]);
 const permLoading = ref(false);
 const permError = ref("");
 const targetUserId = ref("");
 const newPermission = ref("view");
 const saving = ref(false);
+const removingId = ref("");
 const myPermission = ref(null);
+
+const apiBase = computed(() => API_PREFIX[props.resourceType] || "");
 
 const teamMembers = computed(() => teamStore.members || []);
 
@@ -138,29 +130,14 @@ function permLabel(p) {
   return map[p] || p;
 }
 
-async function fetchPipelines() {
-  if (!props.teamId) return;
-  loadingPipelines.value = true;
-  try {
-    const res = await axios.get("/api/pipelines", {
-      params: { team_id: props.teamId },
-    });
-    pipelines.value = res.data?.pipelines || [];
-  } catch {
-    pipelines.value = [];
-  } finally {
-    loadingPipelines.value = false;
-  }
-}
-
 async function loadMyPermission() {
-  if (!selectedPipelineId.value) {
+  if (!props.resourceId || !apiBase.value) {
     myPermission.value = null;
     return;
   }
   try {
     const res = await axios.get(
-      `/api/pipelines/${selectedPipelineId.value}/my-permission`
+      `${apiBase.value}/${props.resourceId}/my-permission`
     );
     myPermission.value = res.data?.permission || null;
   } catch {
@@ -171,18 +148,18 @@ async function loadMyPermission() {
 async function loadMembers() {
   permError.value = "";
   resourceMembers.value = [];
-  if (!selectedPipelineId.value) return;
+  if (!props.resourceId || !apiBase.value) return;
   await loadMyPermission();
   if (!canManageResource.value) return;
   permLoading.value = true;
   try {
     const res = await axios.get(
-      `/api/pipelines/${selectedPipelineId.value}/members`
+      `${apiBase.value}/${props.resourceId}/members`
     );
     resourceMembers.value = Array.isArray(res.data) ? res.data : [];
   } catch (e) {
     permError.value =
-      e?.response?.data?.detail || "无法加载成员权限（需要流水线 admin）";
+      e?.response?.data?.detail || "无法加载成员权限（需要资源管理员权限）";
     resourceMembers.value = [];
   } finally {
     permLoading.value = false;
@@ -190,12 +167,12 @@ async function loadMembers() {
 }
 
 async function setPermission() {
-  if (!selectedPipelineId.value || !targetUserId.value) return;
+  if (!props.resourceId || !targetUserId.value || !apiBase.value) return;
   saving.value = true;
   permError.value = "";
   try {
     await axios.put(
-      `/api/pipelines/${selectedPipelineId.value}/members/${targetUserId.value}`,
+      `${apiBase.value}/${props.resourceId}/members/${targetUserId.value}`,
       { permission: newPermission.value }
     );
     await loadMembers();
@@ -207,13 +184,32 @@ async function setPermission() {
   }
 }
 
+async function removePermission(row) {
+  if (!props.resourceId || !apiBase.value) return;
+  if (!confirm(`确定移除「${row.username}」对该资源的单独权限吗？`)) return;
+  removingId.value = row.user_id;
+  permError.value = "";
+  try {
+    await axios.delete(
+      `${apiBase.value}/${props.resourceId}/members/${row.user_id}`
+    );
+    await loadMembers();
+  } catch (e) {
+    permError.value = e?.response?.data?.detail || "移除失败";
+  } finally {
+    removingId.value = "";
+  }
+}
+
 watch(
-  () => props.teamId,
-  (id) => {
-    selectedPipelineId.value = "";
-    if (id) {
-      teamStore.fetchMembers(id);
-      fetchPipelines();
+  () => [props.resourceId, props.teamId, props.resourceType],
+  ([rid, tid]) => {
+    targetUserId.value = "";
+    if (tid) teamStore.fetchMembers(tid);
+    if (rid) loadMembers();
+    else {
+      resourceMembers.value = [];
+      myPermission.value = null;
     }
   },
   { immediate: true }

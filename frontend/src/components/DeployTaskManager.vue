@@ -114,6 +114,14 @@
             <Button variant="outline" size="sm" @click="editTask(task)" title="编辑">
               <i class="fas fa-edit"></i>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              title="成员授权"
+              @click="openResourcePermission(task)"
+            >
+              <i class="fas fa-user-shield"></i>
+            </Button>
             <Button variant="outline" size="sm" @click="copyTask(task)" title="复制">
               <i class="fas fa-copy"></i>
             </Button>
@@ -174,6 +182,7 @@
               <Button variant="outline" size="sm" @click="executeTask(task)" title="触发部署（将创建新任务）"><i class="fas fa-play"></i> 触发</Button>
               <Button v-if="task.webhook_token" variant="outline" size="sm" @click="showWebhookUrl(task)" title="查看 Webhook URL"><i class="fas fa-link"></i></Button>
               <Button variant="outline" size="sm" @click="editTask(task)" title="编辑配置"><i class="fas fa-edit"></i></Button>
+              <Button variant="outline" size="sm" title="成员授权" @click="openResourcePermission(task)"><i class="fas fa-user-shield"></i></Button>
               <Button variant="outline" size="sm" @click="copyTask(task)" title="复制配置"><i class="fas fa-copy"></i></Button>
               <Button variant="destructive" size="sm" @click="deleteTask(task)" title="删除配置"><i class="fas fa-trash"></i></Button>
             </div>
@@ -2175,6 +2184,7 @@
                 </div>
               </div>
             </div>
+
       <template #footer>
         <Button
               type="button"
@@ -2228,6 +2238,13 @@
             </div>
     </FormDialog>
 
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="deploy_config"
+      :resource-id="permissionTarget?.task_id || ''"
+      :team-id="activeTeamId"
+      :resource-name="permissionTarget?.app_name || ''"
+    />
   </div>
 </template>
 
@@ -2251,6 +2268,8 @@ import TableCell from "@/components/ui/table/TableCell.vue";
 import TableHead from "@/components/ui/table/TableHead.vue";
 import TableHeader from "@/components/ui/table/TableHeader.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useTeamStore } from "@/stores/team";
 
 
 export default {
@@ -2272,6 +2291,7 @@ export default {
     TableHead,
     TableHeader,
     TableRow,
+    ResourceMemberPermissionDialog,
   },
   data() {
     return {
@@ -2282,6 +2302,8 @@ export default {
       showImportModal: false,
       showDetailModal: false,
       showEditModal: false,
+      permissionDialogOpen: false,
+      permissionTarget: null,
       editingTask: null,
       selectedTask: null,
       taskLogs: [],
@@ -2357,6 +2379,9 @@ export default {
     };
   },
   computed: {
+    activeTeamId() {
+      return useTeamStore().activeTeamId || "";
+    },
     filteredTasks() {
       return this.tasks;
     },
@@ -3558,6 +3583,10 @@ export default {
       }
       this.loadAgentHosts();
       this.showSimpleCreateModal = true;
+    },
+    openResourcePermission(task) {
+      this.permissionTarget = task;
+      this.permissionDialogOpen = true;
     },
     async editTask(task) {
       try {
