@@ -1188,9 +1188,7 @@ async function refreshEffectivePermissions() {
     }
 
     if (teamStore.activeTeamId) {
-      if (!teamStore.menuPermissions.length) {
-        await teamStore.fetchMenuPermissions(teamStore.activeTeamId);
-      }
+      await teamStore.fetchMenuPermissions(teamStore.activeTeamId);
       const merged = new Set(teamStore.menuPermissions);
       if (authStore.isGlobalAdmin && global.has("menu.users")) {
         merged.add("menu.users");

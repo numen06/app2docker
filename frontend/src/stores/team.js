@@ -23,9 +23,9 @@ function dedupeDefaultTeamMemberships(raw) {
 }
 
 function membershipRole(state) {
-  const m =
-    state.memberships.find((x) => x.team?.team_id === state.activeTeamId) ||
-    state.memberships[0]
+  const m = state.memberships.find(
+    (x) => x.team?.team_id === state.activeTeamId
+  )
   return (m?.role || state.activeTeamRole || '').toLowerCase()
 }
 
@@ -76,20 +76,24 @@ export const useTeamStore = defineStore('team', {
       return m?.team || null
     },
     canManageTeam(state) {
+      const r = membershipRole(state)
+      if (r === 'owner' || r === 'admin') return true
+      if (r === 'member') return false
       const fromApi = state.teamCapabilities.canManageTeam
       if (fromApi !== null) return fromApi
-      const r = membershipRole(state)
-      return r === 'owner' || r === 'admin'
+      return false
     },
     isTeamOwner(state) {
+      if (membershipRole(state) === 'owner') return true
       const fromApi = state.teamCapabilities.canDissolveTeam
       if (fromApi !== null) return fromApi
-      return membershipRole(state) === 'owner'
+      return false
     },
     canAssignTeamAdmin(state) {
+      if (membershipRole(state) === 'owner') return true
       const fromApi = state.teamCapabilities.canAssignAdmin
       if (fromApi !== null) return fromApi
-      return membershipRole(state) === 'owner'
+      return false
     },
     activeTeamIdForApi(state) {
       return state.activeTeamId || null
@@ -224,12 +228,18 @@ export const useTeamStore = defineStore('team', {
       this.menuPermissionsLoading = true
       try {
         const res = await axios.get(`/api/teams/${id}/menu-permissions`)
+        if (this.activeTeamId !== id) {
+          return this.menuPermissions
+        }
         const perms = res.data?.permissions || []
         this.menuPermissions = Array.isArray(perms) ? perms : []
         this.activeTeamRole = res.data?.role || ''
         this._applyCapabilities(res.data)
         return this.menuPermissions
       } catch {
+        if (this.activeTeamId !== id) {
+          return this.menuPermissions
+        }
         this.menuPermissions = []
         this.activeTeamRole = ''
         this._clearCapabilities()
