@@ -20,8 +20,9 @@ USER node
 # 设置 Node.js 环境变量（构建时需要 devDependencies，所以不设置 NODE_ENV=production）
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# 仅复制依赖文件以利用缓存
+# 复制 package.json 与 postinstall 脚本（npm install 会执行 copy-misans-fonts）
 COPY --chown=node:node frontend/package*.json ./
+COPY --chown=node:node frontend/scripts ./scripts
 
 # 安装依赖（包括 devDependencies，因为 vite 在 devDependencies 中）
 RUN npm config set registry https://registry.npmmirror.com && \
