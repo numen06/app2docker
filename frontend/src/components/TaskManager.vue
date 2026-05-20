@@ -811,7 +811,7 @@ import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
 import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
@@ -853,6 +853,18 @@ const retryingDeploy = ref(null); // 重试部署中的任务ID
 const stopping = ref(null); // 停止中的任务ID
 const teamStore = useTeamStore();
 const buildTaskLogs = useBuildTaskLogs();
+
+async function ensureTeamContextForTasks() {
+  if (!teamStore.memberships.length) {
+    await teamStore.fetchTeams().catch(() => {});
+  }
+  if (!teamStore.activeTeamIdForApi && teamStore.memberships.length) {
+    const tid = teamStore.memberships[0]?.team?.team_id;
+    if (tid) {
+      await teamStore.setCurrentTeam(tid);
+    }
+  }
+}
 // 错误弹窗已移除，错误信息现在显示在日志顶部
 const currentPage = ref(1); // 当前页码
 const pageSize = ref(10); // 每页显示数量（默认10）
@@ -1300,9 +1312,13 @@ const terminalFetchInFlight = new Set();
 
 async function fetchTaskTerminalStatus(taskId, index) {
   if (terminalFetchInFlight.has(taskId)) return;
+  const teamId = teamStore.activeTeamIdForApi;
+  if (!teamId) return;
   terminalFetchInFlight.add(taskId);
   try {
-    const res = await axios.get(`/api/build-tasks/${taskId}`);
+    const res = await axios.get(`/api/build-tasks/${taskId}`, {
+      params: { team_id: teamId },
+    });
     const data = res.data;
     if (index >= 0 && index < tasks.value.length && tasks.value[index].task_id === taskId) {
       tasks.value[index].status = data.status ?? tasks.value[index].status;
@@ -1330,8 +1346,14 @@ async function fetchTaskTerminalStatus(taskId, index) {
 
 // 只刷新运行中任务的状态（不刷新整个页面）
 async function refreshRunningTasks() {
+  const teamId = teamStore.activeTeamIdForApi;
+  if (!teamId) {
+    return;
+  }
   try {
-    const res = await axios.get("/api/tasks/running");
+    const res = await axios.get("/api/tasks/running", {
+      params: { team_id: teamId },
+    });
     const runningTasks = res.data.tasks || [];
     const runningTasksMap = new Map();
     runningTasks.forEach((task) => {
@@ -2281,10 +2303,11 @@ let taskFinishedRefreshTimer = null;
 function handleTaskCreated(event) {
   console.log("收到任务创建事件，刷新任务列表:", event.detail);
   if (taskCreatedRefreshTimer) clearTimeout(taskCreatedRefreshTimer);
-  taskCreatedRefreshTimer = setTimeout(() => {
+  taskCreatedRefreshTimer = setTimeout(async () => {
     taskCreatedRefreshTimer = null;
     currentPage.value = 1;
     categoryFilter.value = "";
+    await ensureTeamContextForTasks();
     loadTasks();
   }, 500);
 }
@@ -2306,6 +2329,7 @@ onMounted(async () => {
   // 监听任务创建事件
   window.addEventListener("taskCreated", handleTaskCreated);
   window.addEventListener("taskFinished", handleTaskFinished);
+  window.addEventListener("team-context-changed", onTeamContextChanged);
   // 检查是否有从仪表盘传递过来的筛选条件
   const statusFilterFromStorage = sessionStorage.getItem("taskStatusFilter");
   if (statusFilterFromStorage) {
@@ -2328,6 +2352,7 @@ onMounted(async () => {
     categoryFilter.value = "";
     statusFilter.value = "";
   }
+  await ensureTeamContextForTasks();
   await loadTasks();
   if (highlightId) {
     const found = tasks.value.find((t) => t.task_id === highlightId);
@@ -2340,7 +2365,21 @@ onMounted(async () => {
   startRefreshInterval();
 });
 
+watch(
+  () => teamStore.activeTeamId,
+  (id) => {
+    if (id) {
+      loadTasks();
+    }
+  }
+);
+
+function onTeamContextChanged() {
+  ensureTeamContextForTasks().then(() => loadTasks());
+}
+
 onUnmounted(() => {
+  window.removeEventListener("team-context-changed", onTeamContextChanged);
   document.removeEventListener("click", handleCleanupOutsideClick);
   window.removeEventListener("resize", adjustCleanupMenuPosition);
 

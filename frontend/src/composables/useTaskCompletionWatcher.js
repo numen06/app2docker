@@ -161,10 +161,15 @@ function notifyTerminal(taskId, task, meta) {
 async function pollOnce() {
   if (tracked.size === 0) return;
 
+  const pollParams = teamQueryParams();
+  if (!pollParams.team_id) {
+    return;
+  }
+
   let runningIds = new Set();
   try {
     const res = await axios.get("/api/tasks/running", {
-      params: teamQueryParams(),
+      params: pollParams,
     });
     const tasks = res.data?.tasks || [];
     runningIds = new Set(tasks.map((t) => t.task_id));

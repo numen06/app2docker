@@ -144,15 +144,8 @@ export function setupAxiosInterceptors() {
       if (teamAccessDenied) {
         try {
           const teamStore = useTeamStore()
-          if (teamStore.activeTeamId) {
-            teamStore.activeTeamId = ''
-            try {
-              sessionStorage.removeItem('app2docker-active-team-id')
-            } catch {
-              /* ignore */
-            }
-            teamStore.fetchMyTeams().catch(() => {})
-          }
+          // 勿手动清空 activeTeamId（会导致 /api/tasks/* 缺 team_id 返回 400）；由 fetchMyTeams 校正
+          teamStore.fetchMyTeams().catch(() => {})
         } catch {
           /* pinia 未就绪时忽略 */
         }

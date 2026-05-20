@@ -1706,6 +1706,7 @@ import { useTeamStore } from "@/stores/team";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from 'vue-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -1722,6 +1723,7 @@ import {
 } from '../utils/projectTypes.js';
 
 const teamStore = useTeamStore();
+const router = useRouter();
 const buildTaskLogs = useBuildTaskLogs({
   onTaskFinished: () => {
     building.value = false;
@@ -3454,6 +3456,8 @@ async function startBuild() {
           },
         })
       );
+
+      router.push("/app/tasks").catch(() => {});
     } else {
       throw new Error("未返回 task_id");
     }

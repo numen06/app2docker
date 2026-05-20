@@ -903,9 +903,9 @@ const sidebarActiveTab = computed(() => {
   return activeTab.value;
 });
 
+// 勿将 activeTeamId 编入 key：403 时拦截器可能短暂清空团队导致整页反复重挂载；切换团队由 team-context-changed 刷新数据
 const panelContentKey = computed(
-  () =>
-    `${teamStore.activeTeamId || "none"}-${route.fullPath || activeTab.value}`
+  () => route.fullPath || `/app/${activeTab.value || "dashboard"}`
 );
 
 const MOBILE_BREAKPOINT = 768;

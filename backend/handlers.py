@@ -1407,6 +1407,97 @@ class BuildManager:
         self.tasks = {}  # build_id -> Thread (保留用于兼容)
         self.task_manager = BuildTaskManager()  # 使用任务管理器
 
+    def _save_upload_staging(
+        self, task_id: str, file_data: bytes, original_filename: str
+    ) -> str:
+        """将上传文件落盘，供全局队列在有空闲槽位时再启动构建。"""
+        staging_dir = os.path.join(BUILD_DIR, "pending_uploads", task_id)
+        os.makedirs(staging_dir, exist_ok=True)
+        safe_name = os.path.basename(original_filename or "") or "upload.bin"
+        upload_path = os.path.join(staging_dir, safe_name)
+        with open(upload_path, "wb") as f:
+            f.write(file_data)
+        return upload_path
+
+    def _merge_task_config(self, task_id: str, updates: dict) -> None:
+        from backend.database import get_db_session
+        from backend.models import Task
+
+        db = get_db_session()
+        try:
+            task = db.query(Task).filter(Task.task_id == task_id).first()
+            if not task:
+                return
+            cfg = dict(task.task_config or {})
+            cfg.update(updates)
+            task.task_config = cfg
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def _start_build_upload_thread(self, task_id: str) -> None:
+        """从 staging 读取上传文件并执行文件上传构建（供全局队列调度）。"""
+        task_row = self.task_manager.get_task(task_id)
+        if not task_row:
+            print(f"⚠️ 文件上传构建任务不存在: {task_id[:8]}")
+            return
+
+        cfg = (
+            task_row.get("task_config")
+            if isinstance(task_row.get("task_config"), dict)
+            else {}
+        )
+        upload_path = cfg.get("upload_staging_path")
+        original_filename = cfg.get("original_filename") or "upload.bin"
+        if not upload_path or not os.path.isfile(upload_path):
+            self.task_manager.update_task_status(
+                task_id,
+                "failed",
+                error="上传文件已丢失，请重新提交构建",
+            )
+            return
+
+        with open(upload_path, "rb") as f:
+            file_data = f.read()
+
+        image_name = task_row.get("image") or cfg.get("image_name") or "myapp/demo"
+        tag = task_row.get("tag") or cfg.get("tag") or "latest"
+        selected_template = task_row.get("template") or cfg.get("template") or ""
+        project_type = task_row.get("project_type") or cfg.get("project_type") or "jar"
+        should_push = bool(
+            task_row.get("should_push")
+            if task_row.get("should_push") is not None
+            else cfg.get("should_push", False)
+        )
+        template_params = cfg.get("template_params") or {}
+        extract_archive = cfg.get("extract_archive", True)
+        resource_package_ids = cfg.get("resource_package_ids") or []
+
+        thread = threading.Thread(
+            target=self._build_task,
+            args=(
+                task_id,
+                file_data,
+                image_name,
+                tag,
+                should_push,
+                selected_template,
+                original_filename,
+                project_type,
+                template_params,
+                None,
+                extract_archive,
+                resource_package_ids,
+            ),
+            daemon=True,
+        )
+        thread.start()
+        with self.lock:
+            self.tasks[task_id] = thread
+
     def start_build(
         self,
         file_data: bytes,
@@ -1440,27 +1531,25 @@ class BuildManager:
             team_id=team_id,
         )
 
-        thread = threading.Thread(
-            target=self._build_task,
-            args=(
-                task_id,
-                file_data,
-                image_name,
-                tag,
-                should_push,
-                selected_template,
-                original_filename,
-                project_type,
-                template_params or {},
-                push_registry,
-                extract_archive,
-                resource_package_ids or [],
-            ),
-            daemon=True,
+        upload_path = self._save_upload_staging(task_id, file_data, original_filename)
+        self._merge_task_config(
+            task_id,
+            {
+                "upload_staging_path": upload_path,
+                "original_filename": original_filename,
+                "extract_archive": extract_archive,
+                "resource_package_ids": resource_package_ids or [],
+            },
         )
-        thread.start()
-        with self.lock:
-            self.tasks[task_id] = thread
+
+        queue_manager = GlobalTaskQueueManager()
+        started = queue_manager.start_if_slot_available(
+            lambda: self._start_build_upload_thread(task_id)
+        )
+        if started:
+            print(f"✅ 文件上传构建已启动: task_id={task_id}")
+        else:
+            print(f"⏳ 文件上传构建进入全局队列等待: task_id={task_id}")
         return task_id
 
     def _build_task(
@@ -1502,14 +1591,14 @@ class BuildManager:
 
         task_row = self.task_manager.get_task(task_id)
         task_cfg = (
-            task_row.task_config
-            if task_row and isinstance(task_row.task_config, dict)
+            task_row.get("task_config")
+            if task_row and isinstance(task_row.get("task_config"), dict)
             else {}
         )
         from backend.registry_manager import scope_from_task_like
 
         reg_team_id, reg_user_id = scope_from_task_like(
-            team_id=getattr(task_row, "team_id", None),
+            team_id=task_row.get("team_id") if task_row else None,
             task_config=task_cfg,
         )
 
@@ -2609,14 +2698,14 @@ class BuildManager:
 
         task_row = self.task_manager.get_task(task_id)
         task_cfg = (
-            task_row.task_config
-            if task_row and isinstance(task_row.task_config, dict)
+            task_row.get("task_config")
+            if task_row and isinstance(task_row.get("task_config"), dict)
             else {}
         )
         from backend.registry_manager import scope_from_task_like
 
         reg_team_id, reg_user_id = scope_from_task_like(
-            team_id=getattr(task_row, "team_id", None),
+            team_id=task_row.get("team_id") if task_row else None,
             task_config=task_cfg,
         )
 
@@ -4194,7 +4283,7 @@ def _process_global_queued_tasks():
             next_task = (
                 db.query(Task)
                 .filter(Task.status == "pending")
-                .filter(Task.task_type.in_(["build_from_source", "deploy"]))
+                .filter(Task.task_type.in_(["build", "build_from_source", "deploy"]))
                 .order_by(Task.created_at.asc())
                 .first()
             )
@@ -4913,6 +5002,8 @@ class BuildTaskManager:
                         trigger_source=serializable_kwargs.get(
                             "trigger_source", "manual"
                         ),
+                        original_filename=serializable_kwargs.get("original_filename"),
+                        extract_archive=serializable_kwargs.get("extract_archive", True),
                     )
             except Exception as e:
                 print(f"⚠️ 构建任务配置JSON失败: {e}")
@@ -5084,7 +5175,7 @@ class BuildTaskManager:
             db.close()
 
     def start_pending_task(self, task_id: str) -> bool:
-        """启动一个已存在的 pending 任务（build_from_source/deploy）。"""
+        """启动一个已存在的 pending 任务（build/build_from_source/deploy）。"""
         from backend.database import get_db_session
         from backend.models import Task
 
@@ -5125,6 +5216,10 @@ class BuildTaskManager:
                             f"⚠️ 启动排队任务时绑定流水线失败: task_id={task_id[:8]}, error={bind_error}"
                         )
                 build_manager._start_build_from_source_thread(task_id, task_config)
+                return True
+
+            if task.task_type == "build":
+                BuildManager()._start_build_upload_thread(task_id)
                 return True
 
             if task.task_type == "deploy":

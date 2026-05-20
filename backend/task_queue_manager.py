@@ -89,7 +89,7 @@ class GlobalTaskQueueManager:
             pending_tasks = (
                 db.query(Task)
                 .filter(Task.status == "pending")
-                .filter(Task.task_type.in_(["build_from_source", "deploy"]))
+                .filter(Task.task_type.in_(["build", "build_from_source", "deploy"]))
                 .count()
             )
             pending_exports = (
