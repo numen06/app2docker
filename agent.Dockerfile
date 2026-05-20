@@ -12,6 +12,7 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     py3-setuptools \
+    expat \
     curl \
     jq \
     git \
@@ -21,12 +22,15 @@ RUN apk add --no-cache \
     linux-headers \
     docker-compose
 
+# Alpine musl：python3 与 expat 版本不一致时，pip 会触发 pyexpat 符号缺失
+RUN apk upgrade --no-cache expat python3 py3-pip py3-setuptools && \
+    python -c "import pyexpat"
+
 # ✅ 创建软链接 python → python3（适配多数脚本）
 RUN ln -sf python3 /usr/bin/python && \
     ln -sf pip3 /usr/bin/pip
 
-# ✅ 【关键修复】用户级升级 pip + 当前 shell 立即生效
-# （注意：用 `sh -c` 显式执行，避免 shell 解析歧义）
+# ✅ 升级系统 pip（venv 创建前；依赖上方 expat/python3 已对齐）
 # 使用国内镜像源并增加超时时间，避免网络超时
 RUN python -m pip install --upgrade --break-system-packages \
     --index-url https://mirrors.aliyun.com/pypi/simple/ \
