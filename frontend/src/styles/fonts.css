@@ -1,14 +1,8 @@
 /**
- * MiSans 全局字体。--font-sans 须与 index.html #app-loading 内联 font-family 保持一致。
- * 字体文件：public/fonts/misans/MiSans-VF.woff2（见该目录 README）
+ * MiSans 全局字体（自托管，npm postinstall 从 misans-vf 复制到 public/fonts/misans/）。
+ * --font-sans 须与 index.html #app-loading 内联 font-family 保持一致。
  */
-@font-face {
-  font-family: 'MiSans';
-  src: url('/fonts/misans/MiSans-VF.woff2') format('woff2');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
+@import url('/fonts/misans/MiSans.min.css');
 
 :root {
   --font-sans:

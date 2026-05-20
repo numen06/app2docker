@@ -9,6 +9,10 @@ lerna-debug.log*
 
 node_modules
 dist
+
+# MiSans（npm postinstall 生成）
+public/fonts/misans/*.woff2
+public/fonts/misans/MiSans.min.css
 dist-ssr
 *.local
 
