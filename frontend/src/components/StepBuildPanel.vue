@@ -1692,10 +1692,7 @@
       </div>
     </div>
 
-    <BuildTaskLogModal
-      :controller="buildTaskLogs"
-      @task-status-updated="onBuildLogStatusUpdated"
-    />
+    <BuildTaskLogModal :controller="buildTaskLogs" />
 </div>
 </template>
 
@@ -1728,13 +1725,13 @@ const teamStore = useTeamStore();
 const buildTaskLogs = useBuildTaskLogs({
   onTaskFinished: () => {
     building.value = false;
-    window.dispatchEvent(new CustomEvent("taskFinished"));
+    window.dispatchEvent(
+      new CustomEvent("taskFinished", {
+        detail: { terminal: true },
+      })
+    );
   },
 });
-
-function onBuildLogStatusUpdated() {
-  window.dispatchEvent(new CustomEvent("taskFinished"));
-}
 
 const currentStep = ref(1);
 const buildStepIndicators = [
@@ -3250,7 +3247,17 @@ async function startBuild() {
         },
       });
       taskId = res.data.build_id || res.data.task_id;
-      
+      const respTeamId = res.data.team_id;
+      const activeTeamId = teamStore.activeTeamIdForApi;
+      if (respTeamId && activeTeamId && respTeamId !== activeTeamId) {
+        showToast({
+          message:
+            "任务已创建，但所属团队与当前所选团队不一致，请切换团队后在任务管理中查看",
+          variant: "warning",
+          duration: 10000,
+        });
+      }
+
       // 上传完成，关闭进度对话框
       showUploadProgressModal.value = false;
     } else {

@@ -182,9 +182,16 @@ function startLogPolling(taskId) {
         await fetchTaskLogs(taskId, true);
         try {
           const res = await axios.get(`/api/build-tasks/${taskId}`);
-          if (res.data?.status) {
-            emit("task-status-updated", res.data.status);
-            if (res.data.status === "completed" || res.data.status === "failed") stopLogPolling();
+          const newStatus = res.data?.status;
+          if (newStatus && newStatus !== props.task?.status) {
+            emit("task-status-updated", newStatus);
+          }
+          if (
+            newStatus === "completed" ||
+            newStatus === "failed" ||
+            newStatus === "stopped"
+          ) {
+            stopLogPolling();
           }
         } catch (err) {
           console.error("获取任务状态失败:", err);
@@ -291,18 +298,24 @@ watch(
 );
 
 watch(
-  () => props.task,
-  () => {
-    if (props.modelValue && props.task) setTimeout(() => loadLogsIfNeeded(), 0);
-  },
-  { deep: true }
+  () => props.task?.task_id,
+  (newId, oldId) => {
+    if (props.modelValue && newId && newId !== oldId) {
+      loadLogsIfNeeded();
+    }
+  }
 );
 
 watch(
   () => props.task?.status,
-  (newStatus) => {
-    if (newStatus === "completed" || newStatus === "failed") stopLogPolling();
-    else if ((newStatus === "running" || newStatus === "pending") && props.task?.task_id) {
+  (newStatus, oldStatus) => {
+    if (!props.modelValue || !props.task?.task_id || newStatus === oldStatus) return;
+    if (newStatus === "completed" || newStatus === "failed" || newStatus === "stopped") {
+      stopLogPolling();
+    } else if (
+      (newStatus === "running" || newStatus === "pending") &&
+      !logPollingInterval.value
+    ) {
       startLogPolling(props.task.task_id);
     }
   }

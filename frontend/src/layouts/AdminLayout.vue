@@ -1431,13 +1431,19 @@ async function updateRunningTasksCount() {
   }
 }
 
+let globalTaskCreatedDebounce = null;
+
 function handleGlobalTaskCreated() {
   try {
     sessionStorage.setItem("tasksNeedRefresh", "1");
   } catch {
     /* ignore */
   }
-  updateRunningTasksCount();
+  if (globalTaskCreatedDebounce) clearTimeout(globalTaskCreatedDebounce);
+  globalTaskCreatedDebounce = setTimeout(() => {
+    globalTaskCreatedDebounce = null;
+    updateRunningTasksCount();
+  }, 400);
 }
 
 function getTaskTypeLabel(type) {

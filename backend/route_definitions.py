@@ -2258,6 +2258,7 @@ async def upload_file(
         return JSONResponse(
             {
                 "task_id": task_id,
+                "team_id": scoped_team_id,
                 "message": "构建任务已启动，请查看任务管理",
             }
         )

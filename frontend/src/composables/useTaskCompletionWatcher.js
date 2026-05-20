@@ -1,5 +1,6 @@
 import axios from "axios";
 import { showToast } from "@/composables/useToast";
+import { useTeamStore } from "@/stores/team";
 
 const STORAGE_KEY = "app2docker-pending-tasks";
 const MAX_STORED = 20;
@@ -100,9 +101,20 @@ export function registerTask(taskId, meta = {}, options = {}) {
   }
 }
 
+function teamQueryParams() {
+  try {
+    const teamId = useTeamStore().activeTeamIdForApi;
+    return teamId ? { team_id: teamId } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function fetchTaskStatus(taskId) {
   try {
-    const res = await axios.get(`/api/build-tasks/${taskId}`);
+    const res = await axios.get(`/api/build-tasks/${taskId}`, {
+      params: teamQueryParams(),
+    });
     return res.data;
   } catch (e) {
     if (e.response?.status === 404) {
@@ -151,7 +163,9 @@ async function pollOnce() {
 
   let runningIds = new Set();
   try {
-    const res = await axios.get("/api/tasks/running");
+    const res = await axios.get("/api/tasks/running", {
+      params: teamQueryParams(),
+    });
     const tasks = res.data?.tasks || [];
     runningIds = new Set(tasks.map((t) => t.task_id));
   } catch (e) {

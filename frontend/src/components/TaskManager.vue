@@ -1182,14 +1182,24 @@ async function loadTasks(includeStats = true) {
   loading.value = true;
   error.value = null;
 
+  const teamId = teamStore.activeTeamIdForApi;
+  if (!teamId) {
+    tasks.value = [];
+    totalTasks.value = 0;
+    totalPages.value = 0;
+    error.value = "请先在顶部选择团队";
+    loading.value = false;
+    filtering.value = false;
+    return;
+  }
+
   try {
     // 构建请求参数，在后端进行筛选和分页
     const params = {
       page: currentPage.value,
       page_size: pageSize.value,
+      team_id: teamId,
     };
-    const teamId = teamStore.activeTeamIdForApi;
-    if (teamId) params.team_id = teamId;
     if (statusFilter.value) params.status = statusFilter.value;
     if (categoryFilter.value) params.task_type = categoryFilter.value;
     if (deployConfigFilterId.value) params.deploy_config_id = deployConfigFilterId.value;
@@ -2265,16 +2275,26 @@ async function viewDeployConfig(task) {
 }
 
 // 监听任务创建事件
+let taskCreatedRefreshTimer = null;
+let taskFinishedRefreshTimer = null;
+
 function handleTaskCreated(event) {
   console.log("收到任务创建事件，刷新任务列表:", event.detail);
-  // 延迟一下再刷新，确保后端任务已创建完成
-  setTimeout(() => {
+  if (taskCreatedRefreshTimer) clearTimeout(taskCreatedRefreshTimer);
+  taskCreatedRefreshTimer = setTimeout(() => {
+    taskCreatedRefreshTimer = null;
+    currentPage.value = 1;
+    categoryFilter.value = "";
     loadTasks();
   }, 500);
 }
 
-function handleTaskFinished() {
-  setTimeout(() => {
+function handleTaskFinished(event) {
+  const detail = event?.detail || {};
+  if (detail.terminal === false) return;
+  if (taskFinishedRefreshTimer) clearTimeout(taskFinishedRefreshTimer);
+  taskFinishedRefreshTimer = setTimeout(() => {
+    taskFinishedRefreshTimer = null;
     loadTasks(false);
   }, 400);
 }
@@ -2331,6 +2351,8 @@ onUnmounted(() => {
   if (refreshInterval) {
     clearInterval(refreshInterval);
   }
+  if (taskCreatedRefreshTimer) clearTimeout(taskCreatedRefreshTimer);
+  if (taskFinishedRefreshTimer) clearTimeout(taskFinishedRefreshTimer);
 
   // 清除防抖定时器
   if (filterDebounceTimer) {

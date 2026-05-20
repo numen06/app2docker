@@ -61,7 +61,7 @@ def resolve_team_scope_from_request_with_fallback(
     team_id: Optional[str],
 ) -> str:
     """
-    解析 team_id；未传时使用用户加入的第一个团队（兼容 FormData 上传未带 query 的场景）。
+    解析 team_id。未传时仅当用户只属于一个团队时自动选用，避免多团队时静默落到「第一个团队」导致列表看不到任务。
     """
     if team_id:
         resolved = resolve_team_scope_from_request(db, username, team_id)
@@ -69,15 +69,20 @@ def resolve_team_scope_from_request_with_fallback(
         return resolved
 
     user_id = get_user_id_by_username(db, username)
-    member = (
+    members = (
         db.query(TeamMember)
         .filter(TeamMember.user_id == user_id)
         .order_by(TeamMember.joined_at.asc())
-        .first()
+        .all()
     )
-    if member and member.team_id:
-        require_team_member(db, member.team_id, user_id)
-        return member.team_id
+    if len(members) == 1 and members[0].team_id:
+        require_team_member(db, members[0].team_id, user_id)
+        return members[0].team_id
+    if len(members) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="需要指定 team_id（请先在顶部选择当前团队）",
+        )
 
     raise HTTPException(status_code=400, detail="需要指定 team_id")
 
