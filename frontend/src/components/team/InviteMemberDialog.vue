@@ -14,7 +14,7 @@
         <Label for="invite-role">加入后角色</Label>
         <NativeSelect id="invite-role" v-model="role" :disabled="loading">
           <option value="member">成员</option>
-          <option value="admin">管理员</option>
+          <option v-if="allowAdminInvite" value="admin">管理员</option>
           <option v-if="allowOwnerInvite" value="owner">所有者</option>
         </NativeSelect>
       </div>
@@ -70,6 +70,7 @@ import { buildTeamInviteLink, formatInviteExpiresAt } from "@/utils/teamInvite";
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   teamId: { type: String, default: "" },
+  allowAdminInvite: { type: Boolean, default: false },
   allowOwnerInvite: { type: Boolean, default: false },
 });
 
@@ -106,6 +107,18 @@ watch(openProxy, (v) => {
 
 watch(role, () => {
   if (skipRoleRegenerate || !openProxy.value || !props.teamId || loading.value) return;
+  if (role.value === "admin" && !props.allowAdminInvite) {
+    skipRoleRegenerate = true;
+    role.value = "member";
+    skipRoleRegenerate = false;
+    return;
+  }
+  if (role.value === "owner" && !props.allowOwnerInvite) {
+    skipRoleRegenerate = true;
+    role.value = "member";
+    skipRoleRegenerate = false;
+    return;
+  }
   clearTimeout(roleChangeTimer);
   roleChangeTimer = setTimeout(() => {
     generateLink();

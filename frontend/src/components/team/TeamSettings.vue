@@ -65,7 +65,7 @@
       </div>
 
       <div
-        v-if="isOwner"
+        v-if="teamStore.isTeamOwner"
         class="rounded-lg border border-amber-200 bg-amber-50/40 p-6 shadow-sm"
       >
         <h3 class="mb-2 font-semibold text-slate-900">转移所有权</h3>
@@ -111,6 +111,24 @@
         </div>
       </div>
 
+      <div
+        v-if="teamStore.isTeamOwner"
+        class="rounded-lg border border-red-200 bg-red-50/30 p-6 shadow-sm"
+      >
+        <h3 class="mb-2 font-semibold text-slate-900">解散团队</h3>
+        <p class="mb-4 text-sm text-slate-600">
+          解散后团队及其关联数据将被永久删除，且无法恢复。此操作仅所有者可执行。
+        </p>
+        <Button
+          type="button"
+          variant="destructive"
+          :disabled="dissolving"
+          @click="dissolveTeam"
+        >
+          {{ dissolving ? "解散中…" : "解散团队" }}
+        </Button>
+      </div>
+
       <TeamMemberList
         ref="memberListRef"
         :team-id="teamStore.activeTeamId"
@@ -121,7 +139,8 @@
         v-if="teamStore.activeTeamId"
         v-model="inviteOpen"
         :team-id="teamStore.activeTeamId"
-        :allow-owner-invite="isOwner"
+        :allow-admin-invite="teamStore.canAssignTeamAdmin"
+        :allow-owner-invite="teamStore.isTeamOwner"
         @invited="onInvited"
       />
     </template>
@@ -131,7 +150,7 @@
 <script setup>
 import axios from "axios";
 import { computed, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
 import Button from "@/components/ui/button/Button.vue";
@@ -143,6 +162,7 @@ import TeamMemberList from "@/components/team/TeamMemberList.vue";
 
 const teamStore = useTeamStore();
 const authStore = useAuthStore();
+const router = useRouter();
 
 const teamName = ref("");
 const taskCleanupDays = ref(7);
@@ -154,11 +174,9 @@ const teamMembers = ref([]);
 const membersLoading = ref(false);
 const transferTargetId = ref("");
 const transferring = ref(false);
+const dissolving = ref(false);
 
-const isOwner = computed(() => {
-  const m = teamStore.activeMembership;
-  return m?.role === "owner";
-});
+const isOwner = computed(() => teamStore.isTeamOwner);
 
 const transferCandidates = computed(() => {
   const me = (authStore.username || "").trim();
@@ -301,5 +319,38 @@ async function onInvited() {
     await loadMembersForTransfer(id);
   }
   await memberListRef.value?.load?.();
+}
+
+async function dissolveTeam() {
+  const id = teamStore.activeTeamId;
+  const name = teamStore.activeTeam?.name || "该团队";
+  if (!id || !teamStore.isTeamOwner) return;
+  const typed = prompt(
+    `解散团队后数据将无法恢复。\n\n请输入团队名称「${name}」以确认解散：`
+  );
+  if (typed === null) return;
+  if (typed.trim() !== name.trim()) {
+    alert("团队名称不匹配，已取消解散。");
+    return;
+  }
+  if (!confirm(`确定要永久解散团队「${name}」吗？`)) return;
+  dissolving.value = true;
+  try {
+    await axios.delete(`/api/teams/${id}`);
+    await teamStore.fetchMyTeams();
+    const nextId = teamStore.memberships[0]?.team?.team_id;
+    if (nextId) {
+      await teamStore.setCurrentTeam(nextId);
+      router.push("/app/team");
+    } else {
+      teamStore.reset();
+      router.push("/onboarding");
+    }
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    alert(typeof detail === "string" ? detail : "解散团队失败");
+  } finally {
+    dissolving.value = false;
+  }
 }
 </script>

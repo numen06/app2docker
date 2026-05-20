@@ -125,6 +125,7 @@ import TableBody from "@/components/ui/table/TableBody.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
+import { registerTask } from "@/composables/useTaskCompletionWatcher";
 
 const inputMode = ref("file");
 const composeText = ref("");
@@ -186,6 +187,13 @@ async function downloadImage(img) {
       tag: img.tag || "latest",
       compress: compress.value,
     });
+    if (res.data?.task_id) {
+      registerTask(res.data.task_id, {
+        task_type: "export",
+        image: img.image,
+        tag: img.tag || "latest",
+      });
+    }
     alert(
       `导出任务已创建！\n镜像: ${img.image}${img.tag && img.tag !== "latest" ? ":" + img.tag : ""}\n任务ID: ${res.data.task_id}\n\n请到「导出任务」标签页查看进度和下载文件。`
     );
@@ -229,7 +237,14 @@ async function downloadSelected() {
           tag: img.tag || "latest",
           compress: compress.value,
         });
-        taskIds.push(res.data.task_id);
+        if (res.data?.task_id) {
+          registerTask(res.data.task_id, {
+            task_type: "export",
+            image: img.image,
+            tag: img.tag || "latest",
+          });
+          taskIds.push(res.data.task_id);
+        }
       } catch (error) {
         console.error(`镜像 ${img.image} 创建任务失败:`, error.response?.data?.error || error.message);
       }

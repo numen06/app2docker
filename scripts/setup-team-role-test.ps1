@@ -86,6 +86,44 @@ try {
     Write-Host "  status: $($_.Exception.Response.StatusCode.value__) (expected 403)"
 }
 
+# admin 不能删团队
+Write-Host "=== admin DELETE team ==="
+try {
+    Invoke-WebRequest -Uri "$base/api/teams/$teamId" -Method DELETE -Headers $ah -ErrorAction Stop | Out-Null
+    Write-Host "  UNEXPECTED OK"
+} catch {
+    Write-Host "  status: $($_.Exception.Response.StatusCode.value__) (expected 403)"
+}
+
+# admin 不能邀请管理员
+Write-Host "=== admin POST invite role=admin ==="
+try {
+    Invoke-RestMethod -Uri "$base/api/teams/$teamId/invite" -Method POST -Headers $ah -ContentType "application/json" -Body '{"role":"admin"}' -ErrorAction Stop
+    Write-Host "  UNEXPECTED OK"
+} catch {
+    Write-Host "  status: $($_.Exception.Response.StatusCode.value__) (expected 403)"
+}
+
+$memberUser = ($members | Where-Object { $_.role -eq "member" } | Select-Object -First 1).user_id
+if ($memberUser) {
+    Write-Host "=== admin PATCH member -> admin ==="
+    try {
+        Invoke-JsonPatch "$base/api/teams/$teamId/members/$memberUser" @{ role = "admin" } $ah
+        Write-Host "  UNEXPECTED OK"
+    } catch {
+        Write-Host "  status: $($_.Exception.Response.StatusCode.value__) (expected 403)"
+    }
+}
+
+# menu-permissions 能力字段
+Write-Host "=== menu-permissions capabilities ==="
+$ownerPerms = Invoke-RestMethod -Uri "$base/api/teams/$teamId/menu-permissions" -Headers $oh
+$adminPerms = Invoke-RestMethod -Uri "$base/api/teams/$teamId/menu-permissions" -Headers $ah
+$memberPerms = Invoke-RestMethod -Uri "$base/api/teams/$teamId/menu-permissions" -Headers $mh
+Write-Host "  owner: manage=$($ownerPerms.can_manage_team) assign=$($ownerPerms.can_assign_admin) dissolve=$($ownerPerms.can_dissolve_team)"
+Write-Host "  admin: manage=$($adminPerms.can_manage_team) assign=$($adminPerms.can_assign_admin) dissolve=$($adminPerms.can_dissolve_team)"
+Write-Host "  member: manage=$($memberPerms.can_manage_team) assign=$($memberPerms.can_assign_admin) dissolve=$($memberPerms.can_dissolve_team)"
+
 @{
     teamId = $teamId
     teamName = $patched.name

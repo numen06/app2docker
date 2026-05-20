@@ -101,6 +101,7 @@ import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import NativeSelect from "@/components/ui/select/NativeSelect.vue";
+import { registerTask } from "@/composables/useTaskCompletionWatcher";
 
 const exportMode = ref("single");
 
@@ -205,6 +206,13 @@ async function handleExport() {
     };
     if (form.value.registry) payload.registry = form.value.registry;
     const res = await axios.post("/api/export-image", payload);
+    if (res.data?.task_id) {
+      registerTask(res.data.task_id, {
+        task_type: "export",
+        image: payload.image,
+        tag: payload.tag,
+      });
+    }
     alert(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到「任务管理」标签页查看进度和下载文件。`);
   } catch (error) {
     alert(

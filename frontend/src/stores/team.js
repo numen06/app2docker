@@ -3,6 +3,13 @@ import axios from 'axios'
 
 const STORAGE_KEY = 'app2docker-active-team-id'
 
+function membershipRole(state) {
+  const m =
+    state.memberships.find((x) => x.team?.team_id === state.activeTeamId) ||
+    state.memberships[0]
+  return (m?.role || state.activeTeamRole || '').toLowerCase()
+}
+
 export const useTeamStore = defineStore('team', {
   state: () => ({
     memberships: [],
@@ -16,6 +23,11 @@ export const useTeamStore = defineStore('team', {
     menuPermissions: [],
     activeTeamRole: '',
     menuPermissionsLoading: false,
+    teamCapabilities: {
+      canManageTeam: null,
+      canAssignAdmin: null,
+      canDissolveTeam: null,
+    },
   }),
   getters: {
     currentTeamId(state) {
@@ -45,12 +57,20 @@ export const useTeamStore = defineStore('team', {
       return m?.team || null
     },
     canManageTeam(state) {
-      const m =
-        state.memberships.find(
-          (x) => x.team?.team_id === state.activeTeamId
-        ) || state.memberships[0]
-      const r = m?.role
+      const fromApi = state.teamCapabilities.canManageTeam
+      if (fromApi !== null) return fromApi
+      const r = membershipRole(state)
       return r === 'owner' || r === 'admin'
+    },
+    isTeamOwner(state) {
+      const fromApi = state.teamCapabilities.canDissolveTeam
+      if (fromApi !== null) return fromApi
+      return membershipRole(state) === 'owner'
+    },
+    canAssignTeamAdmin(state) {
+      const fromApi = state.teamCapabilities.canAssignAdmin
+      if (fromApi !== null) return fromApi
+      return membershipRole(state) === 'owner'
     },
     activeTeamIdForApi(state) {
       return state.activeTeamId || null
@@ -63,6 +83,24 @@ export const useTeamStore = defineStore('team', {
     },
   },
   actions: {
+    _clearCapabilities() {
+      this.teamCapabilities = {
+        canManageTeam: null,
+        canAssignAdmin: null,
+        canDissolveTeam: null,
+      }
+    },
+    _applyCapabilities(data) {
+      if (data && typeof data.can_manage_team === 'boolean') {
+        this.teamCapabilities = {
+          canManageTeam: data.can_manage_team,
+          canAssignAdmin: !!data.can_assign_admin,
+          canDissolveTeam: !!data.can_dissolve_team,
+        }
+      } else {
+        this._clearCapabilities()
+      }
+    },
     canManageResource(permission, minLevel = 'edit') {
       const order = { view: 0, run: 1, edit: 2, admin: 3 }
       const eff = order[(permission || '').toLowerCase()]
@@ -98,6 +136,7 @@ export const useTeamStore = defineStore('team', {
       } else {
         this.menuPermissions = []
         this.activeTeamRole = ''
+        this._clearCapabilities()
       }
     },
     async fetchTeams() {
@@ -160,6 +199,7 @@ export const useTeamStore = defineStore('team', {
       if (!id) {
         this.menuPermissions = []
         this.activeTeamRole = ''
+        this._clearCapabilities()
         return []
       }
       this.menuPermissionsLoading = true
@@ -168,10 +208,12 @@ export const useTeamStore = defineStore('team', {
         const perms = res.data?.permissions || []
         this.menuPermissions = Array.isArray(perms) ? perms : []
         this.activeTeamRole = res.data?.role || ''
+        this._applyCapabilities(res.data)
         return this.menuPermissions
       } catch {
         this.menuPermissions = []
         this.activeTeamRole = ''
+        this._clearCapabilities()
         return []
       } finally {
         this.menuPermissionsLoading = false
@@ -207,6 +249,7 @@ export const useTeamStore = defineStore('team', {
       this.menuPermissions = []
       this.activeTeamRole = ''
       this.error = ''
+      this._clearCapabilities()
       try {
         sessionStorage.removeItem(STORAGE_KEY)
       } catch {

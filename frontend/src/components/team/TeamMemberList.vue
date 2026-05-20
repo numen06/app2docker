@@ -1,7 +1,18 @@
 <template>
   <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-      <h3 class="font-semibold text-slate-900">成员列表</h3>
+      <div>
+        <h3 class="font-semibold text-slate-900">成员列表</h3>
+        <p v-if="!teamStore.canManageTeam" class="mt-0.5 text-xs text-slate-500">
+          普通成员仅可查看，无法邀请或变更角色。
+        </p>
+        <p
+          v-else-if="teamStore.canManageTeam && !teamStore.canAssignTeamAdmin"
+          class="mt-0.5 text-xs text-slate-500"
+        >
+          管理员可邀请与移除普通成员；任命管理员仅所有者可操作。
+        </p>
+      </div>
       <Button v-if="teamStore.canManageTeam" size="sm" type="button" @click="$emit('invite')">
         <i class="fas fa-user-plus mr-1"></i>
         邀请成员
@@ -26,22 +37,24 @@
               <div class="mt-0.5 truncate text-xs text-slate-500">{{ m.email || "—" }}</div>
             </div>
             <span
-              v-if="!teamStore.canManageTeam || m.role === 'owner'"
+              v-if="!canManageMemberRow(m)"
               class="shrink-0 text-sm text-slate-600"
             >{{ roleLabel(m.role) }}</span>
           </div>
           <div
-            v-if="teamStore.canManageTeam && m.role !== 'owner'"
+            v-if="canManageMemberRow(m)"
             class="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3"
           >
             <NativeSelect
+              v-if="showRoleDropdown(m)"
               :value="m.role"
               class="min-h-11 min-w-[120px] flex-1"
               @change="onRoleChange(m, $event)"
             >
               <option value="member">成员</option>
-              <option value="admin">管理员</option>
+              <option v-if="teamStore.canAssignTeamAdmin" value="admin">管理员</option>
             </NativeSelect>
+            <span v-else class="text-sm text-slate-600">{{ roleLabel(m.role) }}</span>
             <Button
               variant="destructive"
               size="sm"
@@ -72,19 +85,19 @@
               <TableCell>{{ m.email || "—" }}</TableCell>
               <TableCell>
                 <NativeSelect
-                  v-if="teamStore.canManageTeam && m.role !== 'owner'"
+                  v-if="showRoleDropdown(m)"
                   :value="m.role"
                   class="max-w-[140px]"
                   @change="onRoleChange(m, $event)"
                 >
                   <option value="member">成员</option>
-                  <option value="admin">管理员</option>
+                  <option v-if="teamStore.canAssignTeamAdmin" value="admin">管理员</option>
                 </NativeSelect>
                 <span v-else class="text-sm">{{ roleLabel(m.role) }}</span>
               </TableCell>
               <TableCell class="text-end">
                 <Button
-                  v-if="teamStore.canManageTeam && m.role !== 'owner'"
+                  v-if="canManageMemberRow(m)"
                   variant="destructive"
                   size="sm"
                   type="button"
@@ -130,6 +143,17 @@ const error = ref("");
 function roleLabel(r) {
   const map = { owner: "所有者", admin: "管理员", member: "成员" };
   return map[r] || r;
+}
+
+function canManageMemberRow(m) {
+  if (!teamStore.canManageTeam) return false;
+  if (m.role === "owner") return false;
+  if (m.role === "admin") return teamStore.canAssignTeamAdmin;
+  return true;
+}
+
+function showRoleDropdown(m) {
+  return canManageMemberRow(m) && teamStore.canAssignTeamAdmin;
 }
 
 async function load() {

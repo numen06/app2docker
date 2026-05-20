@@ -673,6 +673,8 @@
         :initial-tab="userCenterInitialTab"
       />
 
+      <ToastHost />
+
       <transition name="fade">
         <div
           v-if="updateSnackVisible"
@@ -701,6 +703,8 @@ import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import ToastHost from "@/components/ui/ToastHost.vue";
+import { useTaskCompletionWatcher } from "@/composables/useTaskCompletionWatcher";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
 import { useModalEscape } from "@/composables/useModalEscape";
@@ -1061,6 +1065,7 @@ const versionDialogOpen = ref(false);
 const updateSnackVisible = ref(false);
 const updateSnackMessage = ref("");
 let updateSnackTimer = null;
+const taskCompletionWatcher = useTaskCompletionWatcher();
 const updateStatus = ref({
   hasUpdate: false,
   latestVersion: null,
@@ -1519,6 +1524,7 @@ onMounted(async () => {
   }
 
   startRunningTasksTimer();
+  taskCompletionWatcher.start();
 
   await loadSystemVersion();
   await loadUpdateCheck();
@@ -1535,6 +1541,7 @@ function handleNavigateEvent(e) {
 }
 
 onUnmounted(() => {
+  taskCompletionWatcher.stop();
   stopRunningTasksTimer();
   dismissUpdateSnack();
   window.removeEventListener("navigate", handleNavigateEvent);

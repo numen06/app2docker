@@ -2269,6 +2269,7 @@ import TableHeader from "@/components/ui/table/TableHeader.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
 import { useTeamStore } from "@/stores/team";
+import { registerTask } from "@/composables/useTaskCompletionWatcher";
 
 
 export default {
@@ -2993,6 +2994,12 @@ export default {
           `/api/deploy-tasks/${task.task_id}/execute`
         );
         const newTaskId = res.data.task_id;
+        if (newTaskId) {
+          registerTask(newTaskId, {
+            task_type: "deploy",
+            image: task.name || task.config?.name,
+          });
+        }
         alert(
           `部署配置已触发！\n\n新任务ID: ${newTaskId.substring(
             0,

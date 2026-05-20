@@ -1696,6 +1696,7 @@
 
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
+import { registerTask } from "@/composables/useTaskCompletionWatcher";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
@@ -3337,6 +3338,12 @@ async function startBuild() {
 
     if (taskId) {
       console.log("✅ 构建任务已启动, task_id:", taskId);
+
+      registerTask(taskId, {
+        task_type: "build",
+        image: buildConfig.value.imageName || undefined,
+        tag: buildConfig.value.tag || "latest",
+      });
 
       // 保存构建配置到任务（通过更新任务信息）
       try {

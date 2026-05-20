@@ -1,16 +1,16 @@
 ﻿{
     "admin":  {
                   "password":  "test123456",
-                  "username":  "team_admin_1779173114"
+                  "username":  "team_admin_1779287013"
               },
     "member":  {
                    "password":  "test123456",
-                   "username":  "team_member_1779173114"
+                   "username":  "team_member_1779287013"
                },
-    "teamName":  "????????? 1779173114 (admin??",
-    "teamId":  "d72a12af-445f-423a-8c17-5eb85dee273a",
+    "teamName":  "çæå£å¨´å¬­ç¯é¥ã¤æ§¦ 1779287013 (adminé?",
+    "teamId":  "51d1d01d-b3ca-431b-aa97-7bd74a75931c",
     "owner":  {
                   "password":  "test123456",
-                  "username":  "team_owner_1779173114"
+                  "username":  "team_owner_1779287013"
               }
 }

@@ -3981,7 +3981,11 @@ async function confirmManualRun() {
       if (res.data.task_id) {
         window.dispatchEvent(
           new CustomEvent("taskCreated", {
-            detail: { task_id: res.data.task_id },
+            detail: {
+              task_id: res.data.task_id,
+              task_type: "pipeline",
+              pipeline_name: pipeline.name,
+            },
           })
         );
       }
@@ -3995,7 +3999,11 @@ async function confirmManualRun() {
       // 发送事件通知任务管理页面刷新
       window.dispatchEvent(
         new CustomEvent("taskCreated", {
-          detail: { task_id: res.data.task_id },
+          detail: {
+            task_id: res.data.task_id,
+            task_type: "pipeline",
+            pipeline_name: pipeline.name,
+          },
         })
       );
     }

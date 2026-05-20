@@ -131,6 +131,9 @@ class MenuPermissionsOut(BaseModel):
     team_id: str
     role: str
     permissions: List[str]
+    can_manage_team: bool = False
+    can_assign_admin: bool = False
+    can_dissolve_team: bool = False
 
 
 class TeamSettingsOut(BaseModel):
@@ -269,10 +272,14 @@ def get_team_menu_permissions(
     user_id = get_user_id_by_username(db, username)
     member = require_team_member(db, team_id, user_id)
     perms = menu_permissions_for_team_role(member.role)
+    r = member.role
     return MenuPermissionsOut(
         team_id=team_id,
-        role=member.role,
+        role=r,
         permissions=perms,
+        can_manage_team=r in ("owner", "admin"),
+        can_assign_admin=r == "owner",
+        can_dissolve_team=r == "owner",
     )
 
 
@@ -348,6 +355,8 @@ def invite_member(
     invite_role = _normalize_role(body.role)
     if invite_role == "owner" and actor.role != "owner":
         raise HTTPException(status_code=403, detail="仅所有者可邀请所有者角色")
+    if invite_role == "admin" and actor.role != "owner":
+        raise HTTPException(status_code=403, detail="仅所有者可邀请管理员")
     team = db.query(Team).filter(Team.team_id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
@@ -416,6 +425,10 @@ def patch_member_role(
     target = get_team_member(db, team_id, target_user_id)
     if not target:
         raise HTTPException(status_code=404, detail="成员不存在")
+    if new_role == "admin" and actor.role != "owner":
+        raise HTTPException(status_code=403, detail="仅所有者可任命管理员")
+    if target.role == "admin" and new_role != "admin" and actor.role != "owner":
+        raise HTTPException(status_code=403, detail="仅所有者可变更管理员角色")
     if target.role == "owner" and new_role != "owner" and actor.role != "owner":
         raise HTTPException(status_code=403, detail="仅所有者可变更所有者角色")
     if new_role == "owner":
@@ -471,12 +484,14 @@ def remove_member(
 ):
     username = require_auth(request)
     user_id = get_user_id_by_username(db, username)
-    require_team_admin(db, team_id, user_id)
+    actor = require_team_admin(db, team_id, user_id)
     target = get_team_member(db, team_id, target_user_id)
     if not target:
         raise HTTPException(status_code=404, detail="成员不存在")
     if target.role == "owner":
         raise HTTPException(status_code=400, detail="不能移除团队所有者")
+    if target.role == "admin" and actor.role != "owner":
+        raise HTTPException(status_code=403, detail="仅所有者可移除管理员")
     db.delete(target)
     db.commit()
     return None

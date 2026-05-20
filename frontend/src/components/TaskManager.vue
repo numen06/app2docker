@@ -816,6 +816,7 @@ import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
 import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
+import { registerTask } from "@/composables/useTaskCompletionWatcher";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
 import StatCard from "@/components/ui/StatCard.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
@@ -1281,45 +1282,53 @@ function handleFilterChange() {
   }, 300);
 }
 
+const terminalFetchInFlight = new Set();
+
+async function fetchTaskTerminalStatus(taskId, index) {
+  if (terminalFetchInFlight.has(taskId)) return;
+  terminalFetchInFlight.add(taskId);
+  try {
+    const res = await axios.get(`/api/build-tasks/${taskId}`);
+    const data = res.data;
+    if (index >= 0 && index < tasks.value.length && tasks.value[index].task_id === taskId) {
+      tasks.value[index].status = data.status ?? tasks.value[index].status;
+      if (data.completed_at !== undefined) {
+        tasks.value[index].completed_at = data.completed_at;
+      }
+      if (data.error !== undefined) {
+        tasks.value[index].error = data.error;
+      }
+      if (data.file_size !== undefined) {
+        tasks.value[index].file_size = data.file_size;
+      }
+      if (data.started_at !== undefined) {
+        tasks.value[index].started_at = data.started_at;
+      }
+    }
+  } catch (err) {
+    if (err.response?.status !== 404) {
+      console.error("刷新任务终态失败:", taskId, err);
+    }
+  } finally {
+    terminalFetchInFlight.delete(taskId);
+  }
+}
+
 // 只刷新运行中任务的状态（不刷新整个页面）
 async function refreshRunningTasks() {
   try {
-    // 使用新接口一次性获取所有运行中的任务
     const res = await axios.get("/api/tasks/running");
     const runningTasks = res.data.tasks || [];
-
-    // 如果没有运行中的任务，停止定时器
-    if (runningTasks.length === 0) {
-      // 检查当前任务列表中是否还有运行中的任务，如果有则更新状态
-      const localRunningTasks = tasks.value.filter(
-        (t) => t.status === "running" || t.status === "pending"
-      );
-      if (localRunningTasks.length > 0) {
-        // 如果本地有运行中任务但接口返回为空，说明任务已完成，需要更新状态
-        // 这种情况应该很少，因为任务完成后会自动更新状态
-        // 这里我们不做处理，等待下次完整加载时更新
-      }
-
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
-        refreshInterval = null;
-      }
-      return;
-    }
-
-    // 创建一个映射，方便快速查找
     const runningTasksMap = new Map();
     runningTasks.forEach((task) => {
       runningTasksMap.set(task.task_id, task);
     });
 
-    // 更新本地任务列表中对应任务的状态
     tasks.value.forEach((task, index) => {
       const taskId = task.task_id;
       const updatedTask = runningTasksMap.get(taskId);
 
       if (updatedTask) {
-        // 任务仍在运行中，更新状态相关字段
         tasks.value[index].status = updatedTask.status;
         if (updatedTask.completed_at !== undefined) {
           tasks.value[index].completed_at = updatedTask.completed_at;
@@ -1334,13 +1343,10 @@ async function refreshRunningTasks() {
           tasks.value[index].started_at = updatedTask.started_at;
         }
       } else if (task.status === "running" || task.status === "pending") {
-        // 如果任务之前在运行中，但现在不在返回列表中，说明任务已完成或失败
-        // 这种情况需要从完整接口获取最新状态，但为了性能，我们暂时不做处理
-        // 等待下次完整加载时更新，或者用户手动刷新
+        fetchTaskTerminalStatus(taskId, index);
       }
     });
 
-    // 检查是否还有运行中的任务，如果没有则停止定时器
     const stillRunning = tasks.value.some(
       (t) => t.status === "running" || t.status === "pending"
     );
@@ -1350,7 +1356,6 @@ async function refreshRunningTasks() {
     }
   } catch (err) {
     console.error("刷新运行中任务状态失败:", err);
-    // 如果接口调用失败，不影响其他功能
   }
 }
 
@@ -2078,6 +2083,11 @@ async function rebuildTask(task) {
     );
 
     if (res.data && res.data.new_task_id) {
+      registerTask(res.data.new_task_id, {
+        task_type: "build",
+        image: task.image,
+        tag: task.tag || "latest",
+      });
       alert(`任务重试成功！\n新任务 ID: ${res.data.new_task_id}`);
       await loadTasks(); // 刷新任务列表
     } else {
@@ -2144,6 +2154,11 @@ async function retryExportTask(task) {
     const res = await axios.post(`/api/export-tasks/${task.task_id}/retry`);
 
     if (res.data.success) {
+      registerTask(task.task_id, {
+        task_type: "export",
+        image: task.image,
+        tag: task.tag || "latest",
+      });
       alert(`重试导出任务已启动！\n任务 ID: ${task.task_id}`);
       // 刷新任务列表
       await loadTasks();
@@ -2199,6 +2214,10 @@ async function retryDeployTask(task) {
   try {
     const res = await axios.post(`/api/deploy-tasks/${task.task_id}/retry`);
     if (res.data.success) {
+      registerTask(task.task_id, {
+        task_type: "deploy",
+        image: task.image,
+      });
       alert("部署任务已重新启动");
       await loadTasks();
     } else {
@@ -2250,12 +2269,19 @@ function handleTaskCreated(event) {
   }, 500);
 }
 
+function handleTaskFinished() {
+  setTimeout(() => {
+    loadTasks(false);
+  }, 400);
+}
+
 onMounted(() => {
   document.addEventListener("click", handleCleanupOutsideClick);
   window.addEventListener("resize", adjustCleanupMenuPosition);
 
   // 监听任务创建事件
   window.addEventListener("taskCreated", handleTaskCreated);
+  window.addEventListener("taskFinished", handleTaskFinished);
   // 检查是否有从仪表盘传递过来的筛选条件
   const statusFilterFromStorage = sessionStorage.getItem("taskStatusFilter");
   if (statusFilterFromStorage) {
@@ -2281,6 +2307,7 @@ onUnmounted(() => {
 
   // 移除任务创建事件监听器
   window.removeEventListener("taskCreated", handleTaskCreated);
+  window.removeEventListener("taskFinished", handleTaskFinished);
 
   if (refreshInterval) {
     clearInterval(refreshInterval);
