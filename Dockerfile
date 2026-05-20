@@ -35,67 +35,40 @@ COPY --chown=node:node frontend/ ./
 RUN npm run build
 
 # ============ 阶段 2: Python 后端基础镜像 ============
-# 使用阿里云 Python 镜像加速下载
-FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS backend-base
+# 51jbm/docker 内 apk python3 与 expat 不匹配会导致 pyexpat 报错；Python 用 alinux3，Docker CLI 从 docker 镜像复制
+FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS docker-tools
 
-# ✅ 替换 apk 源为阿里云镜像（关键！提速 5–10×）
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.12.0 AS backend-base
 
-RUN apk add --no-cache \
-    python3 \
-    python3-dev \
-    py3-pip \
-    py3-setuptools \
-    curl \
-    jq \
-    git \
-    make \
-    gcc \
-    musl-dev \
-    linux-headers \
-    docker-compose
+COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
 
-# ✅ 创建软链接 python → python3（适配多数脚本）
-RUN ln -sf python3 /usr/bin/python && \
-    ln -sf pip3 /usr/bin/pip
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo "$TZ" > /etc/timezone
 
-# ✅ 【关键修复】用户级升级 pip + 当前 shell 立即生效
-# （注意：用 `sh -c` 显式执行，避免 shell 解析歧义）
+RUN yum install -y curl jq git make gcc gcc-c++ python3-devel && \
+    yum clean all && \
+    rm -rf /var/cache/yum
+
 # 使用国内镜像源并增加超时时间，避免网络超时
-RUN python -m pip install --upgrade --break-system-packages \
+RUN python -m pip install --upgrade \
     --index-url https://mirrors.aliyun.com/pypi/simple/ \
     --timeout 300 \
     --retries 5 \
     pip
 
-# ✅ 验证 Python 环境
 RUN echo "✅ Python version:" && python --version && \
     echo "✅ pip version:" && pip --version && \
     echo "✅ docker version:" && docker --version && \
     echo "✅ buildx version:" && docker buildx version && \
     echo "✅ QEMU arm64 registered:" && ls /proc/sys/fs/binfmt_misc/qemu-arm64 2>/dev/null || echo "⚠️ QEMU not found (should not happen)"
 
-#设置时区
-# 1. 安装 tzdata（Alpine 官方时区数据包）
-RUN apk add --no-cache tzdata
-
-# 2. 设置默认时区（影响 date 命令 & 大多数应用）
-ENV TZ=Asia/Shanghai
-
-# 3. （可选）让 `date` 命令显示正确本地时间（软链接 localtime）
-RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo "$TZ" > /etc/timezone
-
 
 WORKDIR /app
 
 # 复制 Python 依赖文件
 COPY requirements.txt .
-
-# 安装 Python 依赖
-# 创建软链接（可选）
-RUN ln -sf python3 /usr/bin/python && \
-    ln -sf pip3 /usr/bin/pip
 
 # ✅ 创建虚拟环境并激活安装
 RUN python -m venv .venv && \
@@ -104,7 +77,7 @@ RUN python -m venv .venv && \
     .venv/bin/pip config set global.retries 5 && \
     .venv/bin/pip install --upgrade pip && \
     .venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    echo "✅ docker-compose version:" && docker-compose --version || echo "⚠️ docker-compose not found"
+    echo "✅ compose version:" && (docker compose version || docker-compose --version || echo "⚠️ compose not found")
 
 # ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
 ENV PATH="/app/.venv/bin:$PATH"
