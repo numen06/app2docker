@@ -1310,8 +1310,8 @@
             <div class="build-summary-grid">
               <!-- 数据源信息 -->
               <div class="build-summary-grid__item">
-                <div class="border rounded p-3 h-full">
-                  <h6 class="text-blue-600 mb-3">
+                <section class="build-summary-block">
+                  <h6 class="build-summary-block__title text-blue-600">
                     <i class="fas fa-database mr-2"></i> 数据源信息
                   </h6>
                   <div class="mb-2">
@@ -1343,13 +1343,13 @@
                       }}</code>
                     </div>
                   </div>
-                </div>
+                </section>
               </div>
 
               <!-- 构建、镜像、推送配置（合并） -->
               <div class="build-summary-grid__item">
-                <div class="border rounded p-3 h-full">
-                  <h6 class="text-green-600 mb-3">
+                <section class="build-summary-block">
+                  <h6 class="build-summary-block__title text-green-600">
                     <i class="fas fa-cogs mr-2"></i> 构建配置
                   </h6>
                   <div class="mb-2">
@@ -1481,7 +1481,7 @@
                       </span>
                     </div>
                   </div>
-                </div>
+                </section>
               </div>
 
               <!-- 模板参数 -->
@@ -1492,8 +1492,8 @@
                 "
                 class="build-summary-grid__item build-summary-grid__item--full"
               >
-                <div class="border rounded p-3">
-                  <h6 class="text-sky-600 mb-3">
+                <section class="build-summary-block">
+                  <h6 class="build-summary-block__title text-sky-600">
                     <i class="fas fa-sliders-h mr-2"></i> 模板参数
                   </h6>
                   <div v-if="templateParams.length > 0" class="mb-3">
@@ -1539,7 +1539,7 @@
                       </span>
                     </div>
                   </div>
-                </div>
+                </section>
               </div>
 
               <!-- 资源包 -->
@@ -1550,8 +1550,8 @@
                 "
                 class="build-summary-grid__item build-summary-grid__item--full"
               >
-                <div class="border rounded p-3">
-                  <h6 class="text-secondary mb-3">
+                <section class="build-summary-block">
+                  <h6 class="build-summary-block__title text-secondary">
                     <i class="fas fa-archive mr-2"></i> 资源包
                   </h6>
                   <div class="table-responsive">
@@ -1588,7 +1588,7 @@
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </section>
               </div>
             </div>
           </div>
@@ -3093,14 +3093,37 @@ function toggleAllServices(event) {
   }
 }
 
+function validateBeforeBuild() {
+  if (!teamStore.activeTeamIdForApi) {
+    return "请先在顶部选择团队，再提交构建任务";
+  }
+  if (buildConfig.value.sourceType === "file") {
+    if (!buildConfig.value.file) {
+      return "请先选择要上传的 JAR 或压缩包文件";
+    }
+    if (!buildConfig.value.template?.trim()) {
+      return "请在步骤 2 选择 Dockerfile 模板";
+    }
+  } else {
+    if (!buildConfig.value.sourceId) {
+      return "请选择 Git 数据源";
+    }
+    if (!buildConfig.value.useProjectDockerfile && !buildConfig.value.template?.trim()) {
+      return "请选择模板或改用项目 Dockerfile";
+    }
+  }
+  const image = (buildConfig.value.imageName || "").trim();
+  if (!image) {
+    return "请填写镜像名称";
+  }
+  return null;
+}
+
 // 开始构建
 async function startBuild() {
-  if (!teamStore.activeTeamIdForApi) {
-    showToast({
-      message: "请先在顶部选择团队，再提交构建任务",
-      variant: "error",
-      duration: 8000,
-    });
+  const validationError = validateBeforeBuild();
+  if (validationError) {
+    showToast({ message: validationError, variant: "error", duration: 8000 });
     return;
   }
 
@@ -3189,8 +3212,8 @@ async function startBuild() {
       uploadTotal.value = buildConfig.value.file?.size || 0;
       showUploadProgressModal.value = true;  // 显示上传进度对话框
 
+      // 勿手动设置 Content-Type，否则缺少 boundary 会导致上传失败
       const res = await axios.post("/api/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
         onUploadProgress: (progressEvent) => {
           uploadLoaded.value = progressEvent.loaded;
           if (progressEvent.total) {
@@ -3726,6 +3749,11 @@ onUnmounted(() => {
   overflow-x: hidden;
 }
 
+.step-build-panel .step-content {
+  min-width: 0;
+  width: 100%;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -3778,10 +3806,33 @@ onUnmounted(() => {
 
 .step-build-panel .build-summary-grid__item {
   min-width: 0;
+  width: 100%;
 }
 
 .step-build-panel .build-summary-grid__item--full {
   grid-column: 1 / -1;
+}
+
+.step-build-panel .build-summary-block {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.step-build-panel .build-summary-block__title {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.step-build-panel .build-summary-block .mb-2 {
+  display: block;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 .step-build-panel .build-summary-grid .badge {

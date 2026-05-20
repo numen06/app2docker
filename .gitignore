@@ -56,3 +56,8 @@ Thumbs.db
 /data
 /data
 /.workbuddy
+/scripts/.pw-e2e-profile
+/.pw-e2e-profile
+/scripts/e2e-pkg
+/test-artifacts
+/scripts/test-artifacts

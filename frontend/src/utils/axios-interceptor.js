@@ -166,13 +166,13 @@ export function setupAxiosInterceptors() {
             'Token已过期，请重新登录'
 
           if (errorMessage.includes('过期') || errorMessage.includes('expired')) {
-            console.warn('⚠️ Token已过期，正在退出登录...')
+            console.warn('⚠️ Token已过期，正在跳转登录页...')
           } else {
-            console.warn('⚠️ 认证失败，正在退出登录...')
+            console.warn('⚠️ 认证失败，正在跳转登录页...')
           }
 
-          clearAuth()
-          window.location.reload()
+          // 勿 reload：会清空路由并落到仪表盘，破坏构建页；保留 redirect 回到当前页
+          redirectToLoginAfterStaleSession()
         }
       }
       return Promise.reject(error)
