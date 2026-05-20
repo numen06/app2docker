@@ -162,6 +162,11 @@ async function submit() {
     inviteEmail.value = res.data?.email || email.value.trim();
     inviteExpiresAt.value = formatInviteExpiresAt(res.data?.expires_at);
     inviteLink.value = buildTeamInviteLink(token);
+    const copied = await copyToClipboard(inviteLink.value);
+    copyDone.value = copied;
+    copyHint.value = copied
+      ? "链接已自动复制到剪贴板，也可点击下方按钮再次复制。"
+      : "请手动复制下方链接发送给被邀请人。";
     emit("invited");
   } catch (e) {
     const detail = e?.response?.data?.detail;
