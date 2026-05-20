@@ -1160,7 +1160,6 @@
                   style="
                     max-height: 600px;
                     overflow-y: auto;
-                    font-family: monospace;
                     font-size: 12px;
                   "
                 >

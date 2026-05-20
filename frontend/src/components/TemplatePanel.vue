@@ -154,7 +154,10 @@
     <TemplatePreviewModal v-model="showPreview" :template="currentTemplate" />
 
     <BaseDialog v-model="showParseModal">
-      <div class="template-parse-dialog flex max-h-[90vh] w-full max-w-3xl flex-col">
+      <div
+        class="template-parse-dialog relative z-10 mx-auto flex max-h-[90vh] w-full max-w-[min(calc(100vw-1.5rem),48rem)] shrink-0 flex-col overflow-hidden rounded-lg shadow-xl"
+        @click.stop
+      >
         <div class="flex shrink-0 items-center justify-between border-b border-sky-600 bg-sky-600 px-4 py-3 text-white">
           <h3 class="template-parse-dialog__title flex flex-wrap items-center gap-2 text-lg font-semibold">
             <i class="fas fa-search"></i>

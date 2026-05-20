@@ -1,3 +1,7 @@
+/**
+ * MiSans 全局字体。--font-sans 须与 index.html #app-loading 内联 font-family 保持一致。
+ * 字体文件：public/fonts/misans/MiSans-VF.woff2（见该目录 README）
+ */
 @font-face {
   font-family: 'MiSans';
   src: url('/fonts/misans/MiSans-VF.woff2') format('woff2');
@@ -11,4 +15,8 @@
     'MiSans', system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+}
+
+.cm-editor .cm-content {
+  font-family: var(--font-mono);
 }

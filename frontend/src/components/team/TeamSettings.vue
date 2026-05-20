@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <div v-if="teamStore.loading" class="text-sm text-slate-500">???????</div>
+    <div v-if="teamStore.loading" class="text-sm text-slate-500">正在加载团队信息…</div>
     <div
       v-else-if="teamStore.error && !teamStore.memberships.length"
       class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -11,43 +11,34 @@
       v-else-if="!teamStore.memberships.length"
       class="rounded-lg border border-slate-200 bg-white p-6 text-center text-slate-600"
     >
-      ???????
+      您尚未加入任何团队，请前往
       <RouterLink to="/onboarding" class="font-medium text-blue-600 hover:text-blue-700">
-        ???????
+        创建或加入团队
       </RouterLink>
-      ?
+      。
     </div>
     <template v-else>
       <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <Label class="mb-2 block" for="team-picker">????</Label>
-        <NativeSelect id="team-picker" class="w-full sm:max-w-md" :value="teamStore.activeTeamId" @change="onPickTeam">
-          <option v-for="m in teamStore.memberships" :key="m.team.team_id" :value="m.team.team_id">
-            {{ m.team.name }}?{{ roleLabel(m.role) }}?
-          </option>
-        </NativeSelect>
-      </div>
-
-      <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 class="mb-4 font-semibold text-slate-900">????</h3>
+        <h3 class="mb-4 font-semibold text-slate-900">基本信息</h3>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div class="grow space-y-2">
-            <Label for="team-name">??</Label>
+            <Label for="team-name">名称</Label>
             <Input id="team-name" v-model="teamName" :disabled="!teamStore.canManageTeam" />
           </div>
           <Button type="button" :disabled="!teamStore.canManageTeam || savingName" @click="saveTeamName">
-            {{ savingName ? "????" : "??" }}
+            {{ savingName ? "保存中…" : "保存" }}
           </Button>
         </div>
         <p v-if="!teamStore.canManageTeam" class="mt-2 text-xs text-slate-500">
-          ?????????????????
+          仅团队所有者或管理员可修改团队名称。
         </p>
       </div>
 
       <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 class="mb-4 font-semibold text-slate-900">????</h3>
+        <h3 class="mb-4 font-semibold text-slate-900">任务设置</h3>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div class="grow space-y-2">
-            <Label for="task-cleanup-days">??????</Label>
+            <Label for="task-cleanup-days">任务保留天数</Label>
             <Input
               id="task-cleanup-days"
               v-model.number="taskCleanupDays"
@@ -57,7 +48,7 @@
               :disabled="!teamStore.canManageTeam"
             />
             <p class="text-xs text-slate-500">
-              ??????????????????? 7 ??
+              超过该天数的已完成任务将被自动清理，默认 7 天。
             </p>
           </div>
           <Button
@@ -65,17 +56,18 @@
             :disabled="!teamStore.canManageTeam || savingCleanupDays"
             @click="saveTaskCleanupDays"
           >
-            {{ savingCleanupDays ? "????" : "??" }}
+            {{ savingCleanupDays ? "保存中…" : "保存" }}
           </Button>
         </div>
         <p v-if="!teamStore.canManageTeam" class="mt-2 text-xs text-slate-500">
-          ???????????????????
+          仅团队所有者或管理员可修改此设置。
         </p>
       </div>
 
       <TeamMemberList :team-id="teamStore.activeTeamId" @invite="inviteOpen = true" />
 
       <InviteMemberDialog
+        v-if="teamStore.activeTeamId"
         v-model="inviteOpen"
         :team-id="teamStore.activeTeamId"
         :allow-owner-invite="isOwner"
@@ -88,16 +80,14 @@
 <script setup>
 import axios from "axios";
 import { computed, ref, watch } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { useTeamStore } from "@/stores/team";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
-import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 import InviteMemberDialog from "@/components/team/InviteMemberDialog.vue";
 import TeamMemberList from "@/components/team/TeamMemberList.vue";
 
-const router = useRouter();
 const teamStore = useTeamStore();
 
 const teamName = ref("");
@@ -110,21 +100,6 @@ const isOwner = computed(() => {
   const m = teamStore.activeMembership;
   return m?.role === "owner";
 });
-
-function roleLabel(r) {
-  const map = { owner: "???", admin: "???", member: "??" };
-  return map[r] || r;
-}
-
-async function onPickTeam(ev) {
-  const nextId = ev.target.value;
-  if (!nextId || nextId === teamStore.activeTeamId) return;
-  await teamStore.setCurrentTeam(nextId);
-  await router.replace(`/teams/${nextId}/settings`);
-  window.dispatchEvent(
-    new CustomEvent("team-context-changed", { detail: { teamId: nextId } })
-  );
-}
 
 watch(
   () => teamStore.activeTeam,
@@ -161,7 +136,7 @@ async function saveTeamName() {
     await teamStore.fetchMyTeams();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "????");
+    alert(typeof detail === "string" ? detail : "保存失败");
   } finally {
     savingName.value = false;
   }
@@ -172,7 +147,7 @@ async function saveTaskCleanupDays() {
   if (!id || !teamStore.canManageTeam) return;
   const days = parseInt(taskCleanupDays.value, 10);
   if (isNaN(days) || days < 1 || days > 365) {
-    alert("??? 1?365 ???????");
+    alert("请输入 1–365 之间的有效天数");
     return;
   }
   savingCleanupDays.value = true;
@@ -181,7 +156,7 @@ async function saveTaskCleanupDays() {
     taskCleanupDays.value = days;
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "????");
+    alert(typeof detail === "string" ? detail : "保存失败");
   } finally {
     savingCleanupDays.value = false;
   }

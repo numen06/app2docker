@@ -95,7 +95,10 @@
 
     <!-- 创建/编辑 -->
     <BaseDialog v-model="formDialogOpen">
-      <div class="flex max-h-[90vh] w-full max-w-[calc(100vw-1rem)] flex-col sm:max-w-2xl">
+      <div
+        class="relative z-10 mx-auto flex max-h-[90vh] w-full max-w-[calc(100vw-1.5rem)] shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:max-w-2xl"
+        @click.stop
+      >
         <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h3 class="text-lg font-semibold text-slate-900">
             {{ showCreateModal ? "创建角色" : "编辑角色" }}
@@ -178,7 +181,10 @@
 
     <!-- 查看权限 -->
     <BaseDialog v-model="showViewModal">
-      <div class="flex w-full max-w-lg flex-col">
+      <div
+        class="relative z-10 mx-auto flex w-full max-w-[calc(100vw-1.5rem)] shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl sm:max-w-lg"
+        @click.stop
+      >
         <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h3 class="text-lg font-semibold text-slate-900">
             角色权限 — {{ viewRole.name }}

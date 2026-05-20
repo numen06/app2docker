@@ -475,7 +475,7 @@
 }
 
 .font-monospace {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .truncate {

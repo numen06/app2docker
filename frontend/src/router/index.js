@@ -7,7 +7,6 @@ import LoginPage from '@/components/LoginPage.vue'
 const LandingPage = () => import('@/components/LandingPage.vue')
 const RegisterPage = () => import('@/components/RegisterPage.vue')
 const CreateTeamOnboarding = () => import('@/components/CreateTeamOnboarding.vue')
-const TeamLayout = () => import('@/layouts/TeamLayout.vue')
 const AdminLayout = () => import('@/layouts/AdminLayout.vue')
 
 function isTeamAdmin(teamStore, teamId) {
@@ -42,31 +41,23 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/teams/:teamId',
-      component: TeamLayout,
-      meta: { requiresAuth: true },
-      children: [
-        {
-          path: '',
-          redirect: 'settings',
-        },
-        {
-          path: 'dashboard',
-          redirect: () => ({ path: '/app/dashboard' }),
-        },
-        {
-          path: 'settings',
-          name: 'team-settings',
-          component: () => import('@/components/team/TeamSettings.vue'),
-        },
-      ],
-    },
-    {
       path: '/app',
       redirect: (to) => ({
         path: '/app/dashboard',
         query: { ...to.query },
       }),
+    },
+    {
+      path: '/app/pipeline/new',
+      name: 'pipeline-create',
+      component: AdminLayout,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/app/pipeline/:pipelineId/edit',
+      name: 'pipeline-edit',
+      component: AdminLayout,
+      meta: { requiresAuth: true },
     },
     {
       path: '/app/:tab',
@@ -147,25 +138,27 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  if (authed && to.params.teamId) {
-    const tid = String(to.params.teamId)
+  const legacyTeamMatch = to.path.match(/^\/teams\/([^/]+)/)
+  if (authed && legacyTeamMatch) {
+    const tid = legacyTeamMatch[1]
     const allowed = teamStore.memberships.some((m) => m.team?.team_id === tid)
     if (!allowed) {
       if (needsTeamMembership(authStore, teamStore)) {
         next('/onboarding')
         return
       }
-      const fallback = teamStore.memberships[0]?.team?.team_id
-      next(fallback ? '/app/dashboard' : '/app/dashboard')
+      next('/app/dashboard')
       return
     }
     await teamStore.setCurrentTeam(tid)
+    next({ path: '/app/team', replace: true })
+    return
   }
 
   if (to.meta.requiresAdmin && authed) {
-    const tid = String(to.params.teamId || '')
+    const tid = String(to.params.teamId || teamStore.activeTeamId || '')
     if (!tid || !isTeamAdmin(teamStore, tid)) {
-      next(tid ? `/teams/${tid}/settings` : await defaultAuthedPath(authStore, teamStore))
+      next(tid ? '/app/team' : await defaultAuthedPath(authStore, teamStore))
       return
     }
   }
@@ -181,18 +174,6 @@ router.beforeEach(async (to, _from, next) => {
     to.path !== '/onboarding' &&
     !to.params.teamId &&
     to.path.startsWith('/app') &&
-    needsTeamMembership(authStore, teamStore)
-  ) {
-    next('/onboarding')
-    return
-  }
-
-  if (
-    authed &&
-    to.meta.requiresAuth &&
-    to.path !== '/onboarding' &&
-    !to.path.startsWith('/app') &&
-    !to.params.teamId &&
     needsTeamMembership(authStore, teamStore)
   ) {
     next('/onboarding')

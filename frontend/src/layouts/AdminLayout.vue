@@ -253,8 +253,9 @@
             <button
               type="button"
               class="group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+              :class="activeTab === 'team' ? 'bg-blue-50 text-blue-700' : ''"
               title="团队管理"
-              @click="goTeamSettings"
+              @click="goTab('team')"
             >
               <i class="fas fa-people-group fa-fw text-slate-500 group-hover:text-slate-700"></i>
               <span class="truncate">团队管理</span>
@@ -271,7 +272,7 @@
             >
               <button
                 type="button"
-                class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
                 :class="groupHasActiveChild(group) ? 'text-slate-700' : ''"
                 :aria-expanded="isGroupExpanded(group.id)"
                 @click="toggleGroup(group.id)"
@@ -294,8 +295,8 @@
                   v-for="child in group.children"
                   :key="child.id"
                   type="button"
-                  class="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-                  :class="activeTab === child.id ? 'bg-blue-50 text-blue-700' : ''"
+                  class="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                  :class="sidebarActiveTab === child.id ? 'bg-blue-50 text-blue-700' : ''"
                   :title="child.label"
                   @click="goTab(child.id)"
                 >
@@ -304,7 +305,7 @@
                       'fa-fw',
                       child.iconPrefix || 'fas',
                       child.icon,
-                      activeTab === child.id ? 'text-blue-600' : 'text-slate-400',
+                      sidebarActiveTab === child.id ? 'text-blue-600' : 'text-slate-400',
                     ]"
                   ></i>
                   <span class="truncate">{{ child.label }}</span>
@@ -349,8 +350,9 @@
             <button
               type="button"
               class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              :class="activeTab === 'team' ? 'bg-blue-50 text-blue-700' : ''"
               title="团队管理"
-              @click="goTeamSettings"
+              @click="goTab('team')"
             >
               <i class="fas fa-people-group fa-fw"></i>
             </button>
@@ -384,7 +386,7 @@
                   <button
                     type="button"
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-                    :class="activeTab === child.id ? 'bg-blue-50 text-blue-700' : ''"
+                    :class="sidebarActiveTab === child.id ? 'bg-blue-50 text-blue-700' : ''"
                     @click="selectFlyoutTab(group.id, child.id)"
                   >
                     <i
@@ -442,8 +444,15 @@
             <DockerManager
               v-if="activeTab === 'docker' && hasPermission('menu.docker')"
             />
+            <PipelineEditorPage
+              v-if="isPipelineEditorRoute && hasPermission('menu.pipeline')"
+            />
             <PipelinePanel
-              v-if="activeTab === 'pipeline' && hasPermission('menu.pipeline')"
+              v-if="
+                activeTab === 'pipeline' &&
+                !isPipelineEditorRoute &&
+                hasPermission('menu.pipeline')
+              "
             />
             <DataSourcePanel
               v-if="
@@ -481,6 +490,7 @@
               @save="handleBuildConfigSave"
               @cancel="handleBuildConfigCancel"
             />
+            <TeamSettings v-if="activeTab === 'team'" />
             </div>
           </div>
 
@@ -665,12 +675,14 @@ import DockerManager from "@/components/DockerManager.vue";
 import ExportPanel from "@/components/ExportPanel.vue";
 import OperationLogs from "@/components/OperationLogs.vue";
 import PipelinePanel from "@/components/PipelinePanel.vue";
+import PipelineEditorPage from "@/pages/PipelineEditorPage.vue";
 import RegistryPanel from "@/components/RegistryPanel.vue";
 import ResourcePackagePanel from "@/components/ResourcePackagePanel.vue";
 import RoleManagement from "@/components/RoleManagement.vue";
 import StepBuildPanel from "@/components/StepBuildPanel.vue";
 import TaskManager from "@/components/TaskManager.vue";
 import TemplatePanel from "@/components/TemplatePanel.vue";
+import TeamSettings from "@/components/team/TeamSettings.vue";
 import UnifiedHostManager from "@/components/UnifiedHostManager.vue";
 import UserCenterModal from "@/components/UserCenterModal.vue";
 import UserManagement from "@/components/UserManagement.vue";
@@ -802,6 +814,7 @@ const PAGE_TITLES = {
   logs: "操作日志",
   "api-docs": "接口说明",
   "build-config-editor": "构建配置",
+  team: "团队管理",
 };
 
 const SIDEBAR_STORAGE_KEY = "app2docker-admin-sidebar-collapsed";
@@ -822,8 +835,19 @@ const activeTab = computed(() => {
   return typeof p === "string" && p.length ? p : "dashboard";
 });
 
+const isPipelineEditorRoute = computed(
+  () =>
+    route.name === "pipeline-create" || route.name === "pipeline-edit"
+);
+
+const sidebarActiveTab = computed(() => {
+  if (isPipelineEditorRoute.value) return "pipeline";
+  return activeTab.value;
+});
+
 const panelContentKey = computed(
-  () => `${teamStore.activeTeamId || "none"}-${activeTab.value}`
+  () =>
+    `${teamStore.activeTeamId || "none"}-${route.fullPath || activeTab.value}`
 );
 
 const MOBILE_BREAKPOINT = 768;
@@ -950,11 +974,11 @@ function expandGroupForTab(tab) {
 }
 
 function groupHasActiveChild(group) {
-  return group.children.some((c) => c.id === activeTab.value);
+  return group.children.some((c) => c.id === sidebarActiveTab.value);
 }
 
 watch(
-  activeTab,
+  sidebarActiveTab,
   (newTab) => {
     try {
       sessionStorage.setItem(ACTIVE_TAB_STORAGE_KEY, newTab);
@@ -967,6 +991,8 @@ watch(
 );
 
 const pageTitle = computed(() => {
+  if (route.name === "pipeline-create") return "新建流水线";
+  if (route.name === "pipeline-edit") return "编辑流水线";
   return PAGE_TITLES[activeTab.value] || "App2Docker";
 });
 
@@ -1129,18 +1155,6 @@ function handleNavigate(tab, params) {
 function teamRoleLabel(role) {
   const map = { owner: "所有者", admin: "管理员", member: "成员" };
   return map[role] || role;
-}
-
-function goTeamSettings() {
-  closeUserMenu();
-  closeMobileSidebar();
-  const tid =
-    teamStore.activeTeamId || teamStore.memberships[0]?.team?.team_id;
-  if (!tid) {
-    router.push("/onboarding");
-    return;
-  }
-  router.push(`/teams/${tid}/settings`);
 }
 
 async function onGlobalTeamChange(ev) {

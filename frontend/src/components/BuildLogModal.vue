@@ -1,6 +1,9 @@
 <template>
   <BaseDialog :model-value="modelValue" @update:model-value="onDialogClose">
-    <div class="flex max-h-[90vh] w-full max-w-[min(90vw,1400px)] flex-col overflow-hidden">
+    <div
+      class="relative z-10 mx-auto flex max-h-[90vh] w-full max-w-[min(calc(100vw-1.5rem),1400px)] shrink-0 flex-col overflow-hidden rounded-lg shadow-xl"
+      @click.stop
+    >
       <div class="flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-3 text-white">
         <h3 class="flex items-center gap-2 text-lg font-semibold">
           <i class="fas fa-terminal"></i> 构建日志
@@ -251,7 +254,7 @@ defineExpose({ addLog, clearLog });
 .log-container {
   background: #1e1e1e;
   color: #d4d4d4;
-  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-family: var(--font-mono);
   height: calc(100% - 42px);
   overflow-y: auto;
   font-size: 12px;

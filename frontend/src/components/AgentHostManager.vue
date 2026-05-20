@@ -2342,7 +2342,7 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
 
 /* 代码样式 */
 code {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   background-color: #f8f9fa;
   padding: 0.2rem 0.4rem;

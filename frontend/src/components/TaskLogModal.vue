@@ -74,8 +74,8 @@
 
     <pre
       ref="logContainer"
-      class="max-h-[60vh] min-h-[300px] overflow-auto rounded-md bg-slate-900 p-3 text-sm leading-relaxed text-slate-100"
-      style="white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace"
+      class="max-h-[60vh] min-h-[300px] overflow-auto rounded-md bg-slate-900 p-3 font-mono text-sm leading-relaxed text-slate-100"
+      style="white-space: pre-wrap; word-wrap: break-word"
     >{{ logs || "暂无日志" }}</pre>
 
     <template #footer>

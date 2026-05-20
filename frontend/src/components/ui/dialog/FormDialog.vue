@@ -1,7 +1,7 @@
 <template>
   <BaseDialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)">
     <div
-      class="relative z-10 mx-auto flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl max-w-[calc(100vw-1rem)] sm:max-w-none"
+      class="relative z-10 mx-auto flex max-h-[90vh] w-full shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl"
       :class="widthClass"
       @click.stop
     >
