@@ -1,31 +1,48 @@
-# Agent Dockerfile - 独立的 Agent 镜像构建文件
-# 与主 Dockerfile backend-base 策略一致
+# Agent Dockerfile - 与主 Dockerfile backend-base 策略一致
 
-FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS docker-tools
+FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli
 
-FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.12.0
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
-COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
+RUN apk update && apk upgrade -U && \
+    apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-setuptools \
+    expat \
+    curl \
+    jq \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    linux-headers \
+    docker-compose \
+    tzdata && \
+    (apk fix python3 expat 2>/dev/null || true) && \
+    (python -c "import pyexpat" 2>/dev/null || ( \
+      apk del python3 py3-pip py3-setuptools && \
+      apk add --no-cache python3 py3-pip py3-setuptools expat && \
+      python -c "import pyexpat" \
+    ))
 
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo "$TZ" > /etc/timezone
+RUN ln -sf python3 /usr/bin/python && \
+    ln -sf pip3 /usr/bin/pip
 
-RUN yum install -y curl jq git make gcc gcc-c++ python3-devel && \
-    yum clean all && \
-    rm -rf /var/cache/yum
-
-RUN python -m pip install --upgrade \
+RUN python -m pip install --upgrade --break-system-packages \
     --index-url https://mirrors.aliyun.com/pypi/simple/ \
     --timeout 300 \
     --retries 5 \
     pip
 
+ENV TZ=Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo "$TZ" > /etc/timezone
+
 RUN echo "✅ Python version:" && python --version && \
     echo "✅ pip version:" && pip --version && \
     echo "✅ docker version:" && docker --version && \
-    echo "✅ compose version:" && (docker compose version || docker-compose --version || echo "⚠️ compose not found")
+    echo "✅ docker-compose version:" && docker-compose --version
 
 WORKDIR /app
 

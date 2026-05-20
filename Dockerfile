@@ -35,28 +35,46 @@ COPY --chown=node:node frontend/ ./
 RUN npm run build
 
 # ============ 阶段 2: Python 后端基础镜像 ============
-# 51jbm/docker 内 apk python3 与 expat 不匹配会导致 pyexpat 报错；Python 用 alinux3，Docker CLI 从 docker 镜像复制
-FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS docker-tools
+FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS backend-base
 
-FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.12.0 AS backend-base
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
-COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
+# 先全量升级再安装 python3/expat，并强制二者 ABI 一致（修复 pyexpat 符号缺失）
+RUN apk update && apk upgrade -U && \
+    apk add --no-cache \
+    python3 \
+    python3-dev \
+    py3-pip \
+    py3-setuptools \
+    expat \
+    curl \
+    jq \
+    git \
+    make \
+    gcc \
+    musl-dev \
+    linux-headers \
+    docker-compose \
+    tzdata && \
+    (apk fix python3 expat 2>/dev/null || true) && \
+    (python -c "import pyexpat" 2>/dev/null || ( \
+      apk del python3 py3-pip py3-setuptools && \
+      apk add --no-cache python3 py3-pip py3-setuptools expat && \
+      python -c "import pyexpat" \
+    ))
 
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo "$TZ" > /etc/timezone
+RUN ln -sf python3 /usr/bin/python && \
+    ln -sf pip3 /usr/bin/pip
 
-RUN yum install -y curl jq git make gcc gcc-c++ python3-devel && \
-    yum clean all && \
-    rm -rf /var/cache/yum
-
-# 使用国内镜像源并增加超时时间，避免网络超时
-RUN python -m pip install --upgrade \
+RUN python -m pip install --upgrade --break-system-packages \
     --index-url https://mirrors.aliyun.com/pypi/simple/ \
     --timeout 300 \
     --retries 5 \
     pip
+
+ENV TZ=Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo "$TZ" > /etc/timezone
 
 RUN echo "✅ Python version:" && python --version && \
     echo "✅ pip version:" && pip --version && \
@@ -77,7 +95,7 @@ RUN python -m venv .venv && \
     .venv/bin/pip config set global.retries 5 && \
     .venv/bin/pip install --upgrade pip && \
     .venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    echo "✅ compose version:" && (docker compose version || docker-compose --version || echo "⚠️ compose not found")
+    echo "✅ docker-compose version:" && docker-compose --version || echo "⚠️ docker-compose not found"
 
 # ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
 ENV PATH="/app/.venv/bin:$PATH"
