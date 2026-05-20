@@ -2,7 +2,6 @@
 """团队管理 API"""
 from __future__ import annotations
 
-import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -15,6 +14,7 @@ from sqlalchemy.orm import Session
 from backend.database import DEFAULT_TEAM_NAME, get_db
 from backend.models import Team, TeamInvitation, TeamMember, User
 from backend.route_definitions import require_auth
+from backend.team_deletion import delete_team_cascade
 from backend.team_permissions import (
     get_team_member,
     get_user_id_by_username,
@@ -23,31 +23,11 @@ from backend.team_permissions import (
     require_team_member,
     require_team_owner,
 )
+from backend.team_utils import ensure_unique_slug, slugify_name, team_to_dict
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
 TEAM_ROLES = frozenset({"owner", "admin", "member"})
-
-
-def _slugify_name(name: str) -> str:
-    s = name.lower().strip()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[-\s]+", "-", s)
-    s = s.strip("-")
-    return s or "team"
-
-
-def _ensure_unique_slug(
-    db: Session, base_slug: str, exclude_team_id: str | None = None
-) -> str:
-    slug = base_slug
-    while True:
-        q = db.query(Team).filter(Team.slug == slug)
-        if exclude_team_id:
-            q = q.filter(Team.team_id != exclude_team_id)
-        if q.first() is None:
-            return slug
-        slug = f"{base_slug}-{uuid.uuid4().hex[:8]}"
 
 
 def _normalize_role(role: str) -> str:
@@ -145,13 +125,14 @@ class TeamSettingsUpdate(BaseModel):
 
 
 def _team_to_out(t: Team) -> TeamOut:
+    d = team_to_dict(t)
     return TeamOut(
-        team_id=t.team_id,
-        name=t.name,
-        slug=t.slug,
-        description=t.description or "",
+        team_id=d["team_id"],
+        name=d["name"],
+        slug=d["slug"],
+        description=d["description"],
         avatar_url=t.avatar_url,
-        created_by=t.created_by,
+        created_by=d["created_by"],
         created_at=t.created_at,
         updated_at=t.updated_at,
     )
@@ -243,8 +224,8 @@ def create_team(
             status_code=400,
             detail=f"团队名称「{DEFAULT_TEAM_NAME}」为系统保留，请使用其他名称",
         )
-    base = _slugify_name(name)
-    slug = _ensure_unique_slug(db, base)
+    base = slugify_name(name)
+    slug = ensure_unique_slug(db, base)
     team = Team(
         team_id=str(uuid.uuid4()),
         name=name,
@@ -319,8 +300,8 @@ def update_team(
         raise HTTPException(status_code=404, detail="团队不存在")
     if body.name is not None:
         team.name = body.name.strip()
-        team.slug = _ensure_unique_slug(
-            db, _slugify_name(team.name), exclude_team_id=team.team_id
+        team.slug = ensure_unique_slug(
+            db, slugify_name(team.name), exclude_team_id=team.team_id
         )
     if body.description is not None:
         team.description = body.description
@@ -340,11 +321,7 @@ def delete_team(
     username = require_auth(request)
     user_id = get_user_id_by_username(db, username)
     require_team_owner(db, team_id, user_id)
-    team = db.query(Team).filter(Team.team_id == team_id).first()
-    if not team:
-        raise HTTPException(status_code=404, detail="团队不存在")
-    db.delete(team)
-    db.commit()
+    delete_team_cascade(db, team_id)
     return None
 
 

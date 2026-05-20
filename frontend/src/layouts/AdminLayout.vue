@@ -290,11 +290,11 @@
               type="button"
               class="group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               :class="activeTab === 'team' ? 'bg-blue-50 text-blue-700' : ''"
-              title="团队管理"
+              title="我的团队"
               @click="goTab('team')"
             >
               <i class="fas fa-people-group fa-fw text-slate-500 group-hover:text-slate-700"></i>
-              <span class="truncate">团队管理</span>
+              <span class="truncate">我的团队</span>
             </button>
             <div
               v-if="hasPermission('menu.dashboard') && visibleSidebarGroups.length"
@@ -387,7 +387,7 @@
               type="button"
               class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
               :class="activeTab === 'team' ? 'bg-blue-50 text-blue-700' : ''"
-              title="团队管理"
+              title="我的团队"
               @click="goTab('team')"
             >
               <i class="fas fa-people-group fa-fw"></i>
@@ -521,6 +521,9 @@
             />
             <UserManagement
               v-if="activeTab === 'users' && hasPermission('menu.users')"
+            />
+            <TeamManagement
+              v-if="activeTab === 'teams' && hasPermission('menu.users')"
             />
             <RoleManagement
               v-if="activeTab === 'roles' && hasPermission('menu.users')"
@@ -733,6 +736,7 @@ import TeamSettings from "@/components/team/TeamSettings.vue";
 import UnifiedHostManager from "@/components/UnifiedHostManager.vue";
 import UserCenterModal from "@/components/UserCenterModal.vue";
 import UserManagement from "@/components/UserManagement.vue";
+import TeamManagement from "@/components/TeamManagement.vue";
 import { clearPermissionsCache, getUserPermissions } from "@/utils/permissions";
 
 /** 侧边栏二级分组（仪表盘单独「首页」一级入口，其余为分组 + 二级菜单） */
@@ -832,6 +836,12 @@ const SIDEBAR_GROUPS = [
         icon: "fa-users",
       },
       {
+        id: "teams",
+        perm: "menu.users",
+        label: "团队管理",
+        icon: "fa-people-group",
+      },
+      {
         id: "roles",
         perm: "menu.users",
         label: "角色管理",
@@ -857,11 +867,12 @@ const PAGE_TITLES = {
   docker: "Docker 管理",
   deploy: "部署管理",
   users: "用户管理",
+  teams: "团队管理",
   roles: "角色管理",
   logs: "操作日志",
   "api-docs": "接口说明",
   "build-config-editor": "构建配置",
-  team: "团队管理",
+  team: "我的团队",
 };
 
 const SIDEBAR_STORAGE_KEY = "app2docker-admin-sidebar-collapsed";
@@ -966,7 +977,7 @@ const buildConfigToEdit = ref({});
 const permissionsLoaded = ref(false);
 const userPermissions = ref(new Set());
 const globalPermissions = ref(new Set());
-const SYSTEM_TABS = new Set(["users", "roles"]);
+const SYSTEM_TABS = new Set(["users", "teams", "roles"]);
 let runningTasksTimer = null;
 
 const sidebarCollapsed = ref(

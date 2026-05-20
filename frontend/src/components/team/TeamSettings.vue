@@ -119,15 +119,61 @@
         <p class="mb-4 text-sm text-slate-600">
           解散后团队及其关联数据将被永久删除，且无法恢复。此操作仅所有者可执行。
         </p>
+        <AlertBanner v-if="dissolveError && !showDissolveModal" :message="dissolveError" class="mb-4" />
         <Button
           type="button"
           variant="destructive"
           :disabled="dissolving"
-          @click="dissolveTeam"
+          @click="openDissolveModal"
         >
-          {{ dissolving ? "解散中…" : "解散团队" }}
+          解散团队
         </Button>
       </div>
+
+      <FormDialog
+        v-model="showDissolveModal"
+        title="解散团队"
+        icon="fa-user-slash"
+        icon-class="text-red-600"
+        size="md"
+        @update:model-value="(v) => !v && closeDissolveModal()"
+      >
+        <div class="space-y-4">
+          <p class="text-sm text-slate-600">
+            解散后该团队及其全部业务数据将被永久删除，且无法恢复。
+          </p>
+          <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            请输入团队名称
+            <strong class="font-semibold">「{{ teamStore.activeTeam?.name }}」</strong>
+            以确认解散：
+          </p>
+          <div class="space-y-2">
+            <Label for="my-team-dissolve-confirm">团队名称</Label>
+            <Input
+              id="my-team-dissolve-confirm"
+              v-model="dissolveConfirmName"
+              autocomplete="off"
+              placeholder="输入上方引号内的团队名称"
+              :disabled="dissolving || isProtectedActiveTeam"
+              @keyup.enter="confirmDissolve"
+            />
+          </div>
+          <AlertBanner :message="dissolveError" />
+        </div>
+        <template #footer>
+          <Button variant="outline" type="button" :disabled="dissolving" @click="closeDissolveModal">
+            取消
+          </Button>
+          <Button
+            variant="destructive"
+            type="button"
+            :disabled="dissolving || isProtectedActiveTeam"
+            @click="confirmDissolve"
+          >
+            {{ dissolving ? "解散中…" : "确认解散" }}
+          </Button>
+        </template>
+      </FormDialog>
 
       <TeamMemberList
         ref="memberListRef"
@@ -157,8 +203,13 @@ import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import NativeSelect from "@/components/ui/select/NativeSelect.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import InviteMemberDialog from "@/components/team/InviteMemberDialog.vue";
 import TeamMemberList from "@/components/team/TeamMemberList.vue";
+
+const DEFAULT_TEAM_NAME = "默认团队";
+const DEFAULT_TEAM_SLUG = "default";
 
 const teamStore = useTeamStore();
 const authStore = useAuthStore();
@@ -175,8 +226,26 @@ const membersLoading = ref(false);
 const transferTargetId = ref("");
 const transferring = ref(false);
 const dissolving = ref(false);
+const showDissolveModal = ref(false);
+const dissolveConfirmName = ref("");
+const dissolveError = ref("");
 
 const isOwner = computed(() => teamStore.isTeamOwner);
+
+const isProtectedActiveTeam = computed(() => {
+  const t = teamStore.activeTeam;
+  if (!t) return false;
+  return t.name === DEFAULT_TEAM_NAME || t.slug === DEFAULT_TEAM_SLUG;
+});
+
+function formatApiDetail(detail) {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || item?.message || String(item)).join("；");
+  }
+  return String(detail);
+}
 
 const transferCandidates = computed(() => {
   const me = (authStore.username || "").trim();
@@ -321,22 +390,47 @@ async function onInvited() {
   await memberListRef.value?.load?.();
 }
 
-async function dissolveTeam() {
+function openDissolveModal() {
+  if (!teamStore.activeTeamId || !teamStore.isTeamOwner) return;
+  dissolveConfirmName.value = "";
+  dissolveError.value = "";
+  if (isProtectedActiveTeam.value) {
+    dissolveError.value = "不能解散系统保留的默认团队";
+  }
+  showDissolveModal.value = true;
+}
+
+function closeDissolveModal() {
+  showDissolveModal.value = false;
+  dissolveConfirmName.value = "";
+  if (!dissolving.value) {
+    dissolveError.value = "";
+  }
+}
+
+async function confirmDissolve() {
   const id = teamStore.activeTeamId;
-  const name = teamStore.activeTeam?.name || "该团队";
+  const name = (teamStore.activeTeam?.name || "").trim();
   if (!id || !teamStore.isTeamOwner) return;
-  const typed = prompt(
-    `解散团队后数据将无法恢复。\n\n请输入团队名称「${name}」以确认解散：`
-  );
-  if (typed === null) return;
-  if (typed.trim() !== name.trim()) {
-    alert("团队名称不匹配，已取消解散。");
+  if (isProtectedActiveTeam.value) {
+    dissolveError.value = "不能解散系统保留的默认团队";
     return;
   }
-  if (!confirm(`确定要永久解散团队「${name}」吗？`)) return;
+  const typed = dissolveConfirmName.value.trim();
+  if (!typed) {
+    dissolveError.value = "请输入团队名称";
+    return;
+  }
+  if (typed !== name) {
+    dissolveError.value = "团队名称不匹配，请重新输入";
+    return;
+  }
   dissolving.value = true;
+  dissolveError.value = "";
   try {
     await axios.delete(`/api/teams/${id}`);
+    closeDissolveModal();
+    dissolveError.value = "";
     await teamStore.fetchMyTeams();
     const nextId = teamStore.memberships[0]?.team?.team_id;
     if (nextId) {
@@ -347,8 +441,8 @@ async function dissolveTeam() {
       router.push("/onboarding");
     }
   } catch (e) {
-    const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "解散团队失败");
+    console.error("解散团队失败:", e);
+    dissolveError.value = formatApiDetail(e?.response?.data?.detail) || "解散团队失败";
   } finally {
     dissolving.value = false;
   }
