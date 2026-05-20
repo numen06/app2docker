@@ -41,6 +41,8 @@ class GitSourceManager:
             "dockerfiles": source.dockerfiles or {},
             "created_at": source.created_at.isoformat() if source.created_at else None,
             "updated_at": source.updated_at.isoformat() if source.updated_at else None,
+            "team_id": source.team_id,
+            "created_by": source.created_by,
         }
 
         if include_password:
@@ -91,6 +93,8 @@ class GitSourceManager:
         username: str = None,
         password: str = None,
         dockerfiles: Dict[str, str] = None,
+        team_id: str = None,
+        created_by: str = None,
     ) -> str:
         """创建 Git 数据源"""
         source_id = str(uuid.uuid4())
@@ -113,6 +117,8 @@ class GitSourceManager:
                 username=username or "",
                 password=encrypted_password,
                 dockerfiles=dockerfiles or {},
+                team_id=team_id,
+                created_by=created_by,
             )
 
             db.add(source)

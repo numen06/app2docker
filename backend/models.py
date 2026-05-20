@@ -73,6 +73,11 @@ class Pipeline(Base):
     current_task_id = Column(String(36), ForeignKey("tasks.task_id"), nullable=True)
     task_queue = Column(JSON, default=list)  # 保留向后兼容
 
+    # 团队与分组
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    group_id = Column(String(36), ForeignKey("pipeline_groups.group_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     # 元数据
     source_id = Column(String(36))
     created_at = Column(DateTime, default=datetime.now)
@@ -88,6 +93,8 @@ class Pipeline(Base):
     __table_args__ = (
         Index("idx_pipeline_webhook_token", "webhook_token"),
         Index("idx_pipeline_enabled", "enabled"),
+        Index("idx_pipeline_team", "team_id"),
+        Index("idx_pipeline_group", "group_id"),
     )
 
 
@@ -115,6 +122,7 @@ class Task(Base):
     source = Column(String(50), default="手动构建")
     pipeline_id = Column(String(36), ForeignKey("pipelines.pipeline_id"), nullable=True)
     deploy_config_id = Column(String(36), ForeignKey("deploy_configs.config_id"), nullable=True)  # 关联到部署配置
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
 
     # 向后兼容字段（从 task_config 中提取）
     git_url = Column(String(512))
@@ -138,6 +146,7 @@ class Task(Base):
         Index("idx_task_created", "created_at"),
         Index("idx_task_type_status", "task_type", "status"),
         Index("idx_task_type_deploy_config", "task_type", "deploy_config_id"),
+        Index("idx_task_team", "team_id"),
     )
 
 
@@ -176,10 +185,16 @@ class GitSource(Base):
     password = Column(Text)  # 加密存储
     dockerfiles = Column(JSON, default=dict)  # Dockerfile 字典
 
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    __table_args__ = (Index("idx_git_source_url", "git_url"),)
+    __table_args__ = (
+        Index("idx_git_source_url", "git_url"),
+        Index("idx_git_source_team", "team_id"),
+    )
 
 
 class Host(Base):
@@ -199,10 +214,16 @@ class Host(Base):
     docker_version = Column(String(255))
     description = Column(Text, default="")
 
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    __table_args__ = (Index("idx_host_name", "name"),)
+    __table_args__ = (
+        Index("idx_host_name", "name"),
+        Index("idx_host_team", "team_id"),
+    )
 
 
 class ResourcePackage(Base):
@@ -217,10 +238,16 @@ class ResourcePackage(Base):
     size = Column(Integer, default=0)
     extracted = Column(Boolean, default=False)
 
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    __table_args__ = (Index("idx_resource_package_name", "name"),)
+    __table_args__ = (
+        Index("idx_resource_package_name", "name"),
+        Index("idx_resource_package_team", "team_id"),
+    )
 
 
 class OperationLog(Base):
@@ -232,12 +259,14 @@ class OperationLog(Base):
     username = Column(String(255), nullable=False)
     action = Column(String(100), nullable=False)
     details = Column(JSON, default=dict)
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
     timestamp = Column(DateTime, default=datetime.now)
 
     __table_args__ = (
         Index("idx_operation_log_user", "username"),
         Index("idx_operation_log_action", "action"),
         Index("idx_operation_log_time", "timestamp"),
+        Index("idx_operation_log_team", "team_id"),
     )
 
 
@@ -259,6 +288,7 @@ class ExportTask(Base):
     file_path = Column(String(512))
     file_size = Column(Integer)
     source = Column(String(50), default="手动导出")
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     completed_at = Column(DateTime)
     error = Column(Text)
@@ -266,6 +296,7 @@ class ExportTask(Base):
     __table_args__ = (
         Index("idx_export_task_status", "status"),
         Index("idx_export_task_created", "created_at"),
+        Index("idx_export_task_team", "team_id"),
     )
 
 
@@ -322,6 +353,10 @@ class AgentHost(Base):
     docker_info = Column(JSON, default=dict)  # Docker信息（版本、容器数、镜像数等）
     description = Column(Text, default="")
 
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    group_id = Column(String(36), ForeignKey("host_groups.group_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -331,6 +366,8 @@ class AgentHost(Base):
         Index("idx_agent_host_status", "status"),
         Index("idx_agent_host_name", "name"),
         Index("idx_agent_host_type", "host_type"),
+        Index("idx_agent_host_team", "team_id"),
+        Index("idx_agent_host_group", "group_id"),
     )
 
 
@@ -509,6 +546,8 @@ class DeployConfig(Base):
     webhook_allowed_branches = Column(JSON, nullable=True)  # 允许触发的分支列表
     execution_count = Column(Integer, default=0)  # 执行次数统计
     last_executed_at = Column(DateTime, nullable=True)  # 最后执行时间
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)  # 创建时间
     updated_at = Column(
         DateTime, default=datetime.now, onupdate=datetime.now
@@ -518,6 +557,7 @@ class DeployConfig(Base):
         Index("idx_deploy_config_app_name", "app_name"),
         Index("idx_deploy_config_webhook_token", "webhook_token"),
         Index("idx_deploy_config_created", "created_at"),
+        Index("idx_deploy_config_team", "team_id"),
     )
 
 
@@ -530,3 +570,213 @@ class SystemSetting(Base):
     setting_value = Column(String(255), nullable=False)
     description = Column(Text, default="")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class Team(Base):
+    """团队表"""
+
+    __tablename__ = "teams"
+
+    team_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, unique=True)
+    description = Column(Text, default="")
+    avatar_url = Column(String(512), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    task_cleanup_days = Column(Integer, default=7)  # 任务自动清理保留天数
+
+    members = relationship(
+        "TeamMember",
+        back_populates="team",
+        cascade="all, delete-orphan",
+    )
+    invitations = relationship(
+        "TeamInvitation",
+        back_populates="team",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (Index("idx_team_slug", "slug"),)
+
+
+class TeamMember(Base):
+    """团队成员"""
+
+    __tablename__ = "team_members"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    role = Column(String(20), nullable=False, default="member")
+    joined_at = Column(DateTime, default=datetime.now)
+
+    team = relationship("Team", back_populates="members")
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_team_member_team", "team_id"),
+        Index("idx_team_member_user", "user_id"),
+        Index("uq_team_member_team_user", "team_id", "user_id", unique=True),
+    )
+
+
+class TeamInvitation(Base):
+    """团队邀请"""
+
+    __tablename__ = "team_invitations"
+
+    invitation_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=False)
+    email = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="member")
+    token = Column(String(64), unique=True, nullable=False)
+    invited_by = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    team = relationship("Team", back_populates="invitations")
+    inviter = relationship("User", foreign_keys=[invited_by])
+
+    __table_args__ = (
+        Index("idx_team_invitation_team", "team_id"),
+        Index("idx_team_invitation_token", "token"),
+    )
+
+
+class PipelineGroup(Base):
+    """流水线分组"""
+
+    __tablename__ = "pipeline_groups"
+
+    group_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (Index("idx_pipeline_group_team", "team_id"),)
+
+
+class HostGroup(Base):
+    """主机分组"""
+
+    __tablename__ = "host_groups"
+
+    group_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (Index("idx_host_group_team", "team_id"),)
+
+
+class PipelinePermission(Base):
+    """流水线成员权限"""
+
+    __tablename__ = "pipeline_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pipeline_id = Column(
+        String(36), ForeignKey("pipelines.pipeline_id"), nullable=False
+    )
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_pipeline_perm_pipeline_user", "pipeline_id", "user_id", unique=True),
+    )
+
+
+class HostPermission(Base):
+    """主机成员权限"""
+
+    __tablename__ = "host_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    host_id = Column(String(36), ForeignKey("agent_hosts.host_id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_host_perm_host_user", "host_id", "user_id", unique=True),
+    )
+
+
+class DeployConfigPermission(Base):
+    """部署配置成员权限"""
+
+    __tablename__ = "deploy_config_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    config_id = Column(
+        String(36), ForeignKey("deploy_configs.config_id"), nullable=False
+    )
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_deploy_config_perm_config_user", "config_id", "user_id", unique=True),
+    )
+
+
+class GitSourcePermission(Base):
+    """数据源成员权限"""
+
+    __tablename__ = "git_source_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_id = Column(String(36), ForeignKey("git_sources.source_id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_git_source_perm_source_user", "source_id", "user_id", unique=True),
+    )
+
+
+class PipelineGroupPermission(Base):
+    """流水线分组成员权限"""
+
+    __tablename__ = "pipeline_group_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(
+        String(36), ForeignKey("pipeline_groups.group_id"), nullable=False
+    )
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_pipeline_group_perm_group_user", "group_id", "user_id", unique=True),
+    )
+
+
+class HostGroupPermission(Base):
+    """主机分组成员权限"""
+
+    __tablename__ = "host_group_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(String(36), ForeignKey("host_groups.group_id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_host_group_perm_group_user", "group_id", "user_id", unique=True),
+    )

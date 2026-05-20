@@ -6,6 +6,11 @@
     <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="App2Docker：一键将应用打包成 Docker 镜像，支持流水线构建、模板管理、主机部署与团队协作。"
+    />
+    <meta name="keywords" content="Docker,镜像构建,CI/CD,流水线,容器化" />
     <title>App2Docker - Docker 镜像构建平台</title>
     <style>
       /* 加载时显示，防止白屏 */
@@ -20,6 +25,8 @@
         justify-content: center;
         background: #f1f5f9;
         z-index: 9999;
+        font-family: 'MiSans', system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
       }
       #app-loading .spinner {
         width: 40px;
@@ -28,6 +35,12 @@
         border-top: 4px solid #1e293b;
         border-radius: 50%;
         animation: spin 1s linear infinite;
+      }
+      #app-loading .hint {
+        margin-top: 0.75rem;
+        font-size: 0.875rem;
+        color: #64748b;
+        text-align: center;
       }
       @keyframes spin {
         0% { transform: rotate(0deg); }
@@ -38,25 +51,25 @@
   <body>
     <div id="app"></div>
     <div id="app-loading">
-      <div class="text-center">
+      <div>
         <div class="spinner"></div>
-        <p class="mt-3 text-muted">加载中...</p>
+        <p class="hint">加载中...</p>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>
     <script>
-      // 移除加载动画
       window.addEventListener('load', () => {
         setTimeout(() => {
           const loading = document.getElementById('app-loading');
           if (loading) loading.style.display = 'none';
         }, 100);
       });
-      
-      // 捕获错误
       window.addEventListener('error', (e) => {
         console.error('页面错误:', e.error);
-        document.body.innerHTML = '<div style="padding: 2rem; text-align: center;"><h3>❌ 应用加载失败</h3><p>请查看控制台获取详细错误信息</p><pre style="text-align: left; background: #f8f9fa; padding: 1rem; border-radius: 0.5rem;">' + e.error + '</pre></div>';
+        document.body.innerHTML =
+          '<div style="padding: 2rem; text-align: center;"><h3>应用加载失败</h3><p>请查看控制台获取详细错误信息</p><pre style="text-align: left; background: #f8f9fa; padding: 1rem; border-radius: 0.5rem;">' +
+          (e.error || e.message || '') +
+          '</pre></div>';
       });
     </script>
   </body>

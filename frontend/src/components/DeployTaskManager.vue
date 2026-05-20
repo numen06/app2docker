@@ -1,271 +1,220 @@
 <template>
-  <div>
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
-        <i class="fas fa-rocket text-primary"></i>
-        部署配置管理
-      </h5>
-      <div>
-        <button class="btn btn-primary btn-sm" @click="showImportModal = true">
-          <i class="fas fa-file-import me-1"></i> 导入配置
-        </button>
-        <button
-          class="btn btn-success btn-sm ms-2"
-          @click="openSimpleCreateModal('standard')"
-        >
-          <i class="fas fa-plus me-1"></i>
-          新建 SSH/Agent 部署
-        </button>
-        <button
-          class="btn btn-outline-success btn-sm ms-2"
-          @click="openSimpleCreateModal('portainer')"
-        >
-          <i class="fas fa-cubes me-1"></i> 新建 Portainer 部署
-        </button>
-        <button
-          class="btn btn-info btn-sm ms-2"
-          @click="showCreateModal = true"
-        >
-          <i class="fas fa-code me-1"></i> YAML创建
-        </button>
-      </div>
-    </div>
-    <div class="d-flex align-items-center gap-2 mb-2">
-      <span class="small text-muted">快捷过滤</span>
-      <div class="btn-group btn-group-sm" role="group" aria-label="任务类型过滤">
-        <button
-          type="button"
-          class="btn"
-          :class="taskTypeFilter === 'all' ? 'btn-success' : 'btn-outline-success'"
-          @click="filterByType('all')"
-          title="全部类型"
-        >
-          全部类型
-        </button>
-        <button
-          type="button"
-          class="btn"
-          :class="
-            taskTypeFilter === 'agent' ? 'btn-success' : 'btn-outline-success'
-          "
-          @click="filterByType('agent')"
-          title="Agent"
-        >
-          Agent
-        </button>
-        <button
-          type="button"
-          class="btn"
-          :class="taskTypeFilter === 'ssh' ? 'btn-success' : 'btn-outline-success'"
-          @click="filterByType('ssh')"
-          title="SSH"
-        >
-          SSH
-        </button>
-        <button
-          type="button"
-          class="btn"
-          :class="
-            taskTypeFilter === 'portainer'
-              ? 'btn-success'
-              : 'btn-outline-success'
-          "
-          @click="filterByType('portainer')"
-          title="Portainer"
-        >
-          Portainer
-        </button>
+  <div class="min-w-0 max-w-full">
+    <PageToolbar title="部署配置管理" icon="fa-rocket">
+      <template #actions>
+        <Button variant="outline" size="sm" @click="showImportModal = true">
+          <i class="fas fa-file-import mr-1"></i>
+          <span class="hidden sm:inline">导入配置</span>
+          <span class="sm:hidden">导入</span>
+        </Button>
+        <Button size="sm" @click="openSimpleCreateModal('standard')">
+          <i class="fas fa-plus mr-1"></i>
+          <span class="hidden sm:inline">新建 SSH/Agent 部署</span>
+          <span class="sm:hidden">SSH/Agent</span>
+        </Button>
+        <Button variant="outline" size="sm" @click="openSimpleCreateModal('portainer')">
+          <i class="fas fa-cubes mr-1"></i>
+          <span class="hidden sm:inline">新建 Portainer 部署</span>
+          <span class="sm:hidden">Portainer</span>
+        </Button>
+        <Button variant="secondary" size="sm" @click="showCreateModal = true">
+          <i class="fas fa-code mr-1"></i>
+          <span class="hidden sm:inline">YAML创建</span>
+          <span class="sm:hidden">YAML</span>
+        </Button>
+      </template>
+    </PageToolbar>
+
+    <div class="mb-2 flex flex-wrap items-center gap-2">
+      <span class="text-xs text-slate-500">快捷过滤</span>
+      <div class="flex flex-wrap gap-1" role="group" aria-label="任务类型过滤">
+        <Button type="button" size="sm" :variant="taskTypeFilter === 'all' ? 'default' : 'outline'" @click="filterByType('all')" title="全部类型">全部类型</Button>
+        <Button type="button" size="sm" :variant="taskTypeFilter === 'agent' ? 'default' : 'outline'" @click="filterByType('agent')" title="Agent">Agent</Button>
+        <Button type="button" size="sm" :variant="taskTypeFilter === 'ssh' ? 'default' : 'outline'" @click="filterByType('ssh')" title="SSH">SSH</Button>
+        <Button type="button" size="sm" :variant="taskTypeFilter === 'portainer' ? 'default' : 'outline'" @click="filterByType('portainer')" title="Portainer">Portainer</Button>
       </div>
     </div>
 
-    <!-- 配置列表 -->
-    <div class="table-responsive">
-      <table class="table table-hover">
-        <thead>
-          <tr>
-            <th width="8%">配置ID</th>
-            <th width="12%">应用名称</th>
-            <th width="10%">目标主机</th>
-            <th width="8%">触发次数</th>
-            <th width="12%">创建时间</th>
-            <th width="12%">最后触发</th>
-            <th width="38%">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="7" class="text-center py-4">
-              <div class="spinner-border spinner-border-sm me-2"></div>
-              加载中...
-            </td>
-          </tr>
-          <tr v-else-if="filteredTasks.length === 0">
-            <td colspan="7" class="text-center py-4 text-muted">
-              暂无符合筛选条件的部署配置
-            </td>
-          </tr>
-          <tr v-else v-for="task in filteredTasks" :key="task.task_id">
-            <td>
-              <code class="small">{{ task.task_id.substring(0, 8) }}</code>
-            </td>
-            <td>{{ task.app_name || task.config?.app?.name || "-" }}</td>
-            <td>
-              <span
-                v-for="(target, idx) in task.config?.targets || []"
-                :key="idx"
-                class="badge bg-secondary me-1"
-              >
-                {{ target.name || target.host_name || "-" }}
-              </span>
-            </td>
-            <td>
-              <span class="badge bg-info">
-                <i class="fas fa-play-circle"></i>
-                {{ task.execution_count || 0 }}
-              </span>
-              <button
-                v-if="task.execution_count > 0"
-                class="btn btn-link btn-sm p-0 ms-1"
-                @click="viewExecutions(task)"
-                title="查看执行历史"
-                style="font-size: 0.75rem; text-decoration: none"
-              >
-                <i class="fas fa-external-link-alt"></i>
-              </button>
-            </td>
-            <td>{{ formatTime(task.created_at) }}</td>
-            <td>
-              <div class="d-flex flex-column">
-                <span>{{ formatTime(task.last_executed_at) || "-" }}</span>
-                <small v-if="task.status?.trigger_source" class="text-muted">
-                  <span v-if="task.status.trigger_source === 'webhook'">
-                    <i class="fas fa-link text-success me-1"></i> Webhook
-                  </span>
-                  <span v-else-if="task.status.trigger_source === 'manual'">
-                    <i class="fas fa-user text-primary me-1"></i> 手动
-                  </span>
-                  <span v-else-if="task.status.trigger_source === 'cron'">
-                    <i class="fas fa-clock text-warning me-1"></i> 定时
-                  </span>
-                  <span v-else>
-                    <i class="fas fa-question-circle text-secondary me-1"></i>
-                    {{ task.status.trigger_source }}
-                  </span>
-                </small>
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+      <i class="fas fa-spinner fa-spin"></i>
+      加载中…
+    </div>
+
+    <EmptyState v-else-if="filteredTasks.length === 0" message="暂无符合筛选条件的部署配置" />
+
+    <div v-else>
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="task in filteredTasks"
+          :key="`mobile-${task.task_id}`"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-slate-900">
+                {{ task.app_name || task.config?.app?.name || "-" }}
               </div>
-            </td>
-            <td>
-              <div class="btn-group" role="group">
-                <button
-                  class="btn btn-sm btn-outline-primary"
-                  @click="viewTask(task)"
-                  title="查看详情"
-                >
-                  <i class="fas fa-eye"></i>
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-success"
-                  @click="executeTask(task)"
-                  title="触发部署（将创建新任务）"
-                >
-                  <i class="fas fa-play"></i> 触发
-                </button>
-                <button
-                  v-if="task.webhook_token"
-                  class="btn btn-sm btn-outline-info"
-                  @click="showWebhookUrl(task)"
-                  title="查看 Webhook URL"
-                >
-                  <i class="fas fa-link"></i>
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-secondary"
-                  @click="editTask(task)"
-                  title="编辑配置"
-                >
-                  <i class="fas fa-edit"></i>
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-info"
-                  @click="copyTask(task)"
-                  title="复制配置"
-                >
-                  <i class="fas fa-copy"></i>
-                </button>
-                <button
-                  class="btn btn-sm btn-outline-danger"
-                  @click="deleteTask(task)"
-                  title="删除配置"
-                >
-                  <i class="fas fa-trash"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 分页组件 -->
-    <div v-if="!loading && totalTasks > pageSize" class="d-flex justify-content-between align-items-center mt-3">
-      <div class="text-muted small">
-        共 {{ totalTasks }} 条记录，当前第 {{ currentPage }}/{{ totalPages }} 页
-      </div>
-      <nav>
-        <ul class="pagination pagination-sm mb-0">
-          <li class="page-item" :class="{ disabled: currentPage <= 1 }">
-            <a class="page-link" href="#" @click.prevent="goToPage(1)">首页</a>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage <= 1 }">
-            <a class="page-link" href="#" @click.prevent="goToPage(currentPage - 1)">上一页</a>
-          </li>
-          <li
-            v-for="p in visiblePages"
-            :key="p"
-            class="page-item"
-            :class="{ active: p === currentPage }"
-          >
-            <a class="page-link" href="#" @click.prevent="goToPage(p)">{{ p }}</a>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
-            <a class="page-link" href="#" @click.prevent="goToPage(currentPage + 1)">下一页</a>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
-            <a class="page-link" href="#" @click.prevent="goToPage(totalPages)">末页</a>
-          </li>
-        </ul>
-      </nav>
-    </div>
-
-    <!-- 简易创建任务模态框 -->
-    <div
-      v-if="showSimpleCreateModal"
-      class="modal fade show d-block"
-      style="background-color: rgba(0, 0, 0, 0.5)"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-rocket me-2"></i>
-              快速创建部署任务
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeSimpleCreateModal"
-            ></button>
+              <code class="mt-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                {{ task.task_id.substring(0, 8) }}
+              </code>
+            </div>
+            <Badge variant="info" class="shrink-0">
+              <i class="fas fa-play-circle mr-1"></i>{{ task.execution_count || 0 }} 次
+            </Badge>
           </div>
-          <div class="modal-body">
-            <!-- 应用基本信息 -->
+          <div class="mt-2 flex flex-wrap gap-1">
+            <Badge
+              v-for="(target, idx) in task.config?.targets || []"
+              :key="idx"
+              variant="default"
+            >
+              {{ target.name || target.host_name || "-" }}
+            </Badge>
+          </div>
+          <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
+            <dt>创建</dt>
+            <dd>{{ formatTime(task.created_at) }}</dd>
+            <dt>最后触发</dt>
+            <dd>
+              {{ formatTime(task.last_executed_at) || "—" }}
+              <span v-if="task.status?.trigger_source" class="ml-1 text-slate-500">
+                <span v-if="task.status.trigger_source === 'webhook'">Webhook</span>
+                <span v-else-if="task.status.trigger_source === 'manual'">手动</span>
+                <span v-else-if="task.status.trigger_source === 'cron'">定时</span>
+                <span v-else>{{ task.status.trigger_source }}</span>
+              </span>
+            </dd>
+          </dl>
+          <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+            <Button variant="outline" size="sm" @click="viewTask(task)" title="查看详情">
+              <i class="fas fa-eye"></i>
+            </Button>
+            <Button variant="outline" size="sm" @click="executeTask(task)" title="触发部署">
+              <i class="fas fa-play"></i>
+              <span class="ml-1">触发</span>
+            </Button>
+            <Button
+              v-if="task.execution_count > 0"
+              variant="outline"
+              size="sm"
+              @click="viewExecutions(task)"
+              title="执行历史"
+            >
+              <i class="fas fa-history"></i>
+            </Button>
+            <Button
+              v-if="task.webhook_token"
+              variant="outline"
+              size="sm"
+              @click="showWebhookUrl(task)"
+              title="Webhook"
+            >
+              <i class="fas fa-link"></i>
+            </Button>
+            <Button variant="outline" size="sm" @click="editTask(task)" title="编辑">
+              <i class="fas fa-edit"></i>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              title="成员授权"
+              @click="openResourcePermission(task)"
+            >
+              <i class="fas fa-user-shield"></i>
+            </Button>
+            <Button variant="outline" size="sm" @click="copyTask(task)" title="复制">
+              <i class="fas fa-copy"></i>
+            </Button>
+            <Button variant="destructive" size="sm" @click="deleteTask(task)" title="删除">
+              <i class="fas fa-trash"></i>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden md:block">
+        <Table min-width-class="min-w-[64rem]">
+          <TableHeader>
+        <TableRow>
+          <TableHead class="w-[8%]">配置ID</TableHead>
+          <TableHead class="w-[12%]">应用名称</TableHead>
+          <TableHead class="w-[10%]">目标主机</TableHead>
+          <TableHead class="w-[8%]">触发次数</TableHead>
+          <TableHead class="w-[12%]">创建时间</TableHead>
+          <TableHead class="w-[12%]">最后触发</TableHead>
+          <TableHead class="w-[38%]">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="task in filteredTasks" :key="task.task_id">
+          <TableCell>
+            <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{{ task.task_id.substring(0, 8) }}</code>
+          </TableCell>
+          <TableCell>{{ task.app_name || task.config?.app?.name || "-" }}</TableCell>
+          <TableCell>
+            <Badge v-for="(target, idx) in task.config?.targets || []" :key="idx" variant="default" class="mr-1">
+              {{ target.name || target.host_name || "-" }}
+            </Badge>
+          </TableCell>
+          <TableCell>
+            <Badge variant="info" class="mr-1">
+              <i class="fas fa-play-circle mr-1"></i>{{ task.execution_count || 0 }}
+            </Badge>
+            <Button v-if="task.execution_count > 0" variant="ghost" size="sm" class="h-auto p-0 text-xs" @click="viewExecutions(task)" title="查看执行历史">
+              <i class="fas fa-external-link-alt"></i>
+            </Button>
+          </TableCell>
+          <TableCell class="whitespace-nowrap text-sm text-slate-600">{{ formatTime(task.created_at) }}</TableCell>
+          <TableCell>
+            <div class="flex flex-col">
+              <span class="text-sm">{{ formatTime(task.last_executed_at) || "-" }}</span>
+              <span v-if="task.status?.trigger_source" class="text-xs text-slate-500">
+                <span v-if="task.status.trigger_source === 'webhook'"><i class="fas fa-link text-green-600 mr-1"></i> Webhook</span>
+                <span v-else-if="task.status.trigger_source === 'manual'"><i class="fas fa-user text-blue-600 mr-1"></i> 手动</span>
+                <span v-else-if="task.status.trigger_source === 'cron'"><i class="fas fa-clock text-amber-600 mr-1"></i> 定时</span>
+                <span v-else><i class="fas fa-question-circle text-slate-400 mr-1"></i>{{ task.status.trigger_source }}</span>
+              </span>
+            </div>
+          </TableCell>
+          <TableCell>
+            <div class="flex flex-wrap gap-1">
+              <Button variant="outline" size="sm" @click="viewTask(task)" title="查看详情"><i class="fas fa-eye"></i></Button>
+              <Button variant="outline" size="sm" @click="executeTask(task)" title="触发部署（将创建新任务）"><i class="fas fa-play"></i> 触发</Button>
+              <Button v-if="task.webhook_token" variant="outline" size="sm" @click="showWebhookUrl(task)" title="查看 Webhook URL"><i class="fas fa-link"></i></Button>
+              <Button variant="outline" size="sm" @click="editTask(task)" title="编辑配置"><i class="fas fa-edit"></i></Button>
+              <Button variant="outline" size="sm" title="成员授权" @click="openResourcePermission(task)"><i class="fas fa-user-shield"></i></Button>
+              <Button variant="outline" size="sm" @click="copyTask(task)" title="复制配置"><i class="fas fa-copy"></i></Button>
+              <Button variant="destructive" size="sm" @click="deleteTask(task)" title="删除配置"><i class="fas fa-trash"></i></Button>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+        </Table>
+      </div>
+    </div>
+
+    <PaginationBar
+      v-if="!loading && totalTasks > pageSize"
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalTasks"
+      :total-pages="totalPages"
+      @update:page="goToPage"
+    />
+
+    <FormDialog
+      :model-value="showSimpleCreateModal"
+      title="快速创建部署任务"
+      icon="fa-rocket"
+      size="xl"
+      @update:model-value="(v) => !v && (closeSimpleCreateModal())"
+    >
+      <!-- 应用基本信息 -->
             <div class="mb-3">
-              <label class="form-label"
-                >应用名称 <span class="text-danger">*</span></label
-              >
-              <input
+              <Label>应用名称 <span class="text-red-500">*</span></Label>
+              <Input
                 v-model="simpleForm.appName"
                 type="text"
-                class="form-control"
                 :class="{
                   'is-invalid':
                     simpleForm.appName &&
@@ -279,7 +228,7 @@
                   simpleForm.appName &&
                   isAppNameDuplicate(simpleForm.appName.trim(), null)
                 "
-                class="invalid-feedback d-block"
+                class="mt-1 block text-xs text-red-500"
               >
                 应用名称已存在，请使用其他名称
               </div>
@@ -287,12 +236,9 @@
 
             <!-- Portainer 目标主机（前置，便于先选主机再选 Stack） -->
             <div v-if="simpleForm.deployChannel === 'portainer'" class="mb-3">
-              <label class="form-label"
-                >Portainer 目标主机 <span class="text-danger">*</span></label
-              >
-              <select
+              <Label>Portainer 目标主机 <span class="text-red-500">*</span></Label>
+              <NativeSelect
                 v-model="simpleForm.portainerTargetHost"
-                class="form-select form-select-sm"
               >
                 <option :value="null" disabled>请选择 Portainer 主机</option>
                 <option
@@ -302,23 +248,21 @@
                 >
                   {{ host.name }} ({{ host.portainer_url || "-" }})
                 </option>
-              </select>
+              </NativeSelect>
             </div>
 
             <!-- 统一部署配置 -->
-            <div class="card mb-3">
-              <div class="card-header bg-light">
-                <h6 class="mb-0">
-                  <i class="fas fa-cogs me-2"></i>
+            <div class="mb-3 rounded-lg border border-slate-200 bg-white">
+              <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h6 class="text-sm font-semibold text-slate-900">
+                  <i class="fas fa-cogs mr-2"></i>
                   部署配置（统一配置，适用于所有目标主机）
                 </h6>
               </div>
-              <div class="card-body">
+              <div class="p-4">
                 <div class="mb-3">
-                  <label class="form-label"
-                    >发布通道 <span class="text-danger">*</span></label
-                  >
-                  <div class="btn-group w-100" role="group">
+                  <Label>发布通道 <span class="text-red-500">*</span></Label>
+                  <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       v-if="canUseCreateChannel('agent')"
                       type="radio"
@@ -329,7 +273,7 @@
                     />
                     <label
                       v-if="canUseCreateChannel('agent')"
-                      class="btn btn-outline-secondary"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="channel-agent"
                     >
                       Agent 发布
@@ -344,7 +288,7 @@
                     />
                     <label
                       v-if="canUseCreateChannel('ssh')"
-                      class="btn btn-outline-secondary"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="channel-ssh"
                     >
                       SSH 发布
@@ -359,7 +303,7 @@
                     />
                     <label
                       v-if="canUseCreateChannel('portainer')"
-                      class="btn btn-outline-secondary"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="channel-portainer"
                     >
                       Portainer 发布
@@ -368,10 +312,8 @@
                 </div>
 
                 <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3">
-                  <label class="form-label"
-                    >部署方式 <span class="text-danger">*</span></label
-                  >
-                  <div class="btn-group w-100" role="group">
+                  <Label>部署方式 <span class="text-red-500">*</span></Label>
+                  <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       type="radio"
                       class="btn-check"
@@ -380,8 +322,8 @@
                       value="docker_run"
                       checked
                     />
-                    <label class="btn btn-outline-primary" for="deploy-run">
-                      <i class="fas fa-terminal me-1"></i> Docker Run
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-run">
+                      <i class="fas fa-terminal mr-1"></i> Docker Run
                     </label>
 
                     <input
@@ -391,8 +333,8 @@
                       v-model="simpleForm.deployMode"
                       value="docker_compose"
                     />
-                    <label class="btn btn-outline-primary" for="deploy-compose">
-                      <i class="fas fa-layer-group me-1"></i> Docker Compose
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-compose">
+                      <i class="fas fa-layer-group mr-1"></i> Docker Compose
                     </label>
 
                     <input
@@ -402,8 +344,8 @@
                       v-model="simpleForm.deployMode"
                       value="multi_step"
                     />
-                    <label class="btn btn-outline-primary" for="deploy-multi-step">
-                      <i class="fas fa-list-ol me-1"></i> 多步骤
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-multi-step">
+                      <i class="fas fa-list-ol mr-1"></i> 多步骤
                     </label>
                   </div>
                 </div>
@@ -411,12 +353,10 @@
 
                 <!-- Docker Run 命令输入 -->
                 <div v-if="simpleForm.deployMode === 'docker_run'" class="mb-3">
-                  <label class="form-label"
-                    >Docker Run 命令 <span class="text-danger">*</span></label
-                  >
+                  <Label>Docker Run 命令 <span class="text-red-500">*</span></Label>
                   <textarea
                     v-model="simpleForm.runCommand"
-                    class="form-control font-monospace"
+                    class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                     rows="6"
                     placeholder="-d --name my-app -p 8000:8000 registry.cn-hangzhou.aliyuncs.com/namespace/app:tag"
                   ></textarea>
@@ -430,10 +370,8 @@
                   "
                   class="mb-3"
                 >
-                  <label class="form-label"
-                    >Compose 部署模式 <span class="text-danger">*</span></label
-                  >
-                  <div class="btn-group w-100" role="group">
+                  <Label>Compose 部署模式 <span class="text-red-500">*</span></Label>
+                  <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       type="radio"
                       class="btn-check"
@@ -442,8 +380,7 @@
                       value="docker-compose"
                       :disabled="!isComposeModeSupported('docker-compose')"
                     />
-                    <label
-                      class="btn btn-outline-secondary"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       :class="{
                         disabled: !isComposeModeSupported('docker-compose'),
                       }"
@@ -454,7 +391,7 @@
                           : ''
                       "
                     >
-                      <i class="fas fa-layer-group me-1"></i> docker-compose
+                      <i class="fas fa-layer-group mr-1"></i> docker-compose
                     </label>
 
                     <input
@@ -465,8 +402,7 @@
                       value="docker-stack"
                       :disabled="!isComposeModeSupported('docker-stack')"
                     />
-                    <label
-                      class="btn btn-outline-secondary"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       :class="{
                         disabled: !isComposeModeSupported('docker-stack'),
                       }"
@@ -477,7 +413,7 @@
                           : ''
                       "
                     >
-                      <i class="fas fa-server me-1"></i> docker stack deploy
+                      <i class="fas fa-server mr-1"></i> docker stack deploy
                     </label>
                   </div>
                   <small
@@ -485,9 +421,9 @@
                       !isComposeModeSupported('docker-compose') &&
                       !isComposeModeSupported('docker-stack')
                     "
-                    class="text-warning d-block mt-1"
+                    class="text-amber-600 block mt-1"
                   >
-                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
                     所选主机不支持任何 Compose 模式，请选择其他主机或使用 Docker
                     Run 模式
                   </small>
@@ -499,8 +435,8 @@
                   class="mb-3"
                 >
                   <div v-if="simpleForm.deployChannel === 'portainer'" class="mb-2">
-                    <label class="form-label">Stack 部署策略</label>
-                    <div class="btn-group w-100" role="group">
+                    <Label>Stack 部署策略</Label>
+                    <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
                         class="btn-check"
@@ -508,7 +444,7 @@
                         v-model="simpleForm.stackStrategy"
                         value="create_new"
                       />
-                      <label class="btn btn-outline-success" for="stack-create">
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="stack-create">
                         创建新 Stack
                       </label>
                       <input
@@ -518,7 +454,7 @@
                         v-model="simpleForm.stackStrategy"
                         value="update_existing"
                       />
-                      <label class="btn btn-outline-info" for="stack-update">
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="stack-update">
                         更新已有 Stack
                       </label>
                     </div>
@@ -526,11 +462,10 @@
                       v-if="simpleForm.stackStrategy === 'update_existing'"
                       class="mt-2"
                     >
-                      <label class="form-label small">选择已有 Stack</label>
-                      <div class="input-group input-group-sm">
-                        <select
+                      <Label class="text-xs">选择已有 Stack</Label>
+                      <div class="flex gap-2">
+                        <NativeSelect
                           v-model="simpleForm.selectedStackId"
-                          class="form-select"
                           :disabled="
                             loadingStacks ||
                             !simpleForm.portainerTargetHost ||
@@ -545,22 +480,22 @@
                           >
                             {{ stack.name }} (ID: {{ stack.id }})
                           </option>
-                        </select>
-                        <button
+                        </NativeSelect>
+                        <Button
                           type="button"
-                          class="btn btn-outline-secondary"
+                          variant="outline"
                           @click="loadAvailableStacks"
                           :disabled="loadingStacks"
                           title="刷新 Stack 列表"
                         >
                           <span
                             v-if="loadingStacks"
-                            class="spinner-border spinner-border-sm"
+                            class="fas fa-spinner fa-spin"
                           ></span>
                           <i v-else class="fas fa-sync-alt"></i>
-                        </button>
+                        </Button>
                       </div>
-                      <small class="text-muted d-block mt-1">
+                      <small class="text-slate-500 block mt-1">
                         <span v-if="!simpleForm.portainerTargetHost">
                           请先选择 Portainer 目标主机
                         </span>
@@ -568,23 +503,16 @@
                       </small>
                     </div>
                     <div v-else class="mt-2">
-                      <label class="form-label small"
-                        >新 Stack 名称 <span class="text-danger">*</span></label
-                      >
-                      <input
+                      <Label class="text-xs">新 Stack 名称 <span class="text-red-500">*</span></Label>
+                      <Input
                         v-model="simpleForm.newStackName"
                         type="text"
-                        class="form-control form-control-sm"
                         placeholder="请输入要创建的 Stack 名称"
                       />
                     </div>
                   </div>
-                  <label
-                    v-if="simpleForm.deployChannel !== 'portainer'"
-                    class="form-label"
-                    >重新发布策略</label
-                  >
-                  <div class="btn-group w-100" role="group">
+                  <Label v-if="simpleForm.deployChannel !== 'portainer'">重新发布策略</Label>
+                  <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       type="radio"
                       class="btn-check"
@@ -592,11 +520,10 @@
                       v-model="simpleForm.redeployStrategy"
                       value="remove_and_redeploy"
                     />
-                    <label
-                      class="btn btn-outline-warning"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="redeploy-strategy-remove"
                     >
-                      <i class="fas fa-trash-alt me-1"></i> 删除后重新部署
+                      <i class="fas fa-trash-alt mr-1"></i> 删除后重新部署
                     </label>
 
                     <input
@@ -606,11 +533,10 @@
                       v-model="simpleForm.redeployStrategy"
                       value="update_existing"
                     />
-                    <label
-                      class="btn btn-outline-info"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="redeploy-strategy-update"
                     >
-                      <i class="fas fa-sync-alt me-1"></i> 直接更新
+                      <i class="fas fa-sync-alt mr-1"></i> 直接更新
                     </label>
                   </div>
                 </div>
@@ -623,17 +549,15 @@
                   "
                   class="mb-3"
                 >
-                  <label class="form-label">
-                    <span v-if="simpleForm.composeMode === 'docker-compose'"
+                  <Label><span v-if="simpleForm.composeMode === 'docker-compose'"
                       >Docker Compose 命令</span
                     >
                     <span v-else>Docker Stack 命令</span>
-                    <span class="text-danger">*</span>
-                  </label>
-                  <input
+                    <span class="text-red-500">*</span>
+                  </Label>
+                  <Input
                     v-model="simpleForm.composeCommand"
                     type="text"
-                    class="form-control font-monospace"
                     :placeholder="
                       simpleForm.composeMode === 'docker-compose'
                         ? 'up -d'
@@ -646,13 +570,11 @@
                   v-if="simpleForm.deployMode === 'docker_compose'"
                   class="mb-3"
                 >
-                  <label class="form-label"
-                    >docker-compose.yml 内容
-                    <span class="text-danger">*</span></label
-                  >
+                  <Label>docker-compose.yml 内容
+                    <span class="text-red-500">*</span></Label>
                   <textarea
                     v-model="simpleForm.composeContent"
-                    class="form-control font-monospace"
+                    class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                     rows="15"
                     placeholder="version: '3.8'&#10;services:&#10;  app:&#10;    image: registry.cn-hangzhou.aliyuncs.com/namespace/app:tag&#10;    ports:&#10;      - '8000:8000'"
                   ></textarea>
@@ -661,27 +583,25 @@
                 <!-- 多步骤配置 -->
                 <div v-if="simpleForm.deployMode === 'multi_step'" class="mb-3">
                   <div
-                    class="d-flex justify-content-between align-items-center mb-2"
+                    class="flex justify-between items-center mb-2"
                   >
                     <div>
-                      <label class="form-label mb-0"
-                        >部署步骤 <span class="text-danger">*</span></label
-                      >
+                      <Label class="mb-0">部署步骤 <span class="text-red-500">*</span></Label>
                     </div>
-                    <button
+                    <Button
                       type="button"
-                      class="btn btn-sm btn-outline-primary"
+                      variant="outline" size="sm"
                       @click="addStep"
                     >
-                      <i class="fas fa-plus me-1"></i> 添加步骤
-                    </button>
+                      <i class="fas fa-plus mr-1"></i> 添加步骤
+                    </Button>
                   </div>
 
                   <div
                     v-if="simpleForm.steps.length === 0"
-                    class="alert alert-info mb-0"
+                    class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
                   >
-                    <i class="fas fa-info-circle me-1"></i>
+                    <i class="fas fa-info-circle mr-1"></i>
                     请至少添加一个部署步骤
                   </div>
 
@@ -689,69 +609,68 @@
                     <div
                       v-for="(step, index) in simpleForm.steps"
                       :key="index"
-                      class="card mb-2 step-card"
+                      class="mb-2 rounded-lg border border-slate-200 p-4"
                       :class="{ 'border-primary': step.name || step.command }"
                     >
-                      <div class="card-body">
+                      <div class="p-4">
                         <div
-                          class="d-flex justify-content-between align-items-start mb-2"
+                          class="flex justify-between items-start mb-2"
                         >
-                          <div class="d-flex align-items-center">
+                          <div class="flex items-center">
                             <span
-                              class="badge bg-primary me-2"
+                              class="mr-2"
                               style="min-width: 60px"
                               >步骤 {{ index + 1 }}</span
                             >
-                            <span v-if="step.name" class="text-muted small">{{
+                            <span v-if="step.name" class="text-slate-500 small">{{
                               step.name
                             }}</span>
-                            <span v-else class="text-muted small fst-italic"
+                            <span v-else class="text-slate-500 small fst-italic"
                               >未命名步骤</span
                             >
                           </div>
                           <div class="btn-group btn-group-sm">
-                            <button
+                            <Button
                               type="button"
-                              class="btn btn-outline-secondary"
+                              variant="outline"
                               @click="moveStep(index, -1)"
                               :disabled="index === 0"
                               title="上移"
                             >
                               <i class="fas fa-arrow-up"></i>
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
-                              class="btn btn-outline-secondary"
+                              variant="outline"
                               @click="moveStep(index, 1)"
                               :disabled="index === simpleForm.steps.length - 1"
                               title="下移"
                             >
                               <i class="fas fa-arrow-down"></i>
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
-                              class="btn btn-outline-danger"
+                              variant="outline"
                               @click="removeStep(index)"
                               title="删除步骤"
                             >
                               <i class="fas fa-trash"></i>
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         <div class="mb-2">
-                          <label class="form-label small mb-1">步骤名称</label>
-                          <input
+                          <Label class="mb-1 text-xs">步骤名称</Label>
+                          <Input
                             v-model="step.name"
                             type="text"
-                            class="form-control form-control-sm"
                             placeholder="例如：停止旧容器、拉取镜像、启动容器"
                           />
                         </div>
                         <div>
-                          <label class="form-label small mb-1">执行命令</label>
+                          <Label class="mb-1 text-xs">执行命令</Label>
                           <textarea
                             v-model="step.command"
-                            class="form-control font-monospace form-control-sm"
+                            class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 text-xs"
                             rows="4"
                             placeholder="docker stop my-app || true&#10;或&#10;docker pull registry.cn-hangzhou.aliyuncs.com/namespace/app:latest"
                           ></textarea>
@@ -770,7 +689,7 @@
                       v-model="simpleForm.redeploy"
                     />
                     <label class="form-check-label" for="redeploySwitch">
-                      <i class="fas fa-redo me-1"></i>
+                      <i class="fas fa-redo mr-1"></i>
                       重新发布（如果主机上已存在，先停止并删除）
                     </label>
                   </div>
@@ -780,14 +699,11 @@
 
             <!-- 目标主机选择 -->
             <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3">
-              <label class="form-label"
-                >选择目标主机 <span class="text-danger">*</span></label
-              >
+              <Label>选择目标主机 <span class="text-red-500">*</span></Label>
               <div v-if="false" class="mb-2">
-                <label class="form-label small">Portainer 目标主机</label>
-                <select
+                <Label class="text-xs">Portainer 目标主机</Label>
+                <NativeSelect
                   v-model="simpleForm.portainerTargetHost"
-                  class="form-select form-select-sm"
                 >
                   <option :value="null" disabled>请选择 Portainer 主机</option>
                   <option
@@ -797,7 +713,7 @@
                   >
                     {{ host.name }} ({{ host.portainer_url || "-" }})
                   </option>
-                </select>
+                </NativeSelect>
               </div>
 
               <!-- 主机类型筛选和搜索 -->
@@ -811,9 +727,8 @@
                       v-model="hostFilter"
                       value="all"
                     />
-                    <label class="btn btn-outline-secondary" for="filter-all"
-                      >全部</label
-                    >
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-all"
+                      >全部</label>
 
                     <input
                       type="radio"
@@ -822,8 +737,8 @@
                       v-model="hostFilter"
                       value="agent"
                     />
-                    <label class="btn btn-outline-secondary" for="filter-agent">
-                      <i class="fas fa-network-wired me-1"></i> Agent
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-agent">
+                      <i class="fas fa-network-wired mr-1"></i> Agent
                     </label>
                   </template>
 
@@ -835,12 +750,11 @@
                     value="portainer"
                     :disabled="simpleForm.deployChannel !== 'portainer'"
                   />
-                  <label
-                    class="btn btn-outline-secondary"
+                  <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                     for="filter-portainer"
                     :class="{ disabled: simpleForm.deployChannel !== 'portainer' }"
                   >
-                    <i class="fas fa-server me-1"></i> Portainer
+                    <i class="fas fa-server mr-1"></i> Portainer
                   </label>
 
                   <template v-if="simpleForm.deployChannel !== 'portainer'">
@@ -851,12 +765,12 @@
                       v-model="hostFilter"
                       value="ssh"
                     />
-                    <label class="btn btn-outline-secondary" for="filter-ssh">
-                      <i class="fas fa-terminal me-1"></i> SSH
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-ssh">
+                      <i class="fas fa-terminal mr-1"></i> SSH
                     </label>
                   </template>
                 </div>
-                <div class="d-flex align-items-center gap-2">
+                <div class="flex items-center gap-2">
                   <div class="form-check">
                     <input
                       class="form-check-input"
@@ -865,12 +779,10 @@
                       v-model="filterOnlineOnly"
                     />
                     <label class="form-check-label" for="filter-online"
-                      >仅在线</label
-                    >
+                      >仅在线</label>
                   </div>
-                  <input
+                  <Input
                     type="text"
-                    class="form-control form-control-sm flex-grow-1"
                     v-model="hostSearchKeyword"
                     placeholder="搜索主机名称..."
                   />
@@ -880,10 +792,9 @@
               <!-- 主机列表（按类型分组） -->
               <div
                 v-if="loadingHosts"
-                class="text-muted small text-center py-3"
+                class="text-slate-500 small text-center py-3"
               >
-                <span class="spinner-border spinner-border-sm me-2"></span
-                >加载中...
+                <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
               </div>
               <div
                 v-else
@@ -893,15 +804,15 @@
               >
                 <!-- Agent 主机 -->
                 <div v-if="channelFilteredHostsByType.agent.length > 0" class="mb-3">
-                  <div class="fw-bold text-primary mb-2">
-                    <i class="fas fa-network-wired me-1"></i> Agent 主机 ({{
+                  <div class="fw-bold text-blue-600 mb-2">
+                    <i class="fas fa-network-wired mr-1"></i> Agent 主机 ({{
                       channelFilteredHostsByType.agent.length
                     }})
                   </div>
                   <div
                     v-for="host in channelFilteredHostsByType.agent"
                     :key="host.host_id"
-                    class="form-check ms-3"
+                    class="form-check ml-3"
                   >
                     <input
                       class="form-check-input"
@@ -915,15 +826,12 @@
                       :for="`host-${host.host_id}`"
                     >
                       {{ host.name }}
-                      <span
-                        :class="getStatusBadgeClass(host.status)"
-                        class="badge ms-1"
-                      >
+                      <Badge :variant="host.status === 'completed' ? 'success' : host.status === 'failed' ? 'danger' : host.status === 'running' ? 'info' : 'default'" class="ml-1">
                         {{ getStatusText(host.status) }}
-                      </span>
+                      </Badge>
                       <span
                         v-if="host.description"
-                        class="text-muted small ms-1"
+                        class="text-slate-500 small ml-1"
                         >({{ host.description }})</span
                       >
                     </label>
@@ -936,14 +844,14 @@
                   class="mb-3"
                 >
                   <div class="fw-bold text-info mb-2">
-                    <i class="fas fa-server me-1"></i> Portainer 主机 ({{
+                    <i class="fas fa-server mr-1"></i> Portainer 主机 ({{
                       channelFilteredHostsByType.portainer.length
                     }})
                   </div>
                   <div
                     v-for="host in channelFilteredHostsByType.portainer"
                     :key="host.host_id"
-                    class="form-check ms-3"
+                    class="form-check ml-3"
                   >
                     <input
                       class="form-check-input"
@@ -957,15 +865,12 @@
                       :for="`host-${host.host_id}`"
                     >
                       {{ host.name }}
-                      <span
-                        :class="getStatusBadgeClass(host.status)"
-                        class="badge ms-1"
-                      >
+                      <Badge :variant="host.status === 'completed' ? 'success' : host.status === 'failed' ? 'danger' : host.status === 'running' ? 'info' : 'default'" class="ml-1">
                         {{ getStatusText(host.status) }}
-                      </span>
+                      </Badge>
                       <span
                         v-if="host.portainer_url"
-                        class="text-muted small ms-1"
+                        class="text-slate-500 small ml-1"
                         >({{ host.portainer_url }})</span
                       >
                     </label>
@@ -974,15 +879,15 @@
 
                 <!-- SSH 主机 -->
                 <div v-if="channelFilteredHostsByType.ssh.length > 0" class="mb-3">
-                  <div class="fw-bold text-warning mb-2">
-                    <i class="fas fa-terminal me-1"></i> SSH 主机 ({{
+                  <div class="fw-bold text-amber-600 mb-2">
+                    <i class="fas fa-terminal mr-1"></i> SSH 主机 ({{
                       channelFilteredHostsByType.ssh.length
                     }})
                   </div>
                   <div
                     v-for="host in channelFilteredHostsByType.ssh"
                     :key="host.host_id"
-                    class="form-check ms-3"
+                    class="form-check ml-3"
                   >
                     <input
                       class="form-check-input"
@@ -996,17 +901,13 @@
                       :for="`host-${host.host_id}`"
                     >
                       {{ host.name }}
-                      <span
-                        v-if="host.docker_enabled"
-                        class="badge bg-info ms-1"
-                        >Docker</span
-                      >
+                      <Badge v-if="host.docker_enabled" variant="info" class="ml-1">Docker</Badge>
                       <span
                         v-if="host.docker_version"
-                        class="text-muted small ms-1"
+                        class="text-slate-500 small ml-1"
                         >({{ host.docker_version }})</span
                       >
-                      <span v-if="host.host" class="text-muted small ms-1"
+                      <span v-if="host.host" class="text-slate-500 small ml-1"
                         >@{{ host.host }}:{{ host.port || 22 }}</span
                       >
                     </label>
@@ -1015,9 +916,9 @@
 
                 <div
                   v-if="filteredHosts.length === 0"
-                  class="text-muted small text-center py-3"
+                  class="text-slate-500 small text-center py-3"
                 >
-                  <i class="fas fa-inbox me-1"></i>
+                  <i class="fas fa-inbox mr-1"></i>
                   <span v-if="hostSearchKeyword">未找到匹配的主机</span>
                   <span v-else>暂无可用主机，请先在"主机管理"中添加主机</span>
                 </div>
@@ -1025,214 +926,157 @@
 
               <!-- 已选择的主机统计 -->
               <div v-if="simpleForm.selectedHosts.length > 0" class="mt-2">
-                <small class="text-muted">
+                <small class="text-slate-500">
                   已选择
                   <strong>{{ simpleForm.selectedHosts.length }}</strong> 个主机
-                  <button
+                  <Button
                     type="button"
-                    class="btn btn-link btn-sm p-0 ms-2"
+                    variant="ghost" size="sm"
                     @click="simpleForm.selectedHosts = []"
                   >
                     清空
-                  </button>
+                  </Button>
                 </small>
               </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button
+      <template #footer>
+        <Button
               type="button"
-              class="btn btn-secondary"
+              variant="secondary"
               @click="closeSimpleCreateModal"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="btn btn-primary"
+              variant="default"
               @click="createSimpleTask"
               :disabled="creating"
             >
-              <span
-                v-if="creating"
-                class="spinner-border spinner-border-sm me-2"
-              ></span>
+              <i v-if="creating" class="fas fa-spinner fa-spin mr-2"></i>
               创建
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- YAML创建任务模态框 -->
-    <div
-      v-if="showCreateModal"
-      class="modal fade show d-block"
-      style="background-color: rgba(0, 0, 0, 0.5)"
+            </Button>
+      </template>
+    </FormDialog>
+    <FormDialog
+      :model-value="showCreateModal"
+      title="YAML方式创建部署任务"
+      icon="fa-code"
+      size="lg"
+      @update:model-value="(v) => !v && (showCreateModal = false)"
     >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-code me-2"></i> YAML方式创建部署任务
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showCreateModal = false"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">YAML 配置内容</label>
+      <div class="mb-3">
+              <Label>YAML 配置内容</Label>
               <textarea
                 v-model="taskConfigContent"
-                class="form-control font-monospace"
+                class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 rows="20"
                 placeholder="请输入 deploy-config.yaml 格式的配置..."
               ></textarea>
             </div>
-            <div class="row">
-              <div class="col-md-6">
-                <label class="form-label">镜像仓库（可选）</label>
-                <input
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div class="">
+                <Label>镜像仓库（可选）</Label>
+                <Input
                   v-model="taskRegistry"
                   type="text"
-                  class="form-control"
                   placeholder="docker.io"
                 />
               </div>
-              <div class="col-md-6">
-                <label class="form-label">镜像标签（可选）</label>
-                <input
+              <div class="">
+                <Label>镜像标签（可选）</Label>
+                <Input
                   v-model="taskTag"
                   type="text"
-                  class="form-control"
                   placeholder="latest"
                 />
               </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button
+      <template #footer>
+        <Button
               type="button"
-              class="btn btn-secondary"
+              variant="secondary"
               @click="showCreateModal = false"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="btn btn-primary"
+              variant="default"
               @click="createTask"
               :disabled="creating"
             >
-              <span
-                v-if="creating"
-                class="spinner-border spinner-border-sm me-2"
-              ></span>
+              <i v-if="creating" class="fas fa-spinner fa-spin mr-2"></i>
               创建
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 导入任务模态框 -->
-    <div
-      v-if="showImportModal"
-      class="modal fade show d-block"
-      style="background-color: rgba(0, 0, 0, 0.5)"
+            </Button>
+      </template>
+    </FormDialog>
+    <FormDialog
+      :model-value="showImportModal"
+      title="导入部署配置"
+      icon="fa-file-import"
+      size="md"
+      @update:model-value="(v) => !v && (showImportModal = false)"
     >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-file-import me-2"></i> 导入部署配置
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showImportModal = false"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">选择 YAML 文件</label>
+      <div class="mb-3">
+              <Label>选择 YAML 文件</Label>
               <input
                 type="file"
-                class="form-control"
+                class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 @change="handleFileImport"
                 accept=".yaml,.yml"
               />
             </div>
-          </div>
-          <div class="modal-footer">
-            <button
+      <template #footer>
+        <Button
               type="button"
-              class="btn btn-secondary"
+              variant="secondary"
               @click="showImportModal = false"
             >
               取消
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 任务详情模态框 -->
-    <div
-      v-if="showDetailModal && selectedTask"
-      class="modal fade show d-block"
-      style="background-color: rgba(0, 0, 0, 0.5)"
+            </Button>
+      </template>
+    </FormDialog>
+    <FormDialog
+      :model-value="showDetailModal && selectedTask"
+      :title="'任务详情 - ' + (selectedTask?.task_id?.substring(0, 8) || '')"
+      icon="fa-info-circle"
+      size="xl"
+      @update:model-value="(v) => !v && (showDetailModal = false)"
     >
-      <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-info-circle me-2"></i> 任务详情 -
-              {{ selectedTask.task_id.substring(0, 8) }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showDetailModal = false"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <ul class="nav nav-tabs mb-3">
-              <li class="nav-item">
-                <button
-                  class="nav-link"
-                  :class="{ active: detailTab === 'config' }"
+      <div class="mb-3 flex gap-1 border-b border-slate-200">
+              <Button
+                  type="button"
+                  variant="ghost"
+                  class="rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+                  :class="detailTab === 'config' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="detailTab = 'config'"
                 >
-                  <i class="fas fa-cog me-1"></i> 配置信息
-                </button>
-              </li>
-              <li class="nav-item">
-                <button
-                  class="nav-link"
-                  :class="{ active: detailTab === 'status' }"
+                  <i class="fas fa-cog mr-1"></i> 配置信息
+                </Button>
+              <Button
+                  type="button"
+                  variant="ghost"
+                  class="rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+                  :class="detailTab === 'status' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="detailTab = 'status'"
                 >
-                  <i class="fas fa-tasks me-1"></i> 执行状态
-                </button>
-              </li>
-              <li class="nav-item">
-                <button
-                  class="nav-link"
-                  :class="{ active: detailTab === 'logs' }"
+                  <i class="fas fa-tasks mr-1"></i> 执行状态
+                </Button>
+              <Button
+                  type="button"
+                  variant="ghost"
+                  class="rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+                  :class="detailTab === 'logs' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="detailTab = 'logs'"
                 >
-                  <i class="fas fa-file-alt me-1"></i> 执行日志
-                </button>
-              </li>
-            </ul>
+                  <i class="fas fa-file-alt mr-1"></i> 执行日志
+                </Button>
+            </div>
 
             <div v-if="detailTab === 'config'">
               <pre
-                class="bg-dark text-light p-3 rounded"
+                class="max-h-[500px] overflow-y-auto rounded-lg bg-slate-900 p-3 text-slate-100"
                 style="max-height: 500px; overflow-y: auto"
               ><code>{{ selectedTask.config_content || selectedTask.task_config?.config_content || '' }}</code></pre>
             </div>
@@ -1240,31 +1084,31 @@
             <div v-if="detailTab === 'status'">
               <div class="mb-3">
                 <strong>任务状态:</strong>
-                <span
-                  :class="getStatusBadgeClass(selectedTask.status)"
-                  class="badge ms-2"
+                <Badge
+                  :variant="selectedTask.status === 'completed' ? 'success' : selectedTask.status === 'failed' ? 'danger' : selectedTask.status === 'running' ? 'info' : 'default'"
+                  class="ml-2"
                 >
                   {{ getStatusText(selectedTask.status) }}
-                </span>
+                </Badge>
                 <span
                   v-if="selectedTask.created_at"
-                  class="text-muted small ms-3"
+                  class="text-slate-500 small ml-3"
                 >
                   创建时间: {{ formatTime(selectedTask.created_at) }}
                 </span>
                 <span
                   v-if="selectedTask.completed_at"
-                  class="text-muted small ms-3"
+                  class="text-slate-500 small ml-3"
                 >
                   完成时间: {{ formatTime(selectedTask.completed_at) }}
                 </span>
               </div>
-              <div v-if="selectedTask.error" class="alert alert-danger mb-3">
+              <div v-if="selectedTask.error" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 mb-3">
                 <strong>错误信息:</strong> {{ selectedTask.error }}
               </div>
               <div v-if="selectedTask.config?.targets" class="mb-3">
                 <strong>目标主机配置:</strong>
-                <table class="table table-sm mt-2">
+                <table class="mt-2 w-full border-collapse text-sm">
                   <thead>
                     <tr>
                       <th>主机名称</th>
@@ -1279,12 +1123,10 @@
                     >
                       <td>{{ target.name || target.host_name || "-" }}</td>
                       <td>
-                        <span class="badge bg-info">{{
-                          target.host_type || target.mode || "-"
-                        }}</span>
+                        <Badge variant="info">{{ target.host_type || target.mode || "-" }}</Badge>
                       </td>
                       <td>
-                        <small class="text-muted">{{
+                        <small class="text-slate-500">{{
                           target.host_name ||
                           target.host ||
                           target.agent?.name ||
@@ -1300,25 +1142,24 @@
             <!-- 执行日志标签页 -->
             <div v-if="detailTab === 'logs'">
               <div
-                class="mb-2 d-flex justify-content-between align-items-center"
+                class="mb-2 flex justify-between items-center"
               >
                 <strong>执行日志</strong>
-                <button
-                  class="btn btn-sm btn-outline-secondary"
+                <Button
+                  variant="outline" size="sm"
                   @click="refreshTask(selectedTask)"
                   title="刷新日志"
                 >
-                  <i class="fas fa-sync-alt me-1"></i> 刷新
-                </button>
+                  <i class="fas fa-sync-alt mr-1"></i> 刷新
+                </Button>
               </div>
 
               <div v-if="taskLogs && taskLogs.length > 0">
                 <div
-                  class="log-container bg-dark text-light p-3 rounded"
+                  class="max-h-[600px] overflow-y-auto rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-100"
                   style="
                     max-height: 600px;
                     overflow-y: auto;
-                    font-family: monospace;
                     font-size: 12px;
                   "
                 >
@@ -1328,121 +1169,98 @@
                     class="log-line mb-1"
                     :class="getLogLineClass(log)"
                   >
-                    <span class="text-muted"
+                    <span class="text-slate-500"
                       >[{{ formatTime(log.log_time) }}]</span
                     >
                     <span
-                      class="ms-2"
+                      class="ml-2"
                       v-html="formatLogMessage(log.log_message)"
                     ></span>
                   </div>
                 </div>
               </div>
 
-              <div v-else class="text-muted text-center py-4">
-                <i class="fas fa-info-circle me-1"></i>
+              <div v-else class="text-slate-500 text-center py-4">
+                <i class="fas fa-info-circle mr-1"></i>
                 暂无执行日志
               </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button
+      <template #footer>
+        <Button
               type="button"
-              class="btn btn-secondary"
+              variant="secondary"
               @click="showDetailModal = false"
             >
               关闭
-            </button>
-            <button
-              class="btn btn-outline-secondary"
+            </Button>
+            <Button
+              variant="outline"
               @click="editTask(selectedTask)"
             >
-              <i class="fas fa-edit me-1"></i> 编辑
-            </button>
-            <button
-              class="btn btn-outline-info"
+              <i class="fas fa-edit mr-1"></i> 编辑
+            </Button>
+            <Button
+              variant="outline"
               @click="copyTask(selectedTask)"
             >
-              <i class="fas fa-copy me-1"></i> 复制
-            </button>
-            <button
-              class="btn btn-success"
+              <i class="fas fa-copy mr-1"></i> 复制
+            </Button>
+            <Button
+              variant="default"
               @click="executeTask(selectedTask)"
               :disabled="selectedTask.status === 'running'"
             >
-              <i class="fas fa-play me-1"></i>
+              <i class="fas fa-play mr-1"></i>
               {{ selectedTask.status === "running" ? "执行中..." : "执行任务" }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 编辑任务模态框 -->
-    <div
-      v-if="showEditModal && editingTask"
-      class="modal fade show d-block"
-      style="background-color: rgba(0, 0, 0, 0.5)"
+            </Button>
+      </template>
+    </FormDialog>
+    <FormDialog
+      :model-value="showEditModal && editingTask"
+      :title="'编辑部署任务 - ' + (editingTask?.task_id?.substring(0, 8) || '')"
+      icon="fa-edit"
+      size="xl"
+      @update:model-value="(v) => !v && (closeEditModal())"
     >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-edit me-2"></i> 编辑部署任务 -
-              {{ editingTask.task_id.substring(0, 8) }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeEditModal"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <!-- 编辑方式切换标签页 -->
-            <ul class="nav nav-tabs mb-3">
-              <li class="nav-item">
-                <button
-                  class="nav-link"
-                  :class="{ active: editMode === 'form' }"
+      <!-- 编辑方式切换标签页 -->
+            <div class="mb-3 flex gap-1 border-b border-slate-200">
+              <Button
+                  type="button"
+                  variant="ghost"
+                  class="rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+                  :class="editMode === 'form' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="editMode = 'form'"
-                  type="button"
                 >
-                  <i class="fas fa-edit me-1"></i> 表单编辑
-                </button>
-              </li>
-              <li class="nav-item">
-                <button
-                  class="nav-link"
-                  :class="{ active: editMode === 'yaml' }"
+                  <i class="fas fa-edit mr-1"></i> 表单编辑
+                </Button>
+              <Button
+                  type="button"
+                  variant="ghost"
+                  class="rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+                  :class="editMode === 'yaml' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="switchToYamlMode"
-                  type="button"
                 >
-                  <i class="fas fa-code me-1"></i> YAML编辑
-                </button>
-              </li>
-              <li class="nav-item">
-                <button
-                  class="nav-link"
-                  :class="{ active: editMode === 'webhook' }"
+                  <i class="fas fa-code mr-1"></i> YAML编辑
+                </Button>
+              <Button
+                  type="button"
+                  variant="ghost"
+                  class="rounded-none border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
+                  :class="editMode === 'webhook' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="editMode = 'webhook'"
-                  type="button"
                 >
-                  <i class="fas fa-link me-1"></i> Webhook设置
-                </button>
-              </li>
-            </ul>
+                  <i class="fas fa-link mr-1"></i> Webhook设置
+                </Button>
+            </div>
 
             <!-- 表单编辑模式 -->
             <div v-if="editMode === 'form'">
               <!-- 应用基本信息 -->
               <div class="mb-3">
-                <label class="form-label"
-                  >应用名称 <span class="text-danger">*</span></label
-                >
-                <input
+                <Label>应用名称 <span class="text-red-500">*</span></Label>
+                <Input
                   v-model="editForm.appName"
                   type="text"
-                  class="form-control"
                   :class="{
                     'is-invalid':
                       editForm.appName &&
@@ -1467,26 +1285,24 @@
                       editingTask?.task_id
                     )
                   "
-                  class="invalid-feedback d-block"
+                  class="mt-1 block text-xs text-red-500"
                 >
                   应用名称已存在，请使用其他名称
                 </div>
               </div>
 
               <!-- 统一部署配置 -->
-              <div class="card mb-3">
-                <div class="card-header bg-light">
-                  <h6 class="mb-0">
-                    <i class="fas fa-cogs me-2"></i>
+              <div class="mb-3 rounded-lg border border-slate-200 bg-white">
+                <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <h6 class="text-sm font-semibold text-slate-900">
+                    <i class="fas fa-cogs mr-2"></i>
                     部署配置（统一配置，适用于所有目标主机）
                   </h6>
                 </div>
-                <div class="card-body">
+                <div class="p-4">
                   <div class="mb-3">
-                    <label class="form-label"
-                      >发布通道 <span class="text-danger">*</span></label
-                    >
-                    <div class="btn-group w-100" role="group">
+                    <Label>发布通道 <span class="text-red-500">*</span></Label>
+                    <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         v-if="canUseEditChannel('agent')"
                         type="radio"
@@ -1497,7 +1313,7 @@
                       />
                       <label
                         v-if="canUseEditChannel('agent')"
-                        class="btn btn-outline-secondary"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-channel-agent"
                       >
                         Agent 发布
@@ -1512,7 +1328,7 @@
                       />
                       <label
                         v-if="canUseEditChannel('ssh')"
-                        class="btn btn-outline-secondary"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-channel-ssh"
                       >
                         SSH 发布
@@ -1527,7 +1343,7 @@
                       />
                       <label
                         v-if="canUseEditChannel('portainer')"
-                        class="btn btn-outline-secondary"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-channel-portainer"
                       >
                         Portainer 发布
@@ -1537,10 +1353,8 @@
 
 
                   <div v-if="editForm.deployChannel !== 'portainer'" class="mb-3">
-                    <label class="form-label"
-                      >部署方式 <span class="text-danger">*</span></label
-                    >
-                    <div class="btn-group w-100" role="group">
+                    <Label>部署方式 <span class="text-red-500">*</span></Label>
+                    <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
                         class="btn-check"
@@ -1548,11 +1362,10 @@
                         v-model="editForm.deployMode"
                         value="docker_run"
                       />
-                      <label
-                        class="btn btn-outline-primary"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-deploy-run"
                       >
-                        <i class="fas fa-terminal me-1"></i> Docker Run
+                        <i class="fas fa-terminal mr-1"></i> Docker Run
                       </label>
 
                       <input
@@ -1562,11 +1375,10 @@
                         v-model="editForm.deployMode"
                         value="docker_compose"
                       />
-                      <label
-                        class="btn btn-outline-primary"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-deploy-compose"
                       >
-                        <i class="fas fa-layer-group me-1"></i> Docker Compose
+                        <i class="fas fa-layer-group mr-1"></i> Docker Compose
                       </label>
 
                       <input
@@ -1576,23 +1388,20 @@
                         v-model="editForm.deployMode"
                         value="multi_step"
                       />
-                      <label
-                        class="btn btn-outline-primary"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-deploy-multi-step"
                       >
-                        <i class="fas fa-list-ol me-1"></i> 多步骤
+                        <i class="fas fa-list-ol mr-1"></i> 多步骤
                       </label>
                     </div>
                   </div>
 
                   <!-- Docker Run 命令输入 -->
                   <div v-if="editForm.deployMode === 'docker_run'" class="mb-3">
-                    <label class="form-label"
-                      >Docker Run 命令 <span class="text-danger">*</span></label
-                    >
+                    <Label>Docker Run 命令 <span class="text-red-500">*</span></Label>
                     <textarea
                       v-model="editForm.runCommand"
-                      class="form-control font-monospace"
+                      class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       rows="6"
                       placeholder="-d --name my-app -p 8000:8000 registry.cn-hangzhou.aliyuncs.com/namespace/app:tag"
                     ></textarea>
@@ -1606,11 +1415,9 @@
                     "
                     class="mb-3"
                   >
-                    <label class="form-label"
-                      >Compose 部署模式
-                      <span class="text-danger">*</span></label
-                    >
-                    <div class="btn-group w-100" role="group">
+                    <Label>Compose 部署模式
+                      <span class="text-red-500">*</span></Label>
+                    <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
                         class="btn-check"
@@ -1621,8 +1428,7 @@
                           !isEditComposeModeSupported('docker-compose')
                         "
                       />
-                      <label
-                        class="btn btn-outline-secondary"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         :class="{
                           disabled:
                             !isEditComposeModeSupported('docker-compose'),
@@ -1634,7 +1440,7 @@
                             : ''
                         "
                       >
-                        <i class="fas fa-layer-group me-1"></i> docker-compose
+                        <i class="fas fa-layer-group mr-1"></i> docker-compose
                       </label>
 
                       <input
@@ -1645,8 +1451,7 @@
                         value="docker-stack"
                         :disabled="!isEditComposeModeSupported('docker-stack')"
                       />
-                      <label
-                        class="btn btn-outline-secondary"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         :class="{
                           disabled: !isEditComposeModeSupported('docker-stack'),
                         }"
@@ -1657,7 +1462,7 @@
                             : ''
                         "
                       >
-                        <i class="fas fa-server me-1"></i> docker stack deploy
+                        <i class="fas fa-server mr-1"></i> docker stack deploy
                       </label>
                     </div>
                     <small
@@ -1665,9 +1470,9 @@
                         !isEditComposeModeSupported('docker-compose') &&
                         !isEditComposeModeSupported('docker-stack')
                       "
-                      class="text-warning d-block mt-1"
+                      class="text-amber-600 block mt-1"
                     >
-                      <i class="fas fa-exclamation-triangle me-1"></i>
+                      <i class="fas fa-exclamation-triangle mr-1"></i>
                       所选主机不支持任何 Compose 模式，请选择其他主机或使用
                       Docker Run 模式
                     </small>
@@ -1676,8 +1481,8 @@
                   <!-- 重新发布策略选择 -->
                   <div v-if="editForm.deployMode === 'docker_compose'" class="mb-3">
                     <div v-if="editForm.deployChannel === 'portainer'" class="mb-2">
-                      <label class="form-label">Stack 部署策略</label>
-                      <div class="btn-group w-100" role="group">
+                      <Label>Stack 部署策略</Label>
+                      <div class="flex w-full flex-wrap gap-2" role="group">
                         <input
                           type="radio"
                           class="btn-check"
@@ -1685,7 +1490,7 @@
                           v-model="editForm.stackStrategy"
                           value="create_new"
                         />
-                        <label class="btn btn-outline-success" for="edit-stack-create">
+                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="edit-stack-create">
                           创建新 Stack
                         </label>
                         <input
@@ -1695,16 +1500,15 @@
                           v-model="editForm.stackStrategy"
                           value="update_existing"
                         />
-                        <label class="btn btn-outline-info" for="edit-stack-update">
+                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="edit-stack-update">
                           更新已有 Stack
                         </label>
                       </div>
                       <div v-if="editForm.stackStrategy === 'update_existing'" class="mt-2">
-                        <label class="form-label small">选择已有 Stack</label>
-                        <div class="input-group input-group-sm">
-                          <select
+                        <Label class="text-xs">选择已有 Stack</Label>
+                        <div class="flex gap-2">
+                          <NativeSelect
                             v-model="editForm.selectedStackId"
-                            class="form-select"
                             :disabled="
                               loadingStacks ||
                               !editForm.portainerTargetHost ||
@@ -1719,39 +1523,32 @@
                             >
                               {{ stack.name }} (ID: {{ stack.id }})
                             </option>
-                          </select>
-                          <button
+                          </NativeSelect>
+                          <Button
                             type="button"
-                            class="btn btn-outline-secondary"
+                            variant="outline"
                             @click="loadAvailableStacksForEdit"
                             :disabled="loadingStacks"
                           >
                             <span
                               v-if="loadingStacks"
-                              class="spinner-border spinner-border-sm"
+                              class="fas fa-spinner fa-spin"
                             ></span>
                             <i v-else class="fas fa-sync-alt"></i>
-                          </button>
+                          </Button>
                         </div>
                       </div>
                       <div v-else class="mt-2">
-                        <label class="form-label small"
-                          >新 Stack 名称 <span class="text-danger">*</span></label
-                        >
-                        <input
+                        <Label class="text-xs">新 Stack 名称 <span class="text-red-500">*</span></Label>
+                        <Input
                           v-model="editForm.newStackName"
                           type="text"
-                          class="form-control form-control-sm"
                           placeholder="请输入要创建的 Stack 名称"
                         />
                       </div>
                     </div>
-                    <label
-                      v-if="editForm.deployChannel !== 'portainer'"
-                      class="form-label"
-                      >重新发布策略</label
-                    >
-                    <div class="btn-group w-100" role="group">
+                    <Label v-if="editForm.deployChannel !== 'portainer'">重新发布策略</Label>
+                    <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
                         class="btn-check"
@@ -1759,11 +1556,10 @@
                         v-model="editForm.redeployStrategy"
                         value="remove_and_redeploy"
                       />
-                      <label
-                        class="btn btn-outline-warning"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-redeploy-strategy-remove"
                       >
-                        <i class="fas fa-trash-alt me-1"></i> 删除后重新部署
+                        <i class="fas fa-trash-alt mr-1"></i> 删除后重新部署
                       </label>
 
                       <input
@@ -1773,16 +1569,15 @@
                         v-model="editForm.redeployStrategy"
                         value="update_existing"
                       />
-                      <label
-                        class="btn btn-outline-info"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                         for="edit-redeploy-strategy-update"
                       >
-                        <i class="fas fa-sync-alt me-1"></i> 直接更新
+                        <i class="fas fa-sync-alt mr-1"></i> 直接更新
                       </label>
                     </div>
                     <small
                       v-if="editForm.deployChannel !== 'portainer'"
-                      class="text-muted d-block mt-1"
+                      class="text-slate-500 block mt-1"
                     >
                       <span
                         v-if="
@@ -1813,17 +1608,15 @@
                     "
                     class="mb-3"
                   >
-                    <label class="form-label">
-                      <span v-if="editForm.composeMode === 'docker-compose'"
+                    <Label><span v-if="editForm.composeMode === 'docker-compose'"
                         >Docker Compose 命令</span
                       >
                       <span v-else>Docker Stack 命令</span>
-                      <span class="text-danger">*</span>
-                    </label>
-                    <input
+                      <span class="text-red-500">*</span>
+                    </Label>
+                    <Input
                       v-model="editForm.composeCommand"
                       type="text"
-                      class="form-control font-monospace"
                       :placeholder="
                         editForm.composeMode === 'docker-compose'
                           ? 'up -d'
@@ -1836,13 +1629,11 @@
                     v-if="editForm.deployMode === 'docker_compose'"
                     class="mb-3"
                   >
-                    <label class="form-label"
-                      >docker-compose.yml 内容
-                      <span class="text-danger">*</span></label
-                    >
+                    <Label>docker-compose.yml 内容
+                      <span class="text-red-500">*</span></Label>
                     <textarea
                       v-model="editForm.composeContent"
-                      class="form-control font-monospace"
+                      class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       rows="15"
                       placeholder="version: '3.8'&#10;services:&#10;  app:&#10;    image: registry.cn-hangzhou.aliyuncs.com/namespace/app:tag&#10;    ports:&#10;      - '8000:8000'"
                     ></textarea>
@@ -1851,27 +1642,25 @@
                   <!-- 多步骤配置 -->
                   <div v-if="editForm.deployMode === 'multi_step'" class="mb-3">
                     <div
-                      class="d-flex justify-content-between align-items-center mb-2"
+                      class="flex justify-between items-center mb-2"
                     >
                       <div>
-                        <label class="form-label mb-0"
-                          >部署步骤 <span class="text-danger">*</span></label
-                        >
+                        <Label class="mb-0">部署步骤 <span class="text-red-500">*</span></Label>
                       </div>
-                      <button
+                      <Button
                         type="button"
-                        class="btn btn-sm btn-outline-primary"
+                        variant="outline" size="sm"
                         @click="addEditStep"
                       >
-                        <i class="fas fa-plus me-1"></i> 添加步骤
-                      </button>
+                        <i class="fas fa-plus mr-1"></i> 添加步骤
+                      </Button>
                     </div>
 
                     <div
                       v-if="editForm.steps.length === 0"
-                      class="alert alert-info mb-0"
+                      class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
                     >
-                      <i class="fas fa-info-circle me-1"></i>
+                      <i class="fas fa-info-circle mr-1"></i>
                       请至少添加一个部署步骤
                     </div>
 
@@ -1879,73 +1668,68 @@
                       <div
                         v-for="(step, index) in editForm.steps"
                         :key="index"
-                        class="card mb-2 step-card"
+                        class="mb-2 rounded-lg border border-slate-200 p-4"
                         :class="{ 'border-primary': step.name || step.command }"
                       >
-                        <div class="card-body">
+                        <div class="p-4">
                           <div
-                            class="d-flex justify-content-between align-items-start mb-2"
+                            class="flex justify-between items-start mb-2"
                           >
-                            <div class="d-flex align-items-center">
+                            <div class="flex items-center">
                               <span
-                                class="badge bg-primary me-2"
+                                class="mr-2"
                                 style="min-width: 60px"
                                 >步骤 {{ index + 1 }}</span
                               >
-                              <span v-if="step.name" class="text-muted small">{{
+                              <span v-if="step.name" class="text-slate-500 small">{{
                                 step.name
                               }}</span>
-                              <span v-else class="text-muted small fst-italic"
+                              <span v-else class="text-slate-500 small fst-italic"
                                 >未命名步骤</span
                               >
                             </div>
                             <div class="btn-group btn-group-sm">
-                              <button
+                              <Button
                                 type="button"
-                                class="btn btn-outline-secondary"
+                                variant="outline"
                                 @click="moveEditStep(index, -1)"
                                 :disabled="index === 0"
                                 title="上移"
                               >
                                 <i class="fas fa-arrow-up"></i>
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 type="button"
-                                class="btn btn-outline-secondary"
+                                variant="outline"
                                 @click="moveEditStep(index, 1)"
                                 :disabled="index === editForm.steps.length - 1"
                                 title="下移"
                               >
                                 <i class="fas fa-arrow-down"></i>
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 type="button"
-                                class="btn btn-outline-danger"
+                                variant="outline"
                                 @click="removeEditStep(index)"
                                 title="删除步骤"
                               >
                                 <i class="fas fa-trash"></i>
-                              </button>
+                              </Button>
                             </div>
                           </div>
                           <div class="mb-2">
-                            <label class="form-label small mb-1"
-                              >步骤名称</label
-                            >
-                            <input
+                            <Label class="mb-1 text-xs">步骤名称</Label>
+                            <Input
                               v-model="step.name"
                               type="text"
-                              class="form-control form-control-sm"
                               placeholder="例如：停止旧容器、拉取镜像、启动容器"
                             />
                           </div>
                           <div>
-                            <label class="form-label small mb-1"
-                              >执行命令</label
-                            >
+                            <Label class="mb-1 text-xs">执行命令</Label>
                             <textarea
                               v-model="step.command"
-                              class="form-control font-monospace form-control-sm"
+                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 text-xs"
                               rows="4"
                               placeholder="docker stop my-app || true&#10;或&#10;docker pull registry.cn-hangzhou.aliyuncs.com/namespace/app:latest"
                             ></textarea>
@@ -1964,7 +1748,7 @@
                         v-model="editForm.redeploy"
                       />
                       <label class="form-check-label" for="edit-redeploySwitch">
-                        <i class="fas fa-redo me-1"></i>
+                        <i class="fas fa-redo mr-1"></i>
                         重新发布（如果主机上已存在，先停止并删除）
                       </label>
                     </div>
@@ -1974,14 +1758,11 @@
 
               <!-- 目标主机选择 -->
               <div class="mb-3">
-                <label class="form-label"
-                  >选择目标主机 <span class="text-danger">*</span></label
-                >
+                <Label>选择目标主机 <span class="text-red-500">*</span></Label>
                 <div v-if="editForm.deployChannel === 'portainer'" class="mb-2">
-                  <label class="form-label small">Portainer 目标主机</label>
-                  <select
+                  <Label class="text-xs">Portainer 目标主机</Label>
+                  <NativeSelect
                     v-model="editForm.portainerTargetHost"
-                    class="form-select form-select-sm"
                   >
                     <option :value="null" disabled>请选择 Portainer 主机</option>
                     <option
@@ -1991,7 +1772,7 @@
                     >
                       {{ host.name }} ({{ host.portainer_url || "-" }})
                     </option>
-                  </select>
+                  </NativeSelect>
                 </div>
 
                 <!-- 主机类型筛选和搜索 -->
@@ -2004,11 +1785,9 @@
                       v-model="editHostFilter"
                       value="all"
                     />
-                    <label
-                      class="btn btn-outline-secondary"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="edit-filter-all"
-                      >全部</label
-                    >
+                      >全部</label>
 
                     <input
                       type="radio"
@@ -2017,11 +1796,10 @@
                       v-model="editHostFilter"
                       value="agent"
                     />
-                    <label
-                      class="btn btn-outline-secondary"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="edit-filter-agent"
                     >
-                      <i class="fas fa-network-wired me-1"></i> Agent
+                      <i class="fas fa-network-wired mr-1"></i> Agent
                     </label>
 
                     <input
@@ -2031,11 +1809,10 @@
                       v-model="editHostFilter"
                       value="portainer"
                     />
-                    <label
-                      class="btn btn-outline-secondary"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="edit-filter-portainer"
                     >
-                      <i class="fas fa-server me-1"></i> Portainer
+                      <i class="fas fa-server mr-1"></i> Portainer
                     </label>
 
                     <input
@@ -2045,14 +1822,13 @@
                       v-model="editHostFilter"
                       value="ssh"
                     />
-                    <label
-                      class="btn btn-outline-secondary"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                       for="edit-filter-ssh"
                     >
-                      <i class="fas fa-terminal me-1"></i> SSH
+                      <i class="fas fa-terminal mr-1"></i> SSH
                     </label>
                   </div>
-                  <div class="d-flex align-items-center gap-2">
+                  <div class="flex items-center gap-2">
                     <div class="form-check">
                       <input
                         class="form-check-input"
@@ -2061,12 +1837,10 @@
                         v-model="editFilterOnlineOnly"
                       />
                       <label class="form-check-label" for="edit-filter-online"
-                        >仅在线</label
-                      >
+                        >仅在线</label>
                     </div>
-                    <input
+                    <Input
                       type="text"
-                      class="form-control form-control-sm flex-grow-1"
                       v-model="editHostSearchKeyword"
                       placeholder="搜索主机名称..."
                     />
@@ -2076,10 +1850,9 @@
                 <!-- 主机列表（按类型分组） -->
                 <div
                   v-if="loadingHosts"
-                  class="text-muted small text-center py-3"
+                  class="text-slate-500 small text-center py-3"
                 >
-                  <span class="spinner-border spinner-border-sm me-2"></span
-                  >加载中...
+                  <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
                 </div>
                 <div
                   v-else
@@ -2092,15 +1865,15 @@
                     v-if="editFilteredHostsByType.agent.length > 0"
                     class="mb-3"
                   >
-                    <div class="fw-bold text-primary mb-2">
-                      <i class="fas fa-network-wired me-1"></i> Agent 主机 ({{
+                    <div class="fw-bold text-blue-600 mb-2">
+                      <i class="fas fa-network-wired mr-1"></i> Agent 主机 ({{
                         editFilteredHostsByType.agent.length
                       }})
                     </div>
                     <div
                       v-for="host in editFilteredHostsByType.agent"
                       :key="host.host_id"
-                      class="form-check ms-3"
+                      class="form-check ml-3"
                     >
                       <input
                         class="form-check-input"
@@ -2114,15 +1887,12 @@
                         :for="`edit-host-${host.host_id}`"
                       >
                         {{ host.name }}
-                        <span
-                          :class="getStatusBadgeClass(host.status)"
-                          class="badge ms-1"
-                        >
+                        <Badge :variant="host.status === 'completed' ? 'success' : host.status === 'failed' ? 'danger' : host.status === 'running' ? 'info' : 'default'" class="ml-1">
                           {{ getStatusText(host.status) }}
-                        </span>
+                        </Badge>
                         <span
                           v-if="host.description"
-                          class="text-muted small ms-1"
+                          class="text-slate-500 small ml-1"
                           >({{ host.description }})</span
                         >
                       </label>
@@ -2135,14 +1905,14 @@
                     class="mb-3"
                   >
                     <div class="fw-bold text-info mb-2">
-                      <i class="fas fa-server me-1"></i> Portainer 主机 ({{
+                      <i class="fas fa-server mr-1"></i> Portainer 主机 ({{
                         editFilteredHostsByType.portainer.length
                       }})
                     </div>
                     <div
                       v-for="host in editFilteredHostsByType.portainer"
                       :key="host.host_id"
-                      class="form-check ms-3"
+                      class="form-check ml-3"
                     >
                       <input
                         class="form-check-input"
@@ -2156,15 +1926,12 @@
                         :for="`edit-host-${host.host_id}`"
                       >
                         {{ host.name }}
-                        <span
-                          :class="getStatusBadgeClass(host.status)"
-                          class="badge ms-1"
-                        >
+                        <Badge :variant="host.status === 'completed' ? 'success' : host.status === 'failed' ? 'danger' : host.status === 'running' ? 'info' : 'default'" class="ml-1">
                           {{ getStatusText(host.status) }}
-                        </span>
+                        </Badge>
                         <span
                           v-if="host.portainer_url"
-                          class="text-muted small ms-1"
+                          class="text-slate-500 small ml-1"
                           >({{ host.portainer_url }})</span
                         >
                       </label>
@@ -2176,15 +1943,15 @@
                     v-if="editFilteredHostsByType.ssh.length > 0"
                     class="mb-3"
                   >
-                    <div class="fw-bold text-warning mb-2">
-                      <i class="fas fa-terminal me-1"></i> SSH 主机 ({{
+                    <div class="fw-bold text-amber-600 mb-2">
+                      <i class="fas fa-terminal mr-1"></i> SSH 主机 ({{
                         editFilteredHostsByType.ssh.length
                       }})
                     </div>
                     <div
                       v-for="host in editFilteredHostsByType.ssh"
                       :key="host.host_id"
-                      class="form-check ms-3"
+                      class="form-check ml-3"
                     >
                       <input
                         class="form-check-input"
@@ -2198,17 +1965,13 @@
                         :for="`edit-host-${host.host_id}`"
                       >
                         {{ host.name }}
-                        <span
-                          v-if="host.docker_enabled"
-                          class="badge bg-info ms-1"
-                          >Docker</span
-                        >
+                        <Badge v-if="host.docker_enabled" variant="info" class="ml-1">Docker</Badge>
                         <span
                           v-if="host.docker_version"
-                          class="text-muted small ms-1"
+                          class="text-slate-500 small ml-1"
                           >({{ host.docker_version }})</span
                         >
-                        <span v-if="host.host" class="text-muted small ms-1"
+                        <span v-if="host.host" class="text-slate-500 small ml-1"
                           >@{{ host.host }}:{{ host.port || 22 }}</span
                         >
                       </label>
@@ -2217,9 +1980,9 @@
 
                   <div
                     v-if="editFilteredHosts.length === 0"
-                    class="text-muted small text-center py-3"
+                    class="text-slate-500 small text-center py-3"
                   >
-                    <i class="fas fa-inbox me-1"></i>
+                    <i class="fas fa-inbox mr-1"></i>
                     <span v-if="editHostSearchKeyword">未找到匹配的主机</span>
                     <span v-else>暂无可用主机，请先在"主机管理"中添加主机</span>
                   </div>
@@ -2227,16 +1990,16 @@
 
                 <!-- 已选择的主机统计 -->
                 <div v-if="editForm.selectedHosts.length > 0" class="mt-2">
-                  <small class="text-muted">
+                  <small class="text-slate-500">
                     已选择
                     <strong>{{ editForm.selectedHosts.length }}</strong> 个主机
-                    <button
+                    <Button
                       type="button"
-                      class="btn btn-link btn-sm p-0 ms-2"
+                      variant="ghost" size="sm"
                       @click="editForm.selectedHosts = []"
                     >
                       清空
-                    </button>
+                    </Button>
                   </small>
                 </div>
               </div>
@@ -2245,53 +2008,49 @@
             <!-- Webhook设置模式 -->
             <div v-if="editMode === 'webhook'">
               <div class="mb-3">
-                <label class="form-label">Webhook Token（用于 URL）</label>
-                <div class="input-group input-group-sm">
-                  <input
+                <Label>Webhook Token（用于 URL）</Label>
+                <div class="flex gap-2">
+                  <Input
                     v-model="editForm.webhook_token"
                     type="text"
-                    class="form-control font-monospace"
                     placeholder="留空自动生成"
                   />
-                  <button
-                    class="btn btn-outline-secondary"
+                  <Button
+                    variant="outline"
                     type="button"
                     @click="regenerateEditWebhookToken"
                     title="重新生成 Token"
                   >
                     <i class="fas fa-sync-alt"></i> 重新生成
-                  </button>
+                  </Button>
                 </div>
-                <small class="text-muted"
+                <small class="text-slate-500"
                   >用于构建 Webhook URL，留空将自动生成 UUID</small
                 >
               </div>
               <div class="mb-3">
-                <label class="form-label">Webhook 密钥</label>
-                <div class="input-group input-group-sm">
-                  <input
+                <Label>Webhook 密钥</Label>
+                <div class="flex gap-2">
+                  <Input
                     v-model="editForm.webhook_secret"
                     type="text"
-                    class="form-control font-monospace"
                     placeholder="留空自动生成"
                   />
-                  <button
-                    class="btn btn-outline-secondary"
+                  <Button
+                    variant="outline"
                     type="button"
                     @click="regenerateEditWebhookSecret"
                     title="重新生成密钥"
                   >
                     <i class="fas fa-sync-alt"></i> 重新生成
-                  </button>
+                  </Button>
                 </div>
-                <small class="text-muted">用于验证 Webhook 签名（可选）</small>
+                <small class="text-slate-500">用于验证 Webhook 签名（可选）</small>
               </div>
               <div class="mb-3">
-                <label class="form-label"
-                  ><strong>Webhook 分支策略</strong></label
-                >
+                <Label><strong>Webhook 分支策略</strong></Label>
                 <div
-                  class="btn-group w-100 d-flex flex-wrap"
+                  class="btn-group w-full flex flex-wrap"
                   role="group"
                   style="gap: 0.25rem"
                 >
@@ -2303,13 +2062,13 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="btn btn-outline-primary flex-fill"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                     for="edit-strategy-use-push"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-code-branch d-block mb-1"></i>
-                    <small class="d-block fw-bold">使用推送分支</small>
-                    <small class="text-muted d-block" style="font-size: 0.7rem"
+                    <i class="fas fa-code-branch block mb-1"></i>
+                    <small class="block fw-bold">使用推送分支</small>
+                    <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >所有分支都触发</small
                     >
                   </label>
@@ -2321,13 +2080,13 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="btn btn-outline-primary flex-fill"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                     for="edit-strategy-filter-match"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-filter d-block mb-1"></i>
-                    <small class="d-block fw-bold">只允许匹配分支</small>
-                    <small class="text-muted d-block" style="font-size: 0.7rem"
+                    <i class="fas fa-filter block mb-1"></i>
+                    <small class="block fw-bold">只允许匹配分支</small>
+                    <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >使用推送分支构建</small
                     >
                   </label>
@@ -2339,13 +2098,13 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="btn btn-outline-primary flex-fill"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                     for="edit-strategy-use-configured"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-cog d-block mb-1"></i>
-                    <small class="d-block fw-bold">使用配置分支</small>
-                    <small class="text-muted d-block" style="font-size: 0.7rem"
+                    <i class="fas fa-cog block mb-1"></i>
+                    <small class="block fw-bold">使用配置分支</small>
+                    <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >所有分支都触发</small
                     >
                   </label>
@@ -2357,13 +2116,13 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="btn btn-outline-primary flex-fill"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                     for="edit-strategy-select-branches"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-check-square d-block mb-1"></i>
-                    <small class="d-block fw-bold">选择分支触发</small>
-                    <small class="text-muted d-block" style="font-size: 0.7rem"
+                    <i class="fas fa-check-square block mb-1"></i>
+                    <small class="block fw-bold">选择分支触发</small>
+                    <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >仅选中的分支触发</small
                     >
                   </label>
@@ -2373,123 +2132,102 @@
                 v-if="editForm.webhook_branch_strategy === 'select_branches'"
                 class="mb-3"
               >
-                <label class="form-label">允许触发的分支</label>
-                <input
+                <Label>允许触发的分支</label>
+                <Input
                   v-model="editForm.webhook_allowed_branches_input"
                   type="text"
-                  class="form-control"
                   placeholder="输入分支名称，多个分支用逗号分隔，如：main,dev,release"
                 />
-                <small class="text-muted"
+                <small class="text-slate-500"
                   >输入分支名称，多个分支用逗号分隔</small
                 >
               </div>
               <div class="mb-3">
-                <button
+                <Button
                   type="button"
-                  class="btn btn-sm btn-outline-info"
+                  variant="outline" size="sm"
                   @click="showEditWebhookUrl"
                 >
-                  <i class="fas fa-link me-1"></i> 查看 Webhook URL
-                </button>
+                  <i class="fas fa-link mr-1"></i> 查看 Webhook URL
+                </Button>
               </div>
             </div>
 
             <!-- YAML编辑模式 -->
             <div v-if="editMode === 'yaml' && editingTask">
               <div class="mb-3">
-                <label class="form-label">YAML 配置内容</label>
+                <Label>YAML 配置内容</Label>
                 <textarea
                   v-model="editingTask.config_content"
-                  class="form-control font-monospace"
+                  class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-mono shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                   rows="20"
                   placeholder="请输入 deploy-config.yaml 格式的配置..."
                 ></textarea>
               </div>
-              <div class="row">
-                <div class="col-md-6">
-                  <label class="form-label">镜像仓库（可选）</label>
-                  <input
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div class="">
+                  <Label>镜像仓库（可选）</Label>
+                  <Input
                     v-model="editingTask.registry"
                     type="text"
-                    class="form-control"
                     placeholder="docker.io"
                   />
                 </div>
-                <div class="col-md-6">
-                  <label class="form-label">镜像标签（可选）</label>
-                  <input
+                <div class="">
+                  <Label>镜像标签（可选）</Label>
+                  <Input
                     v-model="editingTask.tag"
                     type="text"
-                    class="form-control"
                     placeholder="latest"
                   />
                 </div>
               </div>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button
+
+      <template #footer>
+        <Button
               type="button"
-              class="btn btn-secondary"
+              variant="secondary"
               @click="closeEditModal"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="btn btn-primary"
+              variant="default"
               @click="saveEditTask"
               :disabled="creating"
             >
-              <span
-                v-if="creating"
-                class="spinner-border spinner-border-sm me-2"
-              ></span>
+              <i v-if="creating" class="fas fa-spinner fa-spin mr-2"></i>
               保存
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Webhook URL 模态框 -->
-    <div
-      v-if="showWebhookModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
+            </Button>
+      </template>
+    </FormDialog>
+    <FormDialog
+      :model-value="showWebhookModal"
+      title="Webhook URL"
+      icon="fa-link"
+      size="md"
+      @update:model-value="(v) => !v && (showWebhookModal = false)"
     >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title"><i class="fas fa-link"></i> Webhook URL</h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showWebhookModal = false"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Webhook URL</label>
-              <div class="input-group">
-                <input
+      <div class="mb-3">
+              <Label>Webhook URL</Label>
+              <div class="flex gap-2">
+                <Input
                   :value="webhookUrl"
                   type="text"
-                  class="form-control form-control-sm font-monospace"
                   readonly
                   ref="webhookUrlInput"
                 />
-                <button
-                  class="btn btn-outline-secondary btn-sm"
+                <Button
+                  variant="outline" size="sm"
                   @click="copyWebhookUrlFromModal"
                 >
                   <i class="fas fa-copy"></i> 复制
-                </button>
+                </Button>
               </div>
             </div>
-            <div class="alert alert-info small mb-0">
+            <div class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
               <strong>使用说明：</strong><br />
               1. 在 Git 平台（GitHub/GitLab/Gitee）的仓库设置中添加 Webhook<br />
               2. 将上述 URL 粘贴到 Payload URL 中<br />
@@ -2497,15 +2235,15 @@
               4. Secret 填写部署配置的 Webhook 密钥（如果有）<br />
               5. 选择触发事件（通常是 Push events）
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showWebhookModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
+    </FormDialog>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="deploy_config"
+      :resource-id="permissionTarget?.task_id || ''"
+      :team-id="activeTeamId"
+      :resource-name="permissionTarget?.app_name || ''"
+    />
   </div>
 </template>
 
@@ -2513,9 +2251,47 @@
 import axios from "axios";
 import yaml from "js-yaml";
 import { copyToClipboard } from "../utils/clipboard.js";
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import NativeSelect from "@/components/ui/select/NativeSelect.vue";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import { Badge } from "@/components/ui/badge";
+import Table from "@/components/ui/table/Table.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useTeamStore } from "@/stores/team";
+
 
 export default {
   name: "DeployTaskManager",
+  components: {
+    PageToolbar,
+    PaginationBar,
+    EmptyState,
+    AlertBanner,
+    Button,
+    Input,
+    Label,
+    NativeSelect,
+    FormDialog,
+    Badge,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+    ResourceMemberPermissionDialog,
+  },
   data() {
     return {
       tasks: [],
@@ -2525,6 +2301,8 @@ export default {
       showImportModal: false,
       showDetailModal: false,
       showEditModal: false,
+      permissionDialogOpen: false,
+      permissionTarget: null,
       editingTask: null,
       selectedTask: null,
       taskLogs: [],
@@ -2600,6 +2378,9 @@ export default {
     };
   },
   computed: {
+    activeTeamId() {
+      return useTeamStore().activeTeamId || "";
+    },
     filteredTasks() {
       return this.tasks;
     },
@@ -3802,6 +3583,10 @@ export default {
       this.loadAgentHosts();
       this.showSimpleCreateModal = true;
     },
+    openResourcePermission(task) {
+      this.permissionTarget = task;
+      this.permissionDialogOpen = true;
+    },
     async editTask(task) {
       try {
         this.editTypeLock = null;
@@ -4537,7 +4322,4 @@ export default {
 </script>
 
 <style scoped>
-.modal {
-  z-index: 1050;
-}
 </style>

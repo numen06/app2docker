@@ -1,0 +1,24 @@
+﻿{
+    "owner":  {
+                  "password":  "test123456",
+                  "username":  "page_user_a_ui"
+              },
+    "sourceId":  null,
+    "memberB":  {
+                    "username":  "git_ds_member_b_1779198013",
+                    "permission":  "view",
+                    "password":  "test123456"
+                },
+    "teamId":  null,
+    "admin":  {
+                  "password":  "test123456",
+                  "username":  "git_ds_admin_1779198013"
+              },
+    "sourceName":  "Git鏁版嵁婧愭潈闄愭祴璇?1779198013",
+    "memberC":  {
+                    "username":  "git_ds_member_c_1779198013",
+                    "permission":  "none",
+                    "password":  "test123456"
+                },
+    "teamName":  null
+}

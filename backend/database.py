@@ -136,6 +136,21 @@ def init_db():
     migrate_deploy_task_architecture()
     migrate_init_system_settings()
 
+    # 迁移：团队/成员/邀请表
+    migrate_add_teams_tables()
+
+    # 迁移：团队资源权限与分组
+    migrate_add_team_resource_permissions()
+
+    # 迁移：团队任务清理天数
+    migrate_add_team_task_cleanup_days()
+
+    # 迁移：任务/导出/主机/资源包/操作日志 team_id
+    migrate_add_team_id_to_misc_tables()
+
+    # 迁移：默认团队 + 超级管理员 + 历史数据 team_id 回填
+    migrate_backfill_default_team()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -1070,6 +1085,475 @@ def migrate_init_system_settings():
         print("✅ system_settings 默认配置已初始化")
     except Exception as e:
         print(f"⚠️ 初始化 system_settings 失败: {e}")
+
+
+def migrate_add_teams_tables():
+    """迁移：创建 teams / team_members / team_invitations 表"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='teams'"
+        )
+        if not cursor.fetchone():
+            print("🔄 创建 teams 表...")
+            cursor.execute(
+                """
+                CREATE TABLE teams (
+                    team_id VARCHAR(36) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    slug VARCHAR(255) NOT NULL UNIQUE,
+                    description TEXT DEFAULT '',
+                    avatar_url VARCHAR(512),
+                    created_by VARCHAR(36) NOT NULL,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    FOREIGN KEY(created_by) REFERENCES users(user_id)
+                )
+            """
+            )
+            cursor.execute("CREATE INDEX idx_team_slug ON teams(slug)")
+            conn.commit()
+            print("✅ teams 表创建成功")
+        else:
+            print("✅ teams 表已存在")
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='team_members'"
+        )
+        if not cursor.fetchone():
+            print("🔄 创建 team_members 表...")
+            cursor.execute(
+                """
+                CREATE TABLE team_members (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    team_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    role VARCHAR(20) NOT NULL DEFAULT 'member',
+                    joined_at DATETIME,
+                    FOREIGN KEY(team_id) REFERENCES teams(team_id),
+                    FOREIGN KEY(user_id) REFERENCES users(user_id),
+                    UNIQUE(team_id, user_id)
+                )
+            """
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_member_team ON team_members(team_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_member_user ON team_members(user_id)"
+            )
+            conn.commit()
+            print("✅ team_members 表创建成功")
+        else:
+            print("✅ team_members 表已存在")
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='team_invitations'"
+        )
+        if not cursor.fetchone():
+            print("🔄 创建 team_invitations 表...")
+            cursor.execute(
+                """
+                CREATE TABLE team_invitations (
+                    invitation_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    role VARCHAR(20) NOT NULL DEFAULT 'member',
+                    token VARCHAR(64) NOT NULL UNIQUE,
+                    invited_by VARCHAR(36) NOT NULL,
+                    expires_at DATETIME NOT NULL,
+                    accepted_at DATETIME,
+                    created_at DATETIME,
+                    FOREIGN KEY(team_id) REFERENCES teams(team_id),
+                    FOREIGN KEY(invited_by) REFERENCES users(user_id)
+                )
+            """
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_invitation_team ON team_invitations(team_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX idx_team_invitation_token ON team_invitations(token)"
+            )
+            conn.commit()
+            print("✅ team_invitations 表创建成功")
+        else:
+            print("✅ team_invitations 表已存在")
+
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ 创建团队相关表失败: {e}")
+
+
+def migrate_add_team_resource_permissions():
+    """迁移：资源 team_id、权限表、分组表"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        resource_tables = [
+            ("pipelines", "team_id VARCHAR(36)"),
+            ("pipelines", "group_id VARCHAR(36)"),
+            ("pipelines", "created_by VARCHAR(36)"),
+            ("deploy_configs", "team_id VARCHAR(36)"),
+            ("deploy_configs", "created_by VARCHAR(36)"),
+            ("git_sources", "team_id VARCHAR(36)"),
+            ("git_sources", "created_by VARCHAR(36)"),
+            ("agent_hosts", "team_id VARCHAR(36)"),
+            ("agent_hosts", "group_id VARCHAR(36)"),
+            ("agent_hosts", "created_by VARCHAR(36)"),
+        ]
+        for table, col_def in resource_tables:
+            col_name = col_def.split()[0]
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            )
+            if cursor.fetchone():
+                _add_column_if_missing(cursor, table, col_name, col_def)
+
+        new_tables = {
+            "pipeline_permissions": """
+                CREATE TABLE pipeline_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pipeline_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(pipeline_id, user_id)
+                )
+            """,
+            "host_permissions": """
+                CREATE TABLE host_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    host_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(host_id, user_id)
+                )
+            """,
+            "deploy_config_permissions": """
+                CREATE TABLE deploy_config_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(config_id, user_id)
+                )
+            """,
+            "git_source_permissions": """
+                CREATE TABLE git_source_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(source_id, user_id)
+                )
+            """,
+            "pipeline_groups": """
+                CREATE TABLE pipeline_groups (
+                    group_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT DEFAULT '',
+                    created_at DATETIME
+                )
+            """,
+            "pipeline_group_permissions": """
+                CREATE TABLE pipeline_group_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(group_id, user_id)
+                )
+            """,
+            "host_groups": """
+                CREATE TABLE host_groups (
+                    group_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT DEFAULT '',
+                    created_at DATETIME
+                )
+            """,
+            "host_group_permissions": """
+                CREATE TABLE host_group_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(group_id, user_id)
+                )
+            """,
+        }
+
+        for table_name, ddl in new_tables.items():
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            )
+            if not cursor.fetchone():
+                print(f"🔄 创建 {table_name} 表...")
+                cursor.execute(ddl)
+                print(f"✅ {table_name} 表创建成功")
+
+        conn.commit()
+        conn.close()
+        print("✅ 团队资源权限迁移完成")
+    except Exception as e:
+        print(f"⚠️ 团队资源权限迁移失败: {e}")
+
+
+def _add_column_if_missing(cursor, table: str, column: str, ddl: str):
+    cursor.execute(f"PRAGMA table_info({table})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column not in columns:
+        print(f"🔄 添加 {column} 字段到 {table} 表...")
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+        print(f"✅ {column} 字段添加成功")
+    else:
+        print(f"✅ {table}.{column} 已存在")
+
+
+def migrate_add_team_task_cleanup_days():
+    """迁移：为 teams 表添加 task_cleanup_days 字段"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        _add_column_if_missing(
+            cursor,
+            "teams",
+            "task_cleanup_days",
+            "task_cleanup_days INTEGER DEFAULT 7",
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ 迁移 task_cleanup_days 字段失败: {e}")
+
+
+def migrate_add_team_id_to_misc_tables():
+    """迁移：为 tasks / export_tasks / hosts / resource_packages / operation_logs 添加 team_id 等字段"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        columns = [
+            ("tasks", "team_id", "team_id VARCHAR(36)"),
+            ("export_tasks", "team_id", "team_id VARCHAR(36)"),
+            ("hosts", "team_id", "team_id VARCHAR(36)"),
+            ("hosts", "created_by", "created_by VARCHAR(36)"),
+            ("resource_packages", "team_id", "team_id VARCHAR(36)"),
+            ("resource_packages", "created_by", "created_by VARCHAR(36)"),
+            ("operation_logs", "team_id", "team_id VARCHAR(36)"),
+        ]
+        for table, col, ddl in columns:
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            )
+            if cursor.fetchone():
+                _add_column_if_missing(cursor, table, col, ddl)
+        conn.commit()
+        conn.close()
+        print("✅ 杂项表 team_id 字段迁移完成")
+    except Exception as e:
+        print(f"⚠️ 杂项表 team_id 迁移失败: {e}")
+
+
+def migrate_backfill_default_team():
+    """迁移：创建默认团队，将系统 admin 设为 owner，并为无 team_id 的历史数据回填"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    from datetime import datetime
+
+    from backend.models import Role, Team, TeamMember, User, UserRole
+
+    DEFAULT_TEAM_NAME = "默认团队"
+    DEFAULT_TEAM_SLUG = "default"
+
+    RESOURCE_TABLES = (
+        "pipelines",
+        "deploy_configs",
+        "git_sources",
+        "agent_hosts",
+        "hosts",
+        "resource_packages",
+        "tasks",
+        "export_tasks",
+        "operation_logs",
+    )
+
+    db = get_db_session()
+    try:
+        admin_role = db.query(Role).filter(Role.name == "admin").first()
+        if not admin_role:
+            print("⚠️ 未找到 admin 角色，跳过默认团队回填")
+            return
+
+        admin_user_ids = [
+            row[0]
+            for row in db.query(UserRole.user_id)
+            .filter(UserRole.role_id == admin_role.role_id)
+            .all()
+        ]
+        if not admin_user_ids:
+            print("⚠️ 无超级管理员用户，跳过默认团队回填")
+            return
+
+        admin_users = (
+            db.query(User)
+            .filter(User.user_id.in_(admin_user_ids), User.enabled.is_(True))
+            .order_by(User.created_at.asc())
+            .all()
+        )
+        if not admin_users:
+            print("⚠️ 无可用超级管理员账号，跳过默认团队回填")
+            return
+
+        owner_user = next(
+            (u for u in admin_users if u.username == "admin"), admin_users[0]
+        )
+
+        team = db.query(Team).filter(Team.slug == DEFAULT_TEAM_SLUG).first()
+        if not team:
+            team = Team(
+                team_id=str(uuid.uuid4()),
+                name=DEFAULT_TEAM_NAME,
+                slug=DEFAULT_TEAM_SLUG,
+                description="系统升级时自动创建，承接历史数据",
+                created_by=owner_user.user_id,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(team)
+            db.flush()
+            print(f"🔄 已创建默认团队: {DEFAULT_TEAM_NAME} ({team.team_id})")
+        else:
+            print(f"✅ 默认团队已存在: {team.name} ({team.team_id})")
+
+        for user in admin_users:
+            existing = (
+                db.query(TeamMember)
+                .filter(
+                    TeamMember.team_id == team.team_id,
+                    TeamMember.user_id == user.user_id,
+                )
+                .first()
+            )
+            if existing:
+                if existing.role != "owner":
+                    existing.role = "owner"
+                continue
+            db.add(
+                TeamMember(
+                    team_id=team.team_id,
+                    user_id=user.user_id,
+                    role="owner",
+                    joined_at=datetime.now(),
+                )
+            )
+            print(f"✅ 已将超级管理员 {user.username} 加入默认团队 (owner)")
+
+        db.commit()
+
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        team_id = team.team_id
+        total_updated = 0
+
+        for table in RESOURCE_TABLES:
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            )
+            if not cursor.fetchone():
+                continue
+            cursor.execute(f"PRAGMA table_info({table})")
+            if "team_id" not in [row[1] for row in cursor.fetchall()]:
+                continue
+            cursor.execute(
+                f"UPDATE {table} SET team_id = ? WHERE team_id IS NULL",
+                (team_id,),
+            )
+            n = cursor.rowcount
+            if n:
+                print(f"🔄 {table}: 回填 {n} 条记录的 team_id")
+                total_updated += n
+
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET team_id = (
+                SELECT p.team_id FROM pipelines p
+                WHERE p.pipeline_id = tasks.pipeline_id AND p.team_id IS NOT NULL
+            )
+            WHERE team_id IS NULL AND pipeline_id IS NOT NULL
+            """
+        )
+        if cursor.rowcount:
+            print(f"🔄 tasks: 从流水线继承 {cursor.rowcount} 条 team_id")
+            total_updated += cursor.rowcount
+
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET team_id = (
+                SELECT d.team_id FROM deploy_configs d
+                WHERE d.config_id = tasks.deploy_config_id AND d.team_id IS NOT NULL
+            )
+            WHERE team_id IS NULL AND deploy_config_id IS NOT NULL
+            """
+        )
+        if cursor.rowcount:
+            print(f"🔄 tasks: 从部署配置继承 {cursor.rowcount} 条 team_id")
+            total_updated += cursor.rowcount
+
+        cursor.execute(
+            "UPDATE tasks SET team_id = ? WHERE team_id IS NULL", (team_id,)
+        )
+        if cursor.rowcount:
+            print(f"🔄 tasks: 默认团队回填 {cursor.rowcount} 条")
+            total_updated += cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        if total_updated:
+            print(f"✅ 默认团队数据回填完成，共更新 {total_updated} 条")
+        else:
+            print("✅ 无需回填 team_id（数据已归属团队）")
+    except Exception as e:
+        db.rollback()
+        import traceback
+
+        traceback.print_exc()
+        print(f"⚠️ 默认团队回填失败: {e}")
+    finally:
+        db.close()
 
 
 def close_db():

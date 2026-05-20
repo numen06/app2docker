@@ -1,302 +1,233 @@
 <template>
-  <div 
-    class="modal fade" 
-    :class="{ show: modelValue, 'd-block': modelValue }"
-    tabindex="-1"
+  <FormDialog
+    :model-value="modelValue"
+    :title="isNew ? '新增模板' : '编辑模板'"
+    icon="fa-code"
+    size="xl"
+    @update:model-value="close"
   >
-    <div class="modal-dialog modal-xl">
-      <div class="modal-content">
-        <div class="modal-header bg-primary text-white">
-          <h5 class="modal-title">
-            <i class="fas fa-code"></i>
-            {{ isNew ? '新增模板' : '编辑模板' }}
-            <span v-if="isBuiltin" class="badge bg-warning ms-2">
-              <i class="fas fa-lock"></i> 内置
-            </span>
-          </h5>
-          <button type="button" class="btn-close btn-close-white" @click="close"></button>
-        </div>
-        
-        <div class="modal-body">
-          <!-- 元数据 -->
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">模板名称 <span class="text-danger">*</span></label>
-              <input 
-                v-model="form.name" 
-                type="text" 
-                class="form-control"
-                :disabled="isBuiltin"
-                placeholder="例如: my-custom-template"
-              />
-              <div v-if="isBuiltin" class="form-text text-warning">
-                <i class="fas fa-info-circle"></i> 内置模板不可重命名，保存后将在用户目录创建覆盖
-              </div>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">项目类型 <span class="text-danger">*</span></label>
-              <select 
-                v-model="form.projectType" 
-                class="form-select"
-                :disabled="!canChangeProjectType"
-                @change="validateProjectType"
-              >
-                <option value="jar">Java 应用（JAR）</option>
-                <option value="nodejs">Node.js 应用</option>
-                <option value="python">Python 应用</option>
-                <option value="go">Go 应用</option>
-                <option value="web">静态网站</option>
-              </select>
-              <div v-if="!canChangeProjectType" class="form-text text-warning">
-                <i class="fas fa-lock"></i> 内置模板的项目类型不可修改
-              </div>
-              <div v-else-if="!isNew && projectTypeChanged" class="form-text text-info">
-                <i class="fas fa-info-circle"></i> 修改项目类型后，模板将移动到新目录
-              </div>
-              <div v-else class="form-text">
-                <i class="fas fa-lightbulb"></i> 请从下拉列表中选择项目类型
-              </div>
-            </div>
-          </div>
+    <Badge v-if="isBuiltin" variant="warning" class="mb-3">
+      <i class="fas fa-lock"></i> 内置
+    </Badge>
 
-          <!-- CodeMirror 编辑器 -->
-          <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <label class="form-label mb-0">
-                模板内容 <span class="text-danger">*</span>
-              </label>
-              <div class="btn-group btn-group-sm">
-                <button 
-                  type="button" 
-                  class="btn btn-outline-secondary btn-sm"
-                  @click="$refs.fileInput.click()"
-                >
-                  <i class="fas fa-upload"></i> 从文件加载
-                </button>
-              </div>
-            </div>
-            <input 
-              ref="fileInput"
-              type="file" 
-              class="d-none"
-              accept=".dockerfile,.Dockerfile,.txt"
-              @change="handleFileUpload"
-            />
-            <codemirror
-              v-model="form.content"
-              :style="{ height: '500px', fontSize: '13px' }"
-              :autofocus="true"
-              :indent-with-tab="false"
-              :tab-size="4"
-              :extensions="extensions"
-            />
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" @click="close">
-            <i class="fas fa-times"></i> 取消
-          </button>
-          <button type="button" class="btn btn-primary" @click="save" :disabled="saving">
-            <span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>
-            <i v-else class="fas fa-save"></i>
-            {{ saving ? '保存中...' : '保存' }}
-          </button>
-        </div>
+    <div class="mb-4 grid gap-4 sm:grid-cols-2">
+      <div class="space-y-2">
+        <Label>模板名称 <span class="text-red-600">*</span></Label>
+        <Input
+          v-model="form.name"
+          type="text"
+          :disabled="isBuiltin"
+          placeholder="例如: my-custom-template"
+        />
+        <p v-if="isBuiltin" class="text-xs text-amber-700">
+          <i class="fas fa-info-circle"></i> 内置模板不可重命名，保存后将在用户目录创建覆盖
+        </p>
+      </div>
+      <div class="space-y-2">
+        <Label>项目类型 <span class="text-red-600">*</span></Label>
+        <NativeSelect
+          :value="form.projectType"
+          :disabled="!canChangeProjectType"
+          @change="onProjectTypeChange"
+        >
+          <option value="jar">Java 应用（JAR）</option>
+          <option value="nodejs">Node.js 应用</option>
+          <option value="python">Python 应用</option>
+          <option value="go">Go 应用</option>
+          <option value="web">静态网站</option>
+        </NativeSelect>
+        <p v-if="!canChangeProjectType" class="text-xs text-amber-700">
+          <i class="fas fa-lock"></i> 内置模板的项目类型不可修改
+        </p>
+        <p v-else-if="!isNew && projectTypeChanged" class="text-xs text-sky-700">
+          <i class="fas fa-info-circle"></i> 修改项目类型后，模板将移动到新目录
+        </p>
+        <p v-else class="text-xs text-slate-500">
+          <i class="fas fa-lightbulb"></i> 请从下拉列表中选择项目类型
+        </p>
       </div>
     </div>
-  </div>
-  
-  <div v-if="modelValue" class="modal-backdrop fade show"></div>
+
+    <div class="mb-2 flex items-center justify-between">
+      <Label class="mb-0">模板内容 <span class="text-red-600">*</span></Label>
+      <Button type="button" variant="outline" size="sm" @click="fileInput?.click()">
+        <i class="fas fa-upload"></i> 从文件加载
+      </Button>
+    </div>
+    <input
+      ref="fileInput"
+      type="file"
+      class="hidden"
+      accept=".dockerfile,.Dockerfile,.txt"
+      @change="handleFileUpload"
+    />
+    <codemirror
+      v-model="form.content"
+      :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
+      :autofocus="true"
+      :indent-with-tab="false"
+      :tab-size="4"
+      :extensions="extensions"
+    />
+
+    <template #footer>
+      <Button type="button" variant="secondary" @click="close">取消</Button>
+      <Button type="button" :disabled="saving" @click="save">
+        <i v-if="saving" class="fas fa-spinner fa-spin"></i>
+        <i v-else class="fas fa-save"></i>
+        {{ saving ? "保存中..." : "保存" }}
+      </Button>
+    </template>
+  </FormDialog>
 </template>
 
 <script setup>
-import { StreamLanguage } from '@codemirror/language'
-import { shell } from '@codemirror/legacy-modes/mode/shell'
-import { oneDark } from '@codemirror/theme-one-dark'
-import axios from 'axios'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { Codemirror } from 'vue-codemirror'
+import { StreamLanguage } from "@codemirror/language";
+import { shell } from "@codemirror/legacy-modes/mode/shell";
+import { oneDark } from "@codemirror/theme-one-dark";
+import axios from "axios";
+import { computed, ref, watch } from "vue";
+import { Codemirror } from "vue-codemirror";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import Badge from "@/components/ui/badge/Badge.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 
 const props = defineProps({
   modelValue: Boolean,
   template: Object,
-  isNew: Boolean
-})
+  isNew: Boolean,
+});
 
-const emit = defineEmits(['update:modelValue', 'saved'])
+const emit = defineEmits(["update:modelValue", "saved"]);
 
-const form = ref({
-  name: '',
-  projectType: 'jar',
-  content: ''
-})
+const form = ref({ name: "", projectType: "jar", content: "" });
+const saving = ref(false);
+const originalName = ref("");
+const fileInput = ref(null);
 
-const saving = ref(false)
-const originalName = ref('')
-const fileInput = ref(null)
+const extensions = [oneDark, StreamLanguage.define(shell)];
 
-// CodeMirror 扩展配置
-const extensions = [
-  oneDark,
-  StreamLanguage.define(shell)  // 使用 shell 模式近似 Dockerfile
-]
-
-const isBuiltin = computed(() => {
-  return props.template?.type === 'builtin'
-})
-
-// 是否可以修改项目类型：新增模板或编辑用户自定义模板时可以
-const canChangeProjectType = computed(() => {
-  return props.isNew || !isBuiltin.value
-})
-
-// 项目类型是否已修改
+const isBuiltin = computed(() => props.template?.type === "builtin");
+const canChangeProjectType = computed(() => props.isNew || !isBuiltin.value);
 const projectTypeChanged = computed(() => {
-  if (props.isNew || !props.template) return false
-  return form.value.projectType !== props.template.project_type
-})
+  if (props.isNew || !props.template) return false;
+  return form.value.projectType !== props.template.project_type;
+});
 
-watch(() => props.modelValue, async (show) => {
-  if (show) {
+watch(
+  () => props.modelValue,
+  async (show) => {
+    if (!show) return;
     if (props.isNew) {
-      // 新建模板（包括克隆的情况）
-      if (props.template && props.template.content) {
-        // 克隆模式：使用传入的模板内容
+      if (props.template?.content) {
         form.value = {
-          name: props.template.name || '',
-          projectType: props.template.project_type || 'jar',
-          content: props.template.content || ''
-        }
-        originalName.value = ''
+          name: props.template.name || "",
+          projectType: props.template.project_type || "jar",
+          content: props.template.content || "",
+        };
+        originalName.value = "";
       } else {
-        // 全新创建模式
         form.value = {
-          name: '',
-          projectType: 'jar',
-          content: '# 新建 Dockerfile 模板\nFROM \n\nCOPY . /app\nWORKDIR /app\n\nEXPOSE 8080\n\nCMD []'
-        }
-        originalName.value = ''
+          name: "",
+          projectType: "jar",
+          content:
+            "# 新建 Dockerfile 模板\nFROM \n\nCOPY . /app\nWORKDIR /app\n\nEXPOSE 8080\n\nCMD []",
+        };
+        originalName.value = "";
       }
     } else if (props.template) {
-      // 编辑现有模板
       try {
-        const res = await axios.get(`/api/templates?name=${encodeURIComponent(props.template.name)}`)
+        const res = await axios.get(`/api/templates?name=${encodeURIComponent(props.template.name)}`);
         form.value = {
           name: res.data.name,
-          projectType: props.template.project_type || 'jar',
-          content: res.data.content || ''
-        }
-        originalName.value = res.data.name
-      } catch (error) {
-        alert('加载模板内容失败')
-        close()
+          projectType: props.template.project_type || "jar",
+          content: res.data.content || "",
+        };
+        originalName.value = res.data.name;
+      } catch {
+        alert("加载模板内容失败");
+        close();
       }
     }
   }
-})
+);
 
-
-function validateProjectType() {
-  // 清理项目类型输入：只保留字母、数字、下划线、连字符
-  form.value.projectType = form.value.projectType
+function onProjectTypeChange(e) {
+  form.value.projectType = e.target.value
     .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '')
+    .replace(/[^a-z0-9_-]/g, "");
 }
 
 function handleFileUpload(e) {
-  const file = e.target.files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      form.value.content = ev.target.result
-      // 如果是新建且未填写名称，从文件名提取
-      if (props.isNew && !form.value.name) {
-        const baseName = file.name
-          .replace(/\.Dockerfile$/i, '')
-          .replace(/\.[^/.]+$/, '')
-          .replace(/[^a-zA-Z0-9_-]/g, '-')
-        form.value.name = baseName
-      }
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    form.value.content = ev.target.result;
+    if (props.isNew && !form.value.name) {
+      form.value.name = file.name
+        .replace(/\.Dockerfile$/i, "")
+        .replace(/\.[^/.]+$/, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "-");
     }
-    reader.readAsText(file)
-  }
+  };
+  reader.readAsText(file);
 }
 
 async function save() {
   if (!form.value.name.trim()) {
-    alert('模板名称不能为空')
-    return
+    alert("模板名称不能为空");
+    return;
   }
   if (!form.value.content.trim()) {
-    alert('模板内容不能为空')
-    return
+    alert("模板内容不能为空");
+    return;
   }
   if (!form.value.projectType.trim()) {
-    alert('项目类型不能为空')
-    return
+    alert("项目类型不能为空");
+    return;
   }
-  
-  // 验证项目类型格式
-  const projectTypePattern = /^[a-z0-9_-]+$/
-  if (!projectTypePattern.test(form.value.projectType)) {
-    alert('项目类型只能包含小写字母、数字、下划线和连字符')
-    return
+  if (!/^[a-z0-9_-]+$/.test(form.value.projectType)) {
+    alert("项目类型只能包含小写字母、数字、下划线和连字符");
+    return;
   }
-  
-  // 如果修改了项目类型，需要确认
   if (projectTypeChanged.value) {
-    const confirmMsg = `您正在将模板的项目类型从 "${props.template.project_type}" 修改为 "${form.value.projectType}"。\n\n` +
-                       `模板将从 data/templates/${props.template.project_type}/ 移动到 data/templates/${form.value.projectType}/\n\n` +
-                       `确认要继续吗？`
-    if (!confirm(confirmMsg)) {
-      return
-    }
+    const confirmMsg =
+      `您正在将模板的项目类型从 "${props.template.project_type}" 修改为 "${form.value.projectType}"。\n\n` +
+      `模板将从 data/templates/${props.template.project_type}/ 移动到 data/templates/${form.value.projectType}/\n\n` +
+      `确认要继续吗？`;
+    if (!confirm(confirmMsg)) return;
   }
-  
-  saving.value = true
+
+  saving.value = true;
   try {
     const payload = {
       name: form.value.name.trim(),
       content: form.value.content,
-      project_type: form.value.projectType
-    }
-    
+      project_type: form.value.projectType,
+    };
     if (!props.isNew) {
-      payload.original_name = originalName.value
-      // 始终传递旧的项目类型，以便后端能够准确找到模板
-      payload.old_project_type = props.template.project_type || form.value.projectType
+      payload.original_name = originalName.value;
+      payload.old_project_type = props.template.project_type || form.value.projectType;
     }
-    
-    const method = props.isNew ? 'post' : 'put'
-    const res = await axios[method]('/api/templates', payload)
-    
-    const successMsg = projectTypeChanged.value 
-      ? `模板已保存并移动到新的项目类型目录`
-      : res.data.message || '模板保存成功'
-    alert(successMsg)
-    emit('saved')
-    close()
+    const method = props.isNew ? "post" : "put";
+    const res = await axios[method]("/api/templates", payload);
+    alert(
+      projectTypeChanged.value ? "模板已保存并移动到新的项目类型目录" : res.data.message || "模板保存成功"
+    );
+    emit("saved");
+    close();
   } catch (error) {
-    const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message || '保存失败'
-    alert(`保存失败: ${errorMsg}`)
-    console.error('保存模板失败:', error)
+    alert(error.response?.data?.detail || error.response?.data?.error || error.message || "保存失败");
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 function close() {
-  emit('update:modelValue', false)
+  emit("update:modelValue", false);
 }
 </script>
-
-<style scoped>
-.modal.show {
-  display: block !important;
-}
-
-.modal-backdrop.show {
-  opacity: 0.5;
-}
-</style>

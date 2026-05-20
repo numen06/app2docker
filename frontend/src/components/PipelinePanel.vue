@@ -1,51 +1,106 @@
 <template>
   <div class="pipeline-panel">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="pipeline-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
       <h5 class="mb-0"><i class="fas fa-project-diagram"></i> 流水线管理</h5>
-      <div class="d-flex gap-2">
-        <button
-          class="btn btn-outline-secondary btn-sm"
+      <div class="pipeline-toolbar-actions flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+        <Button
+          variant="outline" size="sm"
           @click="loadPipelines"
           :disabled="loading"
           title="刷新列表"
         >
           <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i> 刷新
-        </button>
-        <button class="btn btn-primary btn-sm" @click="showCreateModal">
+        </Button>
+        <Button size="sm" @click="goToCreate">
           <i class="fas fa-plus"></i> 新建流水线
-        </button>
-        <button class="btn btn-info btn-sm" @click="openJsonCreateModal">
+        </Button>
+        <Button size="sm" @click="openJsonCreateModal">
           <i class="fas fa-code"></i> 通过JSON创建
-        </button>
+        </Button>
+      </div>
+    </div>
+
+    <div
+      class="mb-3 flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3 sm:flex-row sm:flex-wrap sm:items-end"
+    >
+      <div class="min-w-[12rem] flex-1">
+        <label class="mb-1 block text-xs font-medium text-slate-600">名称搜索</label>
+        <Input
+          v-model="searchQuery"
+          placeholder="搜索流水线名称或描述"
+          @input="onSearchInput"
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="text-xs text-slate-500">启用状态</span>
+        <div class="flex flex-wrap gap-1 rounded-md border border-slate-200 bg-white p-0.5">
+          <Button
+            size="sm"
+            :variant="enabledFilter === '' ? 'default' : 'ghost'"
+            @click="setEnabledFilter('')"
+          >
+            全部
+          </Button>
+          <Button
+            size="sm"
+            :variant="enabledFilter === 'enabled' ? 'default' : 'ghost'"
+            @click="setEnabledFilter('enabled')"
+          >
+            已启用
+          </Button>
+          <Button
+            size="sm"
+            :variant="enabledFilter === 'disabled' ? 'default' : 'ghost'"
+            @click="setEnabledFilter('disabled')"
+          >
+            已禁用
+          </Button>
+        </div>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-slate-500">项目类型</label>
+        <select
+          v-model="projectTypeFilter"
+          class="h-9 min-w-[8rem] rounded-md border border-slate-200 bg-white px-2 text-sm"
+          @change="handleFilterChange"
+        >
+          <option value="">全部类型</option>
+          <option
+            v-for="pt in projectTypesList"
+            :key="pt.value"
+            :value="pt.value"
+          >
+            {{ pt.label }}
+          </option>
+        </select>
       </div>
     </div>
 
     <!-- 流水线列表 - 卡片式布局 -->
-    <div v-if="loading" class="text-center py-5">
-      <span class="spinner-border spinner-border-sm"></span> 加载中...
+    <div v-if="loading" class="text-center py-12">
+      <i class="fas fa-spinner fa-spin"></i> 加载中...
     </div>
-    <div v-else-if="pipelines.length === 0" class="text-center py-5 text-muted">
-      <i class="fas fa-inbox fa-3x mb-3"></i>
-      <p class="mb-0">暂无流水线配置</p>
+    <div v-else-if="pipelines.length === 0" class="text-center py-12 text-slate-500">
+      <i class="fas fa-inbox text-4xl mb-3"></i>
+      <p class="mb-0">
+        {{ hasActiveFilters ? "暂无符合筛选条件的流水线" : "暂无流水线配置" }}
+      </p>
     </div>
-    <div v-else class="row g-4">
+    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="pipeline in pipelines"
         :key="pipeline.pipeline_id"
-        class="col-12 col-md-6 col-xl-4"
-      >
-        <div class="card h-100 shadow-sm">
+        >
+        <div class="card h-full shadow-sm">
           <!-- 卡片头部 -->
-          <div class="card-header bg-white">
-            <!-- 标题行 -->
+          <div class="card-header relative bg-white">
             <div class="mb-2">
-              <!-- 流水线名字单独一行 -->
               <h5 class="card-title mb-2">
-                <strong>{{ pipeline.name }}</strong>
+                <strong class="break-words cursor-pointer text-blue-600 hover:underline" @click="goToDetail(pipeline)">{{ pipeline.name }}</strong>
               </h5>
               <!-- 徽章行 -->
               <div
-                class="d-flex align-items-center justify-content-between mb-1"
+                class="pipeline-card-badges flex items-center justify-between mb-1"
               >
                 <div>
                   <span v-if="pipeline.enabled" class="badge bg-success">
@@ -65,7 +120,7 @@
                 </span>
               </div>
               <p
-                class="text-muted mb-0 mt-1"
+                class="text-slate-500 mb-0 mt-1"
                 v-if="pipeline.description"
                 style="font-size: 0.9rem"
               >
@@ -73,20 +128,20 @@
               </p>
             </div>
             <!-- 操作按钮行 -->
-            <div class="btn-group btn-group-sm w-100">
-              <button
-                class="btn btn-outline-success"
+            <div class="pipeline-card-actions btn-group btn-group-sm w-full flex flex-wrap gap-1">
+              <Button
+                variant="outline" size="sm"
                 @click="runPipeline(pipeline)"
                 title="手动运行"
               >
                 <i class="fas fa-play"></i>
                 <span
                   v-if="running === pipeline.pipeline_id"
-                  class="spinner-border spinner-border-sm ms-1"
+                  class="fas fa-spinner fa-spin ml-1"
                 ></span>
                 <span
                   v-else-if="pipeline.queue_length && pipeline.queue_length > 0"
-                  class="badge bg-info ms-1"
+                  class="badge bg-info ml-1"
                 >
                   {{ pipeline.queue_length }}个排队
                 </span>
@@ -95,46 +150,32 @@
                     pipeline.current_task_status === 'running' ||
                     pipeline.current_task_status === 'pending'
                   "
-                  class="badge bg-primary ms-1"
+                  class="badge bg-primary ml-1"
                 >
                   运行中
                 </span>
-              </button>
-              <button
-                class="btn btn-outline-secondary"
+              </Button>
+              <Button
+                variant="outline" size="sm"
                 @click="showHistory(pipeline)"
-                title="查看历史构建"
+                title="历史构建"
               >
                 <i class="fas fa-history"></i>
-              </button>
-              <button
-                class="btn btn-outline-info"
-                @click="showWebhookUrl(pipeline)"
-                title="查看 Webhook URL"
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                @click="openPipelinePermission(pipeline)"
+                title="成员授权"
               >
-                <i class="fas fa-link"></i>
-              </button>
-              <button
-                class="btn btn-outline-primary"
-                @click="editPipeline(pipeline)"
-                title="编辑"
+                <i class="fas fa-user-shield"></i>
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                @click="goToDetail(pipeline)"
+                title="配置流水线"
               >
-                <i class="fas fa-edit"></i>
-              </button>
-              <button
-                class="btn btn-outline-warning"
-                @click="showMultiServiceConfig(pipeline)"
-                title="多服务配置"
-              >
-                <i class="fas fa-layer-group"></i>
-              </button>
-              <button
-                class="btn btn-outline-danger"
-                @click="deletePipeline(pipeline)"
-                title="删除"
-              >
-                <i class="fas fa-trash"></i>
-              </button>
+                <i class="fas fa-cog"></i> 配置
+              </Button>
             </div>
           </div>
 
@@ -142,20 +183,20 @@
           <div class="card-body">
             <!-- Git 信息 -->
             <div class="mb-3" style="min-height: 60px">
-              <div class="d-flex align-items-center mb-2">
+              <div class="flex items-center mb-2">
                 <i
-                  class="fas fa-code-branch text-muted me-2"
+                  class="fas fa-code-branch text-slate-500 mr-2"
                   style="width: 18px; flex-shrink: 0"
                 ></i>
                 <small
-                  class="font-monospace text-truncate flex-grow-1"
+                  class="font-mono truncate flex-1"
                   :title="pipeline.git_url"
                   style="font-size: 0.9rem; min-width: 0"
                 >
                   {{ formatGitUrl(pipeline.git_url) }}
                 </small>
-                <button
-                  class="btn btn-sm btn-outline-secondary p-1 ms-2"
+                <Button
+                  variant="outline" size="sm"
                   style="
                     width: 24px;
                     height: 24px;
@@ -166,10 +207,10 @@
                   title="复制 Git 地址"
                 >
                   <i class="fas fa-copy" style="font-size: 0.7rem"></i>
-                </button>
+                </Button>
               </div>
               <div
-                class="d-flex align-items-center flex-wrap gap-2 ms-4"
+                class="flex items-center flex-wrap gap-2 ml-4"
                 style="min-height: 24px"
               >
                 <span class="badge bg-secondary" style="font-size: 0.75rem">
@@ -205,20 +246,20 @@
 
             <!-- 镜像信息 -->
             <div class="mb-3" style="min-height: 24px">
-              <div class="d-flex align-items-center">
+              <div class="flex items-center">
                 <i
-                  class="fab fa-docker text-muted me-2"
+                  class="fab fa-docker text-slate-500 mr-2"
                   style="width: 18px; flex-shrink: 0"
                 ></i>
                 <small
-                  class="font-monospace text-truncate flex-grow-1"
+                  class="font-mono truncate flex-1"
                   :title="`${pipeline.image_name}:${pipeline.tag}`"
                   style="font-size: 0.9rem; min-width: 0"
                 >
                   {{ pipeline.image_name }}:{{ pipeline.tag }}
                 </small>
-                <button
-                  class="btn btn-sm btn-outline-secondary p-1 ms-2"
+                <Button
+                  variant="outline" size="sm"
                   style="
                     width: 24px;
                     height: 24px;
@@ -235,7 +276,7 @@
                   title="复制镜像名称"
                 >
                   <i class="fas fa-copy" style="font-size: 0.7rem"></i>
-                </button>
+                </Button>
               </div>
               <!-- 多服务信息 -->
               <div
@@ -243,7 +284,7 @@
                   pipeline.selected_services &&
                   pipeline.selected_services.length > 0
                 "
-                class="d-flex align-items-center flex-wrap gap-2 ms-4 mt-2"
+                class="flex items-center flex-wrap gap-2 ml-4 mt-2"
               >
                 <span class="badge bg-info" style="font-size: 0.75rem">
                   <i class="fas fa-layer-group"></i>
@@ -268,8 +309,8 @@
                 </span>
               </div>
               <!-- 子路径 -->
-              <div v-if="pipeline.sub_path" class="ms-4 mt-1">
-                <small class="text-muted" style="font-size: 0.8rem">
+              <div v-if="pipeline.sub_path" class="ml-4 mt-1">
+                <small class="text-slate-500" style="font-size: 0.8rem">
                   <i class="fas fa-folder"></i> 子路径: {{ pipeline.sub_path }}
                 </small>
               </div>
@@ -279,16 +320,16 @@
                   pipeline.resource_package_configs &&
                   pipeline.resource_package_configs.length > 0
                 "
-                class="ms-4 mt-1"
+                class="ml-4 mt-1"
               >
-                <small class="text-muted" style="font-size: 0.8rem">
+                <small class="text-slate-500" style="font-size: 0.8rem">
                   <i class="fas fa-archive"></i>
                   {{ pipeline.resource_package_configs.length }} 个资源包
                 </small>
               </div>
               <!-- Dockerfile 信息 -->
-              <div v-if="pipeline.use_project_dockerfile" class="ms-4 mt-1">
-                <small class="text-muted" style="font-size: 0.8rem">
+              <div v-if="pipeline.use_project_dockerfile" class="ml-4 mt-1">
+                <small class="text-slate-500" style="font-size: 0.8rem">
                   <i class="fas fa-file-code"></i>
                   {{ pipeline.dockerfile_name || "Dockerfile" }}
                 </small>
@@ -296,17 +337,17 @@
             </div>
 
             <!-- 构建状态区域 -->
-            <div class="border-top pt-3 mt-3">
+            <div class="border-t border-slate-200 pt-3 mt-3">
               <!-- 最后构建状态 -->
               <div class="mb-3">
                 <div
-                  class="d-flex align-items-center justify-content-between mb-2"
+                  class="pipeline-build-header flex items-center justify-between mb-2"
                 >
                   <span
-                    class="text-muted fw-semibold"
+                    class="text-slate-500 fw-semibold"
                     style="font-size: 0.9rem"
                   >
-                    <i class="fas fa-hammer me-1"></i>
+                    <i class="fas fa-hammer mr-1"></i>
                     {{ isLastBuildRunning(pipeline) ? "当前任务" : "最后构建" }}
                   </span>
                   <!-- 如果最后构建是运行中或等待中，显示为当前任务 -->
@@ -316,14 +357,14 @@
                       (pipeline.last_build.status === 'running' ||
                         pipeline.last_build.status === 'pending')
                     "
-                    class="d-flex align-items-center gap-2"
+                    class="flex items-center gap-2"
                   >
                     <span
                       v-if="pipeline.last_build.status === 'running'"
                       class="badge bg-primary"
                     >
                       <span
-                        class="spinner-border spinner-border-sm me-1"
+                        class="fas fa-spinner fa-spin mr-1"
                         style="width: 0.7rem; height: 0.7rem"
                       ></span>
                       运行中
@@ -343,16 +384,16 @@
                       <i class="fas fa-list"></i>
                       {{ pipeline.queue_length }}个排队
                     </span>
-                    <button
+                    <Button
                       v-if="
                         pipeline.last_build &&
                         pipeline.last_build.task_id &&
                         pipeline.last_build.status !== 'deleted'
                       "
-                      class="btn btn-sm btn-outline-info p-1"
+                      variant="outline" size="sm"
                       style="width: 24px; height: 24px; line-height: 1"
                       @click.stop="
-                        viewTaskLogs(
+                        buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
                           pipeline.last_build
                         )
@@ -360,7 +401,7 @@
                       title="查看日志"
                     >
                       <i class="fas fa-terminal" style="font-size: 0.75rem"></i>
-                    </button>
+                    </Button>
                   </div>
                   <!-- 如果最后构建已完成或失败，显示为历史构建 -->
                   <div
@@ -369,7 +410,7 @@
                       (pipeline.last_build.status === 'completed' ||
                         pipeline.last_build.status === 'failed')
                     "
-                    class="d-flex align-items-center gap-2"
+                    class="flex items-center gap-2"
                   >
                     <span
                       :class="{
@@ -393,16 +434,16 @@
                           : "失败"
                       }}
                     </span>
-                    <button
+                    <Button
                       v-if="
                         pipeline.last_build &&
                         pipeline.last_build.task_id &&
                         pipeline.last_build.status !== 'deleted'
                       "
-                      class="btn btn-sm btn-outline-info p-1"
+                      variant="outline" size="sm"
                       style="width: 24px; height: 24px; line-height: 1"
                       @click.stop="
-                        viewTaskLogs(
+                        buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
                           pipeline.last_build
                         )
@@ -410,19 +451,19 @@
                       title="查看日志"
                     >
                       <i class="fas fa-terminal" style="font-size: 0.75rem"></i>
-                    </button>
+                    </Button>
                   </div>
-                  <span v-else class="text-muted" style="font-size: 0.85rem"
+                  <span v-else class="text-slate-500" style="font-size: 0.85rem"
                     >暂无构建</span
                   >
                 </div>
                 <!-- 构建详情 -->
                 <div
                   v-if="pipeline.last_build"
-                  class="d-flex justify-content-between align-items-center ms-3 mb-2"
+                  class="pipeline-build-meta flex justify-between items-center ml-3 mb-2"
                 >
                   <small
-                    class="text-muted"
+                    class="text-slate-500"
                     :title="
                       formatDateTime(
                         pipeline.last_build.completed_at ||
@@ -431,7 +472,7 @@
                     "
                     style="font-size: 0.8rem"
                   >
-                    <i class="fas fa-calendar-alt me-1"></i>
+                    <i class="fas fa-calendar-alt mr-1"></i>
                     {{
                       formatDateTime(
                         pipeline.last_build.completed_at ||
@@ -439,8 +480,8 @@
                       )
                     }}
                   </small>
-                  <small class="text-muted">
-                    <i class="fas fa-hashtag me-1"></i>
+                  <small class="text-slate-500">
+                    <i class="fas fa-hashtag mr-1"></i>
                     <code style="font-size: 0.8rem">{{
                       pipeline.last_build.task_id?.substring(0, 8) || "-"
                     }}</code>
@@ -449,10 +490,10 @@
               </div>
 
               <!-- 统计指标 -->
-              <div class="row g-2">
+              <div class="pipeline-stats row g-2">
                 <div class="col-4">
                   <div class="bg-light rounded p-2 text-center">
-                    <div class="text-muted mb-1" style="font-size: 0.75rem">
+                    <div class="text-slate-500 mb-1" style="font-size: 0.75rem">
                       <i class="fas fa-chart-line"></i> 触发次数
                     </div>
                     <div
@@ -465,7 +506,7 @@
                 </div>
                 <div class="col-4">
                   <div class="bg-light rounded p-2 text-center">
-                    <div class="text-muted mb-1" style="font-size: 0.75rem">
+                    <div class="text-slate-500 mb-1" style="font-size: 0.75rem">
                       <i class="fas fa-check-circle"></i> 成功
                     </div>
                     <div
@@ -478,7 +519,7 @@
                 </div>
                 <div class="col-4">
                   <div class="bg-light rounded p-2 text-center">
-                    <div class="text-muted mb-1" style="font-size: 0.75rem">
+                    <div class="text-slate-500 mb-1" style="font-size: 0.75rem">
                       <i class="fas fa-times-circle"></i> 失败
                     </div>
                     <div
@@ -496,1767 +537,45 @@
       </div>
     </div>
 
-    <!-- 创建/编辑流水线模态框 -->
-    <div
-      v-if="showModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              {{ editingPipeline ? "编辑流水线" : "新建流水线" }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeModal"
-            ></button>
-          </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
-            <form @submit.prevent="savePipeline">
-              <!-- Tab 导航 -->
-              <ul class="nav nav-tabs mb-3" role="tablist">
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'basic' }"
-                    type="button"
-                    @click="activeTab = 'basic'"
-                    id="basic-tab"
-                  >
-                    <i class="fas fa-info-circle"></i> 基本信息
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'git' }"
-                    type="button"
-                    @click="activeTab = 'git'"
-                    id="git-tab"
-                  >
-                    <i class="fas fa-code-branch"></i> Git 配置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'build' }"
-                    type="button"
-                    @click="activeTab = 'build'"
-                    id="build-tab"
-                  >
-                    <i class="fas fa-cogs"></i> 编辑构建配置JSON
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'dockerfile' }"
-                    type="button"
-                    @click="activeTab = 'dockerfile'"
-                    id="dockerfile-tab"
-                  >
-                    <i class="fas fa-file-code"></i> Dockerfile 配置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'resource' }"
-                    type="button"
-                    @click="activeTab = 'resource'"
-                    id="resource-tab"
-                  >
-                    <i class="fas fa-archive"></i> 资源包配置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'webhook' }"
-                    type="button"
-                    @click="activeTab = 'webhook'"
-                    id="webhook-tab"
-                  >
-                    <i class="fas fa-link"></i> Webhook 设置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'post_webhook' }"
-                    type="button"
-                    @click="activeTab = 'post_webhook'"
-                    id="post-webhook-tab"
-                  >
-                    <i class="fas fa-bell"></i> 构建后 Webhook
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'other' }"
-                    type="button"
-                    @click="activeTab = 'other'"
-                    id="other-tab"
-                  >
-                    <i class="fas fa-sliders-h"></i> 其他选项
-                  </button>
-                </li>
-              </ul>
+    <PaginationBar
+      v-if="!loading && totalPages > 1"
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalPipelines"
+      :total-pages="totalPages"
+      @update:page="changePage"
+    />
 
-              <!-- Tab 内容 -->
-              <div class="tab-content">
-                <!-- 基本信息 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'basic' }"
-                  role="tabpanel"
-                  id="basic-pane"
-                >
-                  <div class="mb-3">
-                    <label class="form-label"
-                      >流水线名称 <span class="text-danger">*</span></label
-                    >
-                    <input
-                      v-model="formData.name"
-                      type="text"
-                      class="form-control form-control-sm"
-                      required
-                      placeholder="例如：主分支自动构建"
-                    />
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">描述</label>
-                    <input
-                      v-model="formData.description"
-                      type="text"
-                      class="form-control form-control-sm"
-                      placeholder="流水线描述（可选）"
-                    />
-                  </div>
-                </div>
-
-                <!-- Git 配置 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'git' }"
-                  role="tabpanel"
-                  id="git-pane"
-                >
-                  <div class="card">
-                    <div class="card-header bg-light">
-                      <h6 class="mb-0">
-                        <i class="fas fa-code-branch text-primary"></i> Git 配置
-                      </h6>
-                    </div>
-                    <div class="card-body">
-                      <div class="row g-3">
-                        <div class="col-md-6">
-                          <label class="form-label">Git 数据源</label>
-                          <select
-                            v-model="formData.source_id"
-                            class="form-select form-select-sm"
-                            @change="onSourceSelected"
-                          >
-                            <option value="">-- 选择数据源或手动输入 --</option>
-                            <option
-                              v-for="source in gitSources"
-                              :key="source.source_id"
-                              :value="source.source_id"
-                            >
-                              {{ source.name }} ({{
-                                formatGitUrl(source.git_url)
-                              }})
-                            </option>
-                          </select>
-                          <div class="form-text small text-muted mt-1">
-                            <i class="fas fa-info-circle"></i>
-                            可以从已保存的数据源中选择，或手动输入 Git 仓库地址
-                          </div>
-                        </div>
-                        <div class="col-md-6">
-                          <label class="form-label"
-                            >Git 仓库地址
-                            <span class="text-danger">*</span></label
-                          >
-                          <input
-                            v-model="formData.git_url"
-                            type="text"
-                            class="form-control form-control-sm"
-                            required
-                            placeholder="https://github.com/user/repo.git"
-                          />
-                        </div>
-                        <div class="col-md-6">
-                          <label class="form-label">分支名称</label>
-                          <div class="input-group">
-                            <select
-                              v-if="
-                                repoVerified ||
-                                formData.source_id ||
-                                formData.git_url
-                              "
-                              v-model="formData.branch"
-                              class="form-select form-select-sm"
-                              :disabled="
-                                refreshingBranches ||
-                                (!repoVerified &&
-                                  !formData.source_id &&
-                                  !formData.git_url)
-                              "
-                              @change="onBranchChanged"
-                            >
-                              <option value="">
-                                使用默认分支 ({{
-                                  branchesAndTags.default_branch || "main"
-                                }})
-                              </option>
-                              <optgroup
-                                v-if="branchesAndTags.branches.length > 0"
-                                label="分支"
-                              >
-                                <option
-                                  v-for="branch in branchesAndTags.branches"
-                                  :key="branch"
-                                  :value="branch"
-                                >
-                                  {{ branch }}
-                                </option>
-                              </optgroup>
-                              <optgroup
-                                v-if="branchesAndTags.tags.length > 0"
-                                label="标签"
-                              >
-                                <option
-                                  v-for="tag in branchesAndTags.tags"
-                                  :key="tag"
-                                  :value="tag"
-                                >
-                                  {{ tag }}
-                                </option>
-                              </optgroup>
-                            </select>
-                            <input
-                              v-else
-                              type="text"
-                              class="form-control form-control-sm"
-                              placeholder="请先选择数据源"
-                              disabled
-                            />
-                            <button
-                              v-if="formData.source_id || formData.git_url"
-                              class="btn btn-outline-secondary btn-sm"
-                              type="button"
-                              @click="refreshBranches(true)"
-                              :disabled="refreshingBranches"
-                              title="刷新分支列表"
-                            >
-                              <i
-                                v-if="refreshingBranches"
-                                class="fas fa-spinner fa-spin"
-                              ></i>
-                              <i v-else class="fas fa-sync-alt"></i>
-                            </button>
-                          </div>
-                          <small class="text-muted">
-                            <span v-if="refreshingBranches"
-                              >正在刷新分支列表...</span
-                            >
-                            <span
-                              v-else-if="
-                                repoVerified &&
-                                branchesAndTags.branches.length > 0
-                              "
-                            >
-                              已加载
-                              {{ branchesAndTags.branches.length }} 个分支、{{
-                                branchesAndTags.tags.length
-                              }}
-                              个标签
-                            </span>
-                            <span
-                              v-else-if="formData.source_id || formData.git_url"
-                            >
-                              点击刷新按钮加载分支列表，或留空使用推送的分支
-                            </span>
-                            <span v-else>请先选择数据源</span>
-                          </small>
-                        </div>
-                        <div class="col-md-6">
-                          <label class="form-label"
-                            >项目类型 <span class="text-danger">*</span></label
-                          >
-                          <select
-                            v-model="formData.project_type"
-                            class="form-select form-select-sm"
-                          >
-                            <option value="jar">Java 应用（JAR）</option>
-                            <option value="nodejs">Node.js 应用</option>
-                            <option value="python">Python 应用</option>
-                            <option value="go">Go 应用</option>
-                            <option value="web">静态网站</option>
-                          </select>
-                        </div>
-                        <div class="col-md-6">
-                          <label class="form-label">子路径</label>
-                          <input
-                            v-model="formData.sub_path"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="留空表示根目录"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Dockerfile & 镜像配置 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'build' }"
-                  role="tabpanel"
-                  id="build-pane"
-                >
-                  <!-- JSON编辑器（新建和编辑模式都使用） -->
-                  <div>
-                    <div
-                      class="d-flex justify-content-between align-items-center mb-3"
-                    >
-                      <h6 class="mb-0">
-                        <i class="fas fa-code"></i>
-                        {{ editingPipeline ? "编辑" : "新建" }}构建配置JSON
-                      </h6>
-                      <div class="btn-group btn-group-sm" role="group">
-                        <button
-                          type="button"
-                          class="btn btn-outline-primary"
-                          @click="copyBuildConfigJson"
-                        >
-                          <i class="fas fa-copy"></i> 复制JSON
-                        </button>
-                      </div>
-                    </div>
-                    <div class="alert alert-info mb-3">
-                      <i class="fas fa-info-circle"></i>
-                      <strong>提示：</strong
-                      >编辑JSON后点击"应用"将配置应用到表单，然后点击底部"保存"按钮保存流水线。
-                    </div>
-                    <codemirror
-                      v-model="buildConfigJsonText"
-                      :style="{ height: '500px', fontSize: '13px' }"
-                      :extensions="jsonEditorExtensions"
-                    />
-                    <div
-                      v-if="buildConfigJsonError"
-                      class="alert alert-danger mt-2"
-                    >
-                      <i class="fas fa-exclamation-circle"></i>
-                      {{ buildConfigJsonError }}
-                    </div>
-                    <div class="mt-3 d-flex justify-content-end gap-2">
-                      <button
-                        type="button"
-                        class="btn btn-secondary btn-sm"
-                        @click="resetBuildConfigJson"
-                      >
-                        <i class="fas fa-undo"></i> 重置
-                      </button>
-                      <button
-                        type="button"
-                        class="btn btn-success btn-sm"
-                        @click="applyBuildConfigJson"
-                        :disabled="!!buildConfigJsonError"
-                      >
-                        <i class="fas fa-check"></i> 应用
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- 旧表单界面（已废弃，保留作为参考） -->
-                  <div v-if="false" style="display: none">
-                    <!-- 视图切换和查看JSON按钮 -->
-                    <div
-                      class="d-flex justify-content-between align-items-center mb-3"
-                    >
-                      <h6 class="mb-0">
-                        <i class="fas fa-cogs"></i> 编辑构建配置JSON
-                      </h6>
-                      <div class="btn-group btn-group-sm" role="group">
-                        <button
-                          type="button"
-                          class="btn btn-outline-info"
-                          @click="showBuildConfigJsonModal = true"
-                        >
-                          <i class="fas fa-code"></i> 查看JSON
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Dockerfile 配置模块 -->
-                    <div class="card mb-4">
-                      <div class="card-header bg-light">
-                        <h6 class="mb-0">
-                          <i class="fas fa-file-code text-primary"></i>
-                          Dockerfile 配置
-                        </h6>
-                      </div>
-                      <div class="card-body">
-                        <div class="row g-3">
-                          <div class="col-12">
-                            <label class="form-label">Dockerfile 来源</label>
-                            <div class="btn-group w-100 mb-2" role="group">
-                              <input
-                                type="radio"
-                                class="btn-check"
-                                id="use-project-dockerfile"
-                                :value="true"
-                                v-model="formData.use_project_dockerfile"
-                                @change="onDockerfileSourceChange"
-                              />
-                              <label
-                                class="btn btn-outline-primary"
-                                for="use-project-dockerfile"
-                              >
-                                <i class="fas fa-file-code"></i> 项目Dockerfile
-                              </label>
-
-                              <input
-                                type="radio"
-                                class="btn-check"
-                                id="use-template"
-                                :value="false"
-                                v-model="formData.use_project_dockerfile"
-                                @change="onDockerfileSourceChange"
-                              />
-                              <label
-                                class="btn btn-outline-primary"
-                                for="use-template"
-                              >
-                                <i class="fas fa-layer-group"></i> 使用模板
-                              </label>
-                            </div>
-                          </div>
-                          <div
-                            v-if="formData.use_project_dockerfile"
-                            class="col-md-6"
-                          >
-                            <label class="form-label">Dockerfile 文件名</label>
-                            <div v-if="scanningDockerfiles" class="mb-2">
-                              <span
-                                class="spinner-border spinner-border-sm me-2"
-                              ></span>
-                              <small class="text-muted"
-                                >正在扫描项目中的 Dockerfile...</small
-                              >
-                            </div>
-                            <div class="input-group">
-                              <select
-                                v-model="formData.dockerfile_name"
-                                class="form-select form-select-sm"
-                                :disabled="
-                                  scanningDockerfiles || !formData.branch
-                                "
-                                required
-                              >
-                                <option value="">-- 请先选择分支 --</option>
-                                <option value="Dockerfile">
-                                  Dockerfile（默认，根目录）
-                                </option>
-                                <!-- 如果当前选择不在扫描列表中，也要显示出来 -->
-                                <option
-                                  v-if="
-                                    formData.dockerfile_name &&
-                                    formData.dockerfile_name !== 'Dockerfile' &&
-                                    !availableDockerfiles.some(
-                                      (df) =>
-                                        df.path === formData.dockerfile_name
-                                    )
-                                  "
-                                  :value="formData.dockerfile_name"
-                                  :key="'current-' + formData.dockerfile_name"
-                                >
-                                  {{ formData.dockerfile_name }} (当前选择)
-                                </option>
-                                <option
-                                  v-for="dockerfile in availableDockerfiles"
-                                  :key="dockerfile.path"
-                                  :value="dockerfile.path"
-                                >
-                                  {{ dockerfile.path }}
-                                  {{
-                                    dockerfile.path !== dockerfile.name
-                                      ? `(${dockerfile.name})`
-                                      : ""
-                                  }}
-                                </option>
-                              </select>
-                              <button
-                                class="btn btn-outline-secondary btn-sm"
-                                type="button"
-                                @click="scanDockerfiles(true, true)"
-                                :disabled="
-                                  scanningDockerfiles ||
-                                  (!formData.branch &&
-                                    !branchesAndTags.default_branch)
-                                "
-                                title="刷新 Dockerfile 列表（强制刷新）"
-                              >
-                                <i
-                                  v-if="scanningDockerfiles"
-                                  class="fas fa-spinner fa-spin"
-                                ></i>
-                                <i v-else class="fas fa-sync-alt"></i>
-                              </button>
-                            </div>
-                            <small
-                              v-if="dockerfilesError"
-                              class="text-danger d-block mt-1"
-                            >
-                              <i class="fas fa-exclamation-triangle"></i>
-                              {{ dockerfilesError }}
-                            </small>
-                            <small
-                              v-else-if="availableDockerfiles.length > 0"
-                              class="text-muted d-block mt-1"
-                            >
-                              <i class="fas fa-check-circle"></i> 已扫描到
-                              {{ availableDockerfiles.length }} 个 Dockerfile
-                            </small>
-                            <small
-                              v-else-if="formData.branch"
-                              class="text-muted d-block mt-1"
-                            >
-                              <i class="fas fa-info-circle"></i>
-                              请先选择分支，然后点击刷新按钮扫描项目中的
-                              Dockerfile
-                            </small>
-                            <small v-else class="text-muted d-block mt-1">
-                              <i class="fas fa-info-circle"></i> 请先选择分支
-                            </small>
-                          </div>
-                          <div v-else class="col-md-6">
-                            <label class="form-label">模板名称</label>
-
-                            <!-- 当前选择提示 -->
-                            <div
-                              v-if="
-                                formData.template && formData.template !== ''
-                              "
-                              class="alert alert-success alert-sm py-2 mb-2"
-                            >
-                              <i class="fas fa-check-circle me-2"></i>
-                              <strong>当前选择：</strong>{{ formData.template }}
-                              <span
-                                v-if="
-                                  filteredTemplates.find(
-                                    (t) => t.name === formData.template
-                                  )
-                                "
-                              >
-                                ({{
-                                  filteredTemplates.find(
-                                    (t) => t.name === formData.template
-                                  ).project_type
-                                }})
-                              </span>
-                            </div>
-
-                            <select
-                              v-model="formData.template"
-                              class="form-select form-select-sm"
-                              @change="onTemplateChange"
-                              :disabled="!formData.project_type"
-                            >
-                              <option value="">-- 请先选择项目类型 --</option>
-                              <option
-                                v-for="tpl in filteredTemplates"
-                                :key="tpl.name"
-                                :value="tpl.name"
-                              >
-                                {{ tpl.name }} ({{ tpl.project_type }})
-                              </option>
-                            </select>
-                            <small
-                              v-if="
-                                formData.project_type &&
-                                filteredTemplates.length === 0
-                              "
-                              class="text-muted d-block mt-1"
-                            >
-                              <i class="fas fa-info-circle"></i>
-                              当前项目类型没有可用的模板
-                            </small>
-                            <small
-                              v-else-if="
-                                formData.project_type &&
-                                filteredTemplates.length > 0
-                              "
-                              class="text-muted d-block mt-1"
-                            >
-                              <i class="fas fa-check-circle"></i>
-                              已按项目类型过滤，共
-                              {{ filteredTemplates.length }} 个模板
-                            </small>
-                            <small v-else class="text-muted d-block mt-1">
-                              <i class="fas fa-info-circle"></i> 请先在 Git
-                              配置中选择项目类型
-                            </small>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- 镜像配置 -->
-                    <div class="card mb-4">
-                      <div class="card-header bg-light">
-                        <h6 class="mb-0">
-                          <i class="fab fa-docker text-primary"></i> 镜像配置
-                        </h6>
-                      </div>
-                      <div class="card-body">
-                        <div class="row g-3">
-                          <div class="col-md-6">
-                            <label class="form-label"
-                              >镜像名称
-                              <span class="text-danger">*</span></label
-                            >
-                            <input
-                              v-model="formData.image_name"
-                              type="text"
-                              class="form-control form-control-sm"
-                              required
-                              placeholder="myapp/demo"
-                            />
-                            <small class="text-muted d-block mt-1">
-                              <span v-if="formData.push_mode === 'single'">
-                                <i class="fas fa-info-circle"></i>
-                                单服务模式：直接使用此镜像名称
-                              </span>
-                              <span v-else>
-                                <i class="fas fa-info-circle"></i>
-                                多服务模式：作为镜像名称前缀，每个服务会自动拼接服务名
-                              </span>
-                            </small>
-                          </div>
-                          <div class="col-md-6">
-                            <label class="form-label">镜像标签</label>
-                            <input
-                              v-model="formData.tag"
-                              type="text"
-                              class="form-control form-control-sm"
-                              placeholder="latest"
-                            />
-                            <small class="text-muted d-block mt-1">
-                              <i class="fas fa-info-circle"></i>
-                              所有服务使用此标签，支持动态日期占位符
-                            </small>
-                          </div>
-                          <div class="col-md-6">
-                            <div class="form-check mt-4">
-                              <input
-                                v-model="formData.push"
-                                class="form-check-input"
-                                type="checkbox"
-                                id="pushCheckBuild"
-                              />
-                              <label
-                                class="form-check-label"
-                                for="pushCheckBuild"
-                              >
-                                构建完成后推送到仓库
-                              </label>
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          v-if="formData.push_mode === 'single'"
-                          class="alert alert-info mt-3 mb-0"
-                        >
-                          <i class="fas fa-info-circle"></i>
-                          <strong>单服务模式：</strong
-                          >使用上方配置的镜像名称和标签
-                        </div>
-                        <div
-                          v-else-if="formData.push_mode === 'multi'"
-                          class="alert alert-info mt-3 mb-0"
-                        >
-                          <i class="fas fa-info-circle"></i>
-                          <strong>多服务模式：</strong
-                          >每个服务的镜像名称将自动生成为
-                          <code
-                            >{{
-                              formData.image_name || "myapp/demo"
-                            }}-服务名</code
-                          >，标签使用上方配置的全局标签
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Dockerfile 配置 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'dockerfile' }"
-                  role="tabpanel"
-                  id="dockerfile-pane"
-                >
-                  <!-- Dockerfile 来源选择 -->
-                  <div class="card mb-3">
-                    <div class="card-header bg-light">
-                      <h6 class="mb-0">
-                        <i class="fas fa-layer-group text-primary"></i>
-                        Dockerfile 来源
-                      </h6>
-                    </div>
-                    <div class="card-body">
-                      <div class="mb-2">
-                        <label class="form-label"
-                          >Dockerfile 来源
-                          <span class="text-danger">*</span></label
-                        >
-                        <div class="btn-group w-100" role="group">
-                          <input
-                            type="radio"
-                            class="btn-check"
-                            id="dockerfile-from-project"
-                            :value="true"
-                            v-model="formData.use_project_dockerfile"
-                            @change="onDockerfileSourceChange"
-                          />
-                          <label
-                            class="btn btn-outline-primary"
-                            for="dockerfile-from-project"
-                          >
-                            <i class="fas fa-file-code"></i> 从项目中选择
-                          </label>
-
-                          <input
-                            type="radio"
-                            class="btn-check"
-                            id="dockerfile-from-template"
-                            :value="false"
-                            v-model="formData.use_project_dockerfile"
-                            @change="onDockerfileSourceChange"
-                          />
-                          <label
-                            class="btn btn-outline-primary"
-                            for="dockerfile-from-template"
-                          >
-                            <i class="fas fa-layer-group"></i> 从模板库中选择
-                          </label>
-                        </div>
-                        <div class="form-text small text-muted mt-1">
-                          <i class="fas fa-info-circle"></i> 选择 Dockerfile
-                          的来源方式
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 模式1: 从项目中选择 Dockerfile -->
-                  <div v-if="formData.use_project_dockerfile" class="card mb-3">
-                    <div class="card-header bg-light">
-                      <h6 class="mb-0">
-                        <i class="fas fa-file-code text-primary"></i>
-                        从项目中选择 Dockerfile
-                      </h6>
-                    </div>
-                    <div class="card-body">
-                      <div class="mb-2">
-                        <label class="form-label"
-                          >Dockerfile 文件
-                          <span class="text-danger">*</span></label
-                        >
-
-                        <!-- 当前选择提示 -->
-                        <div
-                          v-if="
-                            formData.dockerfile_name &&
-                            formData.dockerfile_name !== ''
-                          "
-                          class="alert alert-success alert-sm py-2 mb-2"
-                        >
-                          <i class="fas fa-check-circle me-2"></i>
-                          <strong>当前选择：</strong
-                          >{{ formData.dockerfile_name }}
-                        </div>
-
-                        <div v-if="scanningDockerfiles" class="mb-2">
-                          <span
-                            class="spinner-border spinner-border-sm me-2"
-                          ></span>
-                          <small class="text-muted"
-                            >正在扫描项目中的 Dockerfile...</small
-                          >
-                        </div>
-                        <div class="input-group input-group-sm">
-                          <select
-                            v-model="formData.dockerfile_name"
-                            class="form-select form-select-sm"
-                            :disabled="scanningDockerfiles || !formData.branch"
-                            required
-                          >
-                            <option value="">-- 请先选择分支 --</option>
-                            <option value="Dockerfile">
-                              Dockerfile（默认，根目录）
-                            </option>
-                            <!-- 如果当前选择不在扫描列表中，也要显示出来 -->
-                            <option
-                              v-if="
-                                formData.dockerfile_name &&
-                                formData.dockerfile_name !== 'Dockerfile' &&
-                                !availableDockerfiles.some(
-                                  (df) => df.path === formData.dockerfile_name
-                                )
-                              "
-                              :value="formData.dockerfile_name"
-                              :key="'current-' + formData.dockerfile_name"
-                            >
-                              {{ formData.dockerfile_name }} (当前选择)
-                            </option>
-                            <option
-                              v-for="dockerfile in availableDockerfiles"
-                              :key="dockerfile.path"
-                              :value="dockerfile.path"
-                            >
-                              {{ dockerfile.path }}
-                              {{
-                                dockerfile.path !== dockerfile.name
-                                  ? `(${dockerfile.name})`
-                                  : ""
-                              }}
-                            </option>
-                          </select>
-                          <button
-                            class="btn btn-outline-secondary"
-                            type="button"
-                            @click="scanDockerfiles(true, true)"
-                            :disabled="
-                              scanningDockerfiles ||
-                              (!formData.branch &&
-                                !branchesAndTags.default_branch)
-                            "
-                            title="刷新 Dockerfile 列表（强制刷新）"
-                          >
-                            <i
-                              v-if="scanningDockerfiles"
-                              class="fas fa-spinner fa-spin"
-                            ></i>
-                            <i v-else class="fas fa-sync-alt"></i>
-                          </button>
-                        </div>
-                        <small
-                          v-if="dockerfilesError"
-                          class="text-danger d-block mt-1"
-                        >
-                          <i class="fas fa-exclamation-triangle"></i>
-                          {{ dockerfilesError }}
-                        </small>
-                        <small
-                          v-else-if="availableDockerfiles.length > 0"
-                          class="text-muted d-block mt-1"
-                        >
-                          <i class="fas fa-check-circle"></i> 已扫描到
-                          {{ availableDockerfiles.length }} 个 Dockerfile
-                        </small>
-                        <small
-                          v-else-if="formData.branch"
-                          class="text-muted d-block mt-1"
-                        >
-                          <i class="fas fa-info-circle"></i>
-                          请先选择分支，然后点击刷新按钮扫描项目中的 Dockerfile
-                        </small>
-                        <small v-else class="text-muted d-block mt-1">
-                          <i class="fas fa-info-circle"></i> 请先在 Git
-                          配置中选择分支
-                        </small>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 模式2: 从模板库中选择 -->
-                  <div
-                    v-if="!formData.use_project_dockerfile"
-                    class="card mb-3"
-                  >
-                    <div class="card-header bg-light">
-                      <h6 class="mb-0">
-                        <i class="fas fa-layer-group text-primary"></i>
-                        从模板库中选择
-                      </h6>
-                    </div>
-                    <div class="card-body">
-                      <div class="mb-2">
-                        <label class="form-label"
-                          >模板 <span class="text-danger">*</span></label
-                        >
-
-                        <!-- 当前选择提示 -->
-                        <div
-                          v-if="formData.template && formData.template !== ''"
-                          class="alert alert-success alert-sm py-2 mb-2"
-                        >
-                          <i class="fas fa-check-circle me-2"></i>
-                          <strong>当前选择：</strong>{{ formData.template }}
-                          <span
-                            v-if="
-                              filteredTemplates.find(
-                                (t) => t.name === formData.template
-                              )
-                            "
-                          >
-                            ({{
-                              filteredTemplates.find(
-                                (t) => t.name === formData.template
-                              ).project_type
-                            }})
-                          </span>
-                        </div>
-
-                        <select
-                          v-model="formData.template"
-                          class="form-select form-select-sm"
-                          @change="onTemplateChange"
-                          :disabled="!formData.project_type"
-                          required
-                        >
-                          <option value="">-- 请先选择项目类型 --</option>
-                          <option
-                            v-for="tpl in filteredTemplates"
-                            :key="tpl.name"
-                            :value="tpl.name"
-                          >
-                            {{ tpl.name }} ({{ tpl.project_type }})
-                          </option>
-                        </select>
-                        <small
-                          v-if="
-                            formData.project_type &&
-                            filteredTemplates.length === 0
-                          "
-                          class="text-muted d-block mt-1"
-                        >
-                          <i class="fas fa-info-circle"></i>
-                          当前项目类型没有可用的模板
-                        </small>
-                        <small
-                          v-else-if="
-                            formData.project_type &&
-                            filteredTemplates.length > 0
-                          "
-                          class="text-muted d-block mt-1"
-                        >
-                          <i class="fas fa-check-circle"></i>
-                          已按项目类型过滤，共
-                          {{ filteredTemplates.length }} 个模板
-                        </small>
-                        <small v-else class="text-muted d-block mt-1">
-                          <i class="fas fa-info-circle"></i> 请先在 Git
-                          配置中选择项目类型
-                        </small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 资源包配置 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'resource' }"
-                  role="tabpanel"
-                  id="resource-pane"
-                >
-                  <div class="card">
-                    <div
-                      class="card-header bg-light d-flex justify-content-between align-items-center"
-                    >
-                      <h6 class="mb-0">
-                        <i class="fas fa-archive text-primary"></i> 资源包配置
-                      </h6>
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-success"
-                        @click="showResourcePackageModal = true"
-                        title="添加资源包"
-                      >
-                        <i class="fas fa-plus"></i> 添加
-                      </button>
-                    </div>
-                    <div class="card-body">
-                      <div
-                        v-if="
-                          formData.resource_package_configs &&
-                          formData.resource_package_configs.length > 0
-                        "
-                        class="border rounded p-2"
-                      >
-                        <div
-                          v-for="(
-                            pkg, index
-                          ) in formData.resource_package_configs"
-                          :key="index"
-                          class="d-flex align-items-center justify-content-between mb-2 p-2 bg-light rounded"
-                        >
-                          <div class="flex-grow-1">
-                            <strong>{{
-                              getResourcePackageName(pkg.package_id)
-                            }}</strong>
-                            <small class="text-muted ms-2"
-                              >→ {{ pkg.target_path || "resources" }}</small
-                            >
-                          </div>
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-danger"
-                            @click="removeResourcePackage(index)"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </div>
-                      </div>
-                      <div v-else class="text-muted small">
-                        暂无资源包，点击"添加"按钮添加资源包
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Webhook 设置 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'webhook' }"
-                  role="tabpanel"
-                  id="webhook-pane"
-                >
-                  <div class="mb-3">
-                    <label class="form-label">Webhook Token（用于 URL）</label>
-                    <div class="input-group input-group-sm">
-                      <input
-                        v-model="formData.webhook_token"
-                        type="text"
-                        class="form-control font-monospace"
-                        placeholder="留空自动生成"
-                      />
-                      <button
-                        class="btn btn-outline-secondary"
-                        type="button"
-                        @click="regenerateWebhookToken"
-                        title="重新生成 Token"
-                      >
-                        <i class="fas fa-sync-alt"></i> 重新生成
-                      </button>
-                    </div>
-                    <small class="text-muted"
-                      >用于构建 Webhook URL，留空将自动生成 UUID</small
-                    >
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label">Webhook 密钥</label>
-                    <div class="input-group input-group-sm">
-                      <input
-                        v-model="formData.webhook_secret"
-                        type="text"
-                        class="form-control font-monospace"
-                        placeholder="留空自动生成"
-                      />
-                      <button
-                        class="btn btn-outline-secondary"
-                        type="button"
-                        @click="regenerateWebhookSecret"
-                        title="重新生成密钥"
-                      >
-                        <i class="fas fa-sync-alt"></i> 重新生成
-                      </button>
-                    </div>
-                    <small class="text-muted"
-                      >用于验证 Webhook 签名（可选）</small
-                    >
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label"
-                      ><strong>Webhook 分支策略</strong></label
-                    >
-                    <div
-                      class="btn-group w-100 d-flex flex-wrap"
-                      role="group"
-                      style="gap: 0.25rem"
-                    >
-                      <input
-                        type="radio"
-                        class="btn-check"
-                        id="strategy-use-push"
-                        value="use_push"
-                        v-model="formData.webhook_branch_strategy"
-                      />
-                      <label
-                        class="btn btn-outline-primary flex-fill"
-                        for="strategy-use-push"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-code-branch d-block mb-1"></i>
-                        <small class="d-block fw-bold">使用推送分支</small>
-                        <small
-                          class="text-muted d-block"
-                          style="font-size: 0.7rem"
-                          >所有分支都触发</small
-                        >
-                      </label>
-
-                      <input
-                        type="radio"
-                        class="btn-check"
-                        id="strategy-filter-match"
-                        value="filter_match"
-                        v-model="formData.webhook_branch_strategy"
-                      />
-                      <label
-                        class="btn btn-outline-primary flex-fill"
-                        for="strategy-filter-match"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-filter d-block mb-1"></i>
-                        <small class="d-block fw-bold">只允许匹配分支</small>
-                        <small
-                          class="text-muted d-block"
-                          style="font-size: 0.7rem"
-                          >使用推送分支构建</small
-                        >
-                      </label>
-
-                      <input
-                        type="radio"
-                        class="btn-check"
-                        id="strategy-use-configured"
-                        value="use_configured"
-                        v-model="formData.webhook_branch_strategy"
-                      />
-                      <label
-                        class="btn btn-outline-primary flex-fill"
-                        for="strategy-use-configured"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-cog d-block mb-1"></i>
-                        <small class="d-block fw-bold">使用配置分支</small>
-                        <small
-                          class="text-muted d-block"
-                          style="font-size: 0.7rem"
-                          >所有分支都触发</small
-                        >
-                      </label>
-
-                      <input
-                        type="radio"
-                        class="btn-check"
-                        id="strategy-select-branches"
-                        value="select_branches"
-                        v-model="formData.webhook_branch_strategy"
-                      />
-                      <label
-                        class="btn btn-outline-primary flex-fill"
-                        for="strategy-select-branches"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-check-square d-block mb-1"></i>
-                        <small class="d-block fw-bold">选择分支触发</small>
-                        <small
-                          class="text-muted d-block"
-                          style="font-size: 0.7rem"
-                          >仅选中的分支触发</small
-                        >
-                      </label>
-                    </div>
-                    <small class="text-muted d-block mt-2">
-                      <span
-                        v-if="formData.webhook_branch_strategy === 'use_push'"
-                      >
-                        <i class="fas fa-info-circle"></i>
-                        任何分支推送都会触发，使用推送的分支进行构建
-                      </span>
-                      <span
-                        v-else-if="
-                          formData.webhook_branch_strategy === 'filter_match'
-                        "
-                      >
-                        <i class="fas fa-info-circle"></i>
-                        只有推送的分支与上方配置的分支一致时才会触发，使用推送的分支构建
-                      </span>
-                      <span
-                        v-else-if="
-                          formData.webhook_branch_strategy === 'select_branches'
-                        "
-                      >
-                        <i class="fas fa-info-circle"></i>
-                        只有选中的分支推送时才会触发，使用推送的分支进行构建
-                      </span>
-                      <span v-else>
-                        <i class="fas fa-info-circle"></i>
-                        任何分支推送都会触发，但使用配置的分支进行构建
-                      </span>
-                    </small>
-                  </div>
-
-                  <!-- 选择分支触发配置 -->
-                  <div
-                    v-if="
-                      formData.webhook_branch_strategy === 'select_branches'
-                    "
-                    class="mb-3"
-                  >
-                    <label class="form-label">
-                      <strong>允许触发的分支</strong>
-                      <span class="text-danger">*</span>
-                    </label>
-                    <div
-                      v-if="
-                        !branchesAndTags.branches ||
-                        branchesAndTags.branches.length === 0
-                      "
-                      class="alert alert-warning py-2"
-                    >
-                      <i class="fas fa-exclamation-triangle"></i> 请先在 Git
-                      配置中选择数据源和分支，以加载可用分支列表
-                    </div>
-                    <div
-                      v-else
-                      class="border rounded p-2"
-                      style="max-height: 200px; overflow-y: auto"
-                    >
-                      <div class="form-check mb-2">
-                        <input
-                          class="form-check-input"
-                          type="checkbox"
-                          id="selectAllBranches"
-                          :checked="isAllBranchesSelected"
-                          @change="toggleAllBranches"
-                        />
-                        <label
-                          class="form-check-label fw-bold"
-                          for="selectAllBranches"
-                        >
-                          全选
-                        </label>
-                      </div>
-                      <hr class="my-2" />
-                      <div
-                        v-for="branch in branchesAndTags.branches"
-                        :key="branch"
-                        class="form-check mb-1"
-                      >
-                        <input
-                          class="form-check-input"
-                          type="checkbox"
-                          :id="`branch-${branch}`"
-                          :value="branch"
-                          v-model="formData.webhook_allowed_branches"
-                        />
-                        <label
-                          class="form-check-label"
-                          :for="`branch-${branch}`"
-                        >
-                          <i class="fas fa-code-branch text-primary me-1"></i
-                          >{{ branch }}
-                        </label>
-                      </div>
-                    </div>
-                    <small class="text-muted d-block mt-1">
-                      <i class="fas fa-info-circle"></i>
-                      只有选中的分支推送时才会触发构建。如果未选择任何分支，则不会触发。
-                    </small>
-                  </div>
-
-                  <!-- 构建后Webhook配置 -->
-                  <!-- 分支标签映射 -->
-                  <div class="mb-3">
-                    <label class="form-label">
-                      <strong>分支标签映射</strong>
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-success ms-2"
-                        @click="addBranchTagMapping"
-                        title="添加映射"
-                      >
-                        <i class="fas fa-plus"></i> 添加
-                      </button>
-                    </label>
-                    <small class="text-muted d-block mb-2">
-                      为不同分支设置不同的镜像标签，支持通配符（如
-                      feature/*）。一个分支可以设置多个标签，用半角逗号（,）分隔（如：latest,v1.0.0）。标签支持动态日期占位符（${DATE}、${DATE:YYYY-MM-DD}、${TIMESTAMP}）
-                    </small>
-                    <div
-                      v-if="
-                        formData.branch_tag_mapping &&
-                        formData.branch_tag_mapping.length > 0
-                      "
-                      class="border rounded p-2"
-                    >
-                      <div
-                        v-for="(mapping, index) in formData.branch_tag_mapping"
-                        :key="index"
-                        class="row g-2 mb-2 align-items-center"
-                      >
-                        <div class="col-md-5">
-                          <input
-                            v-model="mapping.branch"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="分支名（如：main 或 feature/*）"
-                          />
-                        </div>
-                        <div class="col-md-1 text-center">
-                          <i class="fas fa-arrow-right text-muted"></i>
-                        </div>
-                        <div class="col-md-5">
-                          <input
-                            :value="mapping.tag"
-                            type="text"
-                            class="form-control form-control-sm"
-                            placeholder="标签（如：latest 或 latest,v1.0.0）"
-                            title="多个标签用半角逗号（,）分隔"
-                            @input="
-                              mapping.tag = normalizeAsciiCommaSeparators(
-                                $event.target.value
-                              )
-                            "
-                          />
-                        </div>
-                        <div class="col-md-1">
-                          <button
-                            type="button"
-                            class="btn btn-sm btn-outline-danger"
-                            @click="removeBranchTagMapping(index)"
-                            title="删除"
-                          >
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="text-muted small">
-                      暂无映射，点击"添加"按钮添加分支标签映射
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 构建后 Webhook Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'post_webhook' }"
-                  role="tabpanel"
-                  id="post-webhook-pane"
-                >
-                  <div class="mb-3">
-                    <label class="form-label">
-                      <strong>构建后Webhook（构建完成后触发）</strong>
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-success ms-2"
-                        @click="addPostBuildWebhook"
-                        title="添加Webhook"
-                      >
-                        <i class="fas fa-plus"></i> 添加
-                      </button>
-                    </label>
-                    <small class="text-muted d-block mb-2">
-                      构建任务成功完成后，将触发配置的Webhook。支持模板变量：{task_id},
-                      {image}, {tag}, {status}, {branch}, {pipeline_id},
-                      {pipeline_name}, {created_at}, {completed_at}
-                    </small>
-                    <div
-                      v-if="
-                        formData.post_build_webhooks &&
-                        formData.post_build_webhooks.length > 0
-                      "
-                      class="border rounded p-2"
-                    >
-                      <div
-                        v-for="(webhook, index) in formData.post_build_webhooks"
-                        :key="index"
-                        class="card mb-2"
-                      >
-                        <div class="card-body">
-                          <div
-                            class="d-flex justify-content-between align-items-start mb-2"
-                          >
-                            <div class="form-check form-switch">
-                              <input
-                                class="form-check-input"
-                                type="checkbox"
-                                :id="`post-webhook-enabled-${index}`"
-                                v-model="webhook.enabled"
-                              />
-                              <label
-                                class="form-check-label fw-bold"
-                                :for="`post-webhook-enabled-${index}`"
-                              >
-                                Webhook {{ index + 1 }}
-                              </label>
-                            </div>
-                            <button
-                              type="button"
-                              class="btn btn-sm btn-outline-danger"
-                              @click="removePostBuildWebhook(index)"
-                              title="删除"
-                            >
-                              <i class="fas fa-trash"></i>
-                            </button>
-                          </div>
-                          <div class="mb-2">
-                            <label class="form-label small"
-                              >分支策略</label
-                            >
-                            <div
-                              class="btn-group w-100 d-flex flex-wrap"
-                              role="group"
-                              style="gap: 0.25rem"
-                            >
-                              <input
-                                type="radio"
-                                class="btn-check"
-                                :id="`post-wh-branch-all-${index}`"
-                                value="all"
-                                v-model="webhook.branch_strategy"
-                              />
-                              <label
-                                class="btn btn-outline-primary flex-fill"
-                                :for="`post-wh-branch-all-${index}`"
-                                style="white-space: normal; padding: 0.35rem"
-                              >
-                                <small class="fw-bold">所有分支</small>
-                              </label>
-                              <input
-                                type="radio"
-                                class="btn-check"
-                                :id="`post-wh-branch-select-${index}`"
-                                value="select_branches"
-                                v-model="webhook.branch_strategy"
-                              />
-                              <label
-                                class="btn btn-outline-primary flex-fill"
-                                :for="`post-wh-branch-select-${index}`"
-                                style="white-space: normal; padding: 0.35rem"
-                              >
-                                <small class="fw-bold">选择分支</small>
-                              </label>
-                              <input
-                                type="radio"
-                                class="btn-check"
-                                :id="`post-wh-branch-match-${index}`"
-                                value="filter_match"
-                                v-model="webhook.branch_strategy"
-                              />
-                              <label
-                                class="btn btn-outline-primary flex-fill"
-                                :for="`post-wh-branch-match-${index}`"
-                                style="white-space: normal; padding: 0.35rem"
-                              >
-                                <small class="fw-bold">匹配分支</small>
-                              </label>
-                            </div>
-                            <small class="text-muted d-block mt-1">
-                              <span v-if="webhook.branch_strategy === 'all'">
-                                所有分支构建完成后都触发此 Webhook
-                              </span>
-                              <span v-else-if="webhook.branch_strategy === 'select_branches'">
-                                仅指定分支构建完成后触发（精确匹配）
-                              </span>
-                              <span v-else>
-                                仅匹配指定模式的分支触发（支持通配符，如 feature/*）
-                              </span>
-                            </small>
-                          </div>
-                          <div
-                            v-if="webhook.branch_strategy === 'select_branches' || webhook.branch_strategy === 'filter_match'"
-                            class="mb-2"
-                          >
-                            <label class="form-label small">
-                              <span v-if="webhook.branch_strategy === 'select_branches'">允许的分支</span>
-                              <span v-else>匹配模式</span>
-                              <span class="text-danger">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              class="form-control form-control-sm"
-                              inputmode="text"
-                              autocomplete="off"
-                              :placeholder="webhook.branch_strategy === 'filter_match' ? 'main, feature/*, release/*' : 'main, develop, staging'"
-                              :value="(webhook.branches || []).join(', ')"
-                              @input="onPostBuildWebhookBranchesInput(webhook, $event)"
-                            />
-                            <small class="text-muted"
-                              >多个分支用半角逗号（,）分隔；输入全角逗号会自动变为半角</small
-                            >
-                          </div>
-                          <div class="mb-2">
-                            <label class="form-label small">
-                              URL <span class="text-danger">*</span>
-                              <button
-                                type="button"
-                                class="btn btn-sm btn-outline-secondary ms-2 py-0 px-1"
-                                style="font-size: 0.7rem; vertical-align: middle"
-                                title="从部署任务中选择"
-                                @click="loadDeployTasks"
-                              >
-                                <i class="fas fa-link"></i> 从部署任务选择
-                              </button>
-                            </label>
-                            <div class="input-group input-group-sm">
-                              <input
-                                v-model="webhook.url"
-                                type="text"
-                                class="form-control form-control-sm"
-                                placeholder="https://example.com/webhook"
-                              />
-                              <select
-                                class="form-select form-select-sm"
-                                style="max-width: 200px; flex: none"
-                                @change="onDeployTaskSelected(webhook, $event.target.value); $event.target.value = ''"
-                              >
-                                <option value="" disabled>选择部署任务...</option>
-                                <option
-                                  v-for="task in deployTaskList"
-                                  :key="task.task_id"
-                                  :value="task.task_id"
-                                >
-                                  {{ task.app_name || task.task_id.substring(0, 8) }}
-                                </option>
-                              </select>
-                            </div>
-                            <small class="text-muted d-block mt-1" v-if="webhook.url && webhook.url.includes('/api/webhook/deploy/')">
-                              <i class="fas fa-info-circle"></i>
-                              已自动填充部署任务 Webhook URL
-                            </small>
-                          </div>
-                          <div class="row g-2 mb-2">
-                            <div class="col-md-6">
-                              <label class="form-label small">请求方法</label>
-                              <select
-                                v-model="webhook.method"
-                                class="form-select form-select-sm"
-                              >
-                                <option value="POST">POST</option>
-                                <option value="PUT">PUT</option>
-                                <option value="PATCH">PATCH</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div class="mb-2">
-                            <label class="form-label small"
-                              >请求头（JSON格式，可选）</label
-                            >
-                            <textarea
-                              v-model="webhook.headers_json"
-                              class="form-control form-control-sm font-monospace"
-                              rows="2"
-                              placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}'
-                            ></textarea>
-                          </div>
-                          <div class="mb-2">
-                            <label class="form-label small"
-                              >请求体模板（支持变量替换）</label
-                            >
-                            <textarea
-                              v-model="webhook.body_template"
-                              class="form-control form-control-sm font-monospace"
-                              rows="4"
-                              placeholder='{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}'
-                            ></textarea>
-                            <small class="text-muted"
-                              >支持变量：{task_id}, {image}, {tag}, {status},
-                              {branch}, {pipeline_id}, {pipeline_name},
-                              {created_at}, {completed_at}</small
-                            >
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="alert alert-info py-2">
-                      <i class="fas fa-info-circle"></i>
-                      暂无构建后Webhook配置，点击"添加"按钮添加
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 其他选项 Tab -->
-                <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'other' }"
-                  role="tabpanel"
-                  id="other-pane"
-                >
-                  <div class="form-check mb-3">
-                    <input
-                      v-model="formData.enabled"
-                      class="form-check-input"
-                      type="checkbox"
-                      id="enabledCheck"
-                      checked
-                    />
-                    <label class="form-check-label" for="enabledCheck">
-                      启用流水线
-                    </label>
-                  </div>
-                  <div class="mb-3">
-                    <div class="form-check mb-2">
-                      <input
-                        v-model="formData.trigger_schedule"
-                        class="form-check-input"
-                        type="checkbox"
-                        id="triggerScheduleCheck"
-                      />
-                      <label
-                        class="form-check-label"
-                        for="triggerScheduleCheck"
-                      >
-                        启用定时触发
-                      </label>
-                    </div>
-                    <div v-if="formData.trigger_schedule" class="ms-4">
-                      <label class="form-label small"
-                        >Cron 表达式 <span class="text-danger">*</span></label
-                      >
-                      <input
-                        v-model="formData.cron_expression"
-                        type="text"
-                        class="form-control form-control-sm font-monospace"
-                        placeholder="0 0 * * *"
-                        :required="formData.trigger_schedule"
-                      />
-                      <small class="text-muted">
-                        <code>0 0 * * *</code> 每天零点 |
-                        <code>0 */2 * * *</code> 每2小时 |
-                        <code>*/30 * * * *</code> 每30分钟
-                      </small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="closeModal"
-              :disabled="saving"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              @click="savePipeline"
-              :disabled="saving"
-            >
-              <span
-                v-if="saving"
-                class="spinner-border spinner-border-sm me-1"
-                style="width: 0.8rem; height: 0.8rem"
-              ></span>
-              <i v-else class="fas fa-save"></i>
-              {{ saving ? "保存中..." : "保存" }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
-
-    <!-- Webhook URL 模态框 -->
-    <div
-      v-if="showWebhookModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
-    >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title"><i class="fas fa-link"></i> Webhook URL</h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showWebhookModal = false"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Webhook URL</label>
-              <div class="input-group">
-                <input
-                  :value="webhookUrl"
-                  type="text"
-                  class="form-control form-control-sm font-monospace"
-                  readonly
-                  ref="webhookUrlInput"
-                />
-                <button
-                  class="btn btn-outline-secondary btn-sm"
-                  @click="copyWebhookUrl"
-                >
-                  <i class="fas fa-copy"></i> 复制
-                </button>
-              </div>
-            </div>
-            <div class="alert alert-info small mb-0">
-              <strong>使用说明：</strong><br />
-              1. 在 Git 平台（GitHub/GitLab/Gitee）的仓库设置中添加 Webhook<br />
-              2. 将上述 URL 粘贴到 Payload URL 中<br />
-              3. Content Type 选择 <code>application/json</code><br />
-              4. Secret 填写流水线配置的 Webhook 密钥（如果有）<br />
-              5. 选择触发事件（通常是 Push events）
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showWebhookModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
-
-    <!-- 手动触发分支选择模态框 -->
+<!-- 手动触发分支选择模态框 -->
     <div
       v-if="showManualRunModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
-    >
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
+      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+      @click.self="showManualRunModal = false"
+      >
+      <div class="relative z-10 mx-auto w-full max-w-lg">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title">
-              <i class="fas fa-play text-success"></i> 手动触发流水线 -
+              <i class="fas fa-play text-green-600"></i> 手动触发流水线 -
               {{ manualRunPipeline?.name }}
             </h5>
             <button
               type="button"
-              class="btn-close"
+              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
               @click="closeManualRunModal"
-            ></button>
+            ><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="mb-3">
-              <label class="form-label">
+              <label class="block text-sm font-medium text-slate-700">
                 <strong>选择分支</strong>
-                <span class="text-danger">*</span>
+                <span class="text-red-500">*</span>
               </label>
               <div
                 v-if="loadingManualRunBranches"
                 class="alert alert-info py-2"
               >
-                <span class="spinner-border spinner-border-sm me-2"></span>
+                <i class="fas fa-spinner fa-spin"></i>
                 <i class="fas fa-sync-alt fa-spin"></i> 正在加载分支列表...
               </div>
               <div
@@ -2269,7 +588,7 @@
               <div v-else class="input-group">
                 <select
                   v-model="manualRunSelectedBranch"
-                  class="form-select"
+                  class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                   required
                   @change="handleBranchChange"
                 >
@@ -2282,8 +601,8 @@
                     {{ branch }}
                   </option>
                 </select>
-                <button
-                  class="btn btn-outline-secondary"
+                <Button
+                  variant="outline" size="sm"
                   type="button"
                   @click="refreshManualRunBranches"
                   :disabled="loadingManualRunBranches"
@@ -2294,1343 +613,53 @@
                     class="fas fa-spinner fa-spin"
                   ></i>
                   <i v-else class="fas fa-sync-alt"></i>
-                </button>
+                </Button>
               </div>
-              <small class="text-muted d-block mt-1">
+              <small class="text-slate-500 block mt-1">
                 <i class="fas fa-info-circle"></i>
                 选择要用于构建的分支，点击刷新按钮可重新加载分支列表
               </small>
             </div>
           </div>
-          <div class="modal-footer">
-            <button
+          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button
               type="button"
-              class="btn btn-secondary btn-sm"
+              variant="outline" size="sm"
               @click="closeManualRunModal"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="btn btn-success btn-sm"
+              size="sm"
               @click="confirmManualRun"
               :disabled="!manualRunSelectedBranch"
             >
               <i class="fas fa-play"></i> 确认触发
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
-    <div
-      v-if="showManualRunModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
-
-    <!-- 日志查看模态框 -->
-    <div
-      v-if="showLogModal"
-      class="modal fade show d-block"
-      style="z-index: 1070"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-xl" style="max-width: 90%">
-        <div class="modal-content">
-          <div
-            class="modal-header"
-            :class="getLogStatusHeaderClass(selectedTask?.status)"
-          >
-            <h5 class="modal-title">
-              <i :class="getLogStatusIcon(selectedTask?.status)"></i>
-              任务日志 - {{ selectedTask?.image || "未知" }}:{{
-                selectedTask?.tag || "latest"
-              }}
-              <span v-if="isLogTaskRunning" class="badge bg-primary ms-2">
-                <span
-                  class="spinner-border spinner-border-sm me-1"
-                  style="width: 0.7rem; height: 0.7rem"
-                ></span>
-                运行中
-              </span>
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              :class="
-                selectedTask?.status === 'failed' ? 'btn-close-white' : ''
-              "
-              @click="closeLogModal"
-            ></button>
-          </div>
-          <div
-            class="modal-body"
-            style="
-              display: flex;
-              flex-direction: column;
-              padding: 0;
-              max-height: 80vh;
-            "
-          >
-            <!-- 任务信息 -->
-            <div v-if="selectedTask" class="p-3 border-bottom">
-              <div class="text-muted small">
-                任务ID:
-                <code>{{
-                  selectedTask.task_id?.substring(0, 8) || "未知"
-                }}</code>
-              </div>
-            </div>
-
-            <!-- 任务概况（仅已完成/失败/停止时显示） -->
-            <div
-              v-if="
-                selectedTask &&
-                (selectedTask.status === 'failed' ||
-                  selectedTask.status === 'completed' ||
-                  selectedTask.status === 'stopped')
-              "
-              class="p-3 border-bottom"
-              :class="getLogStatusSummaryClass(selectedTask.status)"
-            >
-              <div class="d-flex align-items-center mb-2">
-                <i
-                  :class="getLogStatusIcon(selectedTask.status)"
-                  class="me-2"
-                ></i>
-                <strong>{{ getLogStatusText(selectedTask.status) }}</strong>
-              </div>
-              <div
-                v-if="selectedTask.status === 'failed' && selectedTask.error"
-                class="mt-2"
-              >
-                <strong>错误信息：</strong>
-                <pre
-                  class="mb-0 mt-1 p-2 bg-dark text-light rounded"
-                  style="
-                    font-size: 0.85rem;
-                    max-height: 150px;
-                    overflow-y: auto;
-                  "
-                  >{{ selectedTask.error }}</pre
-                >
-              </div>
-              <div
-                v-if="selectedTask.status === 'completed'"
-                class="mt-2 small"
-              >
-                <div>
-                  <strong>创建时间：</strong
-                  >{{ formatLogTime(selectedTask.created_at) }}
-                </div>
-                <div v-if="selectedTask.completed_at">
-                  <strong>完成时间：</strong
-                  >{{ formatLogTime(selectedTask.completed_at) }}
-                </div>
-                <div v-if="selectedTask.completed_at">
-                  <strong>耗时：</strong
-                  >{{
-                    calculateLogDuration(
-                      selectedTask.created_at,
-                      selectedTask.completed_at
-                    )
-                  }}
-                </div>
-              </div>
-              <div v-if="selectedTask.status === 'stopped'" class="mt-2 small">
-                <div>
-                  <strong>创建时间：</strong
-                  >{{ formatLogTime(selectedTask.created_at) }}
-                </div>
-                <div v-if="selectedTask.completed_at">
-                  <strong>停止时间：</strong
-                  >{{ formatLogTime(selectedTask.completed_at) }}
-                </div>
-              </div>
-            </div>
-
-            <!-- 日志内容 -->
-            <div
-              style="
-                flex: 1;
-                overflow: hidden;
-                display: flex;
-                flex-direction: column;
-              "
-            >
-              <div
-                class="p-2 border-bottom d-flex justify-content-between align-items-center"
-              >
-                <div>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary"
-                    @click="refreshLogs"
-                    :disabled="refreshingLogs"
-                  >
-                    <i
-                      class="fas fa-sync-alt"
-                      :class="{ 'fa-spin': refreshingLogs }"
-                    ></i>
-                    刷新
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary ms-2"
-                    @click="toggleAutoScroll"
-                  >
-                    <i
-                      class="fas"
-                      :class="autoScroll ? 'fa-pause' : 'fa-play'"
-                    ></i>
-                    {{ autoScroll ? "暂停自动滚动" : "启用自动滚动" }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary ms-2"
-                    @click="copyLogs"
-                  >
-                    <i class="fas fa-copy"></i> 复制日志
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-info ms-2"
-                    @click="scrollLogToTop"
-                    title="滚动到顶部"
-                  >
-                    <i class="fas fa-arrow-up"></i> 到顶
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-info ms-2"
-                    @click="scrollLogToBottom"
-                    title="滚动到底部"
-                  >
-                    <i class="fas fa-arrow-down"></i> 到底
-                  </button>
-                </div>
-              </div>
-              <pre
-                ref="logContainer"
-                class="bg-dark text-light p-3 mb-0"
-                style="
-                  flex: 1;
-                  overflow-y: auto;
-                  overflow-x: hidden;
-                  font-size: 0.85rem;
-                  white-space: pre-wrap;
-                  word-wrap: break-word;
-                  font-family: 'Courier New', monospace;
-                  line-height: 1.5;
-                  min-height: 0;
-                  max-height: 80vh;
-                "
-                >{{ taskLogs || "暂无日志" }}</pre
-              >
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="closeLogModal"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showLogModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1065"
-    ></div>
-
-    <!-- 历史构建模态框 -->
-    <div
-      v-if="showHistoryModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-history"></i> 历史构建 -
-              {{ currentPipeline?.name }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeHistoryModal"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <!-- 过滤选项 -->
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label class="form-label small">触发来源</label>
-                <select
-                  v-model="historyFilter.trigger_source"
-                  class="form-select form-select-sm"
-                  @change="
-                    () => {
-                      historyPagination.currentPage = 1;
-                      loadHistory();
-                    }
-                  "
-                >
-                  <option value="">全部</option>
-                  <option value="webhook">Webhook</option>
-                  <option value="manual">手动</option>
-                  <option value="cron">定时</option>
-                </select>
-              </div>
-              <div class="col-md-4">
-                <label class="form-label small">任务状态</label>
-                <select
-                  v-model="historyFilter.status"
-                  class="form-select form-select-sm"
-                  @change="
-                    () => {
-                      historyPagination.currentPage = 1;
-                      loadHistory();
-                    }
-                  "
-                >
-                  <option value="">全部</option>
-                  <option value="pending">等待中</option>
-                  <option value="running">进行中</option>
-                  <option value="completed">已完成</option>
-                  <option value="failed">失败</option>
-                </select>
-              </div>
-              <div class="col-md-4 d-flex align-items-end">
-                <button
-                  class="btn btn-sm btn-outline-primary"
-                  @click="
-                    () => {
-                      historyPagination.currentPage = 1;
-                      loadHistory();
-                    }
-                  "
-                >
-                  <i class="fas fa-sync-alt"></i> 刷新
-                </button>
-              </div>
-            </div>
-
-            <!-- 历史列表 -->
-            <div v-if="historyLoading" class="text-center py-4">
-              <span class="spinner-border spinner-border-sm"></span> 加载中...
-            </div>
-            <div
-              v-else-if="historyTasks.length === 0"
-              class="text-center py-4 text-muted"
-            >
-              <i class="fas fa-inbox fa-2x mb-2"></i>
-              <p class="mb-0">暂无历史构建记录</p>
-            </div>
-            <div v-else class="table-responsive" style="overflow-x: hidden">
-              <table
-                class="table table-sm table-hover"
-                style="table-layout: fixed; width: 100%"
-              >
-                <thead>
-                  <tr>
-                    <th style="width: 9%">任务ID</th>
-                    <th style="width: 9%">触发来源</th>
-                    <th style="width: 9%">状态</th>
-                    <th style="width: 13%">镜像</th>
-                    <th style="width: 12%">触发时间</th>
-                    <th style="width: 12%">完成时间</th>
-                    <th style="width: 18%">分支/Tag</th>
-                    <th style="width: 16%">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="task in historyTasks" :key="task.task_id">
-                    <td>
-                      <code class="small">{{
-                        task.task_id.substring(0, 8)
-                      }}</code>
-                    </td>
-                    <td>
-                      <span
-                        v-if="task.trigger_source === 'webhook'"
-                        class="badge bg-info"
-                      >
-                        <i class="fas fa-link"></i> Webhook
-                      </span>
-                      <span
-                        v-else-if="task.trigger_source === 'manual'"
-                        class="badge bg-success"
-                      >
-                        <i class="fas fa-hand-pointer"></i> 手动
-                      </span>
-                      <span
-                        v-else-if="task.trigger_source === 'cron'"
-                        class="badge bg-warning"
-                      >
-                        <i class="fas fa-clock"></i> 定时
-                      </span>
-                      <span v-else class="badge bg-secondary">未知</span>
-                    </td>
-                    <td>
-                      <span
-                        v-if="task.status === 'pending'"
-                        class="badge bg-secondary"
-                      >
-                        <i class="fas fa-clock"></i> 等待中
-                      </span>
-                      <span
-                        v-else-if="task.status === 'running'"
-                        class="badge bg-primary"
-                      >
-                        <span
-                          class="spinner-border spinner-border-sm me-1"
-                          style="width: 0.65rem; height: 0.65rem"
-                        ></span>
-                        进行中
-                      </span>
-                      <span
-                        v-else-if="task.status === 'completed'"
-                        class="badge bg-success"
-                      >
-                        <i class="fas fa-check-circle"></i> 已完成
-                      </span>
-                      <span
-                        v-else-if="task.status === 'failed'"
-                        class="badge bg-danger"
-                      >
-                        <i class="fas fa-times-circle"></i> 失败
-                      </span>
-                      <span
-                        v-else-if="task.status === 'deleted'"
-                        class="badge bg-secondary"
-                      >
-                        <i class="fas fa-trash"></i> 已删除
-                      </span>
-                    </td>
-                    <td>
-                      <small
-                        class="font-monospace text-truncate d-block"
-                        :title="`${task.image}:${task.tag}`"
-                      >
-                        {{ task.image }}:{{ task.tag }}
-                      </small>
-                    </td>
-                    <td>
-                      <small
-                        class="text-muted"
-                        :title="formatDateTime(task.triggered_at)"
-                      >
-                        {{ formatDateTime(task.triggered_at) }}
-                      </small>
-                    </td>
-                    <td>
-                      <small
-                        v-if="task.completed_at"
-                        class="text-muted"
-                        :title="formatDateTime(task.completed_at)"
-                      >
-                        {{ formatDateTime(task.completed_at) }}
-                      </small>
-                      <small v-else class="text-muted">-</small>
-                    </td>
-                    <td>
-                      <div v-if="task.trigger_info">
-                        <!-- 分支显示 -->
-                        <div v-if="task.trigger_info.branch" class="mb-1">
-                          <span class="badge bg-primary">
-                            <i class="fas fa-code-branch"></i> 分支:
-                            {{ task.trigger_info.branch }}
-                          </span>
-                        </div>
-                        <!-- Tag显示：优先显示任务的tag（每个任务对应一个tag），如果没有则显示trigger_info中的tag -->
-                        <div v-if="task.tag" class="mb-1">
-                          <span class="badge bg-info">
-                            <i class="fas fa-tag"></i> Tag: {{ task.tag }}
-                          </span>
-                        </div>
-                        <div v-else-if="task.trigger_info.tag" class="mb-1">
-                          <span class="badge bg-info">
-                            <i class="fas fa-tag"></i> Tag:
-                            {{ task.trigger_info.tag }}
-                          </span>
-                        </div>
-                        <!-- 平台信息 -->
-                        <div
-                          v-if="task.trigger_info.platform"
-                          class="text-muted small mb-1"
-                        >
-                          <i class="fas fa-server"></i>
-                          {{ task.trigger_info.platform }}
-                        </div>
-                        <!-- 提交信息 -->
-                        <div
-                          v-if="task.trigger_info.last_commit"
-                          class="text-muted small text-truncate"
-                          :title="task.trigger_info.last_commit"
-                        >
-                          <i class="fas fa-hashtag"></i>
-                          {{ task.trigger_info.last_commit.substring(0, 40)
-                          }}{{
-                            task.trigger_info.last_commit.length > 40
-                              ? "..."
-                              : ""
-                          }}
-                        </div>
-                      </div>
-                      <!-- 如果没有trigger_info，尝试显示任务的基本信息 -->
-                      <div v-else>
-                        <div v-if="task.branch" class="mb-1">
-                          <span class="badge bg-primary">
-                            <i class="fas fa-code-branch"></i> 分支:
-                            {{ task.branch }}
-                          </span>
-                        </div>
-                        <div v-if="task.tag" class="mb-1">
-                          <span class="badge bg-info">
-                            <i class="fas fa-tag"></i> Tag: {{ task.tag }}
-                          </span>
-                        </div>
-                        <small
-                          v-if="!task.branch && !task.tag"
-                          class="text-muted"
-                          >-</small
-                        >
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        v-if="task.status !== 'deleted' && task.task_id"
-                        class="btn btn-sm btn-outline-info"
-                        @click.stop="viewTaskLogs(task.task_id, task)"
-                        :disabled="viewingLogs === task.task_id"
-                        title="查看日志"
-                      >
-                        <i class="fas fa-terminal"></i> 日志
-                        <span
-                          v-if="viewingLogs === task.task_id"
-                          class="spinner-border spinner-border-sm ms-1"
-                        ></span>
-                      </button>
-                      <span v-else class="text-muted small">-</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <div class="text-muted small me-auto">
-              共 {{ historyPagination.total }} 条记录
-              <span v-if="historyPagination.total > 0">
-                ，第 {{ historyPagination.currentPage }} /
-                {{
-                  Math.ceil(
-                    historyPagination.total / historyPagination.pageSize
-                  )
-                }}
-                页
-              </span>
-            </div>
-            <!-- 分页控件 -->
-            <nav v-if="historyPagination.total > 0">
-              <ul class="pagination pagination-sm mb-0">
-                <li
-                  class="page-item"
-                  :class="{ disabled: historyPagination.currentPage === 1 }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="changeHistoryPage(1)"
-                    title="首页"
-                  >
-                    <i class="fas fa-angle-double-left"></i>
-                  </a>
-                </li>
-                <li
-                  class="page-item"
-                  :class="{ disabled: historyPagination.currentPage === 1 }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="
-                      changeHistoryPage(historyPagination.currentPage - 1)
-                    "
-                    title="上一页"
-                  >
-                    <i class="fas fa-angle-left"></i>
-                  </a>
-                </li>
-                <li class="page-item active">
-                  <span class="page-link">{{
-                    historyPagination.currentPage
-                  }}</span>
-                </li>
-                <li
-                  class="page-item"
-                  :class="{
-                    disabled:
-                      historyPagination.currentPage >=
-                      Math.ceil(
-                        historyPagination.total / historyPagination.pageSize
-                      ),
-                  }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="
-                      changeHistoryPage(historyPagination.currentPage + 1)
-                    "
-                    title="下一页"
-                  >
-                    <i class="fas fa-angle-right"></i>
-                  </a>
-                </li>
-                <li
-                  class="page-item"
-                  :class="{
-                    disabled:
-                      historyPagination.currentPage >=
-                      Math.ceil(
-                        historyPagination.total / historyPagination.pageSize
-                      ),
-                  }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="
-                      changeHistoryPage(
-                        Math.ceil(
-                          historyPagination.total / historyPagination.pageSize
-                        )
-                      )
-                    "
-                    title="末页"
-                  >
-                    <i class="fas fa-angle-double-right"></i>
-                  </a>
-                </li>
-              </ul>
-            </nav>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm ms-2"
-              @click="closeHistoryModal"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showHistoryModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
-
-    <!-- 资源包选择模态框 -->
-    <div
-      v-if="showResourcePackageModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-archive"></i> 选择资源包
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="showResourcePackageModal = false"
-            ></button>
-          </div>
-          <div class="modal-body" style="max-height: 60vh; overflow-y: auto">
-            <div
-              v-if="resourcePackages.length === 0"
-              class="text-center py-4 text-muted"
-            >
-              <i class="fas fa-inbox fa-2x mb-2"></i>
-              <p class="mb-0">暂无资源包</p>
-              <small class="text-muted">请先在"资源包"标签页上传资源包</small>
-            </div>
-            <div v-else class="row g-3">
-              <div
-                v-for="pkg in resourcePackages"
-                :key="pkg.package_id"
-                class="col-md-6"
-              >
-                <div
-                  class="card h-100"
-                  :class="{
-                    'border-primary': isResourcePackageSelected(pkg.package_id),
-                  }"
-                >
-                  <div class="card-body">
-                    <div class="form-check">
-                      <input
-                        type="checkbox"
-                        :value="pkg.package_id"
-                        :checked="isResourcePackageSelected(pkg.package_id)"
-                        @change="toggleResourcePackage(pkg)"
-                        class="form-check-input"
-                      />
-                      <label class="form-check-label fw-bold">
-                        {{ pkg.name }}
-                      </label>
-                    </div>
-                    <small class="text-muted d-block mt-1">{{
-                      pkg.description || "无描述"
-                    }}</small>
-                    <div
-                      v-if="isResourcePackageSelected(pkg.package_id)"
-                      class="mt-2"
-                    >
-                      <label class="form-label small">目标路径</label>
-                      <input
-                        type="text"
-                        :value="
-                          getResourcePackageConfig(pkg.package_id).target_path
-                        "
-                        @input="
-                          updateResourcePackagePath(
-                            pkg.package_id,
-                            $event.target.value
-                          )
-                        "
-                        class="form-control form-control-sm"
-                        placeholder="resources"
-                      />
-                      <small class="text-muted d-block mt-1">
-                        <i class="fas fa-info-circle"></i>
-                        相对路径，如：<code>test/b.txt</code> 或
-                        <code>config/app.conf</code>
-                      </small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="showResourcePackageModal = false"
-            >
-              完成
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showResourcePackageModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
-
-    <!-- 多服务配置模态框 -->
-    <div
-      v-if="showMultiServiceConfigModal"
-      class="modal fade show"
-      style="display: block; z-index: 1050"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-layer-group"></i> 多服务配置 -
-              {{ multiServiceConfigPipeline?.name }}
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeMultiServiceConfigModal"
-            ></button>
-          </div>
-          <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
-            <div class="alert alert-info mb-3">
-              <i class="fas fa-info-circle"></i>
-              <strong>说明：</strong>此配置为独立的多服务配置，不需要读取
-              Dockerfile。可以手动添加和配置服务。
-            </div>
-
-            <!-- 推送模式选择 -->
-            <div class="mb-3">
-              <label class="form-label"><strong>推送模式</strong></label>
-              <div class="btn-group w-100 d-flex" role="group">
-                <input
-                  type="radio"
-                  class="btn-check"
-                  id="multi-service-mode-single"
-                  value="single"
-                  v-model="multiServiceFormData.push_mode"
-                />
-                <label
-                  class="btn btn-outline-primary flex-fill"
-                  for="multi-service-mode-single"
-                >
-                  <i class="fas fa-cube d-block mb-1"></i>
-                  <small class="d-block fw-bold">单服务模式</small>
-                </label>
-
-                <input
-                  type="radio"
-                  class="btn-check"
-                  id="multi-service-mode-multi"
-                  value="multi"
-                  v-model="multiServiceFormData.push_mode"
-                />
-                <label
-                  class="btn btn-outline-primary flex-fill"
-                  for="multi-service-mode-multi"
-                >
-                  <i class="fas fa-sitemap d-block mb-1"></i>
-                  <small class="d-block fw-bold">多服务模式</small>
-                </label>
-              </div>
-            </div>
-
-            <!-- 全局镜像配置 / 服务配置 -->
-            <div class="mb-3">
-              <label class="form-label">
-                <strong v-if="multiServiceFormData.push_mode === 'single'"
-                  >服务配置</strong
-                >
-                <strong v-else>全局镜像配置（前缀）</strong>
-              </label>
-              <div class="row g-2">
-                <div class="col-md-6">
-                  <label class="form-label small">
-                    <span v-if="multiServiceFormData.push_mode === 'single'"
-                      >镜像名称</span
-                    >
-                    <span v-else>镜像名称前缀</span>
-                  </label>
-                  <input
-                    v-model="multiServiceFormData.global_image_name"
-                    type="text"
-                    class="form-control form-control-sm"
-                    placeholder="myapp/demo"
-                  />
-                  <small class="text-muted d-block mt-1">
-                    <span v-if="multiServiceFormData.push_mode === 'single'">
-                      <i class="fas fa-info-circle"></i>
-                      单服务模式下，此配置将直接用于服务构建
-                    </span>
-                    <span v-else>
-                      <i class="fas fa-info-circle"></i>
-                      多服务模式下，每个启用的服务镜像名称将自动生成为:
-                      <code
-                        >{{
-                          multiServiceFormData.global_image_name ||
-                          "myapp/demo"
-                        }}/服务名</code
-                      >
-                    </span>
-                  </small>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label small">
-                    <span v-if="multiServiceFormData.push_mode === 'single'"
-                      >标签</span
-                    >
-                    <span v-else>全局标签（快捷设置）</span>
-                  </label>
-                  <input
-                    v-model="multiServiceFormData.global_tag"
-                    type="text"
-                    class="form-control form-control-sm"
-                    placeholder="latest"
-                  />
-                  <small class="text-muted d-block mt-1">
-                    <span v-if="multiServiceFormData.push_mode === 'single'">
-                      <i class="fas fa-info-circle"></i>
-                      单服务模式下，此标签将直接用于服务构建
-                    </span>
-                    <span v-else>
-                      <i class="fas fa-info-circle"></i>
-                      多服务模式下，可快速为所有启用的服务设置标签（可在服务级别覆盖）
-                    </span>
-                  </small>
-                </div>
-              </div>
-              <!-- 单服务模式下的推送开关 -->
-              <div
-                v-if="multiServiceFormData.push_mode === 'single'"
-                class="mt-3"
-              >
-                <div class="form-check form-switch">
-                  <input
-                    :checked="getSingleServicePush()"
-                    @change="updateSingleServicePush($event.target.checked)"
-                    class="form-check-input"
-                    type="checkbox"
-                    id="singleServicePushCheck"
-                    style="width: 3em; height: 1.5em"
-                  />
-                  <label
-                    class="form-check-label fw-bold ms-2"
-                    for="singleServicePushCheck"
-                  >
-                    <i class="fas fa-cloud-upload-alt text-success"></i>
-                    构建完成后推送到仓库
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <!-- 服务列表（仅多服务模式显示） -->
-            <div v-if="multiServiceFormData.push_mode === 'multi'" class="mb-3">
-              <div
-                class="d-flex justify-content-between align-items-center mb-3"
-              >
-                <label class="form-label mb-0"><strong>服务列表</strong></label>
-                <div class="btn-group" role="group">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-primary"
-                    @click="enableAllServices"
-                    title="全部启用"
-                    :disabled="
-                      multiServiceFormData.selected_services.length === 0
-                    "
-                  >
-                    <i class="fas fa-check-circle"></i> 全部启用
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary"
-                    @click="disableAllServices"
-                    title="全部禁用"
-                    :disabled="
-                      multiServiceFormData.selected_services.length === 0
-                    "
-                  >
-                    <i class="fas fa-times-circle"></i> 全部禁用
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-success"
-                    @click="addServiceToMultiConfig"
-                    title="添加服务"
-                  >
-                    <i class="fas fa-plus"></i> 添加服务
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-info"
-                    @click="parseDockerfileForMultiService"
-                    title="识别dockerfile"
-                    :disabled="parsingDockerfileForMultiService"
-                  >
-                    <i class="fas fa-file-code"></i>
-                    <span v-if="parsingDockerfileForMultiService"
-                      >识别中...</span
-                    >
-                    <span v-else>识别dockerfile</span>
-                  </button>
-                </div>
-              </div>
-
-              <div
-                v-if="multiServiceFormData.selected_services.length === 0"
-                class="text-muted text-center py-5 border rounded bg-light"
-              >
-                <i class="fas fa-inbox fa-3x mb-3 text-muted"></i>
-                <p class="mb-1">暂无服务</p>
-                <small>点击"添加服务"按钮添加服务</small>
-              </div>
-
-              <div v-else class="row g-3">
-                <div
-                  v-for="(
-                    serviceName, index
-                  ) in multiServiceFormData.selected_services"
-                  :key="`service-${index}-${serviceName}`"
-                  class="col-12"
-                >
-                  <div
-                    class="card shadow-sm border"
-                    :class="{
-                      'border-secondary opacity-75':
-                        multiServiceFormData.push_mode === 'multi' &&
-                        !(
-                          multiServiceFormData.service_push_config[serviceName]
-                            ?.enabled !== false
-                        ),
-                    }"
-                  >
-                    <div
-                      class="card-header bg-light d-flex justify-content-between align-items-center py-2"
-                    >
-                      <div class="d-flex align-items-center">
-                        <span class="badge bg-primary me-2"
-                          >#{{ index + 1 }}</span
-                        >
-                        <strong class="text-primary">{{
-                          serviceName || "未命名服务"
-                        }}</strong>
-                        <!-- 多服务模式下的启用/禁用开关 -->
-                        <div
-                          v-if="multiServiceFormData.push_mode === 'multi'"
-                          class="form-check form-switch ms-3"
-                        >
-                          <input
-                            :checked="
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled !== false
-                            "
-                            @change="
-                              updateServiceEnabled(
-                                serviceName,
-                                $event.target.checked
-                              )
-                            "
-                            class="form-check-input"
-                            type="checkbox"
-                            :id="`enableCheck-${index}`"
-                            style="width: 2.5em; height: 1.3em"
-                          />
-                          <label
-                            class="form-check-label fw-bold ms-2"
-                            :for="`enableCheck-${index}`"
-                          >
-                            <span
-                              :class="
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.enabled !== false
-                                  ? 'text-success'
-                                  : 'text-muted'
-                              "
-                            >
-                              <i
-                                :class="
-                                  multiServiceFormData.service_push_config[
-                                    serviceName
-                                  ]?.enabled !== false
-                                    ? 'fas fa-check-circle'
-                                    : 'fas fa-times-circle'
-                                "
-                              ></i>
-                              {{
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.enabled !== false
-                                  ? "启用"
-                                  : "禁用"
-                              }}
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-danger"
-                        @click="removeServiceFromMultiConfig(index)"
-                        :disabled="multiServiceFormData.push_mode === 'single'"
-                        :title="
-                          multiServiceFormData.push_mode === 'single'
-                            ? '单服务模式下不能删除服务'
-                            : '删除服务'
-                        "
-                      >
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    </div>
-                    <div
-                      class="card-body"
-                      :class="{
-                        'opacity-50':
-                          multiServiceFormData.push_mode === 'multi' &&
-                          multiServiceFormData.service_push_config[serviceName]
-                            ?.enabled === false,
-                      }"
-                    >
-                      <div class="row g-3">
-                        <div class="col-12">
-                          <label class="form-label small fw-bold">
-                            <i class="fas fa-tag text-primary"></i> 服务名称
-                            <span class="text-danger">*</span>
-                          </label>
-                          <input
-                            :value="serviceName"
-                            @input="
-                              updateServiceName(index, $event.target.value)
-                            "
-                            type="text"
-                            class="form-control"
-                            :disabled="
-                              multiServiceFormData.push_mode === 'multi' &&
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled === false
-                            "
-                            placeholder="例如: api, web, worker"
-                            required
-                          />
-                          <small class="text-muted d-block mt-1">
-                            <i class="fas fa-info-circle text-warning"></i>
-                            <strong>注意：</strong>服务名称必须与 Dockerfile
-                            中的阶段名（stage name）匹配才会生效。例如
-                            Dockerfile 中有
-                            <code>FROM node:18 AS api</code>，则服务名称应填写
-                            <code>api</code>。
-                          </small>
-                        </div>
-                        <div class="col-12">
-                          <label class="form-label small fw-bold">
-                            <i class="fas fa-image text-info"></i> 镜像名称
-                          </label>
-                          <input
-                            :value="
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.imageName || ''
-                            "
-                            @input="
-                              updateServiceImageName(
-                                serviceName,
-                                $event.target.value
-                              )
-                            "
-                            type="text"
-                            class="form-control"
-                            :disabled="
-                              multiServiceFormData.push_mode === 'multi' &&
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled === false
-                            "
-                            :placeholder="
-                              getMultiServiceDefaultImageName(serviceName)
-                            "
-                          />
-                          <small class="text-muted d-block mt-1">
-                            <i class="fas fa-info-circle"></i>
-                            <span
-                              v-if="multiServiceFormData.push_mode === 'single'"
-                              >留空使用全局配置</span
-                            >
-                            <span v-else
-                              >留空使用前缀拼接:
-                              {{
-                                getMultiServiceDefaultImageName(serviceName)
-                              }}</span
-                            >
-                          </small>
-                        </div>
-                        <div class="col-md-4">
-                          <label class="form-label small fw-bold">
-                            <i class="fas fa-tags text-warning"></i> 标签
-                          </label>
-                          <input
-                            :value="
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.tag || ''
-                            "
-                            @input="
-                              updateServiceTag(serviceName, $event.target.value)
-                            "
-                            type="text"
-                            class="form-control"
-                            :disabled="
-                              multiServiceFormData.push_mode === 'multi' &&
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled === false
-                            "
-                            :placeholder="
-                              multiServiceFormData.global_tag || 'latest'
-                            "
-                          />
-                        </div>
-                        <div class="col-md-8 d-flex align-items-end">
-                          <div class="form-check form-switch">
-                            <input
-                              :checked="
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.push || false
-                              "
-                              @change="
-                                updateServicePush(
-                                  serviceName,
-                                  $event.target.checked
-                                )
-                              "
-                              class="form-check-input"
-                              type="checkbox"
-                              :id="`pushCheck-${index}`"
-                              :disabled="
-                                multiServiceFormData.push_mode === 'multi' &&
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.enabled === false
-                              "
-                              style="width: 3em; height: 1.5em"
-                            />
-                            <label
-                              class="form-check-label fw-bold ms-2"
-                              :for="`pushCheck-${index}`"
-                            >
-                              <i
-                                class="fas fa-cloud-upload-alt text-success"
-                              ></i>
-                              推送到仓库
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="closeMultiServiceConfigModal"
-              :disabled="savingMultiServiceConfig"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              @click="saveMultiServiceConfig"
-              :disabled="savingMultiServiceConfig"
-            >
-              <span
-                v-if="savingMultiServiceConfig"
-                class="spinner-border spinner-border-sm me-1"
-                style="width: 0.8rem; height: 0.8rem"
-              ></span>
-              <i v-else class="fas fa-save"></i>
-              {{ savingMultiServiceConfig ? "保存中..." : "保存" }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showMultiServiceConfigModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1045"
-    ></div>
-
-    <!-- 构建配置JSON模态框 -->
-    <div
-      v-if="showBuildConfigJsonModal"
-      class="modal fade show"
-      style="display: block; z-index: 1055"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="fas fa-code"></i>
-              {{ editingPipeline ? "编辑" : "查看" }}构建配置JSON
-            </h5>
-            <button
-              type="button"
-              class="btn-close"
-              @click="closeBuildConfigJsonModal"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div v-if="editingPipeline" class="alert alert-info mb-3">
-              <i class="fas fa-info-circle"></i>
-              <strong>提示：</strong>编辑JSON后点击保存，配置将应用到流水线中。
-            </div>
-            <div class="d-flex justify-content-end mb-2">
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-primary me-2"
-                @click="copyBuildConfigJson"
-              >
-                <i class="fas fa-copy"></i> 复制JSON
-              </button>
-            </div>
-            <codemirror
-              v-model="buildConfigJsonText"
-              :style="{ height: '500px', fontSize: '13px' }"
-              :disabled="!editingPipeline"
-              :extensions="jsonEditorExtensions"
-            />
-            <div v-if="buildConfigJsonError" class="alert alert-danger mt-2">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ buildConfigJsonError }}
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="closeBuildConfigJsonModal"
-            >
-              取消
-            </button>
-            <button
-              v-if="editingPipeline"
-              type="button"
-              class="btn btn-primary btn-sm"
-              @click="saveBuildConfigJson"
-              :disabled="!!buildConfigJsonError"
-            >
-              <i class="fas fa-save"></i> 保存并应用
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="showBuildConfigJsonModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1050"
-    ></div>
-
-    <!-- 通过JSON创建流水线模态框 -->
+<!-- 通过JSON创建流水线模态框 -->
     <div
       v-if="showJsonCreateModal"
-      class="modal fade show"
-      style="display: block; z-index: 1055"
-      tabindex="-1"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
+      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+      @click.self="showJsonCreateModal = false"
+      >
+      <div class="relative z-10 mx-auto w-full max-w-3xl">
+        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
+          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
             <h5 class="modal-title">
               <i class="fas fa-code"></i> 通过JSON创建流水线
             </h5>
             <button
               type="button"
-              class="btn-close"
+              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
               @click="closeJsonCreateModal"
-            ></button>
+            ><i class="fas fa-times"></i></button>
           </div>
-          <div class="modal-body">
+          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="alert alert-info">
               <i class="fas fa-info-circle"></i>
               <strong>提示：</strong
@@ -3644,26 +673,26 @@
               </div>
               <div class="card-body">
                 <div class="mb-3">
-                  <label class="form-label"
-                    >流水线名称 <span class="text-danger">*</span></label
+                  <label class="block text-sm font-medium text-slate-700"
+                    >流水线名称 <span class="text-red-500">*</span></label
                   >
                   <input
                     type="text"
                     v-model="jsonFormData.name"
-                    class="form-control"
+                    class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     placeholder="请输入流水线名称"
                     @input="updateJsonFromForm"
                     required
                   />
                 </div>
                 <div class="mb-3">
-                  <label class="form-label"
-                    >Git 仓库地址 <span class="text-danger">*</span></label
+                  <label class="block text-sm font-medium text-slate-700"
+                    >Git 仓库地址 <span class="text-red-500">*</span></label
                   >
                   <input
                     type="text"
                     v-model="jsonFormData.git_url"
-                    class="form-control"
+                    class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     placeholder="https://github.com/example/repo.git"
                     @input="updateJsonFromForm"
                     required
@@ -3674,10 +703,10 @@
 
             <!-- JSON输入框 -->
             <div class="mb-3">
-              <label class="form-label">流水线配置JSON：</label>
+              <label class="block text-sm font-medium text-slate-700">流水线配置JSON：</label>
               <textarea
                 v-model="jsonInput"
-                class="form-control font-monospace"
+                class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
                 rows="15"
                 placeholder='{"name": "my_pipeline", "git_url": "https://github.com/example/repo.git", "branch": "main", ...}'
                 style="font-size: 0.9rem"
@@ -3688,45 +717,57 @@
               <i class="fas fa-exclamation-circle"></i> {{ jsonError }}
             </div>
           </div>
-          <div class="modal-footer">
-            <button
+          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <Button
               type="button"
-              class="btn btn-secondary"
+              variant="outline" size="sm"
               @click="closeJsonCreateModal"
               :disabled="savingJson"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="btn btn-primary"
+              size="sm"
               @click="createPipelineFromJson"
               :disabled="savingJson || (!jsonFormData.name && !jsonInput)"
             >
               <span
                 v-if="savingJson"
-                class="spinner-border spinner-border-sm me-1"
+                class="fas fa-spinner fa-spin mr-1"
               ></span>
               <i v-else class="fas fa-save"></i> 创建流水线
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
-    <div
-      v-if="showJsonCreateModal"
-      class="modal-backdrop fade show"
-      style="z-index: 1050"
-    ></div>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="pipeline"
+      :resource-id="permissionPipeline?.pipeline_id"
+      :team-id="teamStore.activeTeamId"
+      :resource-name="permissionPipeline?.name || ''"
+    />
+    <BuildTaskLogModal :controller="buildTaskLogs" />
   </div>
 </template>
-
 <script setup>
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
+import { useTeamStore } from "@/stores/team";
 import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { goToPipelineList } from "@/utils/pipelineNavigation.js";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
 import { getDockerfilesWithCache } from "../utils/dockerfileCache.js";
@@ -3758,7 +799,44 @@ function onPostBuildWebhookBranchesInput(webhook, e) {
 // 项目类型相关
 const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
 
+const teamStore = useTeamStore();
+const router = useRouter();
+const route = useRoute();
+
+const buildTaskLogs = useBuildTaskLogs({
+  onTaskFinished: () => loadPipelines(),
+});
+
+function goToCreate() {
+  router.push("/app/pipeline/new");
+}
+
+function goToDetail(pipeline, tab = "basic") {
+  router.push({
+    name: "pipeline-detail",
+    params: { pipelineId: pipeline.pipeline_id },
+    query: { tab },
+  });
+}
+
 const pipelines = ref([]);
+const currentPage = ref(1);
+const pageSize = ref(12);
+const totalPipelines = ref(0);
+const totalPages = ref(0);
+const searchQuery = ref("");
+const enabledFilter = ref("");
+const projectTypeFilter = ref("");
+const searchDebounceTimer = ref(null);
+
+const hasActiveFilters = computed(() =>
+  Boolean(
+    searchQuery.value.trim() ||
+      enabledFilter.value ||
+      projectTypeFilter.value
+  )
+);
+
 const templates = ref([]);
 const registries = ref([]);
 const gitSources = ref([]);
@@ -3772,7 +850,8 @@ const loadingServicesKey = ref(""); // 当前加载服务的唯一标识（用�
 const isVerifyingServices = ref(false); // 是否正在验证服务列表（编辑模式下防止重复验证）
 const showModal = ref(false);
 const showWebhookModal = ref(false);
-const showHistoryModal = ref(false);
+const permissionDialogOpen = ref(false);
+const permissionPipeline = ref(null);
 const showMultiServiceConfigModal = ref(false);
 const showManualRunModal = ref(false); // 手动触发分支选择模态框
 const manualRunPipeline = ref(null); // 要手动触发的流水线
@@ -3798,27 +877,6 @@ const webhookUrl = ref("");
 const webhookUrlInput = ref(null);
 const deployTaskList = ref([]); // 部署任务列表（用于构建后Webhook快捷选择）
 const editingPipeline = ref(null);
-const currentPipeline = ref(null);
-const historyTasks = ref([]);
-const historyLoading = ref(false);
-const historyFilter = ref({
-  trigger_source: "",
-  status: "",
-});
-const historyPagination = ref({
-  currentPage: 1,
-  pageSize: 20,
-  total: 0,
-  hasMore: false,
-});
-const showLogModal = ref(false);
-const selectedTask = ref(null);
-const viewingLogs = ref(null);
-const taskLogs = ref("");
-const logContainer = ref(null);
-const logPollingInterval = ref(null);
-const autoScroll = ref(true);
-const refreshingLogs = ref(false);
 const showResourcePackageModal = ref(false);
 const resourcePackages = ref([]); // 资源包列表
 const showJsonCreateModal = ref(false); // JSON创建流水线模态框
@@ -3893,6 +951,25 @@ const formData = ref({
   service_template_params: {}, // 服务模板参数
   resource_package_configs: [], // 资源包配置
 });
+
+watch(
+  () => teamStore.activeTeamId,
+  () => {
+    loadPipelines({ resetPage: true });
+  }
+);
+
+watch(
+  () =>
+    route.name === "admin" &&
+    route.params.tab === "pipeline" &&
+    !route.params.pipelineId,
+  (onList) => {
+    if (onList) {
+      loadPipelines({ resetPage: true });
+    }
+  }
+);
 
 onMounted(() => {
   loadProjectTypes();
@@ -4355,16 +1432,73 @@ watch(
   }
 );
 
-async function loadPipelines() {
+function handleFilterChange() {
+  currentPage.value = 1;
+  loadPipelines();
+}
+
+function setEnabledFilter(value) {
+  enabledFilter.value = value;
+  handleFilterChange();
+}
+
+function onSearchInput() {
+  if (searchDebounceTimer.value) {
+    clearTimeout(searchDebounceTimer.value);
+  }
+  searchDebounceTimer.value = setTimeout(() => {
+    handleFilterChange();
+  }, 300);
+}
+
+function changePage(page) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+  currentPage.value = page;
+  loadPipelines();
+}
+
+async function loadPipelines(options = {}) {
+  const { resetPage = false } = options;
+  if (resetPage) {
+    currentPage.value = 1;
+  }
   loading.value = true;
   try {
-    const res = await axios.get("/api/pipelines");
-    pipelines.value = res.data.pipelines || [];
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+    };
+    if (searchQuery.value.trim()) {
+      params.query = searchQuery.value.trim();
+    }
+    if (enabledFilter.value === "enabled") {
+      params.enabled = true;
+    } else if (enabledFilter.value === "disabled") {
+      params.enabled = false;
+    }
+    if (projectTypeFilter.value) {
+      params.project_type = projectTypeFilter.value;
+    }
+    if (teamStore.activeTeamId) {
+      params.team_id = teamStore.activeTeamId;
+    }
 
-    // 更新排队状态：仅用于显示提示，不用于禁用按钮
+    const res = await axios.get("/api/pipelines", { params });
+    pipelines.value = res.data.pipelines || [];
+    totalPipelines.value = res.data.total ?? 0;
+    totalPages.value = res.data.total_pages ?? 0;
+
+    if (
+      pipelines.value.length === 0 &&
+      currentPage.value > 1 &&
+      totalPages.value > 0
+    ) {
+      currentPage.value = totalPages.value;
+      return loadPipelines();
+    }
+
     queuedPipelines.value.clear();
     pipelines.value.forEach((pipeline) => {
-      // 使用后端返回的队列信息
       if (
         pipeline.has_queued_tasks ||
         (pipeline.queue_length && pipeline.queue_length > 0)
@@ -4375,6 +1509,9 @@ async function loadPipelines() {
   } catch (error) {
     console.error("加载流水线列表失败:", error);
     alert("加载流水线列表失败");
+    pipelines.value = [];
+    totalPipelines.value = 0;
+    totalPages.value = 0;
   } finally {
     loading.value = false;
   }
@@ -5061,24 +2198,6 @@ async function savePipeline() {
       return;
     }
 
-    // 检查名字是否重复
-    const duplicatePipeline = pipelines.value.find((p) => {
-      const nameMatch = p.name && p.name.trim() === pipelineName;
-      if (editingPipeline.value) {
-        // 编辑模式：排除当前流水线
-        return nameMatch && p.pipeline_id !== editingPipeline.value.pipeline_id;
-      } else {
-        // 创建模式：检查所有流水线
-        return nameMatch;
-      }
-    });
-
-    if (duplicatePipeline) {
-      alert("流水线名称已存在，请使用其他名称");
-      saving.value = false;
-      return;
-    }
-
     // 调试信息
     console.log("保存流水线参数:", {
       use_project_dockerfile: payload.use_project_dockerfile,
@@ -5086,20 +2205,19 @@ async function savePipeline() {
       project_type: payload.project_type,
     });
 
-    if (editingPipeline.value) {
-      // 更新
+    const isEdit = !!editingPipeline.value;
+    if (isEdit) {
       await axios.put(
         `/api/pipelines/${editingPipeline.value.pipeline_id}`,
         payload
       );
       alert("流水线更新成功");
     } else {
-      // 创建
       await axios.post("/api/pipelines", payload);
       alert("流水线创建成功");
     }
     closeModal();
-    loadPipelines();
+    loadPipelines({ resetPage: !isEdit });
   } catch (error) {
     console.error("保存流水线失败:", error);
     alert(error.response?.data?.detail || "保存流水线失败");
@@ -5267,25 +2385,12 @@ async function createPipelineFromJson() {
       return;
     }
 
-    // 检查流水线名字是否重复
-    const pipelineName = pipelineData.name && pipelineData.name.trim();
-    const duplicatePipeline = pipelines.value.find((p) => {
-      const nameMatch = p.name && p.name.trim() === pipelineName;
-      return nameMatch;
-    });
-
-    if (duplicatePipeline) {
-      jsonError.value = "流水线名称已存在，请使用其他名称";
-      savingJson.value = false;
-      return;
-    }
-
     // 调用API创建流水线
     const response = await axios.post("/api/pipelines/json", pipelineData);
 
     alert("流水线创建成功！");
     closeJsonCreateModal();
-    loadPipelines();
+    loadPipelines({ resetPage: true });
   } catch (error) {
     console.error("通过JSON创建流水线失败:", error);
     const errorMsg =
@@ -6567,8 +3672,15 @@ async function deletePipeline(pipeline) {
 
   try {
     await axios.delete(`/api/pipelines/${pipeline.pipeline_id}`);
+    const onDetailOfDeleted =
+      route.name === "pipeline-detail" &&
+      route.params.pipelineId === pipeline.pipeline_id;
+    if (onDetailOfDeleted) {
+      await goToPipelineList(router);
+    } else {
+      loadPipelines();
+    }
     alert("流水线已删除");
-    loadPipelines();
   } catch (error) {
     console.error("删除流水线失败:", error);
     alert(error.response?.data?.detail || "删除流水线失败");
@@ -7049,121 +4161,21 @@ function formatDateTime(isoString) {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+function openPipelinePermission(pipeline) {
+  permissionPipeline.value = pipeline;
+  permissionDialogOpen.value = true;
+}
+
 function showHistory(pipeline) {
-  currentPipeline.value = pipeline;
-  historyFilter.value = {
-    trigger_source: "",
-    status: "",
-  };
-  historyPagination.value = {
-    currentPage: 1,
-    // 默认每页 10 条
-    pageSize: 10,
-    total: 0,
-    hasMore: false,
-  };
-  showHistoryModal.value = true;
-  loadHistory();
-}
-
-function closeHistoryModal() {
-  showHistoryModal.value = false;
-  currentPipeline.value = null;
-  historyTasks.value = [];
-  historyPagination.value = {
-    currentPage: 1,
-    // 默认每页 10 条
-    pageSize: 10,
-    total: 0,
-    hasMore: false,
-  };
-}
-
-async function loadHistory(page = null) {
-  if (!currentPipeline.value) return;
-
-  // 获取pipeline_id，支持两种字段名
-  const pipelineId =
-    currentPipeline.value.pipeline_id || currentPipeline.value.id;
-  if (!pipelineId) {
-    console.error("流水线ID不存在:", currentPipeline.value);
-    alert("无法获取流水线ID");
+  const id = pipeline.pipeline_id || pipeline.id;
+  if (!id) {
+    alert("无法获取流水线 ID");
     return;
   }
-
-  // 如果指定了页码，更新当前页
-  if (page !== null) {
-    historyPagination.value.currentPage = page;
-  }
-
-  historyLoading.value = true;
-  try {
-    const params = new URLSearchParams();
-    if (historyFilter.value.trigger_source) {
-      params.append("trigger_source", historyFilter.value.trigger_source);
-    }
-    if (historyFilter.value.status) {
-      params.append("status", historyFilter.value.status);
-    }
-
-    params.append("page", historyPagination.value.currentPage.toString());
-    params.append("page_size", historyPagination.value.pageSize.toString());
-
-    const url = `/api/pipelines/${pipelineId}/tasks?${params.toString()}`;
-    const res = await axios.get(url);
-
-    // 检查响应数据结构
-    if (res.data && Array.isArray(res.data.tasks)) {
-      historyTasks.value = res.data.tasks || [];
-      // 更新分页信息
-      historyPagination.value.total = res.data.total || 0;
-      historyPagination.value.hasMore = res.data.has_more || false;
-      // 如果后端返回了 total_pages，可以使用它来更新分页显示
-      if (res.data.total_pages !== undefined) {
-        // total_pages 已由后端计算，前端可以直接使用
-      }
-    } else if (Array.isArray(res.data)) {
-      // 兼容旧格式：如果直接返回数组
-      historyTasks.value = res.data;
-      historyPagination.value.total = res.data.length;
-      historyPagination.value.hasMore = false;
-    } else {
-      console.warn("意外的响应格式:", res.data);
-      historyTasks.value = [];
-      historyPagination.value.total = 0;
-      historyPagination.value.hasMore = false;
-    }
-  } catch (error) {
-    console.error("加载历史构建失败:", error);
-    const errorMsg =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.message ||
-      "加载历史构建失败";
-
-    // 如果是 404 错误（流水线不存在），显示更友好的提示
-    if (error.response?.status === 404) {
-      console.warn(`流水线 ${pipelineId} 不存在，可能是数据不一致`);
-      alert(`流水线不存在，请刷新页面后重试`);
-    } else {
-      alert(`加载历史构建失败: ${errorMsg}`);
-    }
-
-    historyTasks.value = [];
-    historyPagination.value.total = 0;
-    historyPagination.value.hasMore = false;
-  } finally {
-    historyLoading.value = false;
-  }
-}
-
-function changeHistoryPage(page) {
-  if (page < 1) return;
-  const totalPages = Math.ceil(
-    historyPagination.value.total / historyPagination.value.pageSize
-  );
-  if (page > totalPages) return;
-  loadHistory(page);
+  router.push({
+    name: "pipeline-history",
+    params: { pipelineId: id },
+  });
 }
 
 // 判断最后构建是否正在运行
@@ -7175,276 +4187,17 @@ function isLastBuildRunning(pipeline) {
   );
 }
 
-// 计算任务是否正在运行（用于日志模态框）
-const isLogTaskRunning = computed(() => {
-  if (!selectedTask.value) return false;
-  const status = selectedTask.value.status;
-  return status === "running" || status === "pending";
-});
-
-// 获取任务日志
-async function fetchTaskLogs(taskId, silent = false) {
-  if (!silent) {
-    refreshingLogs.value = true;
-  }
-
-  try {
-    const res = await axios.get(`/api/build-tasks/${taskId}/logs`);
-    const oldLength = taskLogs.value.length;
-    if (typeof res.data === "string") {
-      taskLogs.value = res.data || "暂无日志";
-    } else {
-      taskLogs.value = JSON.stringify(res.data, null, 2);
-    }
-
-    // 如果有新内容，自动滚动到底部
-    if (taskLogs.value.length > oldLength && autoScroll.value) {
-      setTimeout(() => {
-        scrollLogToBottom();
-      }, 50);
-    }
-  } catch (error) {
-    console.error("获取任务日志失败:", error);
-    taskLogs.value = `获取日志失败: ${error.message || "未知错误"}`;
-  } finally {
-    refreshingLogs.value = false;
-  }
-}
-
-// 滚动日志到底部
-// 滚动日志到顶部
-function scrollLogToTop() {
-  if (logContainer.value) {
-    autoScroll.value = false; // 滚动到顶部时关闭自动滚动
-    nextTick(() => {
-      if (logContainer.value) {
-        logContainer.value.scrollTop = 0;
-      }
-    });
-  }
-}
-
-function scrollLogToBottom() {
-  if (logContainer.value) {
-    nextTick(() => {
-      if (logContainer.value) {
-        logContainer.value.scrollTop = logContainer.value.scrollHeight;
-      }
-    });
-  }
-}
-
-// 开始日志轮询
-function startLogPolling(taskId) {
-  stopLogPolling();
-  if (
-    selectedTask.value &&
-    (selectedTask.value.status === "running" ||
-      selectedTask.value.status === "pending")
-  ) {
-    logPollingInterval.value = setInterval(() => {
-      fetchTaskLogs(taskId, true);
-    }, 2000);
-  }
-}
-
-// 停止日志轮询
-function stopLogPolling() {
-  if (logPollingInterval.value) {
-    clearInterval(logPollingInterval.value);
-    logPollingInterval.value = null;
-  }
-}
-
-// 刷新日志
-function refreshLogs() {
-  if (selectedTask.value?.task_id) {
-    fetchTaskLogs(selectedTask.value.task_id);
-  }
-}
-
-// 切换自动滚动
-function toggleAutoScroll() {
-  autoScroll.value = !autoScroll.value;
-  if (autoScroll.value) {
-    scrollLogToBottom();
-  }
-}
-
-async function copyLogs() {
-  if (taskLogs.value) {
-    const success = await copyToClipboard(taskLogs.value);
-    if (success) {
-      alert("日志已复制到剪贴板");
-    } else {
-      alert("复制失败");
-    }
-  }
-}
-
-// 关闭日志模态框
-function closeLogModal() {
-  showLogModal.value = false;
-  stopLogPolling();
-  taskLogs.value = "";
-  selectedTask.value = null;
-  viewingLogs.value = null;
-}
-
-// 日志状态相关函数
-function getLogStatusHeaderClass(status) {
-  if (status === "failed") return "bg-danger text-white";
-  if (status === "completed") return "bg-success text-white";
-  if (status === "stopped") return "bg-warning text-dark";
-  return "bg-primary text-white";
-}
-
-function getLogStatusSummaryClass(status) {
-  if (status === "failed") return "bg-danger-subtle";
-  if (status === "completed") return "bg-success-subtle";
-  if (status === "stopped") return "bg-warning-subtle";
-  return "";
-}
-
-function getLogStatusIcon(status) {
-  if (status === "failed") return "fas fa-times-circle";
-  if (status === "completed") return "fas fa-check-circle";
-  if (status === "stopped") return "fas fa-stop-circle";
-  if (status === "running") return "fas fa-spinner fa-spin";
-  if (status === "pending") return "fas fa-clock";
-  return "fas fa-info-circle";
-}
-
-function getLogStatusText(status) {
-  if (status === "failed") return "构建失败";
-  if (status === "completed") return "构建成功";
-  if (status === "stopped") return "构建已停止";
-  if (status === "running") return "构建中";
-  if (status === "pending") return "等待中";
-  return "未知状态";
-}
-
-function formatLogTime(time) {
-  if (!time) return "未知";
-  return new Date(time).toLocaleString("zh-CN");
-}
-
-function calculateLogDuration(start, end) {
-  if (!start || !end) return "未知";
-  const startTime = new Date(start).getTime();
-  const endTime = new Date(end).getTime();
-  const duration = Math.floor((endTime - startTime) / 1000);
-  const minutes = Math.floor(duration / 60);
-  const seconds = duration % 60;
-  return `${minutes}分${seconds}秒`;
-}
-
-function viewTaskLogs(taskId, task) {
-  if (!taskId) {
-    alert("任务ID不存在，无法查看日志");
-    return;
-  }
-
-  if (viewingLogs.value === taskId) {
-    return;
-  }
-
-  viewingLogs.value = taskId;
-
-  // 确保 task 对象有 task_id 属性
-  if (task) {
-    if (!task.task_id) {
-      task = { ...task, task_id: taskId };
-    }
-    if (!task.image) {
-      task.image = task.image_name || "未知";
-    }
-    if (!task.tag) {
-      task.tag = "latest";
-    }
-  } else {
-    task = {
-      task_id: taskId,
-      status: "unknown",
-      image: "未知",
-      tag: "latest",
-    };
-  }
-
-  selectedTask.value = task;
-  showLogModal.value = true;
-  taskLogs.value = "加载中...";
-
-  // 加载日志
-  fetchTaskLogs(taskId);
-
-  // 如果任务正在运行，开始轮询
-  if (task.status === "running" || task.status === "pending") {
-    startLogPolling(taskId);
-  }
-
-  // 监听任务状态变化
-  let statusCheckInterval = setInterval(async () => {
-    try {
-      const res = await axios.get(`/api/build-tasks/${taskId}`);
-      if (res.data && res.data.status) {
-        if (selectedTask.value && selectedTask.value.task_id === taskId) {
-          selectedTask.value.status = res.data.status;
-          if (
-            res.data.status === "completed" ||
-            res.data.status === "failed" ||
-            res.data.status === "stopped"
-          ) {
-            stopLogPolling();
-            clearInterval(statusCheckInterval);
-            // 刷新一次日志
-            fetchTaskLogs(taskId);
-            // 刷新流水线列表
-            loadPipelines();
-          } else if (
-            res.data.status === "running" ||
-            res.data.status === "pending"
-          ) {
-            startLogPolling(taskId);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("检查任务状态失败:", error);
-    }
-  }, 3000);
-
-  // 当模态框关闭时，清理状态检查
-  const unwatchStatus = watch(
-    () => showLogModal.value,
-    (newVal) => {
-      if (!newVal) {
-        if (statusCheckInterval) {
-          clearInterval(statusCheckInterval);
-        }
-        unwatchStatus();
-      }
-    }
-  );
-
-  // 延迟清除 viewingLogs
-  setTimeout(() => {
-    if (viewingLogs.value === taskId) {
-      viewingLogs.value = null;
-    }
-  }, 100);
-}
-
 // 显示多服务配置模态框
 async function showMultiServiceConfig(pipeline) {
-  // 先刷新流水线列表，确保获取最新数据
-  await loadPipelines();
-
-  // 从最新列表中查找对应的流水线，确保使用最新数据
-  const latestPipeline = pipelines.value.find(
-    (p) => p.pipeline_id === pipeline.pipeline_id
-  );
-  const pipelineToUse = latestPipeline || pipeline;
+  let pipelineToUse = pipeline;
+  try {
+    const res = await axios.get(`/api/pipelines/${pipeline.pipeline_id}`);
+    if (res.data) {
+      pipelineToUse = res.data;
+    }
+  } catch (error) {
+    console.warn("获取流水线详情失败，使用列表数据:", error);
+  }
 
   console.log("showMultiServiceConfig - pipelineToUse:", {
     pipeline_id: pipelineToUse.pipeline_id,
@@ -8050,16 +4803,17 @@ async function saveMultiServiceConfig() {
 
     alert("多服务配置已保存");
 
-    // 重新加载流水线列表
     await loadPipelines();
 
-    // 从更新后的列表中查找对应的流水线并更新 multiServiceConfigPipeline
-    const updatedPipeline = pipelines.value.find(
-      (p) => p.pipeline_id === multiServiceConfigPipeline.value.pipeline_id
-    );
-    if (updatedPipeline) {
-      // 更新 multiServiceConfigPipeline，这样如果用户再次打开多服务配置，会显示最新数据
-      multiServiceConfigPipeline.value = updatedPipeline;
+    try {
+      const res = await axios.get(
+        `/api/pipelines/${multiServiceConfigPipeline.value.pipeline_id}`
+      );
+      if (res.data) {
+        multiServiceConfigPipeline.value = res.data;
+      }
+    } catch (error) {
+      console.warn("刷新流水线详情失败:", error);
     }
 
     // 如果当前正在编辑这个流水线，需要更新 editingPipeline 和 formData
@@ -8116,6 +4870,10 @@ async function saveMultiServiceConfig() {
 <style scoped>
 .pipeline-panel {
   padding: 1rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .card {
@@ -8146,30 +4904,205 @@ async function saveMultiServiceConfig() {
   line-height: 1.6;
 }
 
-.font-monospace {
-  font-family: "Courier New", monospace;
-  font-size: 0.85em;
+/* 卡片操作按钮：桌面单行，移动端可换行 */
+.pipeline-panel .card-header .btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
-/* 确保操作按钮组不换行 */
-.btn-group {
-  flex-wrap: nowrap;
+.pipeline-panel .card-header .btn-group > * {
+  flex: 1 1 calc(33.333% - 0.25rem);
+  min-width: 2.5rem;
+}
+
+.pipeline-stats .col-4 {
+  flex: 0 0 33.333333%;
+  width: 33.333333%;
+  max-width: 33.333333%;
 }
 
 /* 响应式调整 */
-@media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-  }
-
-  .card-header .btn-group {
+@media (max-width: 767px) {
+  .pipeline-panel .row > [class*="col-md-"] {
+    flex: 0 0 100%;
     width: 100%;
-    margin-top: 0.5rem;
-    justify-content: flex-start;
+    max-width: 100%;
   }
 
-  .card-header .btn-group .btn {
-    flex: 1;
+  .pipeline-panel {
+    padding: 0;
+  }
+
+  .pipeline-toolbar h5 {
+    font-size: 1rem;
+  }
+
+  .pipeline-toolbar-actions {
+    width: 100%;
+  }
+
+  .pipeline-toolbar-actions > * {
+    flex: 1 1 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .pipeline-panel .card-header,
+  .pipeline-panel .card-body {
+    padding: 0.75rem;
+  }
+
+  .pipeline-panel .card:hover {
+    transform: none;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05) !important;
+  }
+
+  .pipeline-card-badges {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.375rem;
+  }
+
+  .pipeline-panel .card-body .ml-4 {
+    margin-left: 0.25rem !important;
+  }
+
+  .pipeline-build-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.375rem;
+  }
+
+  .pipeline-build-header > div {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .pipeline-build-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    margin-left: 0 !important;
+  }
+
+  .pipeline-stats.row {
+    flex-direction: column;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .pipeline-stats .col-4 {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .pipeline-panel .card-header .btn-group > * {
+    flex: 1 1 calc(33.333% - 0.25rem);
+    min-height: 2.25rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  .pipeline-panel > .fixed.inset-0 {
+    padding: 0.5rem;
+    align-items: flex-end;
+  }
+
+  .pipeline-panel > .fixed.inset-0 > .relative {
+    max-width: 100%;
+  }
+
+  .pipeline-panel .modal-title {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .pipeline-panel .nav-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .pipeline-panel .nav-tabs .nav-link {
+    white-space: nowrap;
+    font-size: 0.75rem;
+    padding: 0.375rem 0.5rem;
+  }
+
+  .pipeline-modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .pipeline-modal-footer > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .pipeline-panel .flex.justify-between.items-center {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .pipeline-panel .flex.justify-between.items-center .btn-group {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .pipeline-panel .input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pipeline-panel .input-group > .btn,
+  .pipeline-panel .input-group > button {
+    width: 100%;
+    border-radius: 0.375rem !important;
+    margin-top: 0.375rem;
+  }
+
+  .pipeline-panel .input-group > input,
+  .pipeline-panel .input-group > select {
+    border-radius: 0.375rem !important;
+    width: 100%;
+  }
+
+  .pipeline-panel .btn-group.w-full {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .pipeline-panel .btn-group.w-full > .btn,
+  .pipeline-panel .btn-group.w-full > button,
+  .pipeline-panel .btn-group.w-full > label {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  .pipeline-branch-mapping-row .col-md-1.text-center {
+    padding-top: 0.125rem;
+    padding-bottom: 0.125rem;
+  }
+
+  .pipeline-json-editor :deep(.cm-editor) {
+    height: min(500px, 42vh) !important;
+    min-height: 220px;
+  }
+
+  .pipeline-json-editor :deep(.cm-scroller) {
+    max-height: 42vh;
   }
 }
 </style>

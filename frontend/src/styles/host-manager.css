@@ -1,0 +1,374 @@
+/* Host manager layout */
+
+.host-manager-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.host-manager-panel__section {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(226 232 240);
+  background-color: white;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.host-manager-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.625rem 1rem;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+}
+
+.host-manager-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+.host-manager-toolbar__filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid rgb(241 245 249);
+}
+
+.host-manager-toolbar__filters-label {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgb(100 116 139);
+}
+
+.host-manager-toolbar__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+  list-style: none;
+}
+
+.host-manager-toolbar__tabs .nav-link {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.875rem;
+}
+
+.host-manager-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.75rem;
+  margin-left: auto;
+}
+
+.host-manager-filters {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem;
+  border-radius: 0.5rem;
+  background-color: rgb(248 250 252);
+  border: 1px solid rgb(241 245 249);
+}
+
+.host-manager-filter-btn {
+  display: inline-flex;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+  color: rgb(71 85 105);
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.host-manager-filter-btn:hover {
+  background-color: rgb(241 245 249);
+  color: rgb(15 23 42);
+}
+
+.host-manager-filter-btn:has(:checked) {
+  border-color: rgb(226 232 240);
+  background-color: white;
+  color: rgb(29 78 216);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+.host-manager-dropdown {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.host-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .host-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .host-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.host-cards-grid > * {
+  min-height: 0;
+  height: 100%;
+}
+
+.host-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 15rem;
+  transition: box-shadow 0.2s;
+}
+
+.host-card:hover {
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.08);
+}
+
+.host-card__header {
+  flex-shrink: 0;
+  padding: 0.875rem 1rem 0.5rem;
+}
+
+.host-card__headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.host-card__headline-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.host-card__tools {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.125rem;
+}
+
+.host-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgb(15 23 42);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-card__meta {
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  color: rgb(100 116 139);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-card__meta--empty {
+  min-height: 0;
+  visibility: hidden;
+}
+
+.host-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.375rem;
+}
+
+.host-card__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  color: rgb(100 116 139);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.host-card__desc--empty {
+  display: none;
+}
+
+.host-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 0.625rem 1rem 1rem;
+  font-size: 0.875rem;
+}
+
+.host-card__body-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.host-card__info-row {
+  min-height: 1.5rem;
+}
+
+.host-card__docker-row {
+  min-height: 1.25rem;
+}
+
+.host-card__placeholder {
+  color: rgb(148 163 184);
+  font-size: 0.8125rem;
+}
+
+.host-card__footer-meta {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 0.625rem;
+  border-top: 1px solid rgb(241 245 249);
+  font-size: 0.8125rem;
+  color: rgb(100 116 139);
+}
+
+.host-cards-grid > .rounded-lg {
+  height: 100%;
+}
+
+.host-manager-root:empty {
+  display: none;
+}
+
+.host-manager-table-wrap {
+  overflow-x: auto;
+}
+
+.host-manager-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.host-manager-table thead th {
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(100 116 139);
+  background-color: rgb(248 250 252);
+  border-bottom: 1px solid rgb(226 232 240);
+  white-space: nowrap;
+}
+
+.host-manager-table tbody td {
+  padding: 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid rgb(241 245 249);
+  color: rgb(51 65 85);
+}
+
+.host-manager-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.host-manager-table tbody tr:hover td {
+  background-color: rgb(248 250 252);
+}
+
+.host-manager-empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: rgb(100 116 139);
+}
+
+.host-manager-empty__icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.45;
+}
+
+.pending-host-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 15rem;
+}
+
+.pending-host-card .card-header {
+  background-color: rgb(255 251 235);
+}
+
+.pending-host-card .card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pending-host-card .card-footer {
+  margin-top: auto;
+}
+
+.card-footer {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgb(241 245 249);
+  background-color: rgb(248 250 252);
+}
+
+@media (max-width: 767px) {
+  .host-manager-toolbar__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .host-manager-toolbar__actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .host-manager-toolbar__filters-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .host-manager-filters {
+    width: 100%;
+  }
+
+  .host-manager-table thead th,
+  .host-manager-table tbody td {
+    padding: 0.5rem;
+  }
+}

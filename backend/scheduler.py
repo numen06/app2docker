@@ -81,7 +81,7 @@ class PipelineScheduler:
         now = datetime.now()
         
         # 获取所有启用的流水线
-        pipelines = self.pipeline_manager.list_pipelines(enabled=True)
+        pipelines, _ = self.pipeline_manager.list_pipelines(enabled=True)
         
         for pipeline in pipelines:
             cron_expr = pipeline.get("cron_expression")

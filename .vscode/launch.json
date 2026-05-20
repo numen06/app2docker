@@ -1,107 +1,32 @@
 {
   "version": "0.2.0",
   "configurations": [
-    
     {
-      "name": "Python: FastAPI (Uvicorn)",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "uvicorn",
-      "python": "${command:python.interpreterPath}",
-      "args": [
-        "backend.app:app",
-        "--reload",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000"
-      ],
-      "jinja": true,
-      "justMyCode": true,
-      "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      }
-    },
-    {
-      "name": "Python: 后端服务器 (直接运行)",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/backend/app.py",
-      "python": "${command:python.interpreterPath}",
-      "console": "integratedTerminal",
-      "justMyCode": true,
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      }
-    },
-    {
-      "name": "Python: 后端服务器 (热重载)",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/backend/app_dev.py",
-      "python": "${command:python.interpreterPath}",
-      "console": "integratedTerminal",
-      "justMyCode": false,
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      },
-      "subProcess": true
-    },
-    {
-      "name": "前端: Vite Dev Server",
+      "name": "Frontend: Vite Dev",
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}/frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "skipFiles": ["<node_internals>/**"],
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": false,
+      "skipFiles": ["<node_internals>/**", "${workspaceFolder}/frontend/node_modules/**"]
     },
     {
-      "name": "Python: Agent 主程序",
+      "name": "Backend: Uvicorn",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/backend/agent/main.py",
-      "python": "${command:python.interpreterPath}",
-      "console": "integratedTerminal",
-      "justMyCode": false,
+      "module": "uvicorn",
+      "args": ["backend.app:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
       "cwd": "${workspaceFolder}",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}",
-        "AGENT_TOKEN": "3a86c70981398276410b83d7185fe004",
-        "SERVER_URL": "ws://10.100.10.95:8000"
-      },
-      "subProcess": true
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "jinja": true
     }
   ],
   "compounds": [
     {
-      "name": "全栈调试 (FastAPI + 前端)",
-      "configurations": [
-        "Python: FastAPI (Uvicorn)",
-        "前端: Vite Dev Server"
-      ],
-      "presentation": {
-        "hidden": false,
-        "group": "development",
-        "order": 1
-      }
-    },
-    {
-      "name": "全栈调试 (热重载)",
-      "configurations": [
-        "Python: 后端服务器 (热重载)",
-        "前端: Vite Dev Server"
-      ],
-      "presentation": {
-        "hidden": false,
-        "group": "development",
-        "order": 2
-      }
+      "name": "Full Stack",
+      "configurations": ["Backend: Uvicorn", "Frontend: Vite Dev"]
     }
   ]
 }

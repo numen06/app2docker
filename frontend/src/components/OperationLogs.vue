@@ -1,203 +1,163 @@
 <template>
-  <div class="operation-logs">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0"><i class="fas fa-history"></i> 操作日志</h5>
-      <div class="d-flex gap-2 align-items-center">
-        <input
+  <div>
+    <div
+      class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+    >
+      <p class="text-xs text-slate-500 lg:max-w-md">
+        系统自动保留最近 90 天，过期日志每小时自动清理
+      </p>
+      <div class="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+        <Input
           v-model="filterUsername"
           type="text"
-          class="form-control form-control-sm"
+          class="w-full min-w-0 sm:w-36"
           placeholder="过滤用户名"
-          style="width: 150px"
         />
-        <select
-          v-model="filterOperation"
-          class="form-select form-select-sm"
-          style="width: 150px"
-        >
+        <NativeSelect v-model="filterOperation" class="w-full min-w-0 sm:w-40">
           <option value="">全部操作</option>
-          <option value="login">登录</option>
-          <option value="logout">登出</option>
-          <option value="change_password">修改密码</option>
-          <option value="build">构建镜像</option>
-          <option value="export">导出镜像</option>
-          <option value="delete_export_task">删除导出任务</option>
-          <option value="save_config">保存配置</option>
-          <option value="save_registries">保存仓库配置</option>
-          <option value="template_create">创建模板</option>
-          <option value="template_update">更新模板</option>
-          <option value="template_delete">删除模板</option>
-        </select>
-        <button class="btn btn-sm btn-outline-primary" @click="loadLogs">
-          <i class="fas fa-sync-alt"></i> 刷新
-        </button>
-        <div class="btn-group">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-danger dropdown-toggle"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
+          <option
+            v-for="opt in OPERATION_LOG_FILTER_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
           >
-            <i class="fas fa-trash-alt"></i> 清理日志
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li>
-              <a class="dropdown-item" href="#" @click.prevent="clearLogs(7)">
-                <i class="fas fa-calendar-week"></i> 保留最近 7 天
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" @click.prevent="clearLogs(30)">
-                <i class="fas fa-calendar-alt"></i> 保留最近 30 天
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" @click.prevent="clearLogs(90)">
-                <i class="fas fa-calendar"></i> 保留最近 90 天
-              </a>
-            </li>
-            <li><hr class="dropdown-divider" /></li>
-            <li>
-              <a
-                class="dropdown-item text-danger"
-                href="#"
-                @click.prevent="clearLogs(null)"
-              >
-                <i class="fas fa-exclamation-triangle"></i> 清空所有日志
-              </a>
-            </li>
-          </ul>
+            {{ opt.label }}
+          </option>
+        </NativeSelect>
+        <Button variant="outline" size="sm" :disabled="loading" @click="loadLogs">
+          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+          刷新
+        </Button>
+        <DropdownMenu>
+          <template #trigger>
+            <Button variant="outline" size="sm" class="text-red-600 hover:text-red-700">
+              <i class="fas fa-trash-alt"></i>
+              清理日志
+              <i class="fas fa-chevron-down text-xs opacity-70"></i>
+            </Button>
+          </template>
+          <DropdownMenuItem @select="clearLogs(7)">
+            <i class="fas fa-calendar-week mr-2 w-4"></i> 保留最近 7 天
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="clearLogs(30)">
+            <i class="fas fa-calendar-alt mr-2 w-4"></i> 保留最近 30 天
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="clearLogs(90)">
+            <i class="fas fa-calendar mr-2 w-4"></i> 保留最近 90 天
+          </DropdownMenuItem>
+          <DropdownMenuItem class="text-red-600 focus:text-red-700" @select="clearLogs(null)">
+            <i class="fas fa-exclamation-triangle mr-2 w-4"></i> 清空所有日志
+          </DropdownMenuItem>
+        </DropdownMenu>
+      </div>
+    </div>
+
+    <div v-if="error" class="mb-4">
+      <AlertBanner :message="error" />
+    </div>
+
+    <div
+      v-if="loading"
+      class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"
+    >
+      <i class="fas fa-spinner fa-spin"></i>
+      加载中…
+    </div>
+
+    <EmptyState
+      v-else-if="!error && logs.length === 0"
+      :message="hasFilters ? '没有匹配的操作日志' : '暂无操作日志'"
+    />
+
+    <template v-else-if="!error && logs.length > 0">
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="(log, index) in logs"
+          :key="logKey(log, index)"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="info">{{ getOperationLogLabel(log.operation) }}</Badge>
+            <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
+              log.username
+            }}</code>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">{{ formatTime(log.timestamp) }}</p>
+          <pre
+            v-if="log.details && Object.keys(log.details).length > 0"
+            class="mt-2 max-h-32 overflow-auto break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600 whitespace-pre-wrap"
+          >{{ formatDetails(log.details) }}</pre>
         </div>
       </div>
-    </div>
 
-    <!-- 日志列表 -->
-    <div v-if="loading" class="text-center py-4">
-      <div class="spinner-border spinner-border-sm" role="status">
-        <span class="visually-hidden">加载中...</span>
+      <div class="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
+        <Table min-width-class="min-w-[44rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-[180px]">时间</TableHead>
+              <TableHead class="w-[120px]">用户名</TableHead>
+              <TableHead class="w-[160px]">操作</TableHead>
+              <TableHead>详情</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="(log, index) in logs" :key="logKey(log, index)">
+              <TableCell class="text-sm text-slate-600 whitespace-nowrap">{{
+                formatTime(log.timestamp)
+              }}</TableCell>
+              <TableCell>
+                <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
+                  log.username
+                }}</code>
+              </TableCell>
+              <TableCell>
+                <Badge variant="info">{{ getOperationLogLabel(log.operation) }}</Badge>
+              </TableCell>
+              <TableCell class="text-sm text-slate-500">
+                <pre
+                  v-if="log.details && Object.keys(log.details).length > 0"
+                  class="max-h-24 max-w-xl overflow-auto rounded bg-slate-50 px-1.5 py-0.5 font-mono text-xs whitespace-pre-wrap"
+                  :title="formatDetails(log.details)"
+                >{{ formatDetails(log.details) }}</pre>
+                <span v-else>—</span>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
-    </div>
 
-    <div v-else-if="logs.length === 0" class="text-center py-4 text-muted">
-      <i class="fas fa-inbox fa-2x mb-2"></i>
-      <p class="mb-0">暂无操作日志</p>
-    </div>
-
-    <div v-else class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th style="width: 180px">时间</th>
-            <th style="width: 120px">用户名</th>
-            <th style="width: 150px">操作</th>
-            <th>详情</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="log in logs"
-            :key="log.timestamp + log.username + log.operation"
-          >
-            <td class="small">
-              {{ formatTime(log.timestamp) }}
-            </td>
-            <td>
-              <code class="small">{{ log.username }}</code>
-            </td>
-            <td>
-              <span class="badge bg-primary">{{
-                getOperationName(log.operation)
-              }}</span>
-            </td>
-            <td class="small text-muted">
-              <code v-if="log.details && Object.keys(log.details).length > 0">
-                {{ JSON.stringify(log.details) }}
-              </code>
-              <span v-else>-</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 分页控件 -->
-    <div
-      v-if="totalPages > 1"
-      class="d-flex justify-content-between align-items-center mt-3"
-    >
-      <div class="text-muted small">
-        显示第 {{ totalLogs > 0 ? (currentPage - 1) * pageSize + 1 : 0 }} -
-        {{ Math.min(currentPage * pageSize, totalLogs) }} 条，共
-        {{ totalLogs }} 条
-      </div>
-      <nav>
-        <ul class="pagination pagination-sm mb-0">
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-double-left"></i>
-            </button>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(currentPage - 1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-left"></i>
-            </button>
-          </li>
-          <li
-            v-for="page in visiblePages"
-            :key="page"
-            class="page-item"
-            :class="{ active: currentPage === page }"
-          >
-            <button class="page-link" @click="changePage(page)">
-              {{ page }}
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(currentPage + 1)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-right"></i>
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(totalPages)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-double-right"></i>
-            </button>
-          </li>
-        </ul>
-      </nav>
-    </div>
-
-    <!-- 错误提示 -->
-    <div v-if="error" class="alert alert-danger mt-3 mb-0">
-      <i class="fas fa-exclamation-circle"></i> {{ error }}
-    </div>
+      <PaginationBar
+        :page="currentPage"
+        :page-size="pageSize"
+        :total="totalLogs"
+        :total-pages="totalPages"
+        @update:page="onPageChange"
+      />
+    </template>
   </div>
 </template>
 
 <script setup>
 import axios from "axios";
 import { computed, onMounted, ref, watch } from "vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import NativeSelect from "@/components/ui/select/NativeSelect.vue";
+import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
+import DropdownMenuItem from "@/components/ui/dropdown-menu/DropdownMenuItem.vue";
+import { Badge } from "@/components/ui/badge";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
+import {
+  OPERATION_LOG_FILTER_OPTIONS,
+  getOperationLogLabel,
+} from "@/constants/operationLogActions.js";
 
 const logs = ref([]);
 const loading = ref(false);
@@ -209,54 +169,25 @@ const pageSize = ref(10);
 const totalLogs = ref(0);
 const totalPages = ref(0);
 
-// 可见的页码列表
-const visiblePages = computed(() => {
-  const total = totalPages.value;
-  const current = currentPage.value;
-  const pages = [];
+const hasFilters = computed(
+  () => Boolean(filterUsername.value?.trim() || filterOperation.value)
+);
 
-  if (total <= 7) {
-    // 总页数小于7，显示所有页码
-    for (let i = 1; i <= total; i++) {
-      pages.push(i);
-    }
-  } else {
-    // 总页数大于7，智能显示
-    if (current <= 4) {
-      // 前部：1 2 3 4 5 ... 最后页
-      for (let i = 1; i <= 5; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    } else if (current >= total - 3) {
-      // 后部：1 ... 倍数第5页 倍数第4页 倍数第3页 倍数第2页 最后页
-      pages.push(1);
-      pages.push("...");
-      for (let i = total - 4; i <= total; i++) pages.push(i);
-    } else {
-      // 中间：1 ... current-1 current current+1 ... 最后页
-      pages.push(1);
-      pages.push("...");
-      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    }
-  }
+function logKey(log, index) {
+  return `${log.timestamp || ""}-${log.username || ""}-${log.operation || ""}-${index}`;
+}
 
-  return pages.filter(
-    (p) => p !== "..." || pages.indexOf(p) === pages.lastIndexOf(p)
-  );
-});
-
-// 切换页码
-function changePage(page) {
-  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+function onPageChange(page) {
+  if (page < 1 || (totalPages.value > 0 && page > totalPages.value)) return;
+  if (page === currentPage.value) return;
   currentPage.value = page;
   loadLogs();
 }
 
 function formatTime(isoString) {
-  if (!isoString) return "-";
+  if (!isoString) return "—";
   const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
   return date.toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
@@ -268,51 +199,38 @@ function formatTime(isoString) {
   });
 }
 
-function getOperationName(operation) {
-  const names = {
-    login: "登录",
-    logout: "登出",
-    change_password: "修改密码",
-    build: "构建镜像",
-    export: "导出镜像",
-    delete_export_task: "删除导出任务",
-    save_config: "保存配置",
-    save_registries: "保存仓库配置",
-    template_create: "创建模板",
-    template_update: "更新模板",
-    template_delete: "删除模板",
-  };
-  return names[operation] || operation;
+function formatDetails(details) {
+  try {
+    return JSON.stringify(details, null, 2);
+  } catch {
+    return String(details);
+  }
 }
 
 async function loadLogs() {
   loading.value = true;
   error.value = null;
   try {
-    const params = {
-      page: currentPage.value,
-      page_size: pageSize.value,
-    };
-
-    // 将过滤条件传递到后端
-    if (filterUsername.value) {
-      params.username = filterUsername.value;
-    }
-    if (filterOperation.value) {
-      params.operation = filterOperation.value;
-    }
+    const params = { page: currentPage.value, page_size: pageSize.value };
+    if (filterUsername.value?.trim()) params.username = filterUsername.value.trim();
+    if (filterOperation.value) params.operation = filterOperation.value;
 
     const res = await axios.get("/api/operation-logs", { params });
     logs.value = res.data.logs || [];
     totalLogs.value = res.data.total || 0;
     totalPages.value = res.data.total_pages || 0;
+
+    if (totalPages.value > 0 && currentPage.value > totalPages.value) {
+      currentPage.value = totalPages.value;
+      loading.value = false;
+      return loadLogs();
+    }
   } catch (err) {
     error.value =
       err.response?.data?.detail ||
       err.response?.data?.error ||
       err.message ||
       "加载操作日志失败";
-    console.error("加载操作日志失败:", err);
     logs.value = [];
     totalLogs.value = 0;
     totalPages.value = 0;
@@ -328,25 +246,19 @@ async function clearLogs(days) {
   } else {
     confirmMessage = `确定要清理操作日志吗？将保留最近 ${days} 天的日志，其他日志将被删除。`;
   }
-
-  if (!confirm(confirmMessage)) {
-    return;
-  }
+  if (!confirm(confirmMessage)) return;
 
   try {
     const params = days ? { days } : {};
     const res = await axios.delete("/api/operation-logs", { params });
-
     alert(res.data.message || "清理成功");
-    // 重新加载日志
+    currentPage.value = 1;
     await loadLogs();
   } catch (err) {
     alert(err.response?.data?.detail || err.message || "清理失败");
-    console.error("清理操作日志失败:", err);
   }
 }
 
-// 监听过滤条件变化，重置到第一页并重新加载
 watch([filterUsername, filterOperation], () => {
   currentPage.value = 1;
   loadLogs();
@@ -356,45 +268,3 @@ onMounted(() => {
   loadLogs();
 });
 </script>
-
-<style scoped>
-.operation-logs {
-  animation: fadeIn 0.3s;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.table {
-  font-size: 0.9rem;
-}
-
-code {
-  font-size: 0.85rem;
-  background-color: #f8f9fa;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-/* 分页样式优化 */
-.pagination .page-link {
-  min-width: 38px;
-  text-align: center;
-}
-
-.pagination .page-item.disabled .page-link {
-  cursor: not-allowed;
-}
-
-.pagination .page-item.active .page-link {
-  font-weight: 600;
-}
-</style>

@@ -6,7 +6,7 @@ import hmac
 import hashlib
 import threading
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from sqlalchemy.orm import Session
 from backend.database import get_db_session, init_db
 from backend.models import Pipeline, PipelineTaskHistory
@@ -118,6 +118,9 @@ class PipelineManager:
                     else None
                 ),
                 "trigger_count": pipeline.trigger_count,
+                "team_id": pipeline.team_id,
+                "group_id": pipeline.group_id,
+                "created_by": pipeline.created_by,
             }
         except Exception as e:
             print(
@@ -165,6 +168,9 @@ class PipelineManager:
         push_mode: str = "multi",
         resource_package_configs: list = None,
         post_build_webhooks: list = None,
+        team_id: str = None,
+        group_id: str = None,
+        created_by: str = None,
     ) -> str:
         """创建流水线配置"""
         pipeline_id = str(uuid.uuid4())
@@ -183,6 +189,9 @@ class PipelineManager:
             )
             if existing:
                 raise ValueError(f"Webhook Token '{webhook_token}' 已被其他流水线使用")
+
+            if self.pipeline_name_exists(name, team_id):
+                raise ValueError("流水线名称已存在，请使用其他名称")
 
             # 如果没有提供 webhook_secret，生成一个
             if not webhook_secret:
@@ -234,6 +243,9 @@ class PipelineManager:
                 cron_expression=cron_expression,
                 post_build_webhooks=post_build_webhooks or [],
                 task_queue=[],
+                team_id=team_id,
+                group_id=group_id,
+                created_by=created_by,
             )
 
             db.add(pipeline)
@@ -371,11 +383,120 @@ class PipelineManager:
         finally:
             db.close()
 
-    def list_pipelines(self, enabled: bool = None) -> List[Dict]:
-        """列出所有流水线配置"""
+    def pipeline_name_exists(
+        self,
+        name: str,
+        team_id: str = None,
+        exclude_pipeline_id: str = None,
+    ) -> bool:
+        """同团队下是否存在同名流水线（名称 trim 后比较）"""
+        trimmed = (name or "").strip()
+        if not trimmed:
+            return False
         db = get_db_session()
         try:
-            # 使用原始 SQL 查询来避免 SQLAlchemy 的 JSON 自动解码问题
+            q = db.query(Pipeline)
+            if team_id:
+                q = q.filter(Pipeline.team_id == team_id)
+            else:
+                q = q.filter(Pipeline.team_id.is_(None))
+            if exclude_pipeline_id:
+                q = q.filter(Pipeline.pipeline_id != exclude_pipeline_id)
+            for row in q.all():
+                if row.name and row.name.strip() == trimmed:
+                    return True
+            return False
+        finally:
+            db.close()
+
+    def _row_to_pipeline_dict(self, row) -> Dict:
+        """将 sqlite3.Row 转为流水线字典"""
+        pipeline_dict = {
+            "pipeline_id": row["pipeline_id"],
+            "name": row["name"],
+            "description": row["description"] or "",
+            "enabled": bool(row["enabled"]),
+            "git_url": row["git_url"],
+            "branch": row["branch"],
+            "sub_path": row["sub_path"],
+            "project_type": row["project_type"],
+            "template": row["template"],
+            "image_name": row["image_name"],
+            "tag": row["tag"],
+            "push": bool(row["push"]),
+            "push_registry": row["push_registry"],
+            "template_params": self._safe_parse_json(row["template_params"], {}),
+            "use_project_dockerfile": bool(row["use_project_dockerfile"]),
+            "dockerfile_name": row["dockerfile_name"],
+            "webhook_token": row["webhook_token"],
+            "webhook_secret": row["webhook_secret"],
+            "webhook_branch_filter": bool(row["webhook_branch_filter"]),
+            "webhook_use_push_branch": bool(row["webhook_use_push_branch"]),
+            "webhook_allowed_branches": self._safe_parse_json(
+                (
+                    row["webhook_allowed_branches"]
+                    if "webhook_allowed_branches" in row.keys()
+                    else None
+                ),
+                [],
+            ),
+            "branch_tag_mapping": self._safe_parse_json(row["branch_tag_mapping"], {}),
+            "source_id": row["source_id"],
+            "selected_services": self._safe_parse_json(row["selected_services"], []),
+            "service_push_config": self._safe_parse_json(
+                row["service_push_config"], {}
+            ),
+            "service_template_params": self._safe_parse_json(
+                row["service_template_params"], {}
+            ),
+            "push_mode": row["push_mode"],
+            "resource_package_configs": self._safe_parse_json(
+                row["resource_package_configs"], []
+            ),
+            "cron_expression": row["cron_expression"],
+            "next_run_time": row["next_run_time"],
+            "post_build_webhooks": self._safe_parse_json(
+                (
+                    row["post_build_webhooks"]
+                    if "post_build_webhooks" in row.keys()
+                    else None
+                ),
+                [],
+            ),
+            "current_task_id": row["current_task_id"],
+            "task_queue": self._safe_parse_json(row["task_queue"], []),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "last_triggered_at": row["last_triggered_at"],
+            "trigger_count": row["trigger_count"] or 0,
+            "team_id": row["team_id"] if "team_id" in row.keys() else None,
+            "group_id": row["group_id"] if "group_id" in row.keys() else None,
+            "created_by": row["created_by"] if "created_by" in row.keys() else None,
+        }
+        for date_field in [
+            "created_at",
+            "updated_at",
+            "last_triggered_at",
+            "next_run_time",
+        ]:
+            if pipeline_dict[date_field] and isinstance(
+                pipeline_dict[date_field], datetime
+            ):
+                pipeline_dict[date_field] = pipeline_dict[date_field].isoformat()
+        return pipeline_dict
+
+    def list_pipelines(
+        self,
+        enabled: bool = None,
+        query: str = None,
+        project_type: str = None,
+        team_id: str = None,
+        offset: int = None,
+        limit: int = None,
+    ) -> Tuple[List[Dict], int]:
+        """列出流水线配置，支持筛选与分页。返回 (items, total)。"""
+        db = get_db_session()
+        try:
             import sqlite3
             from backend.database import DB_FILE
 
@@ -384,110 +505,45 @@ class PipelineManager:
             cursor = conn.cursor()
 
             try:
+                conditions = []
+                params = []
+
                 if enabled is not None:
-                    cursor.execute(
-                        "SELECT * FROM pipelines WHERE enabled = ? ORDER BY created_at DESC",
-                        (enabled,),
-                    )
+                    conditions.append("enabled = ?")
+                    params.append(enabled)
+                if project_type:
+                    conditions.append("project_type = ?")
+                    params.append(project_type)
+                if team_id:
+                    conditions.append("team_id = ?")
+                    params.append(team_id)
+                if query:
+                    q = f"%{query.strip()}%"
+                    conditions.append("(name LIKE ? OR description LIKE ?)")
+                    params.extend([q, q])
+
+                where_sql = ""
+                if conditions:
+                    where_sql = " WHERE " + " AND ".join(conditions)
+
+                count_sql = f"SELECT COUNT(*) FROM pipelines{where_sql}"
+                cursor.execute(count_sql, params)
+                total = cursor.fetchone()[0]
+
+                select_sql = (
+                    f"SELECT * FROM pipelines{where_sql} ORDER BY created_at DESC"
+                )
+                if offset is not None and limit is not None:
+                    select_sql += " LIMIT ? OFFSET ?"
+                    cursor.execute(select_sql, params + [limit, offset])
                 else:
-                    cursor.execute("SELECT * FROM pipelines ORDER BY created_at DESC")
+                    cursor.execute(select_sql, params)
 
                 rows = cursor.fetchall()
                 result = []
-
                 for row in rows:
                     try:
-                        # 手动构建字典，安全处理 JSON 字段
-                        pipeline_dict = {
-                            "pipeline_id": row["pipeline_id"],
-                            "name": row["name"],
-                            "description": row["description"] or "",
-                            "enabled": bool(row["enabled"]),
-                            "git_url": row["git_url"],
-                            "branch": row["branch"],
-                            "sub_path": row["sub_path"],
-                            "project_type": row["project_type"],
-                            "template": row["template"],
-                            "image_name": row["image_name"],
-                            "tag": row["tag"],
-                            "push": bool(row["push"]),
-                            "push_registry": row["push_registry"],
-                            "template_params": self._safe_parse_json(
-                                row["template_params"], {}
-                            ),
-                            "use_project_dockerfile": bool(
-                                row["use_project_dockerfile"]
-                            ),
-                            "dockerfile_name": row["dockerfile_name"],
-                            "webhook_token": row["webhook_token"],
-                            "webhook_secret": row["webhook_secret"],
-                            "webhook_branch_filter": bool(row["webhook_branch_filter"]),
-                            "webhook_use_push_branch": bool(
-                                row["webhook_use_push_branch"]
-                            ),
-                            "webhook_allowed_branches": self._safe_parse_json(
-                                (
-                                    row["webhook_allowed_branches"]
-                                    if "webhook_allowed_branches" in row.keys()
-                                    else None
-                                ),
-                                [],
-                            ),
-                            "branch_tag_mapping": self._safe_parse_json(
-                                row["branch_tag_mapping"], {}
-                            ),
-                            "source_id": row["source_id"],
-                            "selected_services": self._safe_parse_json(
-                                row["selected_services"], []
-                            ),
-                            "service_push_config": self._safe_parse_json(
-                                row["service_push_config"], {}
-                            ),
-                            "service_template_params": self._safe_parse_json(
-                                row["service_template_params"], {}
-                            ),
-                            "push_mode": row["push_mode"],
-                            "resource_package_configs": self._safe_parse_json(
-                                row["resource_package_configs"], []
-                            ),
-                            "cron_expression": row["cron_expression"],
-                            "next_run_time": row["next_run_time"],
-                            "post_build_webhooks": self._safe_parse_json(
-                                (
-                                    row["post_build_webhooks"]
-                                    if "post_build_webhooks" in row.keys()
-                                    else None
-                                ),
-                                [],
-                            ),
-                            "current_task_id": row["current_task_id"],
-                            "task_queue": self._safe_parse_json(row["task_queue"], []),
-                            "created_at": row["created_at"],
-                            "updated_at": row["updated_at"],
-                            "last_triggered_at": row["last_triggered_at"],
-                            "trigger_count": row["trigger_count"] or 0,
-                        }
-
-                        # 格式化日期时间（SQLite 返回的是字符串，需要转换为 ISO 格式）
-                        from datetime import datetime
-
-                        for date_field in [
-                            "created_at",
-                            "updated_at",
-                            "last_triggered_at",
-                            "next_run_time",
-                        ]:
-                            if pipeline_dict[date_field]:
-                                # 如果已经是字符串格式，直接使用；否则转换为 ISO 格式
-                                if isinstance(pipeline_dict[date_field], datetime):
-                                    pipeline_dict[date_field] = pipeline_dict[
-                                        date_field
-                                    ].isoformat()
-                                elif isinstance(pipeline_dict[date_field], str):
-                                    # 已经是字符串，保持原样
-                                    pass
-
-                        result.append(pipeline_dict)
+                        result.append(self._row_to_pipeline_dict(row))
                     except Exception as e:
                         pipeline_id = (
                             row["pipeline_id"]
@@ -499,7 +555,7 @@ class PipelineManager:
 
                         traceback.print_exc()
 
-                return result
+                return result, total
             finally:
                 conn.close()
         finally:
@@ -568,6 +624,10 @@ class PipelineManager:
 
             # 更新字段
             if name is not None:
+                if self.pipeline_name_exists(
+                    name, pipeline.team_id, exclude_pipeline_id=pipeline_id
+                ):
+                    raise ValueError("流水线名称已存在，请使用其他名称")
                 pipeline.name = name
             if git_url is not None:
                 pipeline.git_url = git_url

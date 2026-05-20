@@ -1,0 +1,16 @@
+/**
+ * MiSans 全局字体（自托管，npm postinstall 从 misans-vf 复制到 public/fonts/misans/）。
+ * --font-sans 须与 index.html #app-loading 内联 font-family 保持一致。
+ */
+@import url('/fonts/misans/MiSans.min.css');
+
+:root {
+  --font-sans:
+    'MiSans', system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+}
+
+.cm-editor .cm-content {
+  font-family: var(--font-mono);
+}

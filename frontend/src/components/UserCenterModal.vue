@@ -1,385 +1,485 @@
 <template>
-  <div v-if="show" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">
-            <i class="fas fa-user-circle"></i> 用户中心
-          </h5>
-          <button type="button" class="btn-close" @click="close"></button>
-        </div>
-        <div class="modal-body">
-          <!-- 需要修改密码的提示 -->
-          <div v-if="requirePasswordChange" class="alert alert-warning mb-3">
-            <i class="fas fa-info-circle"></i> 
-            检测到您使用的是默认密码，为了安全起见，请先修改密码。
+  <FormDialog
+    :model-value="show"
+    title="用户中心"
+    icon="fa-user-circle"
+    size="lg"
+    @update:model-value="onDialogUpdate"
+  >
+    <AlertBanner
+      v-if="requirePasswordChange"
+      message="检测到您使用的是默认密码，为了安全起见，请先修改密码。"
+      variant="warning"
+    />
+
+    <div v-if="!requirePasswordChange" class="mb-4">
+      <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <i class="fas fa-user text-blue-600"></i>
+        用户信息
+      </h4>
+      <Card>
+        <CardContent class="flex items-center gap-3 p-4">
+          <i class="fas fa-user-circle text-3xl text-blue-600"></i>
+          <div>
+            <div class="font-semibold text-slate-900">{{ username }}</div>
+            <p v-if="isGlobalAdmin" class="text-xs text-slate-500">系统管理员</p>
+            <p v-else-if="teamStore.activeTeamRole" class="text-xs text-slate-500">
+              {{ teamRoleLabel(teamStore.activeTeamRole) }}
+            </p>
           </div>
-
-          <!-- 用户信息 -->
-          <div v-if="!requirePasswordChange" class="mb-4">
-            <h6 class="mb-3">
-              <i class="fas fa-user"></i> 用户信息
-            </h6>
-            <div class="card bg-light">
-              <div class="card-body">
-                <div class="d-flex align-items-center">
-                  <i class="fas fa-user-circle fa-2x text-primary me-3"></i>
-                  <div>
-                    <div class="fw-bold">{{ username }}</div>
-                    <small class="text-muted">管理员</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <ul v-if="!requirePasswordChange" class="nav nav-tabs mb-3">
-            <li class="nav-item">
-              <button class="nav-link" :class="{ active: activeTab === 'password' }" @click="activeTab = 'password'" type="button">
-                修改密码
-              </button>
-            </li>
-            <li class="nav-item">
-              <button class="nav-link" :class="{ active: activeTab === 'appkeys' }" @click="switchToAppKeys" type="button">
-                API 密钥
-              </button>
-            </li>
-          </ul>
-
-          <div v-if="activeTab === 'password'">
-            <h6 v-if="!requirePasswordChange" class="mb-3">
-              <i class="fas fa-key"></i> 修改密码
-            </h6>
-            <form @submit.prevent="handleChangePassword">
-              <div class="mb-3">
-                <label class="form-label">当前密码 <span class="text-danger">*</span></label>
-                <input v-model="form.oldPassword" type="password" class="form-control" placeholder="请输入当前密码" required autocomplete="current-password" />
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">新密码 <span class="text-danger">*</span></label>
-                <input v-model="form.newPassword" type="password" class="form-control" placeholder="请输入新密码（至少6位）" required minlength="6" autocomplete="new-password" />
-                <div class="form-text">密码长度至少6位</div>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">确认新密码 <span class="text-danger">*</span></label>
-                <input v-model="form.confirmPassword" type="password" class="form-control" placeholder="请再次输入新密码" required minlength="6" autocomplete="new-password" />
-              </div>
-            </form>
-          </div>
-
-          <div v-else>
-            <div class="d-flex align-items-center justify-content-between mb-3">
-              <h6 class="mb-0"><i class="fas fa-key"></i> API 密钥</h6>
-              <button class="btn btn-sm btn-primary" @click="showCreateForm = !showCreateForm" :disabled="appKeysLoading">
-                <i class="fas fa-plus me-1"></i>创建密钥
-              </button>
-            </div>
-
-            <div v-if="showCreateForm" class="card bg-light mb-3">
-              <div class="card-body">
-                <div class="mb-2">
-                  <label class="form-label mb-1">名称</label>
-                  <input v-model="newAppKey.name" class="form-control" placeholder="例如：CI 调用密钥" maxlength="255" />
-                </div>
-                <div class="mb-2">
-                  <label class="form-label mb-1">过期时间（可选）</label>
-                  <input v-model="newAppKey.expiresAt" type="datetime-local" class="form-control" />
-                </div>
-                <button class="btn btn-success btn-sm" @click="createAppKey" :disabled="creatingAppKey || !newAppKey.name.trim()">
-                  <span v-if="creatingAppKey" class="spinner-border spinner-border-sm me-1"></span>
-                  生成密钥
-                </button>
-              </div>
-            </div>
-
-            <div v-if="createdAppKey" class="alert alert-warning py-2">
-              <div class="fw-bold mb-1">请立即复制，该密钥仅展示一次：</div>
-              <code>{{ createdAppKey }}</code>
-            </div>
-
-            <div v-if="appKeysLoading" class="text-muted">加载中...</div>
-            <div v-else-if="appKeys.length === 0" class="text-muted">暂无 API 密钥</div>
-            <div v-else class="table-responsive">
-              <table class="table table-sm align-middle">
-                <thead>
-                  <tr>
-                    <th>名称</th>
-                    <th>前缀</th>
-                    <th>状态</th>
-                    <th>最后使用</th>
-                    <th>过期时间</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in appKeys" :key="item.key_id">
-                    <td>{{ item.name }}</td>
-                    <td><code>{{ item.key_prefix }}</code></td>
-                    <td>
-                      <span class="badge" :class="item.enabled ? 'text-bg-success' : 'text-bg-secondary'">
-                        {{ item.enabled ? '启用' : '禁用' }}
-                      </span>
-                    </td>
-                    <td>{{ formatTime(item.last_used_at) }}</td>
-                    <td>{{ formatTime(item.expires_at) }}</td>
-                    <td>
-                      <button class="btn btn-outline-secondary btn-sm me-1" @click="toggleAppKey(item.key_id)">
-                        {{ item.enabled ? '禁用' : '启用' }}
-                      </button>
-                      <button class="btn btn-outline-danger btn-sm" @click="removeAppKey(item.key_id)">删除</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div v-if="error" class="alert alert-danger mb-0 mt-3">
-            <i class="fas fa-exclamation-circle"></i> {{ error }}
-          </div>
-
-          <div v-if="success" class="alert alert-success mb-0 mt-3">
-            <i class="fas fa-check-circle"></i> {{ success }}
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button 
-            v-if="!requirePasswordChange"
-            type="button" 
-            class="btn btn-secondary" 
-            @click="close"
-          >
-            关闭
-          </button>
-          <button 
-            type="button" 
-            class="btn btn-primary" 
-            @click="handlePrimaryAction"
-            :disabled="(activeTab === 'password' || requirePasswordChange) ? (loading || !canSubmit) : false"
-          >
-            <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
-            {{ (activeTab === 'password' || requirePasswordChange) ? (loading ? '修改中...' : '修改密码') : '确定' }}
-          </button>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  </div>
+
+    <div v-if="!requirePasswordChange" class="mb-4 flex gap-1 border-b border-slate-200">
+      <button
+        type="button"
+        class="border-b-2 px-4 py-2 text-sm font-medium transition"
+        :class="
+          activeTab === 'password'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
+        "
+        @click="activeTab = 'password'"
+      >
+        修改密码
+      </button>
+      <button
+        type="button"
+        class="border-b-2 px-4 py-2 text-sm font-medium transition"
+        :class="
+          activeTab === 'appkeys'
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-slate-500 hover:text-slate-800'
+        "
+        @click="switchToAppKeys"
+      >
+        API 密钥
+      </button>
+    </div>
+
+    <div v-if="activeTab === 'password' || requirePasswordChange">
+      <h4
+        v-if="!requirePasswordChange"
+        class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900"
+      >
+        <i class="fas fa-key text-blue-600"></i>
+        修改密码
+      </h4>
+      <form class="space-y-4" @submit.prevent="handleChangePassword">
+        <div class="space-y-2">
+          <Label>当前密码 <span class="text-red-500">*</span></Label>
+          <Input
+            v-model="form.oldPassword"
+            type="password"
+            placeholder="请输入当前密码"
+            required
+            autocomplete="current-password"
+          />
+        </div>
+        <div class="space-y-2">
+          <Label>新密码 <span class="text-red-500">*</span></Label>
+          <Input
+            v-model="form.newPassword"
+            type="password"
+            placeholder="请输入新密码（至少 6 位）"
+            required
+            minlength="6"
+            autocomplete="new-password"
+          />
+          <p class="text-xs text-slate-500">密码长度至少 6 位</p>
+        </div>
+        <div class="space-y-2">
+          <Label>确认新密码 <span class="text-red-500">*</span></Label>
+          <Input
+            v-model="form.confirmPassword"
+            type="password"
+            placeholder="请再次输入新密码"
+            required
+            minlength="6"
+            autocomplete="new-password"
+          />
+        </div>
+      </form>
+    </div>
+
+    <div v-else-if="activeTab === 'appkeys' && !requirePasswordChange">
+      <div class="mb-3 flex items-center justify-between">
+        <h4 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <i class="fas fa-fingerprint text-blue-600"></i>
+          API 密钥
+        </h4>
+        <Button
+          size="sm"
+          type="button"
+          :disabled="appKeysLoading"
+          @click="showCreateForm = !showCreateForm"
+        >
+          <i class="fas fa-plus"></i>
+          创建密钥
+        </Button>
+      </div>
+
+      <Card v-if="showCreateForm" class="mb-4">
+        <CardContent class="space-y-3 p-4">
+          <div class="space-y-2">
+            <Label>名称</Label>
+            <Input
+              v-model="newAppKey.name"
+              placeholder="例如：CI 调用密钥"
+              maxlength="255"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label>过期时间（可选）</Label>
+            <Input v-model="newAppKey.expiresAt" type="datetime-local" />
+          </div>
+          <Button
+            size="sm"
+            type="button"
+            :disabled="creatingAppKey || !newAppKey.name.trim()"
+            @click="createAppKey"
+          >
+            <i v-if="creatingAppKey" class="fas fa-spinner fa-spin"></i>
+            生成密钥
+          </Button>
+        </CardContent>
+      </Card>
+
+      <AlertBanner
+        v-if="createdAppKey"
+        :message="`请立即复制，该密钥仅展示一次：${createdAppKey}`"
+        variant="warning"
+      />
+
+      <div
+        v-if="appKeysLoading"
+        class="flex items-center gap-2 py-6 text-sm text-slate-500"
+      >
+        <i class="fas fa-spinner fa-spin"></i>
+        加载中…
+      </div>
+      <EmptyState v-else-if="appKeys.length === 0" message="暂无 API 密钥" icon="fa-fingerprint" />
+      <Table v-else min-width-class="min-w-[48rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>前缀</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>最后使用</TableHead>
+              <TableHead>过期时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="item in appKeys" :key="item.key_id">
+              <TableCell>{{ item.name }}</TableCell>
+              <TableCell>
+                <code class="rounded bg-slate-100 px-1 text-xs">{{ item.key_prefix }}</code>
+              </TableCell>
+              <TableCell>
+                <Badge :variant="item.enabled ? 'success' : 'default'">
+                  {{ item.enabled ? "启用" : "禁用" }}
+                </Badge>
+              </TableCell>
+              <TableCell class="text-slate-600">{{ formatTime(item.last_used_at) }}</TableCell>
+              <TableCell class="text-slate-600">{{ formatTime(item.expires_at) }}</TableCell>
+              <TableCell class="text-end">
+                <div class="flex justify-end gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    @click="toggleAppKey(item.key_id)"
+                  >
+                    {{ item.enabled ? "禁用" : "启用" }}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    @click="removeAppKey(item.key_id)"
+                  >
+                    删除
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+      </Table>
+    </div>
+
+    <AlertBanner :message="error" class="mt-3" />
+    <AlertBanner :message="success" variant="success" class="mt-3" />
+
+    <template #footer>
+      <Button v-if="!requirePasswordChange" variant="outline" type="button" @click="close">
+        关闭
+      </Button>
+      <Button
+        type="button"
+        :disabled="
+          (activeTab === 'password' || requirePasswordChange) && (loading || !canSubmit)
+        "
+        @click="handlePrimaryAction"
+      >
+        <i v-if="loading" class="fas fa-spinner fa-spin"></i>
+        {{
+          activeTab === "password" || requirePasswordChange
+            ? loading
+              ? "修改中…"
+              : "修改密码"
+            : "确定"
+        }}
+      </Button>
+    </template>
+  </FormDialog>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { computed, ref, watch } from "vue";
+import axios from "axios";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Label from "@/components/ui/label/Label.vue";
+import { Badge } from "@/components/ui/badge";
+import Card from "@/components/ui/card/Card.vue";
+import CardContent from "@/components/ui/card/CardContent.vue";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
+import { useTeamStore } from "@/stores/team";
+import { useAuthStore } from "@/stores/auth";
 
 const props = defineProps({
   show: {
     type: Boolean,
-    default: false
+    default: false,
   },
   username: {
     type: String,
-    default: ''
+    default: "",
   },
   requirePasswordChange: {
     type: Boolean,
-    default: false
+    default: false,
   },
   initialTab: {
     type: String,
-    default: 'password'
-  }
-})
+    default: "password",
+  },
+});
 
-const emit = defineEmits(['update:show', 'password-changed'])
+const emit = defineEmits(["update:show", "password-changed"]);
+
+const teamStore = useTeamStore();
+const authStore = useAuthStore();
+
+const isGlobalAdmin = computed(() => authStore.isGlobalAdmin);
+
+function teamRoleLabel(role) {
+  const map = { owner: "所有者", admin: "管理员", member: "成员" };
+  return map[role] || role;
+}
 
 const form = ref({
-  oldPassword: '',
-  newPassword: '',
-  confirmPassword: ''
-})
+  oldPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+});
 
-const loading = ref(false)
-const error = ref('')
-const success = ref('')
-const activeTab = ref('password')
-const appKeys = ref([])
-const appKeysLoading = ref(false)
-const showCreateForm = ref(false)
-const creatingAppKey = ref(false)
-const createdAppKey = ref('')
+const loading = ref(false);
+const error = ref("");
+const success = ref("");
+const activeTab = ref("password");
+const appKeys = ref([]);
+const appKeysLoading = ref(false);
+const showCreateForm = ref(false);
+const creatingAppKey = ref(false);
+const createdAppKey = ref("");
 const newAppKey = ref({
-  name: '',
-  expiresAt: ''
-})
+  name: "",
+  expiresAt: "",
+});
 
 const canSubmit = computed(() => {
-  return form.value.oldPassword && 
-         form.value.newPassword && 
-         form.value.confirmPassword &&
-         form.value.newPassword.length >= 6 &&
-         form.value.newPassword === form.value.confirmPassword
-})
+  return (
+    form.value.oldPassword &&
+    form.value.newPassword &&
+    form.value.confirmPassword &&
+    form.value.newPassword.length >= 6 &&
+    form.value.newPassword === form.value.confirmPassword
+  );
+});
+
+function onDialogUpdate(value) {
+  emit("update:show", value);
+  if (!value) {
+    resetState();
+  }
+}
 
 function close() {
-  emit('update:show', false)
-  resetState()
+  emit("update:show", false);
+  resetState();
 }
 
 function resetState() {
   form.value = {
-    oldPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  }
-  activeTab.value = props.initialTab === 'appkeys' ? 'appkeys' : 'password'
-  appKeys.value = []
-  showCreateForm.value = false
-  createdAppKey.value = ''
-  newAppKey.value = { name: '', expiresAt: '' }
-  error.value = ''
-  success.value = ''
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  };
+  const tab = props.initialTab;
+  activeTab.value = tab === "appkeys" ? "appkeys" : "password";
+  appKeys.value = [];
+  showCreateForm.value = false;
+  createdAppKey.value = "";
+  newAppKey.value = { name: "", expiresAt: "" };
+  error.value = "";
+  success.value = "";
 }
 
 function handlePrimaryAction() {
-  if (activeTab.value === 'password' || props.requirePasswordChange) {
-    handleChangePassword()
+  if (activeTab.value === "password" || props.requirePasswordChange) {
+    handleChangePassword();
   } else {
-    close()
+    close();
   }
 }
 
 async function switchToAppKeys() {
-  activeTab.value = 'appkeys'
-  await loadAppKeys()
+  activeTab.value = "appkeys";
+  await loadAppKeys();
 }
 
 function formatTime(value) {
-  if (!value) return '-'
+  if (!value) return "—";
   try {
-    return new Date(value).toLocaleString()
+    return new Date(value).toLocaleString("zh-CN");
   } catch {
-    return value
+    return value;
   }
 }
 
 async function loadAppKeys() {
-  appKeysLoading.value = true
-  error.value = ''
+  appKeysLoading.value = true;
+  error.value = "";
   try {
-    const res = await axios.get('/api/user/app-keys')
-    appKeys.value = res.data?.app_keys || []
+    const res = await axios.get("/api/user/app-keys");
+    appKeys.value = res.data?.app_keys || [];
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || '加载 API 密钥失败'
+    error.value = err.response?.data?.detail || err.message || "加载 API 密钥失败";
   } finally {
-    appKeysLoading.value = false
+    appKeysLoading.value = false;
   }
 }
 
 async function createAppKey() {
-  if (!newAppKey.value.name.trim()) return
-  creatingAppKey.value = true
-  error.value = ''
-  success.value = ''
+  if (!newAppKey.value.name.trim()) return;
+  creatingAppKey.value = true;
+  error.value = "";
+  success.value = "";
   try {
-    const payload = { name: newAppKey.value.name.trim() }
+    const payload = { name: newAppKey.value.name.trim() };
     if (newAppKey.value.expiresAt) {
-      payload.expires_at = new Date(newAppKey.value.expiresAt).toISOString()
+      payload.expires_at = new Date(newAppKey.value.expiresAt).toISOString();
     }
-    const res = await axios.post('/api/user/app-keys', payload)
-    createdAppKey.value = res.data?.app_key || ''
-    success.value = 'API 密钥创建成功'
-    newAppKey.value = { name: '', expiresAt: '' }
-    showCreateForm.value = false
-    await loadAppKeys()
+    const res = await axios.post("/api/user/app-keys", payload);
+    createdAppKey.value = res.data?.app_key || "";
+    success.value = "API 密钥创建成功";
+    newAppKey.value = { name: "", expiresAt: "" };
+    showCreateForm.value = false;
+    await loadAppKeys();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || '创建 API 密钥失败'
+    error.value = err.response?.data?.detail || err.message || "创建 API 密钥失败";
   } finally {
-    creatingAppKey.value = false
+    creatingAppKey.value = false;
   }
 }
 
 async function toggleAppKey(keyId) {
-  error.value = ''
-  success.value = ''
+  error.value = "";
+  success.value = "";
   try {
-    await axios.put(`/api/user/app-keys/${keyId}/toggle`)
-    success.value = 'API 密钥状态已更新'
-    await loadAppKeys()
+    await axios.put(`/api/user/app-keys/${keyId}/toggle`);
+    success.value = "API 密钥状态已更新";
+    await loadAppKeys();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || '更新 API 密钥状态失败'
+    error.value = err.response?.data?.detail || err.message || "更新 API 密钥状态失败";
   }
 }
 
 async function removeAppKey(keyId) {
-  if (!window.confirm('确定删除该 API 密钥吗？删除后不可恢复。')) return
-  error.value = ''
-  success.value = ''
+  if (!window.confirm("确定删除该 API 密钥吗？删除后不可恢复。")) return;
+  error.value = "";
+  success.value = "";
   try {
-    await axios.delete(`/api/user/app-keys/${keyId}`)
-    success.value = 'API 密钥已删除'
-    await loadAppKeys()
+    await axios.delete(`/api/user/app-keys/${keyId}`);
+    success.value = "API 密钥已删除";
+    await loadAppKeys();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || '删除 API 密钥失败'
+    error.value = err.response?.data?.detail || err.message || "删除 API 密钥失败";
   }
 }
 
 async function handleChangePassword() {
   if (!canSubmit.value) {
-    error.value = '请填写完整信息，且新密码长度至少6位，两次输入需一致'
-    return
+    error.value = "请填写完整信息，且新密码长度至少 6 位，两次输入需一致";
+    return;
   }
-  
+
   if (form.value.newPassword !== form.value.confirmPassword) {
-    error.value = '两次输入的密码不一致'
-    return
+    error.value = "两次输入的密码不一致";
+    return;
   }
-  
+
   if (form.value.newPassword.length < 6) {
-    error.value = '新密码长度至少6位'
-    return
+    error.value = "新密码长度至少 6 位";
+    return;
   }
-  
-  loading.value = true
-  error.value = ''
-  success.value = ''
-  
+
+  loading.value = true;
+  error.value = "";
+  success.value = "";
+
   try {
-    const res = await axios.post('/api/change-password', {
+    const res = await axios.post("/api/change-password", {
       old_password: form.value.oldPassword,
-      new_password: form.value.newPassword
-    })
-    
+      new_password: form.value.newPassword,
+    });
+
     if (res.data.success) {
-      success.value = '密码修改成功！'
-      // 清空表单
+      success.value = "密码修改成功！";
       form.value = {
-        oldPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      }
-      
-      // 如果是必须修改密码模式，修改成功后触发事件并关闭
+        oldPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      };
+
       if (props.requirePasswordChange) {
-        // 延迟一下，让用户看到成功消息
         setTimeout(() => {
-          emit('password-changed')
-          emit('update:show', false)
-        }, 1000)
+          emit("password-changed");
+          emit("update:show", false);
+        }, 1000);
       } else {
-        // 普通模式，只显示成功消息
-        // 3秒后自动关闭成功消息
         setTimeout(() => {
-          success.value = ''
-        }, 3000)
+          success.value = "";
+        }, 3000);
       }
     } else {
-      error.value = res.data.error || '修改密码失败'
+      error.value = res.data.error || "修改密码失败";
     }
   } catch (err) {
-    error.value = err.response?.data?.error || err.message || '修改密码失败'
+    error.value = err.response?.data?.error || err.message || "修改密码失败";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -387,19 +487,15 @@ watch(
   () => props.show,
   (visible) => {
     if (visible) {
-      activeTab.value = props.initialTab === 'appkeys' ? 'appkeys' : 'password'
-      if (activeTab.value === 'appkeys') {
-        loadAppKeys()
+      const tab = props.initialTab;
+      activeTab.value = tab === "appkeys" ? "appkeys" : "password";
+      if (activeTab.value === "appkeys") {
+        loadAppKeys();
       }
     } else {
-      resetState()
+      resetState();
     }
-  }
-)
+  },
+  { immediate: true }
+);
 </script>
-
-<style scoped>
-.modal.show {
-  display: block;
-}
-</style>

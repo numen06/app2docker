@@ -70,6 +70,9 @@ class AgentHostManager:
             "description": host.description,
             "created_at": host.created_at.isoformat() if host.created_at else None,
             "updated_at": host.updated_at.isoformat() if host.updated_at else None,
+            "team_id": host.team_id,
+            "group_id": host.group_id,
+            "created_by": host.created_by,
         }
 
     def add_agent_host(
@@ -80,6 +83,9 @@ class AgentHostManager:
         portainer_url: str = None,
         portainer_api_key: str = None,
         portainer_endpoint_id: int = None,
+        team_id: str = None,
+        group_id: str = None,
+        created_by: str = None,
     ) -> Dict:
         """
         添加主机（支持 Agent 和 Portainer 类型）
@@ -131,6 +137,9 @@ class AgentHostManager:
                     "host_info": {},
                     "docker_info": {},
                     "description": description,
+                    "team_id": team_id,
+                    "group_id": group_id,
+                    "created_by": created_by,
                 }
 
                 # 根据主机类型设置不同的字段

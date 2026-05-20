@@ -56,6 +56,8 @@ class HostManager:
             "docker_enabled": host.docker_enabled,
             "docker_version": host.docker_version,
             "description": host.description,
+            "team_id": getattr(host, "team_id", None),
+            "created_by": getattr(host, "created_by", None),
             "created_at": host.created_at.isoformat() if host.created_at else None,
             "updated_at": host.updated_at.isoformat() if host.updated_at else None,
         }
@@ -385,6 +387,8 @@ class HostManager:
         key_password: Optional[str] = None,
         docker_enabled: bool = False,
         description: str = "",
+        team_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> Dict:
         """添加主机"""
         with self._lock:
@@ -418,6 +422,8 @@ class HostManager:
                     docker_enabled=docker_enabled,
                     docker_version=None,
                     description=description,
+                    team_id=team_id,
+                    created_by=created_by,
                 )
 
                 db.add(host_obj)
@@ -508,11 +514,14 @@ class HostManager:
             finally:
                 db.close()
 
-    def list_hosts(self) -> List[Dict]:
-        """列出所有主机"""
+    def list_hosts(self, team_id: Optional[str] = None) -> List[Dict]:
+        """列出所有主机（可选按团队过滤）"""
         db = get_db_session()
         try:
-            hosts = db.query(Host).order_by(Host.created_at.desc()).all()
+            query = db.query(Host)
+            if team_id:
+                query = query.filter(Host.team_id == team_id)
+            hosts = query.order_by(Host.created_at.desc()).all()
             # 在关闭会话之前，先访问所有需要的属性，确保它们被加载
             for host in hosts:
                 _ = host.created_at

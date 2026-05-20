@@ -51,6 +51,8 @@ class ResourcePackageManager:
             "filename": package.filename,
             "size": package.size,
             "extracted": package.extracted,
+            "team_id": getattr(package, "team_id", None),
+            "created_by": getattr(package, "created_by", None),
             "created_at": package.created_at.isoformat() if package.created_at else None,
             "updated_at": package.updated_at.isoformat() if package.updated_at else None,
         }
@@ -60,7 +62,9 @@ class ResourcePackageManager:
         file_data: bytes,
         filename: str,
         description: str = "",
-        extract: bool = True
+        extract: bool = True,
+        team_id: Optional[str] = None,
+        created_by: Optional[str] = None,
     ) -> Dict:
         """上传资源包"""
         with self._lock:
@@ -110,6 +114,8 @@ class ResourcePackageManager:
                     filename=filename,
                     size=file_size,
                     extracted=extract and extracted_path is not None,
+                    team_id=team_id,
+                    created_by=created_by,
                 )
                 
                 db.add(package)
@@ -126,11 +132,14 @@ class ResourcePackageManager:
             finally:
                 db.close()
     
-    def list_packages(self) -> List[Dict]:
-        """列出所有资源包"""
+    def list_packages(self, team_id: Optional[str] = None) -> List[Dict]:
+        """列出所有资源包（可选按团队过滤）"""
         db = get_db_session()
         try:
-            packages = db.query(ResourcePackage).order_by(ResourcePackage.created_at.desc()).all()
+            query = db.query(ResourcePackage)
+            if team_id:
+                query = query.filter(ResourcePackage.team_id == team_id)
+            packages = query.order_by(ResourcePackage.created_at.desc()).all()
             result = []
             packages_to_delete = []
             

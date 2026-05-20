@@ -1,174 +1,149 @@
 <template>
   <div class="template-panel">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h6 class="mb-0"><i class="fas fa-layer-group"></i> 模板列表</h6>
-      <button class="btn btn-primary btn-sm" @click="openEditor(null, true)">
-        <i class="fas fa-plus-circle"></i> 新增模板
-      </button>
+    <PageToolbar title="模板管理" icon="fa-layer-group">
+      <template #actions>
+        <Button size="sm" @click="openEditor(null, true)">
+          <i class="fas fa-plus-circle"></i>
+          新增模板
+        </Button>
+      </template>
+    </PageToolbar>
+
+    <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+      <i class="fas fa-spinner fa-spin"></i>
+      加载中…
     </div>
 
-    <!-- 模板列表表格 -->
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>模板名称</th>
-            <th>项目类型</th>
-            <th>文件大小</th>
-            <th>更新时间</th>
-            <th class="text-end">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading">
-            <td colspan="5" class="text-center py-4">
-              <div class="spinner-border spinner-border-sm me-2"></div>
-              加载中...
-            </td>
-          </tr>
-          <tr v-else-if="templates.length === 0">
-            <td colspan="5" class="text-center text-muted py-4">
-              <i class="fas fa-file-code fa-2x mb-2 d-block"></i>
-              暂无模板，请点击"新增模板"创建
-            </td>
-          </tr>
-          <tr v-for="tpl in templates" :key="tpl.name">
-            <td>
-              <strong>{{ tpl.name }}</strong>
+    <EmptyState
+      v-else-if="templates.length === 0"
+      message='暂无模板，请点击「新增模板」创建'
+      icon="fa-file-code"
+    />
+
+    <template v-else>
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="tpl in templates"
+          :key="`mobile-${tpl.name}`"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="min-w-0">
+            <div class="font-medium text-slate-900">
+              {{ tpl.name }}
               <i
                 v-if="tpl.type === 'builtin'"
-                class="fas fa-lock text-muted ms-1"
+                class="fas fa-lock ml-1 text-slate-400"
                 title="内置模板"
               ></i>
-            </td>
-            <td>
-              <span
-                class="badge"
-                :class="getProjectTypeBadgeClass(tpl.project_type)"
-              >
+            </div>
+            <div class="mt-2">
+              <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
                 {{ getProjectTypeLabel(tpl.project_type) }}
-              </span>
-            </td>
-            <td>{{ formatBytes(tpl.size) }}</td>
-            <td>{{ formatTime(tpl.updated_at) }}</td>
-            <td class="text-end">
-              <div class="btn-group btn-group-sm">
-                <button
-                  class="btn btn-outline-info"
-                  @click="parseTemplate(tpl)"
-                  title="解析"
-                  :disabled="parsing === tpl.name"
-                >
-                  <i
-                    v-if="parsing === tpl.name"
-                    class="fas fa-spinner fa-spin"
-                  ></i>
-                  <i v-else class="fas fa-search"></i>
-                </button>
-                <button
-                  class="btn btn-outline-secondary"
-                  @click="previewTemplate(tpl)"
-                  title="预览"
-                >
-                  <i class="fas fa-eye"></i>
-                </button>
-                <button
-                  class="btn btn-outline-success"
-                  @click="cloneTemplate(tpl)"
-                  title="克隆"
-                >
-                  <i class="fas fa-copy"></i>
-                </button>
-                <button
-                  class="btn btn-outline-primary"
-                  @click="openEditor(tpl, false)"
-                  title="编辑"
-                >
-                  <i class="fas fa-pen"></i>
-                </button>
-                <button
-                  class="btn btn-outline-danger"
-                  @click="deleteTemplate(tpl)"
-                  title="删除"
-                >
-                  <i class="fas fa-trash"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 分页控件 -->
-    <div
-      v-if="totalPages > 1"
-      class="d-flex justify-content-between align-items-center mt-3"
-    >
-      <div class="text-muted small">
-        显示第 {{ totalTemplates > 0 ? (currentPage - 1) * pageSize + 1 : 0 }} -
-        {{ Math.min(currentPage * pageSize, totalTemplates) }} 条，共
-        {{ totalTemplates }} 条
+              </Badge>
+            </div>
+            <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
+              <dt>大小</dt>
+              <dd>{{ formatBytes(tpl.size) }}</dd>
+              <dt>更新</dt>
+              <dd>{{ formatTime(tpl.updated_at) }}</dd>
+            </dl>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              title="解析"
+              :disabled="parsing === tpl.name"
+              @click="parseTemplate(tpl)"
+            >
+              <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
+              <i v-else class="fas fa-search"></i>
+            </Button>
+            <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
+              <i class="fas fa-eye"></i>
+            </Button>
+            <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
+              <i class="fas fa-copy"></i>
+            </Button>
+            <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
+              <i class="fas fa-pen"></i>
+            </Button>
+            <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
+              <i class="fas fa-trash"></i>
+            </Button>
+          </div>
+        </div>
       </div>
-      <nav>
-        <ul class="pagination pagination-sm mb-0">
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-double-left"></i>
-            </button>
-          </li>
-          <li class="page-item" :class="{ disabled: currentPage === 1 }">
-            <button
-              class="page-link"
-              @click="changePage(currentPage - 1)"
-              :disabled="currentPage === 1"
-            >
-              <i class="fas fa-angle-left"></i>
-            </button>
-          </li>
-          <li
-            v-for="page in visiblePages"
-            :key="page"
-            class="page-item"
-            :class="{ active: currentPage === page }"
-          >
-            <button class="page-link" @click="changePage(page)">
-              {{ page }}
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(currentPage + 1)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-right"></i>
-            </button>
-          </li>
-          <li
-            class="page-item"
-            :class="{ disabled: currentPage === totalPages }"
-          >
-            <button
-              class="page-link"
-              @click="changePage(totalPages)"
-              :disabled="currentPage === totalPages"
-            >
-              <i class="fas fa-angle-double-right"></i>
-            </button>
-          </li>
-        </ul>
-      </nav>
-    </div>
 
-    <!-- 模板编辑器模态框 -->
+      <div class="hidden md:block">
+        <Table min-width-class="min-w-[48rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>模板名称</TableHead>
+              <TableHead>项目类型</TableHead>
+              <TableHead>文件大小</TableHead>
+              <TableHead>更新时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="tpl in templates" :key="tpl.name">
+              <TableCell class="font-medium text-slate-900">
+                {{ tpl.name }}
+                <i
+                  v-if="tpl.type === 'builtin'"
+                  class="fas fa-lock ml-1 text-slate-400"
+                  title="内置模板"
+                ></i>
+              </TableCell>
+              <TableCell>
+                <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
+                  {{ getProjectTypeLabel(tpl.project_type) }}
+                </Badge>
+              </TableCell>
+              <TableCell class="text-slate-600">{{ formatBytes(tpl.size) }}</TableCell>
+              <TableCell class="whitespace-nowrap text-slate-600">{{ formatTime(tpl.updated_at) }}</TableCell>
+              <TableCell class="text-end">
+                <div class="flex justify-end gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title="解析"
+                    :disabled="parsing === tpl.name"
+                    @click="parseTemplate(tpl)"
+                  >
+                    <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
+                    <i v-else class="fas fa-search"></i>
+                  </Button>
+                  <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
+                    <i class="fas fa-eye"></i>
+                  </Button>
+                  <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
+                    <i class="fas fa-copy"></i>
+                  </Button>
+                  <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
+                    <i class="fas fa-pen"></i>
+                  </Button>
+                  <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
+                    <i class="fas fa-trash"></i>
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    </template>
+
+    <PaginationBar
+      v-if="totalPages > 1"
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalTemplates"
+      :total-pages="totalPages"
+      @update:page="changePage"
+    />
+
     <TemplateEditorModal
       v-model="showEditor"
       :template="currentTemplate"
@@ -176,175 +151,136 @@
       @saved="handleSaved"
     />
 
-    <!-- 模板预览模态框 -->
     <TemplatePreviewModal v-model="showPreview" :template="currentTemplate" />
 
-    <!-- 模板解析信息模态框 -->
-    <div
-      v-if="showParseModal"
-      class="modal fade show d-block"
-      tabindex="-1"
-      style="z-index: 1055"
-    >
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-info text-white">
-            <h5 class="modal-title">
-              <i class="fas fa-search"></i> 模板解析信息
-              <span v-if="parseTemplateData" class="ms-2">{{
-                parseTemplateData.name
-              }}</span>
-            </h5>
-            <button
-              type="button"
-              class="btn-close btn-close-white"
-              @click="closeParseModal"
-            ></button>
+    <BaseDialog v-model="showParseModal">
+      <div
+        class="template-parse-dialog relative z-10 mx-auto flex max-h-[90vh] w-full max-w-[min(calc(100vw-1.5rem),48rem)] shrink-0 flex-col overflow-hidden rounded-lg shadow-xl"
+        @click.stop
+      >
+        <div class="flex shrink-0 items-center justify-between border-b border-sky-600 bg-sky-600 px-4 py-3 text-white">
+          <h3 class="template-parse-dialog__title flex flex-wrap items-center gap-2 text-lg font-semibold">
+            <i class="fas fa-search"></i>
+            模板解析信息
+            <span v-if="parseTemplateData" class="font-normal opacity-90">{{ parseTemplateData.name }}</span>
+          </h3>
+          <button
+            type="button"
+            class="rounded-md p-2 text-white hover:bg-white/20"
+            @click="closeParseModal"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div v-if="parsing" class="flex items-center justify-center gap-2 py-8 text-slate-500">
+            <i class="fas fa-spinner fa-spin"></i>
+            正在解析模板…
           </div>
-          <div class="modal-body">
-            <div v-if="parsing" class="text-center py-4">
-              <div class="spinner-border spinner-border-sm me-2"></div>
-              正在解析模板...
-            </div>
-            <div v-else-if="parseError" class="alert alert-danger">
-              <i class="fas fa-exclamation-triangle"></i> {{ parseError }}
-            </div>
-            <div v-else-if="parseInfo">
-              <!-- 模板参数 -->
-              <div class="mb-4">
-                <h6 class="mb-3">
-                  <i class="fas fa-sliders-h text-primary"></i> 模板参数
-                  <span class="badge bg-primary ms-2"
-                    >{{ parseInfo.params?.length || 0 }} 个</span
-                  >
-                </h6>
-                <div
-                  v-if="parseInfo.params && parseInfo.params.length > 0"
-                  class="table-responsive"
-                >
-                  <table class="table table-sm table-bordered table-hover">
-                    <thead class="table-light">
-                      <tr>
-                        <th style="width: 200px">参数名称</th>
-                        <th>描述</th>
-                        <th style="width: 100px">默认值</th>
-                        <th style="width: 80px">必填</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="param in parseInfo.params" :key="param.name">
-                        <td>
-                          <code>{{ param.name }}</code>
-                        </td>
-                        <td>{{ param.description || "-" }}</td>
-                        <td>
-                          <span
-                            v-if="param.default"
-                            class="badge bg-secondary"
-                            >{{ param.default }}</span
-                          >
-                          <span v-else class="text-muted">-</span>
-                        </td>
-                        <td>
-                          <span v-if="param.required" class="badge bg-danger"
-                            >是</span
-                          >
-                          <span v-else class="badge bg-success">否</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div v-else class="alert alert-info mb-0">
-                  <i class="fas fa-info-circle"></i> 该模板没有可配置参数
-                </div>
-              </div>
-
-              <!-- 服务阶段（多阶段构建） -->
-              <div>
-                <h6 class="mb-3">
-                  <i class="fas fa-server text-info"></i> 服务阶段（多阶段构建）
-                  <span class="badge bg-info ms-2"
-                    >{{ parseInfo.services?.length || 0 }} 个</span
-                  >
-                </h6>
-                <div
-                  v-if="parseInfo.services && parseInfo.services.length > 0"
-                  class="table-responsive"
-                >
-                  <table class="table table-sm table-bordered table-hover">
-                    <thead class="table-light">
-                      <tr>
-                        <th style="width: 250px">服务名称</th>
-                        <th style="width: 100px">端口</th>
-                        <th style="width: 100px">用户</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="service in parseInfo.services"
-                        :key="service.name"
-                      >
-                        <td>
-                          <code>{{ service.name }}</code>
-                        </td>
-                        <td>
-                          <span
-                            v-if="service.port"
-                            class="badge bg-secondary"
-                            >{{ service.port }}</span
-                          >
-                          <span v-else class="text-muted">-</span>
-                        </td>
-                        <td>
-                          <span
-                            v-if="service.user"
-                            class="badge bg-secondary"
-                            >{{ service.user }}</span
-                          >
-                          <span v-else class="text-muted">-</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div v-else class="alert alert-info mb-0">
-                  <i class="fas fa-info-circle"></i>
-                  该模板不是多阶段构建，或没有服务阶段
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              @click="closeParseModal"
-            >
-              <i class="fas fa-times"></i> 关闭
-            </button>
+          <AlertBanner v-else-if="parseError" :message="parseError" variant="danger" />
+          <div v-else-if="parseInfo" class="space-y-6">
+            <section>
+              <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <i class="fas fa-sliders-h text-blue-600"></i>
+                模板参数
+                <Badge variant="info">{{ parseInfo.params?.length || 0 }} 个</Badge>
+              </h4>
+              <Table v-if="parseInfo.params?.length" class="border border-slate-200">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="w-48">参数名称</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead class="w-28">默认值</TableHead>
+                    <TableHead class="w-20">必填</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="param in parseInfo.params" :key="param.name">
+                    <TableCell><code class="text-xs">{{ param.name }}</code></TableCell>
+                    <TableCell class="text-slate-600">{{ param.description || "—" }}</TableCell>
+                    <TableCell>
+                      <Badge v-if="param.default" variant="default">{{ param.default }}</Badge>
+                      <span v-else class="text-slate-400">—</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge :variant="param.required ? 'danger' : 'success'">
+                        {{ param.required ? "是" : "否" }}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <p v-else class="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                该模板没有可配置参数
+              </p>
+            </section>
+            <section>
+              <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <i class="fas fa-server text-sky-600"></i>
+                服务阶段（多阶段构建）
+                <Badge variant="info">{{ parseInfo.services?.length || 0 }} 个</Badge>
+              </h4>
+              <Table v-if="parseInfo.services?.length" class="border border-slate-200">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>服务名称</TableHead>
+                    <TableHead class="w-28">端口</TableHead>
+                    <TableHead class="w-28">用户</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="service in parseInfo.services" :key="service.name">
+                    <TableCell><code class="text-xs">{{ service.name }}</code></TableCell>
+                    <TableCell>
+                      <Badge v-if="service.port" variant="default">{{ service.port }}</Badge>
+                      <span v-else class="text-slate-400">—</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge v-if="service.user" variant="default">{{ service.user }}</Badge>
+                      <span v-else class="text-slate-400">—</span>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <p v-else class="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                该模板不是多阶段构建，或没有服务阶段
+              </p>
+            </section>
           </div>
         </div>
+        <div class="flex shrink-0 justify-end border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <Button variant="outline" @click="closeParseModal">关闭</Button>
+        </div>
       </div>
-    </div>
-    <div v-if="showParseModal" class="modal-backdrop fade show"></div>
+    </BaseDialog>
   </div>
 </template>
 
 <script setup>
 import axios from "axios";
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import TemplateEditorModal from "./TemplateEditorModal.vue";
 import TemplatePreviewModal from "./TemplatePreviewModal.vue";
-import { 
-  getProjectTypes, 
+import PageToolbar from "@/components/ui/PageToolbar.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import EmptyState from "@/components/ui/EmptyState.vue";
+import AlertBanner from "@/components/ui/AlertBanner.vue";
+import BaseDialog from "@/components/ui/dialog/BaseDialog.vue";
+import Button from "@/components/ui/button/Button.vue";
+import { Badge } from "@/components/ui/badge";
+import Table from "@/components/ui/table/Table.vue";
+import TableHeader from "@/components/ui/table/TableHeader.vue";
+import TableBody from "@/components/ui/table/TableBody.vue";
+import TableRow from "@/components/ui/table/TableRow.vue";
+import TableHead from "@/components/ui/table/TableHead.vue";
+import TableCell from "@/components/ui/table/TableCell.vue";
+import {
+  getProjectTypes,
   getProjectTypesSync,
-  getProjectTypeLabel, 
-  getProjectTypeBadgeClass 
-} from '../utils/projectTypes.js';
+  getProjectTypeLabel,
+} from "../utils/projectTypes.js";
 
-// 项目类型相关
-const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类型列表
+const projectTypesList = ref(getProjectTypesSync());
 
 const templates = ref([]);
 const loading = ref(false);
@@ -357,52 +293,24 @@ const pageSize = ref(10);
 const totalTemplates = ref(0);
 const totalPages = ref(0);
 
-// 解析相关状态
 const showParseModal = ref(false);
-const parsing = ref(null); // 正在解析的模板名称
-const parseInfo = ref(null); // 解析结果
+const parsing = ref(null);
+const parseInfo = ref(null);
 const parseError = ref("");
-const parseTemplateData = ref(null); // 当前解析的模板数据
+const parseTemplateData = ref(null);
 
-// 可见的页码列表
-const visiblePages = computed(() => {
-  const total = totalPages.value;
-  const current = currentPage.value;
-  const pages = [];
+function projectTypeBadgeVariant(type) {
+  const map = {
+    jar: "default",
+    war: "warning",
+    node: "success",
+    python: "info",
+    go: "info",
+    static: "default",
+  };
+  return map[type] || "default";
+}
 
-  if (total <= 7) {
-    // 总页数小于7，显示所有页码
-    for (let i = 1; i <= total; i++) {
-      pages.push(i);
-    }
-  } else {
-    // 总页数大于7，智能显示
-    if (current <= 4) {
-      // 前部：1 2 3 4 5 ... 最后页
-      for (let i = 1; i <= 5; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    } else if (current >= total - 3) {
-      // 后部：1 ... 倍数第5页 倍数第4页 倍数第3页 倍数第2页 最后页
-      pages.push(1);
-      pages.push("...");
-      for (let i = total - 4; i <= total; i++) pages.push(i);
-    } else {
-      // 中间：1 ... current-1 current current+1 ... 最后页
-      pages.push(1);
-      pages.push("...");
-      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    }
-  }
-
-  return pages.filter(
-    (p) => p !== "..." || pages.indexOf(p) === pages.lastIndexOf(p)
-  );
-});
-
-// 切换页码
 function changePage(page) {
   if (page < 1 || page > totalPages.value || page === currentPage.value) return;
   currentPage.value = page;
@@ -445,18 +353,15 @@ function previewTemplate(tpl) {
 
 async function cloneTemplate(tpl) {
   try {
-    // 获取模板内容
     const res = await axios.get("/api/templates", {
       params: { name: tpl.name },
     });
 
     const projectType = res.data.project_type || tpl.project_type;
 
-    // 生成新模板名称
     let newName = `${tpl.name}_copy`;
     let counter = 1;
 
-    // 检查名称是否已存在（只检查相同项目类型的模板）
     while (
       templates.value.some(
         (t) => t.name === newName && (t.project_type || "jar") === projectType
@@ -466,16 +371,12 @@ async function cloneTemplate(tpl) {
       counter++;
     }
 
-    // 创建克隆的模板对象
-    const clonedTemplate = {
+    currentTemplate.value = {
       name: newName,
       project_type: projectType,
       content: res.data.content,
-      type: "user", // 克隆的模板都是用户模板
+      type: "user",
     };
-
-    // 打开编辑器，设置为新建模式
-    currentTemplate.value = clonedTemplate;
     isNew.value = true;
     showEditor.value = true;
   } catch (error) {
@@ -539,12 +440,12 @@ async function deleteTemplate(tpl) {
 }
 
 function handleSaved() {
-  currentPage.value = 1; // 重置到第一页
+  currentPage.value = 1;
   loadTemplates();
 }
 
 function formatBytes(bytes) {
-  if (!bytes) return "-";
+  if (!bytes) return "—";
   const units = ["B", "KB", "MB", "GB"];
   let idx = 0;
   let value = bytes;
@@ -556,7 +457,7 @@ function formatBytes(bytes) {
 }
 
 function formatTime(timeStr) {
-  if (!timeStr) return "-";
+  if (!timeStr) return "—";
   try {
     return new Date(timeStr).toLocaleString("zh-CN");
   } catch {
@@ -564,7 +465,6 @@ function formatTime(timeStr) {
   }
 }
 
-// 项目类型处理（从缓存加载，如果没有则从API加载）
 async function loadProjectTypes() {
   projectTypesList.value = await getProjectTypes();
 }
@@ -591,22 +491,18 @@ onMounted(() => {
   }
 }
 
-.table th {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
+@media (max-width: 767px) {
+  .template-parse-dialog {
+    max-width: 100%;
+  }
 
-/* 分页样式优化 */
-.pagination .page-link {
-  min-width: 38px;
-  text-align: center;
-}
+  .template-parse-dialog__title {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+  }
 
-.pagination .page-item.disabled .page-link {
-  cursor: not-allowed;
-}
-
-.pagination .page-item.active .page-link {
-  font-weight: 600;
+  .template-parse-dialog :deep(table) {
+    font-size: 0.8125rem;
+  }
 }
 </style>
