@@ -8,7 +8,15 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from backend.auth import check_role
-from backend.models import DeployConfig, ExportTask, Host, Pipeline, ResourcePackage, Task
+from backend.models import (
+    DeployConfig,
+    ExportTask,
+    Host,
+    Pipeline,
+    ResourcePackage,
+    Task,
+    TeamMember,
+)
 from backend.team_permissions import get_user_id_by_username, require_team_member
 
 
@@ -45,6 +53,33 @@ def resolve_team_scope_from_request(
 ) -> Optional[str]:
     user_id = get_user_id_by_username(db, username)
     return resolve_team_scope(db, user_id, team_id, required=required)
+
+
+def resolve_team_scope_from_request_with_fallback(
+    db: Session,
+    username: str,
+    team_id: Optional[str],
+) -> str:
+    """
+    解析 team_id；未传时使用用户加入的第一个团队（兼容 FormData 上传未带 query 的场景）。
+    """
+    if team_id:
+        resolved = resolve_team_scope_from_request(db, username, team_id)
+        assert resolved
+        return resolved
+
+    user_id = get_user_id_by_username(db, username)
+    member = (
+        db.query(TeamMember)
+        .filter(TeamMember.user_id == user_id)
+        .order_by(TeamMember.joined_at.asc())
+        .first()
+    )
+    if member and member.team_id:
+        require_team_member(db, member.team_id, user_id)
+        return member.team_id
+
+    raise HTTPException(status_code=400, detail="需要指定 team_id")
 
 
 def get_effective_team_id_for_task(db: Session, task: Task) -> Optional[str]:

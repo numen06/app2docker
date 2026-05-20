@@ -817,6 +817,7 @@ import { Codemirror } from "vue-codemirror";
 import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
+import { useTeamStore } from "@/stores/team";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
 import StatCard from "@/components/ui/StatCard.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
@@ -850,6 +851,7 @@ const rebuilding = ref(null); // 重建中的任务ID
 const retrying = ref(null); // 重试中的任务ID
 const retryingDeploy = ref(null); // 重试部署中的任务ID
 const stopping = ref(null); // 停止中的任务ID
+const teamStore = useTeamStore();
 const buildTaskLogs = useBuildTaskLogs();
 // 错误弹窗已移除，错误信息现在显示在日志顶部
 const currentPage = ref(1); // 当前页码
@@ -1186,6 +1188,8 @@ async function loadTasks(includeStats = true) {
       page: currentPage.value,
       page_size: pageSize.value,
     };
+    const teamId = teamStore.activeTeamIdForApi;
+    if (teamId) params.team_id = teamId;
     if (statusFilter.value) params.status = statusFilter.value;
     if (categoryFilter.value) params.task_type = categoryFilter.value;
     if (deployConfigFilterId.value) params.deploy_config_id = deployConfigFilterId.value;
@@ -2275,7 +2279,7 @@ function handleTaskFinished() {
   }, 400);
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener("click", handleCleanupOutsideClick);
   window.addEventListener("resize", adjustCleanupMenuPosition);
 
@@ -2295,7 +2299,22 @@ onMounted(() => {
     categoryFilter.value = "deploy";
     sessionStorage.removeItem("deployConfigFilter");
   }
-  loadTasks();
+  if (sessionStorage.getItem("tasksNeedRefresh")) {
+    sessionStorage.removeItem("tasksNeedRefresh");
+  }
+  const highlightId = sessionStorage.getItem("highlightTaskId");
+  if (highlightId) {
+    sessionStorage.removeItem("highlightTaskId");
+    categoryFilter.value = "";
+    statusFilter.value = "";
+  }
+  await loadTasks();
+  if (highlightId) {
+    const found = tasks.value.find((t) => t.task_id === highlightId);
+    if (found) {
+      nextTick(() => buildTaskLogs.viewLogs(found));
+    }
+  }
   loadSystemQueueSettings();
   // 启动定时刷新（如果有运行中的任务）
   startRefreshInterval();

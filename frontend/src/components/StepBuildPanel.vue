@@ -1691,12 +1691,19 @@
         </div>
       </div>
     </div>
+
+    <BuildTaskLogModal
+      :controller="buildTaskLogs"
+      @task-status-updated="onBuildLogStatusUpdated"
+    />
 </div>
 </template>
 
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
+import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
+import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 import { showToast } from "@/composables/useToast";
 import { useTeamStore } from "@/stores/team";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
@@ -1718,6 +1725,17 @@ import {
 } from '../utils/projectTypes.js';
 
 const teamStore = useTeamStore();
+const buildTaskLogs = useBuildTaskLogs({
+  onTaskFinished: () => {
+    building.value = false;
+    window.dispatchEvent(new CustomEvent("taskFinished"));
+  },
+});
+
+function onBuildLogStatusUpdated() {
+  window.dispatchEvent(new CustomEvent("taskFinished"));
+}
+
 const currentStep = ref(1);
 const buildStepIndicators = [
   { num: 1, label: "选择数据源" },
@@ -3206,6 +3224,11 @@ async function startBuild() {
       }
       formData.append("build_steps", JSON.stringify(buildSteps)); // 添加步骤信息
 
+      const teamId = teamStore.activeTeamIdForApi;
+      if (teamId) {
+        formData.append("team_id", teamId);
+      }
+
       // 初始化上传进度
       uploadProgress.value = 0;
       uploadLoaded.value = 0;
@@ -3396,6 +3419,23 @@ async function startBuild() {
       });
 
       building.value = false;
+
+      buildTaskLogs.viewTaskLogs(taskId, {
+        task_id: taskId,
+        task_type: "build",
+        image: imageName,
+        tag,
+        status: "pending",
+        source:
+          buildConfig.value.sourceType === "file" ? "文件上传" : "Git源码",
+      });
+
+      try {
+        sessionStorage.setItem("tasksNeedRefresh", "1");
+        sessionStorage.setItem("highlightTaskId", taskId);
+      } catch {
+        /* ignore */
+      }
 
       window.dispatchEvent(
         new CustomEvent("taskCreated", {

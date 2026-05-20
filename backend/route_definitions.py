@@ -2174,15 +2174,21 @@ async def upload_file(
     build_steps: Optional[str] = Form(None),  # JSON 字符串格式的构建步骤信息
     resource_package_configs: Optional[str] = Form(None),  # JSON 字符串格式的资源包配置
     team_id: Optional[str] = Query(None, description="当前团队 ID"),
+    team_id_form: Optional[str] = Form(None, description="当前团队 ID（Form 字段，与 query 二选一）"),
 ):
     """上传文件并开始构建"""
     try:
         username = get_current_username(request)
         from backend.database import get_db_session
+        from backend.team_scope import resolve_team_scope_from_request_with_fallback
+
+        effective_team_id = (team_id or team_id_form or "").strip() or None
 
         db = get_db_session()
         try:
-            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, effective_team_id
+            )
         finally:
             db.close()
 

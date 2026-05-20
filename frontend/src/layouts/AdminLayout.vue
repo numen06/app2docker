@@ -1407,21 +1407,37 @@ function goToRunningTasks() {
 
 async function updateRunningTasksCount() {
   if (!getToken()) return;
+  const teamId = teamStore.activeTeamIdForApi;
+  if (!teamId) {
+    runningTasksCount.value = 0;
+    runningTasksList.value = [];
+    return;
+  }
   try {
-    const res = await axios.get("/api/tasks");
-    const tasks = res.data.tasks || [];
-    const running = tasks
-      .filter((t) => t.status === "running")
+    const res = await axios.get("/api/tasks/running", {
+      params: { team_id: teamId },
+    });
+    const tasks = (res.data.tasks || [])
+      .filter((t) => t.status === "running" || t.status === "pending")
       .sort((a, b) => {
         const timeA = new Date(a.created_at || 0).getTime();
         const timeB = new Date(b.created_at || 0).getTime();
         return timeB - timeA;
       });
-    runningTasksCount.value = running.length;
-    runningTasksList.value = running;
+    runningTasksCount.value = tasks.length;
+    runningTasksList.value = tasks;
   } catch (error) {
     console.error("获取运行任务数量失败:", error);
   }
+}
+
+function handleGlobalTaskCreated() {
+  try {
+    sessionStorage.setItem("tasksNeedRefresh", "1");
+  } catch {
+    /* ignore */
+  }
+  updateRunningTasksCount();
 }
 
 function getTaskTypeLabel(type) {
@@ -1530,6 +1546,7 @@ onMounted(async () => {
   await loadUpdateCheck();
 
   window.addEventListener("navigate", handleNavigateEvent);
+  window.addEventListener("taskCreated", handleGlobalTaskCreated);
   document.addEventListener("click", handleTopbarOutsideClick);
   window.addEventListener("resize", handleTopbarResize);
 });
@@ -1545,6 +1562,7 @@ onUnmounted(() => {
   stopRunningTasksTimer();
   dismissUpdateSnack();
   window.removeEventListener("navigate", handleNavigateEvent);
+  window.removeEventListener("taskCreated", handleGlobalTaskCreated);
   document.removeEventListener("click", handleTopbarOutsideClick);
   window.removeEventListener("resize", handleTopbarResize);
 });
