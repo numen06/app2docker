@@ -2,17 +2,18 @@
 # 基于主程序的 Dockerfile，但只包含 Python 后端部分，入口程序改为 backend/agent/main.py
 
 # ============ Python 后端 ============
-# 使用阿里云 Python 镜像加速下载
-FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli
+# docker:cli 仅提供 Docker/buildx；Python 用官方镜像，避免 51jbm/docker 内 apk python3 与 expat ABI 不匹配
+FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS docker-tools
+
+FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.12-alpine
+
+COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
 
 # ✅ 替换 apk 源为阿里云镜像（关键！提速 5–10×）
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    py3-setuptools \
-    expat \
     curl \
     jq \
     git \
@@ -20,40 +21,25 @@ RUN apk add --no-cache \
     gcc \
     musl-dev \
     linux-headers \
-    docker-compose
+    docker-compose \
+    tzdata
 
-# Alpine musl：python3 与 expat 版本不一致时，pip 会触发 pyexpat 符号缺失
-RUN apk upgrade --no-cache expat python3 py3-pip py3-setuptools && \
-    python -c "import pyexpat"
+ENV TZ=Asia/Shanghai
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo "$TZ" > /etc/timezone
 
-# ✅ 创建软链接 python → python3（适配多数脚本）
-RUN ln -sf python3 /usr/bin/python && \
-    ln -sf pip3 /usr/bin/pip
-
-# ✅ 升级系统 pip（venv 创建前；依赖上方 expat/python3 已对齐）
-# 使用国内镜像源并增加超时时间，避免网络超时
-RUN python -m pip install --upgrade --break-system-packages \
+RUN python -c "import pyexpat" && \
+    python -m pip install --upgrade \
     --index-url https://mirrors.aliyun.com/pypi/simple/ \
     --timeout 300 \
     --retries 5 \
     pip
 
-# ✅ 验证 Python 环境
+# ✅ 验证 Python / Docker 环境
 RUN echo "✅ Python version:" && python --version && \
     echo "✅ pip version:" && pip --version && \
     echo "✅ docker version:" && docker --version && \
     echo "✅ docker-compose version:" && docker-compose --version
-
-#设置时区
-# 1. 安装 tzdata（Alpine 官方时区数据包）
-RUN apk add --no-cache tzdata
-
-# 2. 设置默认时区（影响 date 命令 & 大多数应用）
-ENV TZ=Asia/Shanghai
-
-# 3. （可选）让 `date` 命令显示正确本地时间（软链接 localtime）
-RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo "$TZ" > /etc/timezone
 
 WORKDIR /app
 
@@ -102,4 +88,3 @@ RUN chmod +x /app/backend/agent/start.sh
 
 # 启动 Agent 程序（使用启动脚本捕获错误）
 CMD ["/app/backend/agent/start.sh"]
-
