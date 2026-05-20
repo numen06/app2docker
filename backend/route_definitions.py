@@ -1414,16 +1414,27 @@ async def clear_operation_logs(
     days: Optional[int] = Query(
         None, description="保留最近 N 天的日志，不传则清空所有"
     ),
+    team_id: Optional[str] = Query(None, description="按团队清理"),
 ):
     """清理操作日志"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         logger = OperationLogger()
-        removed_count = logger.clear_logs(days=days)
+        removed_count = logger.clear_logs(days=days, team_id=scoped_team_id)
 
         # 记录清理操作
         OperationLogger.log(
-            username, "clear_logs", {"removed_count": removed_count, "days_kept": days}
+            username,
+            "clear_logs",
+            {"removed_count": removed_count, "days_kept": days},
+            team_id=scoped_team_id,
         )
 
         return JSONResponse(
@@ -2696,7 +2707,6 @@ async def build_from_source(
     try:
         username = require_auth(request)
         from backend.database import get_db_session
-        from backend.team_scope import resolve_team_scope_from_request
 
         db = get_db_session()
         try:
@@ -8092,10 +8102,19 @@ async def upload_resource_package(
     package_file: UploadFile = File(...),
     description: str = Form(""),
     extract: bool = Form(True),
+    team_id: Optional[str] = Form(None),
 ):
     """上传资源包"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
 
         # 读取文件数据
         file_data = await package_file.read()
@@ -8110,6 +8129,8 @@ async def upload_resource_package(
             filename=package_file.filename,
             description=description,
             extract=extract,
+            team_id=scoped_team_id,
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -8140,11 +8161,22 @@ async def upload_resource_package(
 
 
 @router.get("/resource-packages")
-async def list_resource_packages(request: Request):
+async def list_resource_packages(
+    request: Request,
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
+):
     """获取资源包列表"""
     try:
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         manager = ResourcePackageManager()
-        packages = manager.list_packages()
+        packages = manager.list_packages(team_id=scoped_team_id)
 
         return JSONResponse(
             {
@@ -8160,9 +8192,24 @@ async def list_resource_packages(request: Request):
 
 
 @router.get("/resource-packages/{package_id}")
-async def get_resource_package(request: Request, package_id: str):
+async def get_resource_package(
+    request: Request,
+    package_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取资源包信息"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_resource_package_in_team(
+                db, user_id, package_id, scoped_team_id
+            )
+        finally:
+            db.close()
         manager = ResourcePackageManager()
         package_info = manager.get_package(package_id)
 
@@ -8185,10 +8232,25 @@ async def get_resource_package(request: Request, package_id: str):
 
 
 @router.delete("/resource-packages/{package_id}")
-async def delete_resource_package(request: Request, package_id: str):
+async def delete_resource_package(
+    request: Request,
+    package_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """删除资源包"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_resource_package_in_team(
+                db, user_id, package_id, scoped_team_id
+            )
+        finally:
+            db.close()
 
         manager = ResourcePackageManager()
         success = manager.delete_package(package_id)
@@ -8221,9 +8283,24 @@ async def delete_resource_package(request: Request, package_id: str):
 
 
 @router.get("/resource-packages/{package_id}/content")
-async def get_resource_package_content(request: Request, package_id: str):
+async def get_resource_package_content(
+    request: Request,
+    package_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取资源包文件内容（仅文本文件）"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_resource_package_in_team(
+                db, user_id, package_id, scoped_team_id
+            )
+        finally:
+            db.close()
         manager = ResourcePackageManager()
         package_info = manager.get_package(package_id)
 
@@ -8325,10 +8402,22 @@ async def update_resource_package_content(
     request: Request,
     package_id: str,
     content: str = Body(..., embed=True, description="文件内容"),
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
 ):
     """更新资源包文件内容（仅文本文件）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_resource_package_in_team(
+                db, user_id, package_id, scoped_team_id
+            )
+        finally:
+            db.close()
 
         manager = ResourcePackageManager()
         package_info = manager.get_package(package_id)
@@ -8455,6 +8544,7 @@ class HostRequest(BaseModel):
     private_key: Optional[str] = None
     key_password: Optional[str] = None
     description: str = ""
+    team_id: str
 
 
 class HostUpdateRequest(BaseModel):
@@ -8511,10 +8601,23 @@ async def test_ssh_connection(request: Request, ssh_test: SSHTestRequest):
 
 
 @router.post("/hosts/{host_id}/test-ssh")
-async def test_host_ssh_connection(request: Request, host_id: str):
+async def test_host_ssh_connection(
+    request: Request,
+    host_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """使用已保存的配置测试SSH连接"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_host_in_team(db, user_id, host_id, scoped_team_id)
+        finally:
+            db.close()
         manager = HostManager()
 
         # 获取完整的主机信息（包含密码/私钥）
@@ -8561,22 +8664,44 @@ async def test_host_ssh_connection(request: Request, host_id: str):
 
 
 @router.get("/hosts")
-async def list_hosts(request: Request):
+async def list_hosts(
+    request: Request,
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
+):
     """获取主机列表"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         manager = HostManager()
-        hosts = manager.list_hosts()
+        hosts = manager.list_hosts(team_id=scoped_team_id)
         return JSONResponse({"hosts": hosts})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取主机列表失败: {str(e)}")
 
 
 @router.get("/hosts/{host_id}")
-async def get_host(request: Request, host_id: str):
+async def get_host(
+    request: Request,
+    host_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取主机详情"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_host_in_team(db, user_id, host_id, scoped_team_id)
+        finally:
+            db.close()
         manager = HostManager()
         host = manager.get_host(host_id)
         if not host:
@@ -8592,7 +8717,17 @@ async def get_host(request: Request, host_id: str):
 async def add_host(request: Request, host_req: HostRequest):
     """添加主机"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(
+                db, user_id, host_req.team_id or None
+            )
+        finally:
+            db.close()
         manager = HostManager()
 
         host_info = manager.add_host(
@@ -8605,6 +8740,8 @@ async def add_host(request: Request, host_req: HostRequest):
             key_password=host_req.key_password,
             docker_enabled=False,  # 默认不支持，通过检测后自动更新
             description=host_req.description,
+            team_id=scoped_team_id,
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -8629,10 +8766,24 @@ async def add_host(request: Request, host_req: HostRequest):
 
 
 @router.put("/hosts/{host_id}")
-async def update_host(request: Request, host_id: str, host_req: HostUpdateRequest):
+async def update_host(
+    request: Request,
+    host_id: str,
+    host_req: HostUpdateRequest,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """更新主机"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_host_in_team(db, user_id, host_id, scoped_team_id)
+        finally:
+            db.close()
         manager = HostManager()
 
         host_info = manager.update_host(
@@ -8670,10 +8821,23 @@ async def update_host(request: Request, host_id: str, host_req: HostUpdateReques
 
 
 @router.delete("/hosts/{host_id}")
-async def delete_host(request: Request, host_id: str):
+async def delete_host(
+    request: Request,
+    host_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """删除主机"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_host_in_team(db, user_id, host_id, scoped_team_id)
+        finally:
+            db.close()
         manager = HostManager()
 
         success = manager.delete_host(host_id)
@@ -10050,10 +10214,23 @@ async def execute_deploy_task(
 
 
 @router.post("/deploy-tasks/{task_id}/retry")
-async def retry_deploy_task(task_id: str, request: Request):
+async def retry_deploy_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """重试部署任务（失败或停止的任务可以重试）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         build_manager = BuildTaskManager()
 
         # 检查任务是否存在
@@ -10093,17 +10270,33 @@ async def retry_deploy_task(task_id: str, request: Request):
 
 
 @router.post("/deploy-tasks/import")
-async def import_deploy_task(request: Request, file: UploadFile = File(...)):
+async def import_deploy_task(
+    request: Request,
+    file: UploadFile = File(...),
+    team_id: Optional[str] = Form(None),
+):
     """导入部署任务（从YAML文件）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
 
         # 读取文件内容
         content = await file.read()
         config_content = content.decode("utf-8")
 
         build_manager = BuildTaskManager()
-        config_id = build_manager.create_deploy_task(config_content=config_content)
+        config_id = build_manager.create_deploy_task(
+            config_content=config_content,
+            team_id=scoped_team_id,
+            created_by=user_id,
+        )
 
         # 获取配置信息
         from backend.database import get_db_session
@@ -10163,15 +10356,23 @@ async def import_deploy_task(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/deploy-tasks/{config_id}/export")
-async def export_deploy_task(request: Request, config_id: str):
+async def export_deploy_task(
+    request: Request,
+    config_id: str,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """导出部署配置（YAML格式）"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        user_id = _resolve_user_id(request)
         from backend.database import get_db_session
         from backend.models import DeployConfig
 
         db = get_db_session()
         try:
+            require_resource_permission(
+                db, user_id, "deploy_config", config_id, "view"
+            )
             deploy_config = db.query(DeployConfig).filter(DeployConfig.config_id == config_id).first()
             if not deploy_config:
                 raise HTTPException(status_code=404, detail="部署配置不存在")

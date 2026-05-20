@@ -5618,6 +5618,7 @@ class BuildTaskManager:
                         created_at=created_at,
                         task_config=task_config,
                         source=source or ("Webhook" if trigger_source == "webhook" else "手动"),
+                        team_id=deploy_config.team_id or team_id,
                         pipeline_id=None,
                         git_url=None,
                         branch=None,
@@ -7191,11 +7192,12 @@ class OperationLogger:
         finally:
             db.close()
 
-    def clear_logs(self, days: int = None):
+    def clear_logs(self, days: int = None, team_id: str = None):
         """清理操作日志
 
         Args:
             days: 保留最近 N 天的日志，如果为 None 则清空所有日志
+            team_id: 仅清理指定团队的日志
 
         Returns:
             清理的日志条数
@@ -7205,22 +7207,20 @@ class OperationLogger:
 
         db = get_db_session()
         try:
+            query = db.query(OperationLog)
+            if team_id:
+                query = query.filter(OperationLog.team_id == team_id)
             if days is None:
-                # 清空所有日志
-                count = db.query(OperationLog).count()
-                db.query(OperationLog).delete()
+                count = query.count()
+                query.delete(synchronize_session=False)
                 db.commit()
                 return count
-            else:
-                # 保留最近 N 天的日志
-                cutoff_time = datetime.now() - timedelta(days=days)
-                deleted = (
-                    db.query(OperationLog)
-                    .filter(OperationLog.timestamp < cutoff_time)
-                    .delete()
-                )
-                db.commit()
-                return deleted
+            cutoff_time = datetime.now() - timedelta(days=days)
+            deleted = query.filter(OperationLog.timestamp < cutoff_time).delete(
+                synchronize_session=False
+            )
+            db.commit()
+            return deleted
         except Exception as e:
             db.rollback()
             print(f"⚠️ 清理操作日志失败: {e}")
