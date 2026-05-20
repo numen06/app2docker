@@ -136,10 +136,10 @@ export function setupAxiosInterceptors() {
         return Promise.reject(error)
       }
 
+      const detail = String(error.response?.data?.detail || '')
+      // 仅「非团队成员」时重置团队上下文；资源级 403（如无权访问该团队的任务）不得清空当前团队，否则会触发整页重挂载
       const teamAccessDenied =
-        error.response?.status === 403 &&
-        (error.response?.data?.detail === '无权访问该团队' ||
-          String(error.response?.data?.detail || '').includes('无权访问该团队'))
+        error.response?.status === 403 && detail === '无权访问该团队'
 
       if (teamAccessDenied) {
         try {

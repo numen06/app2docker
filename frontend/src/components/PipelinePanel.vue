@@ -575,8 +575,7 @@
                 v-if="loadingManualRunBranches"
                 class="alert alert-info py-2"
               >
-                <i class="fas fa-spinner fa-spin"></i>
-                <i class="fas fa-sync-alt fa-spin"></i> 正在加载分支列表...
+                <i class="fas fa-spinner fa-spin"></i> 正在加载分支列表...
               </div>
               <div
                 v-else-if="manualRunBranches.length === 0"

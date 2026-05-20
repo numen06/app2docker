@@ -157,6 +157,7 @@ def init_db():
 
     # 迁移：默认团队 + 超级管理员 + 历史数据 team_id 回填
     migrate_backfill_default_team()
+    migrate_dedupe_default_teams()
 
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
@@ -1761,6 +1762,26 @@ def migrate_backfill_default_team():
 
         team = db.query(Team).filter(Team.slug == DEFAULT_TEAM_SLUG).first()
         if not team:
+            by_name = (
+                db.query(Team)
+                .filter(Team.name == DEFAULT_TEAM_NAME)
+                .order_by(Team.created_at.asc())
+                .first()
+            )
+            if by_name:
+                team = by_name
+                if team.slug != DEFAULT_TEAM_SLUG:
+                    conflict = (
+                        db.query(Team)
+                        .filter(Team.slug == DEFAULT_TEAM_SLUG)
+                        .first()
+                    )
+                    if not conflict:
+                        team.slug = DEFAULT_TEAM_SLUG
+                        print(
+                            f"🔄 已将团队 {team.name} 的 slug 规范为 {DEFAULT_TEAM_SLUG}"
+                        )
+        if not team:
             team = Team(
                 team_id=str(uuid.uuid4()),
                 name=DEFAULT_TEAM_NAME,
@@ -1873,6 +1894,105 @@ def migrate_backfill_default_team():
 
         traceback.print_exc()
         print(f"⚠️ 默认团队回填失败: {e}")
+    finally:
+        db.close()
+
+
+def migrate_dedupe_default_teams():
+    """合并重复的「默认团队」（迁移 slug=default 与用户创建的中文名团队 slug=team 等）"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    from backend.models import Team, TeamMember
+
+    DEFAULT_TEAM_NAME = "默认团队"
+
+    db = get_db_session()
+    try:
+        canonical = db.query(Team).filter(Team.slug == "default").first()
+        if not canonical:
+            canonical = (
+                db.query(Team)
+                .filter(Team.name == DEFAULT_TEAM_NAME)
+                .order_by(Team.created_at.asc())
+                .first()
+            )
+        if not canonical:
+            return
+
+        dupes = (
+            db.query(Team)
+            .filter(Team.name == DEFAULT_TEAM_NAME, Team.team_id != canonical.team_id)
+            .all()
+        )
+        if not dupes:
+            return
+
+        keep_id = canonical.team_id
+        dup_ids = [d.team_id for d in dupes]
+        for dup in dupes:
+            dup_id = dup.team_id
+            members = (
+                db.query(TeamMember).filter(TeamMember.team_id == dup_id).all()
+            )
+            for member in members:
+                existing = (
+                    db.query(TeamMember)
+                    .filter(
+                        TeamMember.team_id == keep_id,
+                        TeamMember.user_id == member.user_id,
+                    )
+                    .first()
+                )
+                if existing:
+                    if member.role == "owner" and existing.role != "owner":
+                        existing.role = "owner"
+                    db.delete(member)
+                else:
+                    member.team_id = keep_id
+            db.flush()
+            db.delete(dup)
+            print(
+                f"🔄 已合并重复默认团队 {dup.name} ({dup_id}) -> {keep_id}"
+            )
+
+        db.commit()
+
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        for dup_id in dup_ids:
+            for table in (
+                "pipelines",
+                "deploy_configs",
+                "git_sources",
+                "agent_hosts",
+                "hosts",
+                "resource_packages",
+                "tasks",
+                "export_tasks",
+                "operation_logs",
+            ):
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                )
+                if not cursor.fetchone():
+                    continue
+                cursor.execute(f"PRAGMA table_info({table})")
+                if "team_id" not in [row[1] for row in cursor.fetchall()]:
+                    continue
+                cursor.execute(
+                    f"UPDATE {table} SET team_id = ? WHERE team_id = ?",
+                    (keep_id, dup_id),
+                )
+                if cursor.rowcount:
+                    print(f"🔄 {table}: 从重复团队迁移 {cursor.rowcount} 条")
+        conn.commit()
+        conn.close()
+        print(f"✅ 默认团队去重完成，保留 {canonical.name} ({keep_id})")
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ 默认团队去重失败: {e}")
     finally:
         db.close()
 

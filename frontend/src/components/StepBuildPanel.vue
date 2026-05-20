@@ -1697,9 +1697,11 @@
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
+import { showToast } from "@/composables/useToast";
+import { showToast } from "@/composables/useToast";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from 'vue-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -3353,22 +3355,25 @@ async function startBuild() {
         console.warn("⚠️ 保存构建配置失败:", saveError);
       }
 
-      // 显示成功提示
-      const imageName = buildConfig.value.imageName || '未知镜像';
-      const tag = buildConfig.value.tag || 'latest';
-      alert(`✅ 构建任务已创建！\n\n镜像: ${imageName}:${tag}\n任务ID: ${taskId}\n\n请到"任务管理"标签页查看进度和日志。`);
+      const imageName = buildConfig.value.imageName || "未知镜像";
+      const tag = buildConfig.value.tag || "latest";
+      showToast({
+        message: `构建任务已创建：${imageName}:${tag}，可在「任务管理」查看进度`,
+        variant: "success",
+      });
 
-      // 重置构建状态
       building.value = false;
 
       window.dispatchEvent(
-        new CustomEvent("taskCreated", { detail: { task_id: taskId } })
+        new CustomEvent("taskCreated", {
+          detail: {
+            task_id: taskId,
+            task_type: "build",
+            image: imageName,
+            tag,
+          },
+        })
       );
-      window.dispatchEvent(new CustomEvent("show-build-log"));
-
-      setTimeout(() => {
-        pollBuildLogs(taskId);
-      }, 100);
     } else {
       throw new Error("未返回 task_id");
     }
@@ -3376,9 +3381,14 @@ async function startBuild() {
     console.error("❌ 构建请求失败:", error);
     // 关闭上传进度对话框
     showUploadProgressModal.value = false;
-    alert(
-      error.response?.data?.error || error.response?.data?.detail || "构建失败"
-    );
+    showToast({
+      message:
+        error.response?.data?.error ||
+        error.response?.data?.detail ||
+        "构建失败",
+      variant: "error",
+      duration: 8000,
+    });
     building.value = false;
   }
 }
@@ -3417,101 +3427,6 @@ async function saveBuildConfigToTask(taskId) {
   // 注意：任务信息已经在创建任务时保存，这里可以记录额外的配置信息
   // 如果需要，可以通过 API 更新任务信息
   console.log("📋 构建配置信息:", configInfo);
-}
-
-// 轮询构建日志
-let pollInterval = null;
-async function pollBuildLogs(buildId) {
-  let lastLogLength = 0;
-  let taskCompleted = false;
-
-  const poll = async () => {
-    try {
-      const taskRes = await axios.get(`/api/build-tasks/${buildId}`);
-      const taskStatus = taskRes.data.status;
-
-      let logs = "";
-      try {
-        const res = await axios.get(`/api/build-tasks/${buildId}/logs`);
-        logs = typeof res.data === "string" ? res.data : String(res.data);
-      } catch (e) {
-        const res = await axios.get("/api/get-logs", {
-          params: { build_id: buildId },
-        });
-        logs = typeof res.data === "string" ? res.data : String(res.data);
-      }
-
-      const logLines = logs
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-
-      if (logLines.length > lastLogLength) {
-        for (let i = lastLogLength; i < logLines.length; i++) {
-          window.dispatchEvent(
-            new CustomEvent("add-log", {
-              detail: { text: logLines[i] },
-            })
-          );
-        }
-        lastLogLength = logLines.length;
-      }
-
-      if (taskStatus === "completed" || taskStatus === "failed") {
-        taskCompleted = true;
-        clearInterval(pollInterval);
-        building.value = false;
-        window.dispatchEvent(
-          new CustomEvent("add-log", {
-            detail: {
-              text:
-                taskStatus === "completed" ? "✅ 构建已完成" : "❌ 构建已失败",
-            },
-          })
-        );
-      }
-    } catch (error) {
-      console.error("❌ 获取日志失败:", error);
-      if (error.response?.status === 404) {
-        clearInterval(pollInterval);
-        building.value = false;
-        window.dispatchEvent(
-          new CustomEvent("add-log", {
-            detail: { text: "❌ 任务不存在" },
-          })
-        );
-      }
-    }
-  };
-
-  window.dispatchEvent(
-    new CustomEvent("add-log", {
-      detail: { text: `🚀 开始构建，Task ID: ${buildId}` },
-    })
-  );
-
-  await poll();
-
-  let pollCount = 0;
-  pollInterval = setInterval(() => {
-    if (taskCompleted) {
-      clearInterval(pollInterval);
-      return;
-    }
-
-    pollCount++;
-    if (pollCount > 300) {
-      clearInterval(pollInterval);
-      building.value = false;
-      window.dispatchEvent(
-        new CustomEvent("add-log", {
-          detail: { text: "⏰ 构建日志轮询超时（5分钟）" },
-        })
-      );
-    } else {
-      poll();
-    }
-  }, 1000);
 }
 
 // 加载资源包列表
@@ -3766,13 +3681,26 @@ watch(
   }
 );
 
-onMounted(() => {
-  loadProjectTypes();
-  loadTemplates();
+function reloadTeamScopedData() {
   loadGitSources();
+  loadTemplates();
   loadRegistries();
   loadBatchRegistries();
+}
+
+function onTeamContextChanged() {
+  reloadTeamScopedData();
+}
+
+onMounted(() => {
+  loadProjectTypes();
+  reloadTeamScopedData();
   loadDockerInfo();
+  window.addEventListener("team-context-changed", onTeamContextChanged);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("team-context-changed", onTeamContextChanged);
 });
 </script>
 

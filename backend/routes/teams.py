@@ -237,11 +237,15 @@ def create_team(
 ):
     username = require_auth(request)
     user_id = get_user_id_by_username(db, username)
-    base = _slugify_name(body.name)
+    name = body.name.strip()
+    if name == "默认团队":
+        base = "default"
+    else:
+        base = _slugify_name(name)
     slug = _ensure_unique_slug(db, base)
     team = Team(
         team_id=str(uuid.uuid4()),
-        name=body.name.strip(),
+        name=name,
         slug=slug,
         description=body.description or "",
         avatar_url=body.avatar_url,

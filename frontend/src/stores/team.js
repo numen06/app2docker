@@ -2,6 +2,25 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 
 const STORAGE_KEY = 'app2docker-active-team-id'
+const DEFAULT_TEAM_NAME = '默认团队'
+
+/** 合并重复的「默认团队」成员记录（迁移前后端可能各有一条） */
+function dedupeDefaultTeamMemberships(raw) {
+  if (!Array.isArray(raw) || raw.length < 2) return raw
+  const defaults = raw.filter((m) => m.team?.name === DEFAULT_TEAM_NAME)
+  if (defaults.length < 2) return raw
+  const canonical =
+    defaults.find((m) => m.team?.slug === 'default') || defaults[0]
+  const keepId = canonical?.team?.team_id
+  if (!keepId) return raw
+  const dropIds = new Set(
+    defaults
+      .map((m) => m.team?.team_id)
+      .filter((id) => id && id !== keepId)
+  )
+  if (!dropIds.size) return raw
+  return raw.filter((m) => !dropIds.has(m.team?.team_id))
+}
 
 function membershipRole(state) {
   const m =
@@ -149,7 +168,7 @@ export const useTeamStore = defineStore('team', {
       try {
         const res = await axios.get('/api/teams/me')
         const raw = Array.isArray(res.data) ? res.data : []
-        this.memberships = raw
+        this.memberships = dedupeDefaultTeamMemberships(raw)
         if (
           this.activeTeamId &&
           !this.memberships.some((m) => m.team?.team_id === this.activeTeamId)
