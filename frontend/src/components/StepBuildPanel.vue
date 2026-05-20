@@ -1699,7 +1699,6 @@ import Button from "@/components/ui/button/Button.vue";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
 import { showToast } from "@/composables/useToast";
 import { useTeamStore } from "@/stores/team";
-import { showToast } from "@/composables/useToast";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";

@@ -2607,6 +2607,19 @@ class BuildManager:
         except Exception as e:
             print(f"⚠️ 更新任务状态失败: {e}")
 
+        task_row = self.task_manager.get_task(task_id)
+        task_cfg = (
+            task_row.task_config
+            if task_row and isinstance(task_row.task_config, dict)
+            else {}
+        )
+        from backend.registry_manager import scope_from_task_like
+
+        reg_team_id, reg_user_id = scope_from_task_like(
+            team_id=getattr(task_row, "team_id", None),
+            task_config=task_cfg,
+        )
+
         try:
             log(f"🚀 开始从 Git 源码构建: {git_url}\n")
 
