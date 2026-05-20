@@ -1300,16 +1300,16 @@
         </div>
 
         <!-- 构建配置摘要 -->
-        <div class="card mb-3 border-primary">
-          <div class="card-header bg-primary text-white">
+        <div class="build-summary-card mb-3">
+          <div class="build-summary-card__header">
             <h6 class="mb-0">
               <i class="fas fa-list-check mr-2"></i> 构建配置摘要
             </h6>
           </div>
-          <div class="card-body">
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div class="build-summary-card__body">
+            <div class="build-summary-grid">
               <!-- 数据源信息 -->
-              <div class="col-md-6">
+              <div class="build-summary-grid__item">
                 <div class="border rounded p-3 h-full">
                   <h6 class="text-blue-600 mb-3">
                     <i class="fas fa-database mr-2"></i> 数据源信息
@@ -1347,7 +1347,7 @@
               </div>
 
               <!-- 构建、镜像、推送配置（合并） -->
-              <div class="col-md-6">
+              <div class="build-summary-grid__item">
                 <div class="border rounded p-3 h-full">
                   <h6 class="text-green-600 mb-3">
                     <i class="fas fa-cogs mr-2"></i> 构建配置
@@ -1490,7 +1490,7 @@
                   templateParams.length > 0 ||
                   Object.keys(buildConfig.serviceTemplateParams).length > 0
                 "
-                class="col-12"
+                class="build-summary-grid__item build-summary-grid__item--full"
               >
                 <div class="border rounded p-3">
                   <h6 class="text-sky-600 mb-3">
@@ -1548,7 +1548,7 @@
                   buildConfig.resourcePackages &&
                   buildConfig.resourcePackages.length > 0
                 "
-                class="col-12"
+                class="build-summary-grid__item build-summary-grid__item--full"
               >
                 <div class="border rounded p-3">
                   <h6 class="text-secondary mb-3">
@@ -1698,6 +1698,7 @@
 import Button from "@/components/ui/button/Button.vue";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
 import { showToast } from "@/composables/useToast";
+import { useTeamStore } from "@/stores/team";
 import { showToast } from "@/composables/useToast";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
@@ -1717,6 +1718,7 @@ import {
   getProjectTypeIcon 
 } from '../utils/projectTypes.js';
 
+const teamStore = useTeamStore();
 const currentStep = ref(1);
 const buildStepIndicators = [
   { num: 1, label: "选择数据源" },
@@ -3094,6 +3096,15 @@ function toggleAllServices(event) {
 
 // 开始构建
 async function startBuild() {
+  if (!teamStore.activeTeamIdForApi) {
+    showToast({
+      message: "请先在顶部选择团队，再提交构建任务",
+      variant: "error",
+      duration: 8000,
+    });
+    return;
+  }
+
   building.value = true;
 
   try {
@@ -3381,11 +3392,15 @@ async function startBuild() {
     console.error("❌ 构建请求失败:", error);
     // 关闭上传进度对话框
     showUploadProgressModal.value = false;
+    const detail = error.response?.data?.detail;
+    let errMsg = error.response?.data?.error || "构建失败";
+    if (typeof detail === "string") {
+      errMsg = detail;
+    } else if (Array.isArray(detail) && detail.length) {
+      errMsg = detail.map((d) => d.msg || d.message || String(d)).join("；");
+    }
     showToast({
-      message:
-        error.response?.data?.error ||
-        error.response?.data?.detail ||
-        "构建失败",
+      message: errMsg,
       variant: "error",
       duration: 8000,
     });
@@ -3726,6 +3741,98 @@ onUnmounted(() => {
 .step-build-panel .step-panel {
   min-height: 400px;
   padding: 20px;
+}
+
+.step-build-panel .build-summary-card {
+  border: 1px solid rgb(59 130 246);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.step-build-panel .build-summary-card__header {
+  padding: 0.75rem 1rem;
+  background: rgb(37 99 235);
+  color: #fff;
+}
+
+.step-build-panel .build-summary-card__header h6 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.step-build-panel .build-summary-card__body {
+  padding: 1rem;
+}
+
+.step-build-panel .build-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .step-build-panel .build-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.step-build-panel .build-summary-grid__item {
+  min-width: 0;
+}
+
+.step-build-panel .build-summary-grid__item--full {
+  grid-column: 1 / -1;
+}
+
+.step-build-panel .build-summary-grid .badge {
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 0.25rem;
+  vertical-align: middle;
+}
+
+.step-build-panel .build-summary-grid .bg-info {
+  background: rgb(14 165 233);
+  color: #fff;
+}
+.step-build-panel .build-summary-grid .bg-success {
+  background: rgb(34 197 94);
+  color: #fff;
+}
+.step-build-panel .build-summary-grid .bg-warning {
+  background: rgb(250 204 21);
+  color: rgb(15 23 42);
+}
+.step-build-panel .build-summary-grid .bg-danger {
+  background: rgb(239 68 68);
+  color: #fff;
+}
+.step-build-panel .build-summary-grid .bg-primary {
+  background: rgb(37 99 235);
+  color: #fff;
+}
+.step-build-panel .build-summary-grid .bg-secondary {
+  background: rgb(100 116 139);
+  color: #fff;
+}
+
+.step-build-panel .build-summary-grid .table-responsive {
+  overflow-x: auto;
+}
+
+.step-build-panel .build-summary-grid table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.step-build-panel .build-summary-grid th,
+.step-build-panel .build-summary-grid td {
+  border: 1px solid rgb(226 232 240);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
 }
 
 .step-build-panel .btn-group {
