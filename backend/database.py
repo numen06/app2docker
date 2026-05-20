@@ -152,6 +152,9 @@ def init_db():
     # 迁移：任务/导出/主机/资源包/操作日志 team_id
     migrate_add_team_id_to_misc_tables()
 
+    # 迁移：无 team_id 的文件上传构建任务，从操作日志/用户团队推断
+    migrate_backfill_orphan_upload_build_tasks()
+
     # 迁移：默认团队 + 超级管理员 + 历史数据 team_id 回填
     migrate_backfill_default_team()
 
@@ -1621,6 +1624,84 @@ def migrate_add_team_id_to_misc_tables():
         print("✅ 杂项表 team_id 字段迁移完成")
     except Exception as e:
         print(f"⚠️ 杂项表 team_id 迁移失败: {e}")
+
+
+def migrate_backfill_orphan_upload_build_tasks():
+    """迁移：为 team_id 为空的文件上传构建任务回填团队（优先操作日志，其次创建者所属团队）"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    from backend.models import OperationLog, Task, TeamMember, User
+
+    db = get_db_session()
+    try:
+        orphans = (
+            db.query(Task)
+            .filter(
+                Task.team_id.is_(None),
+                Task.task_type == "build",
+                Task.source == "文件上传",
+            )
+            .all()
+        )
+        if not orphans:
+            return
+
+        updated = 0
+        for task in orphans:
+            resolved_team_id = None
+
+            logs = (
+                db.query(OperationLog)
+                .filter(OperationLog.action == "build")
+                .order_by(OperationLog.timestamp.desc())
+                .limit(200)
+                .all()
+            )
+            for log in logs:
+                details = log.details if isinstance(log.details, dict) else {}
+                if details.get("task_id") != task.task_id:
+                    continue
+                if log.team_id:
+                    resolved_team_id = log.team_id
+                    break
+                if log.username and not resolved_team_id:
+                    user = (
+                        db.query(User)
+                        .filter(User.username == log.username)
+                        .first()
+                    )
+                    if user:
+                        member = (
+                            db.query(TeamMember)
+                            .filter(TeamMember.user_id == user.user_id)
+                            .order_by(TeamMember.joined_at.asc())
+                            .first()
+                        )
+                        if member:
+                            resolved_team_id = member.team_id
+                break
+
+            cfg = task.task_config if isinstance(task.task_config, dict) else {}
+            if not resolved_team_id and isinstance(cfg, dict) and cfg.get("team_id"):
+                resolved_team_id = cfg.get("team_id")
+
+            if not resolved_team_id:
+                continue
+
+            task.team_id = resolved_team_id
+            if isinstance(cfg, dict):
+                task.task_config = {**cfg, "team_id": resolved_team_id}
+            updated += 1
+
+        if updated:
+            db.commit()
+            print(f"🔄 文件上传构建任务: 回填 {updated} 条 team_id")
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ 文件上传构建任务 team_id 回填失败: {e}")
+    finally:
+        db.close()
 
 
 def migrate_backfill_default_team():

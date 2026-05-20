@@ -2173,10 +2173,19 @@ async def upload_file(
     extract_archive: str = Form("on"),  # 是否解压压缩包（默认解压）
     build_steps: Optional[str] = Form(None),  # JSON 字符串格式的构建步骤信息
     resource_package_configs: Optional[str] = Form(None),  # JSON 字符串格式的资源包配置
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
 ):
     """上传文件并开始构建"""
     try:
         username = get_current_username(request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
+
         if not app_file or not app_file.filename:
             raise HTTPException(status_code=400, detail="未上传文件")
 
@@ -2222,6 +2231,7 @@ async def upload_file(
             extract_archive=(extract_archive == "on"),  # 传递解压选项
             build_steps=build_steps_dict,  # 传递构建步骤信息
             resource_package_ids=resource_package_configs_list,  # 传递资源包配置
+            team_id=scoped_team_id,
         )
 
         # 记录操作日志
@@ -2236,6 +2246,7 @@ async def upload_file(
                 "push": push == "on",
                 "filename": app_file.filename,
             },
+            team_id=scoped_team_id,
         )
 
         return JSONResponse(

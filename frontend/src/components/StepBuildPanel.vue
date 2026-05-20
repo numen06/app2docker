@@ -3361,6 +3361,9 @@ async function startBuild() {
       // 重置构建状态
       building.value = false;
 
+      window.dispatchEvent(
+        new CustomEvent("taskCreated", { detail: { task_id: taskId } })
+      );
       window.dispatchEvent(new CustomEvent("show-build-log"));
 
       setTimeout(() => {

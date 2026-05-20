@@ -1421,6 +1421,7 @@ class BuildManager:
         extract_archive: bool = True,  # 是否解压压缩包（默认解压）
         build_steps: dict = None,  # 构建步骤信息
         resource_package_ids: list = None,  # 资源包ID列表
+        team_id: str = None,
     ):
         # 创建任务
         task_id = self.task_manager.create_task(
@@ -1436,6 +1437,7 @@ class BuildManager:
             extract_archive=extract_archive,
             build_steps=build_steps or {},  # 传递构建步骤信息
             resource_package_ids=resource_package_ids or [],  # 传递资源包配置
+            team_id=team_id,
         )
 
         thread = threading.Thread(
