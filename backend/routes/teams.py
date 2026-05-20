@@ -99,13 +99,17 @@ class TeamMemberOut(BaseModel):
 
 
 class InviteRequest(BaseModel):
-    email: str = Field(..., min_length=3, max_length=255)
+    email: str | None = None
     role: str = "member"
 
     @field_validator("email")
     @classmethod
-    def strip_email(cls, v: str) -> str:
+    def normalize_email(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         s = v.strip()
+        if not s:
+            return None
         if "@" not in s or "." not in s.split("@")[-1]:
             raise ValueError("无效的邮箱格式")
         return s
@@ -118,7 +122,7 @@ class MemberRoleUpdate(BaseModel):
 class InviteCreatedOut(BaseModel):
     invitation_id: str
     token: str
-    email: str
+    email: str | None = None
     role: str
     expires_at: datetime
 
@@ -178,11 +182,8 @@ def accept_invitation(
     username = require_auth(request)
     user_id = get_user_id_by_username(db, username)
     user = db.query(User).filter(User.user_id == user_id).first()
-    if not user or not (user.email and user.email.strip()):
-        raise HTTPException(
-            status_code=400,
-            detail="请先在个人资料中设置邮箱后再接受邀请",
-        )
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
     inv = (
         db.query(TeamInvitation)
         .filter(
@@ -195,8 +196,15 @@ def accept_invitation(
         raise HTTPException(status_code=404, detail="邀请不存在或已失效")
     if inv.expires_at and inv.expires_at < datetime.now():
         raise HTTPException(status_code=400, detail="邀请已过期")
-    if user.email.strip().casefold() != inv.email.strip().casefold():
-        raise HTTPException(status_code=403, detail="当前登录用户邮箱与邀请不匹配")
+    inv_email = (inv.email or "").strip()
+    if inv_email:
+        if not (user.email and user.email.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail="请先在个人资料中设置邮箱后再接受邀请",
+            )
+        if user.email.strip().casefold() != inv_email.casefold():
+            raise HTTPException(status_code=403, detail="当前登录用户邮箱与邀请不匹配")
     team = db.query(Team).filter(Team.team_id == inv.team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
@@ -344,10 +352,11 @@ def invite_member(
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
     token = secrets.token_urlsafe(32)
+    invite_email = (body.email or "").strip() if body.email else ""
     inv = TeamInvitation(
         invitation_id=str(uuid.uuid4()),
         team_id=team_id,
-        email=str(body.email).strip(),
+        email=invite_email,
         role=invite_role,
         token=token,
         invited_by=user_id,
@@ -359,7 +368,7 @@ def invite_member(
     return InviteCreatedOut(
         invitation_id=inv.invitation_id,
         token=inv.token,
-        email=inv.email,
+        email=inv.email or None,
         role=inv.role,
         expires_at=inv.expires_at,
     )

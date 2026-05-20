@@ -68,7 +68,7 @@
               required
             />
             <p class="text-xs text-slate-500">
-              支持完整邀请链接；登录账号邮箱须与邀请绑定的邮箱一致。
+              支持完整邀请链接；登录后即可接受邀请加入团队。
             </p>
           </div>
           <Button type="submit" class="w-full" :disabled="loading">
