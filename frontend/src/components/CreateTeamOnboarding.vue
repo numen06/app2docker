@@ -7,7 +7,7 @@
         </div>
         <CardTitle class="text-center">加入或创建团队</CardTitle>
         <CardDescription>
-          每位用户需至少属于一个团队。创建新团队或通过邀请码加入已有团队。
+          每位用户需至少属于一个团队。创建新团队或通过邀请链接加入已有团队。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -60,15 +60,15 @@
 
         <form v-else class="space-y-4" @submit.prevent="joinTeam">
           <div class="space-y-2">
-            <Label for="invite-token">邀请码</Label>
+            <Label for="invite-token">邀请链接</Label>
             <Input
               id="invite-token"
               v-model="inviteToken"
-              placeholder="粘贴管理员提供的邀请链接或令牌"
+              placeholder="粘贴邀请链接，或直接打开管理员发来的链接"
               required
             />
             <p class="text-xs text-slate-500">
-              可使用完整邀请链接，系统会自动提取令牌部分。
+              支持完整邀请链接；登录账号邮箱须与邀请绑定的邮箱一致。
             </p>
           </div>
           <Button type="submit" class="w-full" :disabled="loading">
@@ -102,7 +102,8 @@
 
 <script setup>
 import { onMounted, ref } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import { extractInviteToken } from "@/utils/teamInvite";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
@@ -115,6 +116,7 @@ import CardContent from "@/components/ui/card/CardContent.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const teamStore = useTeamStore();
