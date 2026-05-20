@@ -1407,6 +1407,38 @@ class BuildManager:
         self.tasks = {}  # build_id -> Thread (保留用于兼容)
         self.task_manager = BuildTaskManager()  # 使用任务管理器
 
+    def _registry_scope_for_task(self, task_id: str) -> tuple:
+        """解析任务关联的 team_id / user_id，供镜像仓库推送与拉取使用。"""
+        from backend.database import get_db_session
+        from backend.models import Task
+        from backend.registry_manager import scope_from_task_like
+        from backend.team_scope import infer_team_id_for_new_task
+
+        task_row = self.task_manager.get_task(task_id)
+        task_cfg = (
+            task_row.get("task_config")
+            if task_row and isinstance(task_row.get("task_config"), dict)
+            else {}
+        )
+        reg_team_id, reg_user_id = scope_from_task_like(
+            team_id=task_row.get("team_id") if task_row else None,
+            task_config=task_cfg,
+        )
+        if not reg_team_id:
+            db = get_db_session()
+            try:
+                task_obj = db.query(Task).filter(Task.task_id == task_id).first()
+                if task_obj:
+                    reg_team_id = infer_team_id_for_new_task(
+                        db,
+                        team_id=task_obj.team_id,
+                        pipeline_id=task_obj.pipeline_id,
+                        task_config=task_obj.task_config,
+                    )
+            finally:
+                db.close()
+        return reg_team_id, reg_user_id
+
     def _save_upload_staging(
         self, task_id: str, file_data: bytes, original_filename: str
     ) -> str:
@@ -1589,18 +1621,7 @@ class BuildManager:
         # 更新任务状态为运行中
         self.task_manager.update_task_status(task_id, "running")
 
-        task_row = self.task_manager.get_task(task_id)
-        task_cfg = (
-            task_row.get("task_config")
-            if task_row and isinstance(task_row.get("task_config"), dict)
-            else {}
-        )
-        from backend.registry_manager import scope_from_task_like
-
-        reg_team_id, reg_user_id = scope_from_task_like(
-            team_id=task_row.get("team_id") if task_row else None,
-            task_config=task_cfg,
-        )
+        reg_team_id, reg_user_id = self._registry_scope_for_task(task_id)
 
         def do_extract_archive(file_path: str, extract_to: str):
             """解压压缩文件"""
@@ -2430,6 +2451,7 @@ class BuildManager:
             service_template_params=service_template_params,
             resource_package_ids=resource_package_ids,
             trigger_source=trigger_source,
+            team_id=task_config.get("team_id"),
         )
 
     def _start_build_from_source_thread(self, task_id: str, task_config: dict):
@@ -2696,18 +2718,7 @@ class BuildManager:
         except Exception as e:
             print(f"⚠️ 更新任务状态失败: {e}")
 
-        task_row = self.task_manager.get_task(task_id)
-        task_cfg = (
-            task_row.get("task_config")
-            if task_row and isinstance(task_row.get("task_config"), dict)
-            else {}
-        )
-        from backend.registry_manager import scope_from_task_like
-
-        reg_team_id, reg_user_id = scope_from_task_like(
-            team_id=task_row.get("team_id") if task_row else None,
-            task_config=task_cfg,
-        )
+        reg_team_id, reg_user_id = self._registry_scope_for_task(task_id)
 
         try:
             log(f"🚀 开始从 Git 源码构建: {git_url}\n")
@@ -3097,6 +3108,8 @@ logs/
 
             # 多服务构建逻辑（只有当服务数量大于1时才进入多服务构建）
             if is_multi_services_build:
+                # 多服务推送依赖团队仓库配置，此处再次解析避免作用域遗漏
+                reg_team_id, reg_user_id = self._registry_scope_for_task(task_id)
                 log(f"🔨 开始多服务构建，共 {len(selected_services)} 个服务\n")
                 log(f"📋 选中的服务: {', '.join(selected_services)}\n")
                 log(f"📦 推送模式: {push_mode}\n")

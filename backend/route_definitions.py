@@ -82,11 +82,13 @@ from backend.app_key_manager import (
 )
 from backend.team_permissions import get_user_id_by_username, require_team_member
 from backend.team_scope import (
+    get_effective_team_id_for_task,
     require_export_task_in_team,
     require_host_in_team,
     require_resource_package_in_team,
     require_task_in_team,
     resolve_team_scope,
+    resolve_team_scope_for_existing_resource,
     resolve_team_scope_from_request,
     task_belongs_to_team,
 )
@@ -3372,19 +3374,33 @@ async def retry_build_task(
     task_id: str,
     request: Request,
     team_id: Optional[str] = Query(None, description="当前团队 ID"),
+    body: Optional[dict] = Body(None, description="可选 JSON，可含 team_id"),
 ):
     """重试构建任务（使用任务保存的JSON配置）"""
     try:
         from backend.database import get_db_session
+        from backend.models import Task
 
         username = require_auth(request)
+        body_team_id = (
+            (body or {}).get("team_id") if isinstance(body, dict) else None
+        )
+        request_team_id = (team_id or body_team_id or "").strip() or None
+
         db = get_db_session()
         try:
-            user_id = get_user_id_by_username(db, username)
-            scoped_team_id = resolve_team_scope(db, user_id, team_id)
-            require_task_in_team(db, user_id, task_id, scoped_team_id)
+            task_row = db.query(Task).filter(Task.task_id == task_id).first()
+            if not task_row:
+                raise HTTPException(status_code=404, detail="任务不存在")
+            resource_team_id = get_effective_team_id_for_task(db, task_row)
+            scoped_team_id = resolve_team_scope_for_existing_resource(
+                db, username, request_team_id, resource_team_id
+            )
+            if not task_belongs_to_team(db, task_row, scoped_team_id):
+                raise HTTPException(status_code=403, detail="无权访问该团队的任务")
         finally:
             db.close()
+
         manager = BuildTaskManager()
         task = manager.get_task(task_id)
 
@@ -3422,6 +3438,14 @@ async def retry_build_task(
                 pipeline_id=task.get("pipeline_id"),
                 trigger_source="retry",  # 标记为重试
             )
+
+        if isinstance(task_config, dict):
+            if not task_config.get("team_id"):
+                task_config = {
+                    **task_config,
+                    "team_id": scoped_team_id or task.get("team_id"),
+                }
+            task_config["trigger_source"] = "retry"
 
         # 使用统一触发函数重新触发任务
         build_manager = BuildManager()

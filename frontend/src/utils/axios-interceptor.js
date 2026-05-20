@@ -78,8 +78,10 @@ function attachTeamId(config, teamId) {
       if (!data.team_id) {
         config.data = { ...data, team_id: teamId }
       }
-    } else if (!hasTeamInParams) {
-      config.params = { ...existingParams, team_id: teamId }
+    }
+    // 多数接口从 Query 读取 team_id；与 body 同时带上，避免仅写入 body 时后端收不到
+    if (!hasTeamInParams) {
+      config.params = { ...(config.params || existingParams), team_id: teamId }
     }
   }
 }

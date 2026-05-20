@@ -55,6 +55,30 @@ def resolve_team_scope_from_request(
     return resolve_team_scope(db, user_id, team_id, required=required)
 
 
+def resolve_team_scope_for_existing_resource(
+    db: Session,
+    username: str,
+    team_id: Optional[str],
+    resource_team_id: Optional[str],
+) -> str:
+    """
+    解析业务接口的 team_id：请求参数优先；未传时从资源所属团队推断（如任务/流水线）。
+    仍无法确定时，仅当用户只属于一个团队时自动选用。
+    """
+    if team_id:
+        user_id = get_user_id_by_username(db, username)
+        resolved = resolve_team_scope(db, user_id, team_id)
+        assert resolved
+        return resolved
+
+    if resource_team_id:
+        user_id = get_user_id_by_username(db, username)
+        require_team_member(db, resource_team_id, user_id)
+        return resource_team_id
+
+    return resolve_team_scope_from_request_with_fallback(db, username, None)
+
+
 def resolve_team_scope_from_request_with_fallback(
     db: Session,
     username: str,
