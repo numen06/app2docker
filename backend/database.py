@@ -61,6 +61,14 @@ SessionLocal = scoped_session(SessionFactory)
 # 线程本地存储
 _local = threading.local()
 
+# 每个进程只执行一次 init_db 内迁移（避免 OperationLogger 等重复触发）
+_init_db_lock = threading.Lock()
+_init_db_done = False
+
+DEFAULT_TEAM_NAME = "默认团队"
+DEFAULT_TEAM_SLUG = "default"
+MIGRATION_DEFAULT_TEAM_BACKFILL = "migration.default_team_resource_backfill_done"
+
 
 def get_db():
     """获取数据库会话（用于依赖注入）"""
@@ -79,6 +87,16 @@ def get_db_session():
 
 def init_db():
     """初始化数据库（创建所有表）"""
+    global _init_db_done
+    with _init_db_lock:
+        if _init_db_done:
+            return
+        _run_init_db_migrations()
+        _init_db_done = True
+
+
+def _run_init_db_migrations():
+    """实际迁移逻辑（每进程仅执行一次）。"""
     from backend.models import Base
 
     # 确保目录存在
@@ -155,9 +173,8 @@ def init_db():
     # 迁移：无 team_id 的文件上传构建任务，从操作日志/用户团队推断
     migrate_backfill_orphan_upload_build_tasks()
 
-    # 迁移：默认团队 + 超级管理员 + 历史数据 team_id 回填
+    # 迁移：默认团队（去重 + 确保存在 + 一次性历史 team_id 回填）
     migrate_backfill_default_team()
-    migrate_dedupe_default_teams()
 
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
@@ -1705,29 +1722,250 @@ def migrate_backfill_orphan_upload_build_tasks():
         db.close()
 
 
+_DEFAULT_TEAM_RESOURCE_TABLES = (
+    "pipelines",
+    "deploy_configs",
+    "git_sources",
+    "agent_hosts",
+    "hosts",
+    "resource_packages",
+    "tasks",
+    "export_tasks",
+    "operation_logs",
+)
+
+
+def _migration_flag_get(cursor: sqlite3.Cursor, key: str) -> bool:
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='system_settings'"
+    )
+    if not cursor.fetchone():
+        return False
+    cursor.execute(
+        "SELECT setting_value FROM system_settings WHERE setting_key = ?",
+        (key,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return False
+    return str(row[0]).strip().lower() in ("1", "true", "yes", "done")
+
+
+def _migration_flag_set(cursor: sqlite3.Cursor, key: str, description: str) -> None:
+    from datetime import datetime
+
+    now = datetime.now().isoformat(sep=" ", timespec="seconds")
+    cursor.execute(
+        """
+        INSERT INTO system_settings (setting_key, setting_value, description, updated_at)
+        VALUES (?, '1', ?, ?)
+        ON CONFLICT(setting_key) DO UPDATE SET
+            setting_value = '1',
+            description = excluded.description,
+            updated_at = excluded.updated_at
+        """,
+        (key, description, now),
+    )
+
+
+def _repoint_team_id_refs(cursor: sqlite3.Cursor, keep_id: str, dup_id: str) -> None:
+    for table in _DEFAULT_TEAM_RESOURCE_TABLES:
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        )
+        if not cursor.fetchone():
+            continue
+        cursor.execute(f"PRAGMA table_info({table})")
+        if "team_id" not in [row[1] for row in cursor.fetchall()]:
+            continue
+        cursor.execute(
+            f"UPDATE {table} SET team_id = ? WHERE team_id = ?",
+            (keep_id, dup_id),
+        )
+        if cursor.rowcount:
+            print(f"🔄 {table}: 从重复团队迁移 {cursor.rowcount} 条")
+
+
+def _dedupe_default_teams_locked(cursor: sqlite3.Cursor):
+    """在 BEGIN IMMEDIATE 事务内合并重复「默认团队」，返回保留的 team_id。"""
+    cursor.execute(
+        "SELECT team_id, slug FROM teams WHERE slug = ? LIMIT 1",
+        (DEFAULT_TEAM_SLUG,),
+    )
+    row = cursor.fetchone()
+    if row:
+        keep_id = row[0]
+    else:
+        cursor.execute(
+            """
+            SELECT team_id, slug FROM teams WHERE name = ?
+            ORDER BY created_at ASC LIMIT 1
+            """,
+            (DEFAULT_TEAM_NAME,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        keep_id = row[0]
+        if row[1] != DEFAULT_TEAM_SLUG:
+            cursor.execute(
+                "SELECT 1 FROM teams WHERE slug = ? LIMIT 1",
+                (DEFAULT_TEAM_SLUG,),
+            )
+            if not cursor.fetchone():
+                cursor.execute(
+                    "UPDATE teams SET slug = ? WHERE team_id = ?",
+                    (DEFAULT_TEAM_SLUG, keep_id),
+                )
+                print(f"🔄 已将团队 slug 规范为 {DEFAULT_TEAM_SLUG}")
+
+    cursor.execute(
+        "SELECT team_id FROM teams WHERE name = ? AND team_id != ?",
+        (DEFAULT_TEAM_NAME, keep_id),
+    )
+    dup_ids = [r[0] for r in cursor.fetchall()]
+    for dup_id in dup_ids:
+        cursor.execute(
+            """
+            SELECT user_id, role FROM team_members WHERE team_id = ?
+            """,
+            (dup_id,),
+        )
+        for user_id, role in cursor.fetchall():
+            cursor.execute(
+                """
+                SELECT id, role FROM team_members
+                WHERE team_id = ? AND user_id = ?
+                """,
+                (keep_id, user_id),
+            )
+            existing = cursor.fetchone()
+            if existing:
+                if role == "owner" and existing[1] != "owner":
+                    cursor.execute(
+                        "UPDATE team_members SET role = 'owner' WHERE id = ?",
+                        (existing[0],),
+                    )
+                cursor.execute(
+                    "DELETE FROM team_members WHERE team_id = ? AND user_id = ?",
+                    (dup_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE team_members SET team_id = ? WHERE team_id = ? AND user_id = ?",
+                    (keep_id, dup_id, user_id),
+                )
+        cursor.execute("DELETE FROM team_members WHERE team_id = ?", (dup_id,))
+        _repoint_team_id_refs(cursor, keep_id, dup_id)
+        cursor.execute("DELETE FROM teams WHERE team_id = ?", (dup_id,))
+        print(f"🔄 已合并重复默认团队 ({dup_id}) -> {keep_id}")
+
+    if dup_ids:
+        print(f"✅ 默认团队去重完成，保留 {keep_id}")
+    return keep_id
+
+
+def _ensure_canonical_default_team_locked(
+    cursor: sqlite3.Cursor, owner_user_id: str
+) -> str:
+    """在锁内确保存在唯一 canonical 默认团队（先 dedupe 再按需创建）。"""
+    keep_id = _dedupe_default_teams_locked(cursor)
+    if keep_id:
+        print(f"✅ 默认团队已存在 ({keep_id})")
+        return keep_id
+
+    from datetime import datetime
+
+    team_id = str(uuid.uuid4())
+    now = datetime.now()
+    cursor.execute(
+        """
+        INSERT INTO teams (
+            team_id, name, slug, description, created_by,
+            created_at, updated_at, task_cleanup_days
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 7)
+        """,
+        (
+            team_id,
+            DEFAULT_TEAM_NAME,
+            DEFAULT_TEAM_SLUG,
+            "系统升级时自动创建，承接历史数据",
+            owner_user_id,
+            now,
+            now,
+        ),
+    )
+    print(f"🔄 已创建默认团队: {DEFAULT_TEAM_NAME} ({team_id})")
+    return team_id
+
+
+def _backfill_null_team_ids_locked(cursor: sqlite3.Cursor, team_id: str) -> int:
+    total_updated = 0
+    for table in _DEFAULT_TEAM_RESOURCE_TABLES:
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        )
+        if not cursor.fetchone():
+            continue
+        cursor.execute(f"PRAGMA table_info({table})")
+        if "team_id" not in [row[1] for row in cursor.fetchall()]:
+            continue
+        cursor.execute(
+            f"UPDATE {table} SET team_id = ? WHERE team_id IS NULL",
+            (team_id,),
+        )
+        n = cursor.rowcount
+        if n:
+            print(f"🔄 {table}: 回填 {n} 条记录的 team_id")
+            total_updated += n
+
+    cursor.execute(
+        """
+        UPDATE tasks
+        SET team_id = (
+            SELECT p.team_id FROM pipelines p
+            WHERE p.pipeline_id = tasks.pipeline_id AND p.team_id IS NOT NULL
+        )
+        WHERE team_id IS NULL AND pipeline_id IS NOT NULL
+        """
+    )
+    if cursor.rowcount:
+        print(f"🔄 tasks: 从流水线继承 {cursor.rowcount} 条 team_id")
+        total_updated += cursor.rowcount
+
+    cursor.execute(
+        """
+        UPDATE tasks
+        SET team_id = (
+            SELECT d.team_id FROM deploy_configs d
+            WHERE d.config_id = tasks.deploy_config_id AND d.team_id IS NOT NULL
+        )
+        WHERE team_id IS NULL AND deploy_config_id IS NOT NULL
+        """
+    )
+    if cursor.rowcount:
+        print(f"🔄 tasks: 从部署配置继承 {cursor.rowcount} 条 team_id")
+        total_updated += cursor.rowcount
+
+    cursor.execute(
+        "UPDATE tasks SET team_id = ? WHERE team_id IS NULL", (team_id,)
+    )
+    if cursor.rowcount:
+        print(f"🔄 tasks: 默认团队回填 {cursor.rowcount} 条")
+        total_updated += cursor.rowcount
+    return total_updated
+
+
 def migrate_backfill_default_team():
-    """迁移：创建默认团队，将系统 admin 设为 owner，并为无 team_id 的历史数据回填"""
+    """迁移：去重并确保唯一默认团队；超级管理员加入；历史 team_id 仅回填一次。"""
     if not os.path.exists(DB_FILE):
         return
 
     from datetime import datetime
 
-    from backend.models import Role, Team, TeamMember, User, UserRole
-
-    DEFAULT_TEAM_NAME = "默认团队"
-    DEFAULT_TEAM_SLUG = "default"
-
-    RESOURCE_TABLES = (
-        "pipelines",
-        "deploy_configs",
-        "git_sources",
-        "agent_hosts",
-        "hosts",
-        "resource_packages",
-        "tasks",
-        "export_tasks",
-        "operation_logs",
-    )
+    from backend.models import Role, TeamMember, User, UserRole
 
     db = get_db_session()
     try:
@@ -1759,49 +1997,52 @@ def migrate_backfill_default_team():
         owner_user = next(
             (u for u in admin_users if u.username == "admin"), admin_users[0]
         )
+    finally:
+        db.close()
 
-        team = db.query(Team).filter(Team.slug == DEFAULT_TEAM_SLUG).first()
-        if not team:
-            by_name = (
-                db.query(Team)
-                .filter(Team.name == DEFAULT_TEAM_NAME)
-                .order_by(Team.created_at.asc())
-                .first()
-            )
-            if by_name:
-                team = by_name
-                if team.slug != DEFAULT_TEAM_SLUG:
-                    conflict = (
-                        db.query(Team)
-                        .filter(Team.slug == DEFAULT_TEAM_SLUG)
-                        .first()
-                    )
-                    if not conflict:
-                        team.slug = DEFAULT_TEAM_SLUG
-                        print(
-                            f"🔄 已将团队 {team.name} 的 slug 规范为 {DEFAULT_TEAM_SLUG}"
-                        )
-        if not team:
-            team = Team(
-                team_id=str(uuid.uuid4()),
-                name=DEFAULT_TEAM_NAME,
-                slug=DEFAULT_TEAM_SLUG,
-                description="系统升级时自动创建，承接历史数据",
-                created_by=owner_user.user_id,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-            )
-            db.add(team)
-            db.flush()
-            print(f"🔄 已创建默认团队: {DEFAULT_TEAM_NAME} ({team.team_id})")
+    team_id = None
+    conn = sqlite3.connect(DB_FILE, timeout=60.0)
+    try:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        cursor = conn.cursor()
+        team_id = _ensure_canonical_default_team_locked(
+            cursor, owner_user.user_id
+        )
+        if _migration_flag_get(cursor, MIGRATION_DEFAULT_TEAM_BACKFILL):
+            conn.execute("COMMIT")
         else:
-            print(f"✅ 默认团队已存在: {team.name} ({team.team_id})")
+            total = _backfill_null_team_ids_locked(cursor, team_id)
+            _migration_flag_set(
+                cursor,
+                MIGRATION_DEFAULT_TEAM_BACKFILL,
+                "默认团队历史资源 team_id 已回填",
+            )
+            conn.execute("COMMIT")
+            if total:
+                print(f"✅ 默认团队数据回填完成，共更新 {total} 条")
+            else:
+                print("✅ 无需回填 team_id（数据已归属团队）")
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        import traceback
 
+        traceback.print_exc()
+        print(f"⚠️ 默认团队回填失败: {e}")
+        return
+    finally:
+        conn.close()
+
+    db = get_db_session()
+    try:
         for user in admin_users:
             existing = (
                 db.query(TeamMember)
                 .filter(
-                    TeamMember.team_id == team.team_id,
+                    TeamMember.team_id == team_id,
                     TeamMember.user_id == user.user_id,
                 )
                 .first()
@@ -1812,189 +2053,40 @@ def migrate_backfill_default_team():
                 continue
             db.add(
                 TeamMember(
-                    team_id=team.team_id,
+                    team_id=team_id,
                     user_id=user.user_id,
                     role="owner",
                     joined_at=datetime.now(),
                 )
             )
             print(f"✅ 已将超级管理员 {user.username} 加入默认团队 (owner)")
-
         db.commit()
-
-        conn = sqlite3.connect(DB_FILE, timeout=30.0)
-        cursor = conn.cursor()
-        team_id = team.team_id
-        total_updated = 0
-
-        for table in RESOURCE_TABLES:
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                (table,),
-            )
-            if not cursor.fetchone():
-                continue
-            cursor.execute(f"PRAGMA table_info({table})")
-            if "team_id" not in [row[1] for row in cursor.fetchall()]:
-                continue
-            cursor.execute(
-                f"UPDATE {table} SET team_id = ? WHERE team_id IS NULL",
-                (team_id,),
-            )
-            n = cursor.rowcount
-            if n:
-                print(f"🔄 {table}: 回填 {n} 条记录的 team_id")
-                total_updated += n
-
-        cursor.execute(
-            """
-            UPDATE tasks
-            SET team_id = (
-                SELECT p.team_id FROM pipelines p
-                WHERE p.pipeline_id = tasks.pipeline_id AND p.team_id IS NOT NULL
-            )
-            WHERE team_id IS NULL AND pipeline_id IS NOT NULL
-            """
-        )
-        if cursor.rowcount:
-            print(f"🔄 tasks: 从流水线继承 {cursor.rowcount} 条 team_id")
-            total_updated += cursor.rowcount
-
-        cursor.execute(
-            """
-            UPDATE tasks
-            SET team_id = (
-                SELECT d.team_id FROM deploy_configs d
-                WHERE d.config_id = tasks.deploy_config_id AND d.team_id IS NOT NULL
-            )
-            WHERE team_id IS NULL AND deploy_config_id IS NOT NULL
-            """
-        )
-        if cursor.rowcount:
-            print(f"🔄 tasks: 从部署配置继承 {cursor.rowcount} 条 team_id")
-            total_updated += cursor.rowcount
-
-        cursor.execute(
-            "UPDATE tasks SET team_id = ? WHERE team_id IS NULL", (team_id,)
-        )
-        if cursor.rowcount:
-            print(f"🔄 tasks: 默认团队回填 {cursor.rowcount} 条")
-            total_updated += cursor.rowcount
-
-        conn.commit()
-        conn.close()
-
-        if total_updated:
-            print(f"✅ 默认团队数据回填完成，共更新 {total_updated} 条")
-        else:
-            print("✅ 无需回填 team_id（数据已归属团队）")
     except Exception as e:
         db.rollback()
-        import traceback
-
-        traceback.print_exc()
-        print(f"⚠️ 默认团队回填失败: {e}")
+        print(f"⚠️ 默认团队成员同步失败: {e}")
     finally:
         db.close()
 
 
 def migrate_dedupe_default_teams():
-    """合并重复的「默认团队」（迁移 slug=default 与用户创建的中文名团队 slug=team 等）"""
+    """合并重复的「默认团队」（供手动迁移；常规启动已包含在 migrate_backfill_default_team）。"""
     if not os.path.exists(DB_FILE):
         return
-
-    from backend.models import Team, TeamMember
-
-    DEFAULT_TEAM_NAME = "默认团队"
-
-    db = get_db_session()
+    conn = sqlite3.connect(DB_FILE, timeout=60.0)
     try:
-        canonical = db.query(Team).filter(Team.slug == "default").first()
-        if not canonical:
-            canonical = (
-                db.query(Team)
-                .filter(Team.name == DEFAULT_TEAM_NAME)
-                .order_by(Team.created_at.asc())
-                .first()
-            )
-        if not canonical:
-            return
-
-        dupes = (
-            db.query(Team)
-            .filter(Team.name == DEFAULT_TEAM_NAME, Team.team_id != canonical.team_id)
-            .all()
-        )
-        if not dupes:
-            return
-
-        keep_id = canonical.team_id
-        dup_ids = [d.team_id for d in dupes]
-        for dup in dupes:
-            dup_id = dup.team_id
-            members = (
-                db.query(TeamMember).filter(TeamMember.team_id == dup_id).all()
-            )
-            for member in members:
-                existing = (
-                    db.query(TeamMember)
-                    .filter(
-                        TeamMember.team_id == keep_id,
-                        TeamMember.user_id == member.user_id,
-                    )
-                    .first()
-                )
-                if existing:
-                    if member.role == "owner" and existing.role != "owner":
-                        existing.role = "owner"
-                    db.delete(member)
-                else:
-                    member.team_id = keep_id
-            db.flush()
-            db.delete(dup)
-            print(
-                f"🔄 已合并重复默认团队 {dup.name} ({dup_id}) -> {keep_id}"
-            )
-
-        db.commit()
-
-        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
-        for dup_id in dup_ids:
-            for table in (
-                "pipelines",
-                "deploy_configs",
-                "git_sources",
-                "agent_hosts",
-                "hosts",
-                "resource_packages",
-                "tasks",
-                "export_tasks",
-                "operation_logs",
-            ):
-                cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                    (table,),
-                )
-                if not cursor.fetchone():
-                    continue
-                cursor.execute(f"PRAGMA table_info({table})")
-                if "team_id" not in [row[1] for row in cursor.fetchall()]:
-                    continue
-                cursor.execute(
-                    f"UPDATE {table} SET team_id = ? WHERE team_id = ?",
-                    (keep_id, dup_id),
-                )
-                if cursor.rowcount:
-                    print(f"🔄 {table}: 从重复团队迁移 {cursor.rowcount} 条")
-        conn.commit()
-        conn.close()
-        print(f"✅ 默认团队去重完成，保留 {canonical.name} ({keep_id})")
+        _dedupe_default_teams_locked(cursor)
+        conn.execute("COMMIT")
     except Exception as e:
-        db.rollback()
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
         print(f"⚠️ 默认团队去重失败: {e}")
     finally:
-        db.close()
+        conn.close()
 
 
 def close_db():

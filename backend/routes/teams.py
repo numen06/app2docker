@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
+from backend.database import DEFAULT_TEAM_NAME, get_db
 from backend.models import Team, TeamInvitation, TeamMember, User
 from backend.route_definitions import require_auth
 from backend.team_permissions import (
@@ -238,10 +238,12 @@ def create_team(
     username = require_auth(request)
     user_id = get_user_id_by_username(db, username)
     name = body.name.strip()
-    if name == "默认团队":
-        base = "default"
-    else:
-        base = _slugify_name(name)
+    if name == DEFAULT_TEAM_NAME:
+        raise HTTPException(
+            status_code=400,
+            detail=f"团队名称「{DEFAULT_TEAM_NAME}」为系统保留，请使用其他名称",
+        )
+    base = _slugify_name(name)
     slug = _ensure_unique_slug(db, base)
     team = Team(
         team_id=str(uuid.uuid4()),
