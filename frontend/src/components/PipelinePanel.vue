@@ -2,7 +2,7 @@
   <div class="pipeline-panel">
     <div class="pipeline-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
       <h5 class="mb-0"><i class="fas fa-project-diagram"></i> 流水线管理</h5>
-      <div class="pipeline-toolbar-actions flex flex-wrap gap-2">
+      <div class="pipeline-toolbar-actions flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
         <Button
           variant="outline" size="sm"
           @click="loadPipelines"
@@ -20,13 +20,71 @@
       </div>
     </div>
 
+    <div
+      class="mb-3 flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/50 p-3 sm:flex-row sm:flex-wrap sm:items-end"
+    >
+      <div class="min-w-[12rem] flex-1">
+        <label class="mb-1 block text-xs font-medium text-slate-600">名称搜索</label>
+        <Input
+          v-model="searchQuery"
+          placeholder="搜索流水线名称或描述"
+          @input="onSearchInput"
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="text-xs text-slate-500">启用状态</span>
+        <div class="flex flex-wrap gap-1 rounded-md border border-slate-200 bg-white p-0.5">
+          <Button
+            size="sm"
+            :variant="enabledFilter === '' ? 'default' : 'ghost'"
+            @click="setEnabledFilter('')"
+          >
+            全部
+          </Button>
+          <Button
+            size="sm"
+            :variant="enabledFilter === 'enabled' ? 'default' : 'ghost'"
+            @click="setEnabledFilter('enabled')"
+          >
+            已启用
+          </Button>
+          <Button
+            size="sm"
+            :variant="enabledFilter === 'disabled' ? 'default' : 'ghost'"
+            @click="setEnabledFilter('disabled')"
+          >
+            已禁用
+          </Button>
+        </div>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-slate-500">项目类型</label>
+        <select
+          v-model="projectTypeFilter"
+          class="h-9 min-w-[8rem] rounded-md border border-slate-200 bg-white px-2 text-sm"
+          @change="handleFilterChange"
+        >
+          <option value="">全部类型</option>
+          <option
+            v-for="pt in projectTypesList"
+            :key="pt.value"
+            :value="pt.value"
+          >
+            {{ pt.label }}
+          </option>
+        </select>
+      </div>
+    </div>
+
     <!-- 流水线列表 - 卡片式布局 -->
     <div v-if="loading" class="text-center py-12">
       <i class="fas fa-spinner fa-spin"></i> 加载中...
     </div>
     <div v-else-if="pipelines.length === 0" class="text-center py-12 text-slate-500">
       <i class="fas fa-inbox text-4xl mb-3"></i>
-      <p class="mb-0">暂无流水线配置</p>
+      <p class="mb-0">
+        {{ hasActiveFilters ? "暂无符合筛选条件的流水线" : "暂无流水线配置" }}
+      </p>
     </div>
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div
@@ -35,12 +93,10 @@
         >
         <div class="card h-full shadow-sm">
           <!-- 卡片头部 -->
-          <div class="card-header bg-white">
-            <!-- 标题行 -->
+          <div class="card-header relative bg-white">
             <div class="mb-2">
-              <!-- 流水线名字单独一行 -->
               <h5 class="card-title mb-2">
-                <strong>{{ pipeline.name }}</strong>
+                <strong class="break-words cursor-pointer text-blue-600 hover:underline" @click="goToDetail(pipeline)">{{ pipeline.name }}</strong>
               </h5>
               <!-- 徽章行 -->
               <div
@@ -102,44 +158,23 @@
               <Button
                 variant="outline" size="sm"
                 @click="showHistory(pipeline)"
-                title="查看历史构建"
+                title="历史构建"
               >
                 <i class="fas fa-history"></i>
               </Button>
               <Button
                 variant="outline" size="sm"
-                @click="showWebhookUrl(pipeline)"
-                title="查看 Webhook URL"
-              >
-                <i class="fas fa-link"></i>
-              </Button>
-              <Button
-                variant="outline" size="sm"
-                @click="goToEdit(pipeline)"
-                title="编辑"
-              >
-                <i class="fas fa-edit"></i>
-              </Button>
-              <Button
-                variant="outline" size="sm"
-                @click="openResourcePermission(pipeline)"
+                @click="openPipelinePermission(pipeline)"
                 title="成员授权"
               >
                 <i class="fas fa-user-shield"></i>
               </Button>
               <Button
                 variant="outline" size="sm"
-                @click="showMultiServiceConfig(pipeline)"
-                title="多服务配置"
+                @click="goToDetail(pipeline)"
+                title="配置流水线"
               >
-                <i class="fas fa-layer-group"></i>
-              </Button>
-              <Button
-                variant="destructive" size="sm"
-                @click="deletePipeline(pipeline)"
-                title="删除"
-              >
-                <i class="fas fa-trash"></i>
+                <i class="fas fa-cog"></i> 配置
               </Button>
             </div>
           </div>
@@ -502,53 +537,15 @@
       </div>
     </div>
 
-<!-- Webhook URL 模态框 -->
-    <div
-      v-if="showWebhookModal"
-      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-      @click.self="showWebhookModal = false"
-      >
-      <div class="relative z-10 mx-auto w-full max-w-lg">
-        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
-          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title"><i class="fas fa-link"></i> Webhook URL</h5>
-            <button
-              type="button"
-              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-              @click="showWebhookModal = false"
-            ><i class="fas fa-times"></i></button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-slate-700">Webhook URL</label>
-              <div class="input-group">
-                <input
-                  :value="webhookUrl"
-                  type="text"
-                  class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 font-mono text-sm"
-                  readonly
-                  ref="webhookUrlInput"
-                />
-                <Button
-                  variant="outline" size="sm"
-                  @click="copyWebhookUrl"
-                >
-                  <i class="fas fa-copy"></i> 复制
-                </Button>
-              </div>
-            </div>
-            <div class="alert alert-info small mb-0">
-              <strong>使用说明：</strong><br />
-              1. 在 Git 平台（GitHub/GitLab/Gitee）的仓库设置中添加 Webhook<br />
-              2. 将上述 URL 粘贴到 Payload URL 中<br />
-              3. Content Type 选择 <code>application/json</code><br />
-              4. Secret 填写流水线配置的 Webhook 密钥（如果有）<br />
-              5. 选择触发事件（通常是 Push events）
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <PaginationBar
+      v-if="!loading && totalPages > 1"
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalPipelines"
+      :total-pages="totalPages"
+      @update:page="changePage"
+    />
+
 <!-- 手动触发分支选择模态框 -->
     <div
       v-if="showManualRunModal"
@@ -639,1255 +636,6 @@
               :disabled="!manualRunSelectedBranch"
             >
               <i class="fas fa-play"></i> 确认触发
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-<!-- 日志查看模态框 -->
-    <div
-      v-if="showLogModal"
-      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-      @click.self="showLogModal = false"
-      >
-      <div class="relative z-10 mx-auto w-full max-w-5xl" style="max-width: 90%">
-        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
-          <div
-            class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3"
-            :class="getLogStatusHeaderClass(selectedTask?.status)"
-          >
-            <h5 class="modal-title">
-              <i :class="getLogStatusIcon(selectedTask?.status)"></i>
-              任务日志 - {{ selectedTask?.image || "未知" }}:{{
-                selectedTask?.tag || "latest"
-              }}
-              <span v-if="isLogTaskRunning" class="badge bg-primary ml-2">
-                <span
-                  class="fas fa-spinner fa-spin mr-1"
-                  style="width: 0.7rem; height: 0.7rem"
-                ></span>
-                运行中
-              </span>
-            </h5>
-            <button
-              type="button"
-              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-              :class="
-                selectedTask?.status === 'failed' ? 'btn-close-white' : ''
-              "
-              @click="closeLogModal"
-            ><i class="fas fa-times"></i></button>
-          </div>
-          <div
-            class="min-h-0 flex-1 overflow-y-auto px-4 py-4"
-            style="
-              display: flex;
-              flex-direction: column;
-              padding: 0;
-              max-height: 80vh;
-            "
-          >
-            <!-- 任务信息 -->
-            <div v-if="selectedTask" class="p-3 border-b border-slate-200">
-              <div class="text-slate-500 small">
-                任务ID:
-                <code>{{
-                  selectedTask.task_id?.substring(0, 8) || "未知"
-                }}</code>
-              </div>
-            </div>
-
-            <!-- 任务概况（仅已完成/失败/停止时显示） -->
-            <div
-              v-if="
-                selectedTask &&
-                (selectedTask.status === 'failed' ||
-                  selectedTask.status === 'completed' ||
-                  selectedTask.status === 'stopped')
-              "
-              class="p-3 border-b border-slate-200"
-              :class="getLogStatusSummaryClass(selectedTask.status)"
-            >
-              <div class="flex items-center mb-2">
-                <i
-                  :class="getLogStatusIcon(selectedTask.status)"
-                  class="mr-2"
-                ></i>
-                <strong>{{ getLogStatusText(selectedTask.status) }}</strong>
-              </div>
-              <div
-                v-if="selectedTask.status === 'failed' && selectedTask.error"
-                class="mt-2"
-              >
-                <strong>错误信息：</strong>
-                <pre
-                  class="mb-0 mt-1 p-2 bg-dark text-light rounded"
-                  style="
-                    font-size: 0.85rem;
-                    max-height: 150px;
-                    overflow-y: auto;
-                  "
-                  >{{ selectedTask.error }}</pre
-                >
-              </div>
-              <div
-                v-if="selectedTask.status === 'completed'"
-                class="mt-2 small"
-              >
-                <div>
-                  <strong>创建时间：</strong
-                  >{{ formatLogTime(selectedTask.created_at) }}
-                </div>
-                <div v-if="selectedTask.completed_at">
-                  <strong>完成时间：</strong
-                  >{{ formatLogTime(selectedTask.completed_at) }}
-                </div>
-                <div v-if="selectedTask.completed_at">
-                  <strong>耗时：</strong
-                  >{{
-                    calculateLogDuration(
-                      selectedTask.created_at,
-                      selectedTask.completed_at
-                    )
-                  }}
-                </div>
-              </div>
-              <div v-if="selectedTask.status === 'stopped'" class="mt-2 small">
-                <div>
-                  <strong>创建时间：</strong
-                  >{{ formatLogTime(selectedTask.created_at) }}
-                </div>
-                <div v-if="selectedTask.completed_at">
-                  <strong>停止时间：</strong
-                  >{{ formatLogTime(selectedTask.completed_at) }}
-                </div>
-              </div>
-            </div>
-
-            <!-- 日志内容 -->
-            <div
-              style="
-                flex: 1;
-                overflow: hidden;
-                display: flex;
-                flex-direction: column;
-              "
-            >
-              <div
-                class="p-2 border-b border-slate-200 flex justify-between items-center"
-              >
-                <div>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="refreshLogs"
-                    :disabled="refreshingLogs"
-                  >
-                    <i
-                      class="fas fa-sync-alt"
-                      :class="{ 'fa-spin': refreshingLogs }"
-                    ></i>
-                    刷新
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="toggleAutoScroll"
-                  >
-                    <i
-                      class="fas"
-                      :class="autoScroll ? 'fa-pause' : 'fa-play'"
-                    ></i>
-                    {{ autoScroll ? "暂停自动滚动" : "启用自动滚动" }}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="copyLogs"
-                  >
-                    <i class="fas fa-copy"></i> 复制日志
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="scrollLogToTop"
-                    title="滚动到顶部"
-                  >
-                    <i class="fas fa-arrow-up"></i> 到顶
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="scrollLogToBottom"
-                    title="滚动到底部"
-                  >
-                    <i class="fas fa-arrow-down"></i> 到底
-                  </Button>
-                </div>
-              </div>
-              <pre
-                ref="logContainer"
-                class="bg-dark text-light mb-0 font-mono p-3"
-                style="
-                  flex: 1;
-                  overflow-y: auto;
-                  overflow-x: hidden;
-                  font-size: 0.85rem;
-                  white-space: pre-wrap;
-                  word-wrap: break-word;
-                  line-height: 1.5;
-                  min-height: 0;
-                  max-height: 80vh;
-                "
-                >{{ taskLogs || "暂无日志" }}</pre
-              >
-            </div>
-          </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-            <Button
-              type="button"
-              variant="outline" size="sm"
-              @click="closeLogModal"
-            >
-              关闭
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-<!-- 历史构建模态框 -->
-    <div
-      v-if="showHistoryModal"
-      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-      @click.self="showHistoryModal = false"
-      >
-      <div class="relative z-10 mx-auto w-full max-w-5xl">
-        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
-          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-history"></i> 历史构建 -
-              {{ currentPipeline?.name }}
-            </h5>
-            <button
-              type="button"
-              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-              @click="closeHistoryModal"
-            ><i class="fas fa-times"></i></button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <!-- 过滤选项 -->
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label class="form-label small">触发来源</label>
-                <select
-                  v-model="historyFilter.trigger_source"
-                  class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                  @change="
-                    () => {
-                      historyPagination.currentPage = 1;
-                      loadHistory();
-                    }
-                  "
-                >
-                  <option value="">全部</option>
-                  <option value="webhook">Webhook</option>
-                  <option value="manual">手动</option>
-                  <option value="cron">定时</option>
-                </select>
-              </div>
-              <div class="col-md-4">
-                <label class="form-label small">任务状态</label>
-                <select
-                  v-model="historyFilter.status"
-                  class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                  @change="
-                    () => {
-                      historyPagination.currentPage = 1;
-                      loadHistory();
-                    }
-                  "
-                >
-                  <option value="">全部</option>
-                  <option value="pending">等待中</option>
-                  <option value="running">进行中</option>
-                  <option value="completed">已完成</option>
-                  <option value="failed">失败</option>
-                </select>
-              </div>
-              <div class="col-md-4 flex items-end">
-                <Button
-                  variant="outline" size="sm"
-                  @click="
-                    () => {
-                      historyPagination.currentPage = 1;
-                      loadHistory();
-                    }
-                  "
-                >
-                  <i class="fas fa-sync-alt"></i> 刷新
-                </Button>
-              </div>
-            </div>
-
-            <!-- 历史列表 -->
-            <div v-if="historyLoading" class="text-center py-4">
-              <i class="fas fa-spinner fa-spin"></i> 加载中...
-            </div>
-            <div
-              v-else-if="historyTasks.length === 0"
-              class="text-center py-4 text-slate-500"
-            >
-              <i class="fas fa-inbox fa-2x mb-2"></i>
-              <p class="mb-0">暂无历史构建记录</p>
-            </div>
-            <div v-else class="table-responsive" style="overflow-x: hidden">
-              <table
-                class="w-full border-collapse text-sm"
-                style="table-layout: fixed; width: 100%"
-              >
-                <thead>
-                  <tr>
-                    <th style="width: 9%">任务ID</th>
-                    <th style="width: 9%">触发来源</th>
-                    <th style="width: 9%">状态</th>
-                    <th style="width: 13%">镜像</th>
-                    <th style="width: 12%">触发时间</th>
-                    <th style="width: 12%">完成时间</th>
-                    <th style="width: 18%">分支/Tag</th>
-                    <th style="width: 16%">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="task in historyTasks" :key="task.task_id">
-                    <td>
-                      <code class="small">{{
-                        task.task_id.substring(0, 8)
-                      }}</code>
-                    </td>
-                    <td>
-                      <span
-                        v-if="task.trigger_source === 'webhook'"
-                        class="badge bg-info"
-                      >
-                        <i class="fas fa-link"></i> Webhook
-                      </span>
-                      <span
-                        v-else-if="task.trigger_source === 'manual'"
-                        class="badge bg-success"
-                      >
-                        <i class="fas fa-hand-pointer"></i> 手动
-                      </span>
-                      <span
-                        v-else-if="task.trigger_source === 'cron'"
-                        class="badge bg-warning"
-                      >
-                        <i class="fas fa-clock"></i> 定时
-                      </span>
-                      <span v-else class="badge bg-secondary">未知</span>
-                    </td>
-                    <td>
-                      <span
-                        v-if="task.status === 'pending'"
-                        class="badge bg-secondary"
-                      >
-                        <i class="fas fa-clock"></i> 等待中
-                      </span>
-                      <span
-                        v-else-if="task.status === 'running'"
-                        class="badge bg-primary"
-                      >
-                        <span
-                          class="fas fa-spinner fa-spin mr-1"
-                          style="width: 0.65rem; height: 0.65rem"
-                        ></span>
-                        进行中
-                      </span>
-                      <span
-                        v-else-if="task.status === 'completed'"
-                        class="badge bg-success"
-                      >
-                        <i class="fas fa-check-circle"></i> 已完成
-                      </span>
-                      <span
-                        v-else-if="task.status === 'failed'"
-                        class="badge bg-danger"
-                      >
-                        <i class="fas fa-times-circle"></i> 失败
-                      </span>
-                      <span
-                        v-else-if="task.status === 'deleted'"
-                        class="badge bg-secondary"
-                      >
-                        <i class="fas fa-trash"></i> 已删除
-                      </span>
-                    </td>
-                    <td>
-                      <small
-                        class="font-mono truncate block"
-                        :title="`${task.image}:${task.tag}`"
-                      >
-                        {{ task.image }}:{{ task.tag }}
-                      </small>
-                    </td>
-                    <td>
-                      <small
-                        class="text-slate-500"
-                        :title="formatDateTime(task.triggered_at)"
-                      >
-                        {{ formatDateTime(task.triggered_at) }}
-                      </small>
-                    </td>
-                    <td>
-                      <small
-                        v-if="task.completed_at"
-                        class="text-slate-500"
-                        :title="formatDateTime(task.completed_at)"
-                      >
-                        {{ formatDateTime(task.completed_at) }}
-                      </small>
-                      <small v-else class="text-slate-500">-</small>
-                    </td>
-                    <td>
-                      <div v-if="task.trigger_info">
-                        <!-- 分支显示 -->
-                        <div v-if="task.trigger_info.branch" class="mb-1">
-                          <span class="badge bg-primary">
-                            <i class="fas fa-code-branch"></i> 分支:
-                            {{ task.trigger_info.branch }}
-                          </span>
-                        </div>
-                        <!-- Tag显示：优先显示任务的tag（每个任务对应一个tag），如果没有则显示trigger_info中的tag -->
-                        <div v-if="task.tag" class="mb-1">
-                          <span class="badge bg-info">
-                            <i class="fas fa-tag"></i> Tag: {{ task.tag }}
-                          </span>
-                        </div>
-                        <div v-else-if="task.trigger_info.tag" class="mb-1">
-                          <span class="badge bg-info">
-                            <i class="fas fa-tag"></i> Tag:
-                            {{ task.trigger_info.tag }}
-                          </span>
-                        </div>
-                        <!-- 平台信息 -->
-                        <div
-                          v-if="task.trigger_info.platform"
-                          class="text-slate-500 small mb-1"
-                        >
-                          <i class="fas fa-server"></i>
-                          {{ task.trigger_info.platform }}
-                        </div>
-                        <!-- 提交信息 -->
-                        <div
-                          v-if="task.trigger_info.last_commit"
-                          class="text-slate-500 small truncate"
-                          :title="task.trigger_info.last_commit"
-                        >
-                          <i class="fas fa-hashtag"></i>
-                          {{ task.trigger_info.last_commit.substring(0, 40)
-                          }}{{
-                            task.trigger_info.last_commit.length > 40
-                              ? "..."
-                              : ""
-                          }}
-                        </div>
-                      </div>
-                      <!-- 如果没有trigger_info，尝试显示任务的基本信息 -->
-                      <div v-else>
-                        <div v-if="task.branch" class="mb-1">
-                          <span class="badge bg-primary">
-                            <i class="fas fa-code-branch"></i> 分支:
-                            {{ task.branch }}
-                          </span>
-                        </div>
-                        <div v-if="task.tag" class="mb-1">
-                          <span class="badge bg-info">
-                            <i class="fas fa-tag"></i> Tag: {{ task.tag }}
-                          </span>
-                        </div>
-                        <small
-                          v-if="!task.branch && !task.tag"
-                          class="text-slate-500"
-                          >-</small
-                        >
-                      </div>
-                    </td>
-                    <td>
-                      <Button
-                        v-if="task.status !== 'deleted' && task.task_id"
-                        variant="outline" size="sm"
-                        @click.stop="viewTaskLogs(task.task_id, task)"
-                        :disabled="viewingLogs === task.task_id"
-                        title="查看日志"
-                      >
-                        <i class="fas fa-terminal"></i> 日志
-                        <span
-                          v-if="viewingLogs === task.task_id"
-                          class="fas fa-spinner fa-spin ml-1"
-                        ></span>
-                      </Button>
-                      <span v-else class="text-slate-500 small">-</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-            <div class="text-slate-500 small me-auto">
-              共 {{ historyPagination.total }} 条记录
-              <span v-if="historyPagination.total > 0">
-                ，第 {{ historyPagination.currentPage }} /
-                {{
-                  Math.ceil(
-                    historyPagination.total / historyPagination.pageSize
-                  )
-                }}
-                页
-              </span>
-            </div>
-            <!-- 分页控件 -->
-            <nav v-if="historyPagination.total > 0">
-              <ul class="pagination pagination-sm mb-0">
-                <li
-                  class="page-item"
-                  :class="{ disabled: historyPagination.currentPage === 1 }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="changeHistoryPage(1)"
-                    title="首页"
-                  >
-                    <i class="fas fa-angle-double-left"></i>
-                  </a>
-                </li>
-                <li
-                  class="page-item"
-                  :class="{ disabled: historyPagination.currentPage === 1 }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="
-                      changeHistoryPage(historyPagination.currentPage - 1)
-                    "
-                    title="上一页"
-                  >
-                    <i class="fas fa-angle-left"></i>
-                  </a>
-                </li>
-                <li class="page-item active">
-                  <span class="page-link">{{
-                    historyPagination.currentPage
-                  }}</span>
-                </li>
-                <li
-                  class="page-item"
-                  :class="{
-                    disabled:
-                      historyPagination.currentPage >=
-                      Math.ceil(
-                        historyPagination.total / historyPagination.pageSize
-                      ),
-                  }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="
-                      changeHistoryPage(historyPagination.currentPage + 1)
-                    "
-                    title="下一页"
-                  >
-                    <i class="fas fa-angle-right"></i>
-                  </a>
-                </li>
-                <li
-                  class="page-item"
-                  :class="{
-                    disabled:
-                      historyPagination.currentPage >=
-                      Math.ceil(
-                        historyPagination.total / historyPagination.pageSize
-                      ),
-                  }"
-                >
-                  <a
-                    class="page-link"
-                    href="#"
-                    @click.prevent="
-                      changeHistoryPage(
-                        Math.ceil(
-                          historyPagination.total / historyPagination.pageSize
-                        )
-                      )
-                    "
-                    title="末页"
-                  >
-                    <i class="fas fa-angle-double-right"></i>
-                  </a>
-                </li>
-              </ul>
-            </nav>
-            <Button
-              type="button"
-              variant="outline" size="sm"
-              @click="closeHistoryModal"
-            >
-              关闭
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-<!-- 资源包选择模态框 -->
-    <div
-      v-if="showResourcePackageModal"
-      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-      @click.self="showResourcePackageModal = false"
-      >
-      <div class="relative z-10 mx-auto w-full max-w-3xl">
-        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
-          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-archive"></i> 选择资源包
-            </h5>
-            <button
-              type="button"
-              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-              @click="showResourcePackageModal = false"
-            ><i class="fas fa-times"></i></button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 60vh; overflow-y: auto">
-            <div
-              v-if="resourcePackages.length === 0"
-              class="text-center py-4 text-slate-500"
-            >
-              <i class="fas fa-inbox fa-2x mb-2"></i>
-              <p class="mb-0">暂无资源包</p>
-              <small class="text-slate-500">请先在"资源包"标签页上传资源包</small>
-            </div>
-            <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <div
-                v-for="pkg in resourcePackages"
-                :key="pkg.package_id"
-                class="col-md-6"
-              >
-                <div
-                  class="card h-full"
-                  :class="{
-                    'border-primary': isResourcePackageSelected(pkg.package_id),
-                  }"
-                >
-                  <div class="card-body">
-                    <div class="form-check">
-                      <input
-                        type="checkbox"
-                        :value="pkg.package_id"
-                        :checked="isResourcePackageSelected(pkg.package_id)"
-                        @change="toggleResourcePackage(pkg)"
-                        class="form-check-input"
-                      />
-                      <label class="form-check-label fw-bold">
-                        {{ pkg.name }}
-                      </label>
-                    </div>
-                    <small class="text-slate-500 block mt-1">{{
-                      pkg.description || "无描述"
-                    }}</small>
-                    <div
-                      v-if="isResourcePackageSelected(pkg.package_id)"
-                      class="mt-2"
-                    >
-                      <label class="form-label small">目标路径</label>
-                      <input
-                        type="text"
-                        :value="
-                          getResourcePackageConfig(pkg.package_id).target_path
-                        "
-                        @input="
-                          updateResourcePackagePath(
-                            pkg.package_id,
-                            $event.target.value
-                          )
-                        "
-                        class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                        placeholder="resources"
-                      />
-                      <small class="text-slate-500 block mt-1">
-                        <i class="fas fa-info-circle"></i>
-                        相对路径，如：<code>test/b.txt</code> 或
-                        <code>config/app.conf</code>
-                      </small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-            <Button
-              type="button"
-              variant="outline" size="sm"
-              @click="showResourcePackageModal = false"
-            >
-              完成
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-<!-- 多服务配置模态框 -->
-    <div
-      v-if="showMultiServiceConfigModal"
-      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-      @click.self="showMultiServiceConfigModal = false"
-      >
-      <div class="relative z-10 mx-auto w-full max-w-3xl">
-        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
-          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-layer-group"></i> 多服务配置 -
-              {{ multiServiceConfigPipeline?.name }}
-            </h5>
-            <button
-              type="button"
-              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-              @click="closeMultiServiceConfigModal"
-            ><i class="fas fa-times"></i></button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto">
-            <div class="alert alert-info mb-3">
-              <i class="fas fa-info-circle"></i>
-              <strong>说明：</strong>此配置为独立的多服务配置，不需要读取
-              Dockerfile。可以手动添加和配置服务。
-            </div>
-
-            <!-- 推送模式选择 -->
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-slate-700"><strong>推送模式</strong></label>
-              <div class="btn-group w-full flex" role="group">
-                <input
-                  type="radio"
-                  class="btn-check"
-                  id="multi-service-mode-single"
-                  value="single"
-                  v-model="multiServiceFormData.push_mode"
-                />
-                <label
-                  class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                  for="multi-service-mode-single"
-                >
-                  <i class="fas fa-cube block mb-1"></i>
-                  <small class="block fw-bold">单服务模式</small>
-                </label>
-
-                <input
-                  type="radio"
-                  class="btn-check"
-                  id="multi-service-mode-multi"
-                  value="multi"
-                  v-model="multiServiceFormData.push_mode"
-                />
-                <label
-                  class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                  for="multi-service-mode-multi"
-                >
-                  <i class="fas fa-sitemap block mb-1"></i>
-                  <small class="block fw-bold">多服务模式</small>
-                </label>
-              </div>
-            </div>
-
-            <!-- 全局镜像配置 / 服务配置 -->
-            <div class="mb-3">
-              <label class="block text-sm font-medium text-slate-700">
-                <strong v-if="multiServiceFormData.push_mode === 'single'"
-                  >服务配置</strong
-                >
-                <strong v-else>全局镜像配置（前缀）</strong>
-              </label>
-              <div class="row g-2">
-                <div class="col-md-6">
-                  <label class="form-label small">
-                    <span v-if="multiServiceFormData.push_mode === 'single'"
-                      >镜像名称</span
-                    >
-                    <span v-else>镜像名称前缀</span>
-                  </label>
-                  <input
-                    v-model="multiServiceFormData.global_image_name"
-                    type="text"
-                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                    placeholder="myapp/demo"
-                  />
-                  <small class="text-slate-500 block mt-1">
-                    <span v-if="multiServiceFormData.push_mode === 'single'">
-                      <i class="fas fa-info-circle"></i>
-                      单服务模式下，此配置将直接用于服务构建
-                    </span>
-                    <span v-else>
-                      <i class="fas fa-info-circle"></i>
-                      多服务模式下，每个启用的服务镜像名称将自动生成为:
-                      <code
-                        >{{
-                          multiServiceFormData.global_image_name ||
-                          "myapp/demo"
-                        }}/服务名</code
-                      >
-                    </span>
-                  </small>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label small">
-                    <span v-if="multiServiceFormData.push_mode === 'single'"
-                      >标签</span
-                    >
-                    <span v-else>全局标签（快捷设置）</span>
-                  </label>
-                  <input
-                    v-model="multiServiceFormData.global_tag"
-                    type="text"
-                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                    placeholder="latest"
-                  />
-                  <small class="text-slate-500 block mt-1">
-                    <span v-if="multiServiceFormData.push_mode === 'single'">
-                      <i class="fas fa-info-circle"></i>
-                      单服务模式下，此标签将直接用于服务构建
-                    </span>
-                    <span v-else>
-                      <i class="fas fa-info-circle"></i>
-                      多服务模式下，可快速为所有启用的服务设置标签（可在服务级别覆盖）
-                    </span>
-                  </small>
-                </div>
-              </div>
-              <!-- 单服务模式下的推送开关 -->
-              <div
-                v-if="multiServiceFormData.push_mode === 'single'"
-                class="mt-3"
-              >
-                <div class="form-check form-switch">
-                  <input
-                    :checked="getSingleServicePush()"
-                    @change="updateSingleServicePush($event.target.checked)"
-                    class="form-check-input"
-                    type="checkbox"
-                    id="singleServicePushCheck"
-                    style="width: 3em; height: 1.5em"
-                  />
-                  <label
-                    class="form-check-label fw-bold ml-2"
-                    for="singleServicePushCheck"
-                  >
-                    <i class="fas fa-cloud-upload-alt text-green-600"></i>
-                    构建完成后推送到仓库
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <!-- 服务列表（仅多服务模式显示） -->
-            <div v-if="multiServiceFormData.push_mode === 'multi'" class="mb-3">
-              <div
-                class="flex justify-between items-center mb-3"
-              >
-                <label class="form-label mb-0"><strong>服务列表</strong></label>
-                <div class="btn-group" role="group">
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="enableAllServices"
-                    title="全部启用"
-                    :disabled="
-                      multiServiceFormData.selected_services.length === 0
-                    "
-                  >
-                    <i class="fas fa-check-circle"></i> 全部启用
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="disableAllServices"
-                    title="全部禁用"
-                    :disabled="
-                      multiServiceFormData.selected_services.length === 0
-                    "
-                  >
-                    <i class="fas fa-times-circle"></i> 全部禁用
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="addServiceToMultiConfig"
-                    title="添加服务"
-                  >
-                    <i class="fas fa-plus"></i> 添加服务
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline" size="sm"
-                    @click="parseDockerfileForMultiService"
-                    title="识别dockerfile"
-                    :disabled="parsingDockerfileForMultiService"
-                  >
-                    <i class="fas fa-file-code"></i>
-                    <span v-if="parsingDockerfileForMultiService"
-                      >识别中...</span
-                    >
-                    <span v-else>识别dockerfile</span>
-                  </Button>
-                </div>
-              </div>
-
-              <div
-                v-if="multiServiceFormData.selected_services.length === 0"
-                class="text-slate-500 text-center py-12 border rounded bg-light"
-              >
-                <i class="fas fa-inbox text-4xl mb-3 text-slate-500"></i>
-                <p class="mb-1">暂无服务</p>
-                <small>点击"添加服务"按钮添加服务</small>
-              </div>
-
-              <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <div
-                  v-for="(
-                    serviceName, index
-                  ) in multiServiceFormData.selected_services"
-                  :key="`service-${index}-${serviceName}`"
-                  class="col-12"
-                >
-                  <div
-                    class="card shadow-sm border"
-                    :class="{
-                      'border-secondary opacity-75':
-                        multiServiceFormData.push_mode === 'multi' &&
-                        !(
-                          multiServiceFormData.service_push_config[serviceName]
-                            ?.enabled !== false
-                        ),
-                    }"
-                  >
-                    <div
-                      class="card-header bg-light flex justify-between items-center py-2"
-                    >
-                      <div class="flex items-center">
-                        <span class="badge bg-primary mr-2"
-                          >#{{ index + 1 }}</span
-                        >
-                        <strong class="text-blue-600">{{
-                          serviceName || "未命名服务"
-                        }}</strong>
-                        <!-- 多服务模式下的启用/禁用开关 -->
-                        <div
-                          v-if="multiServiceFormData.push_mode === 'multi'"
-                          class="form-check form-switch ml-3"
-                        >
-                          <input
-                            :checked="
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled !== false
-                            "
-                            @change="
-                              updateServiceEnabled(
-                                serviceName,
-                                $event.target.checked
-                              )
-                            "
-                            class="form-check-input"
-                            type="checkbox"
-                            :id="`enableCheck-${index}`"
-                            style="width: 2.5em; height: 1.3em"
-                          />
-                          <label
-                            class="form-check-label fw-bold ml-2"
-                            :for="`enableCheck-${index}`"
-                          >
-                            <span
-                              :class="
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.enabled !== false
-                                  ? 'text-green-600'
-                                  : 'text-slate-500'
-                              "
-                            >
-                              <i
-                                :class="
-                                  multiServiceFormData.service_push_config[
-                                    serviceName
-                                  ]?.enabled !== false
-                                    ? 'fas fa-check-circle'
-                                    : 'fas fa-times-circle'
-                                "
-                              ></i>
-                              {{
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.enabled !== false
-                                  ? "启用"
-                                  : "禁用"
-                              }}
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="destructive" size="sm"
-                        @click="removeServiceFromMultiConfig(index)"
-                        :disabled="multiServiceFormData.push_mode === 'single'"
-                        :title="
-                          multiServiceFormData.push_mode === 'single'
-                            ? '单服务模式下不能删除服务'
-                            : '删除服务'
-                        "
-                      >
-                        <i class="fas fa-trash"></i>
-                      </Button>
-                    </div>
-                    <div
-                      class="card-body"
-                      :class="{
-                        'opacity-50':
-                          multiServiceFormData.push_mode === 'multi' &&
-                          multiServiceFormData.service_push_config[serviceName]
-                            ?.enabled === false,
-                      }"
-                    >
-                      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        <div class="col-12">
-                          <label class="form-label small fw-bold">
-                            <i class="fas fa-tag text-blue-600"></i> 服务名称
-                            <span class="text-red-500">*</span>
-                          </label>
-                          <input
-                            :value="serviceName"
-                            @input="
-                              updateServiceName(index, $event.target.value)
-                            "
-                            type="text"
-                            class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                            :disabled="
-                              multiServiceFormData.push_mode === 'multi' &&
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled === false
-                            "
-                            placeholder="例如: api, web, worker"
-                            required
-                          />
-                          <small class="text-slate-500 block mt-1">
-                            <i class="fas fa-info-circle text-amber-600"></i>
-                            <strong>注意：</strong>服务名称必须与 Dockerfile
-                            中的阶段名（stage name）匹配才会生效。例如
-                            Dockerfile 中有
-                            <code>FROM node:18 AS api</code>，则服务名称应填写
-                            <code>api</code>。
-                          </small>
-                        </div>
-                        <div class="col-12">
-                          <label class="form-label small fw-bold">
-                            <i class="fas fa-image text-sky-600"></i> 镜像名称
-                          </label>
-                          <input
-                            :value="
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.imageName || ''
-                            "
-                            @input="
-                              updateServiceImageName(
-                                serviceName,
-                                $event.target.value
-                              )
-                            "
-                            type="text"
-                            class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                            :disabled="
-                              multiServiceFormData.push_mode === 'multi' &&
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled === false
-                            "
-                            :placeholder="
-                              getMultiServiceDefaultImageName(serviceName)
-                            "
-                          />
-                          <small class="text-slate-500 block mt-1">
-                            <i class="fas fa-info-circle"></i>
-                            <span
-                              v-if="multiServiceFormData.push_mode === 'single'"
-                              >留空使用全局配置</span
-                            >
-                            <span v-else
-                              >留空使用前缀拼接:
-                              {{
-                                getMultiServiceDefaultImageName(serviceName)
-                              }}</span
-                            >
-                          </small>
-                        </div>
-                        <div class="col-md-4">
-                          <label class="form-label small fw-bold">
-                            <i class="fas fa-tags text-amber-600"></i> 标签
-                          </label>
-                          <input
-                            :value="
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.tag || ''
-                            "
-                            @input="
-                              updateServiceTag(serviceName, $event.target.value)
-                            "
-                            type="text"
-                            class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                            :disabled="
-                              multiServiceFormData.push_mode === 'multi' &&
-                              multiServiceFormData.service_push_config[
-                                serviceName
-                              ]?.enabled === false
-                            "
-                            :placeholder="
-                              multiServiceFormData.global_tag || 'latest'
-                            "
-                          />
-                        </div>
-                        <div class="col-md-8 flex items-end">
-                          <div class="form-check form-switch">
-                            <input
-                              :checked="
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.push || false
-                              "
-                              @change="
-                                updateServicePush(
-                                  serviceName,
-                                  $event.target.checked
-                                )
-                              "
-                              class="form-check-input"
-                              type="checkbox"
-                              :id="`pushCheck-${index}`"
-                              :disabled="
-                                multiServiceFormData.push_mode === 'multi' &&
-                                multiServiceFormData.service_push_config[
-                                  serviceName
-                                ]?.enabled === false
-                              "
-                              style="width: 3em; height: 1.5em"
-                            />
-                            <label
-                              class="form-check-label fw-bold ml-2"
-                              :for="`pushCheck-${index}`"
-                            >
-                              <i
-                                class="fas fa-cloud-upload-alt text-green-600"
-                              ></i>
-                              推送到仓库
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-            <Button
-              type="button"
-              variant="outline" size="sm"
-              @click="closeMultiServiceConfigModal"
-              :disabled="savingMultiServiceConfig"
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              @click="saveMultiServiceConfig"
-              :disabled="savingMultiServiceConfig"
-            >
-              <span
-                v-if="savingMultiServiceConfig"
-                class="fas fa-spinner fa-spin mr-1"
-                style="width: 0.8rem; height: 0.8rem"
-              ></span>
-              <i v-else class="fas fa-save"></i>
-              {{ savingMultiServiceConfig ? "保存中..." : "保存" }}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-<!-- 构建配置JSON模态框 -->
-    <div
-      v-if="showBuildConfigJsonModal"
-      class="fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
-      @click.self="showBuildConfigJsonModal = false"
-      >
-      <div class="relative z-10 mx-auto w-full max-w-3xl">
-        <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
-          <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-code"></i>
-              {{ editingPipeline ? "编辑" : "查看" }}构建配置JSON
-            </h5>
-            <button
-              type="button"
-              class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
-              @click="closeBuildConfigJsonModal"
-            ><i class="fas fa-times"></i></button>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div v-if="editingPipeline" class="alert alert-info mb-3">
-              <i class="fas fa-info-circle"></i>
-              <strong>提示：</strong>编辑JSON后点击保存，配置将应用到流水线中。
-            </div>
-            <div class="flex justify-end mb-2">
-              <Button
-                type="button"
-                variant="outline" size="sm"
-                @click="copyBuildConfigJson"
-              >
-                <i class="fas fa-copy"></i> 复制JSON
-              </Button>
-            </div>
-            <div class="pipeline-json-editor">
-              <codemirror
-                v-model="buildConfigJsonText"
-                :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
-                :disabled="!editingPipeline"
-                :extensions="jsonEditorExtensions"
-              />
-            </div>
-            <div v-if="buildConfigJsonError" class="alert alert-danger mt-2">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ buildConfigJsonError }}
-            </div>
-          </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-            <Button
-              type="button"
-              variant="outline" size="sm"
-              @click="closeBuildConfigJsonModal"
-            >
-              取消
-            </Button>
-            <Button
-              v-if="editingPipeline"
-              type="button"
-              size="sm"
-              @click="saveBuildConfigJson"
-              :disabled="!!buildConfigJsonError"
-            >
-              <i class="fas fa-save"></i> 保存并应用
             </Button>
           </div>
         </div>
@@ -1995,19 +743,29 @@
       </div>
     </div>
 
+    <PipelineHistoryDialog
+      v-model:open="showHistoryModal"
+      :pipeline="historyPipeline"
+      :view-task-logs="pipelineTaskLogs.viewTaskLogs"
+    />
     <ResourceMemberPermissionDialog
       v-model="permissionDialogOpen"
       resource-type="pipeline"
-      :resource-id="permissionTarget?.pipeline_id || ''"
+      :resource-id="permissionPipeline?.pipeline_id"
       :team-id="teamStore.activeTeamId"
-      :resource-name="permissionTarget?.name || ''"
+      :resource-name="permissionPipeline?.name || ''"
     />
+    <PipelineTaskLogDialog :logs="pipelineTaskLogs" />
   </div>
 </template>
-
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
+import Input from "@/components/ui/input/Input.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import PipelineHistoryDialog from "@/components/pipeline/PipelineHistoryDialog.vue";
+import PipelineTaskLogDialog from "@/components/pipeline/PipelineTaskLogDialog.vue";
 import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { usePipelineTaskLogs } from "@/composables/usePipelineTaskLogs";
 import { useTeamStore } from "@/stores/team";
 import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
@@ -2049,23 +807,40 @@ const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类
 const teamStore = useTeamStore();
 const router = useRouter();
 
+const pipelineTaskLogs = usePipelineTaskLogs({
+  onTaskFinished: () => loadPipelines(),
+});
+
 function goToCreate() {
   router.push("/app/pipeline/new");
 }
 
-function goToEdit(pipeline) {
-  router.push(`/app/pipeline/${pipeline.pipeline_id}/edit`);
-}
-
-const permissionDialogOpen = ref(false);
-const permissionTarget = ref(null);
-
-function openResourcePermission(pipeline) {
-  permissionTarget.value = pipeline;
-  permissionDialogOpen.value = true;
+function goToDetail(pipeline, tab = "basic") {
+  router.push({
+    name: "pipeline-detail",
+    params: { pipelineId: pipeline.pipeline_id },
+    query: { tab },
+  });
 }
 
 const pipelines = ref([]);
+const currentPage = ref(1);
+const pageSize = ref(12);
+const totalPipelines = ref(0);
+const totalPages = ref(0);
+const searchQuery = ref("");
+const enabledFilter = ref("");
+const projectTypeFilter = ref("");
+const searchDebounceTimer = ref(null);
+
+const hasActiveFilters = computed(() =>
+  Boolean(
+    searchQuery.value.trim() ||
+      enabledFilter.value ||
+      projectTypeFilter.value
+  )
+);
+
 const templates = ref([]);
 const registries = ref([]);
 const gitSources = ref([]);
@@ -2080,6 +855,9 @@ const isVerifyingServices = ref(false); // 是否正在验证服务列表（编�
 const showModal = ref(false);
 const showWebhookModal = ref(false);
 const showHistoryModal = ref(false);
+const historyPipeline = ref(null);
+const permissionDialogOpen = ref(false);
+const permissionPipeline = ref(null);
 const showMultiServiceConfigModal = ref(false);
 const showManualRunModal = ref(false); // 手动触发分支选择模态框
 const manualRunPipeline = ref(null); // 要手动触发的流水线
@@ -2200,6 +978,13 @@ const formData = ref({
   service_template_params: {}, // 服务模板参数
   resource_package_configs: [], // 资源包配置
 });
+
+watch(
+  () => teamStore.activeTeamId,
+  () => {
+    loadPipelines({ resetPage: true });
+  }
+);
 
 onMounted(() => {
   loadProjectTypes();
@@ -2662,16 +1447,73 @@ watch(
   }
 );
 
-async function loadPipelines() {
+function handleFilterChange() {
+  currentPage.value = 1;
+  loadPipelines();
+}
+
+function setEnabledFilter(value) {
+  enabledFilter.value = value;
+  handleFilterChange();
+}
+
+function onSearchInput() {
+  if (searchDebounceTimer.value) {
+    clearTimeout(searchDebounceTimer.value);
+  }
+  searchDebounceTimer.value = setTimeout(() => {
+    handleFilterChange();
+  }, 300);
+}
+
+function changePage(page) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+  currentPage.value = page;
+  loadPipelines();
+}
+
+async function loadPipelines(options = {}) {
+  const { resetPage = false } = options;
+  if (resetPage) {
+    currentPage.value = 1;
+  }
   loading.value = true;
   try {
-    const res = await axios.get("/api/pipelines");
-    pipelines.value = res.data.pipelines || [];
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+    };
+    if (searchQuery.value.trim()) {
+      params.query = searchQuery.value.trim();
+    }
+    if (enabledFilter.value === "enabled") {
+      params.enabled = true;
+    } else if (enabledFilter.value === "disabled") {
+      params.enabled = false;
+    }
+    if (projectTypeFilter.value) {
+      params.project_type = projectTypeFilter.value;
+    }
+    if (teamStore.activeTeamId) {
+      params.team_id = teamStore.activeTeamId;
+    }
 
-    // 更新排队状态：仅用于显示提示，不用于禁用按钮
+    const res = await axios.get("/api/pipelines", { params });
+    pipelines.value = res.data.pipelines || [];
+    totalPipelines.value = res.data.total ?? 0;
+    totalPages.value = res.data.total_pages ?? 0;
+
+    if (
+      pipelines.value.length === 0 &&
+      currentPage.value > 1 &&
+      totalPages.value > 0
+    ) {
+      currentPage.value = totalPages.value;
+      return loadPipelines();
+    }
+
     queuedPipelines.value.clear();
     pipelines.value.forEach((pipeline) => {
-      // 使用后端返回的队列信息
       if (
         pipeline.has_queued_tasks ||
         (pipeline.queue_length && pipeline.queue_length > 0)
@@ -2682,6 +1524,9 @@ async function loadPipelines() {
   } catch (error) {
     console.error("加载流水线列表失败:", error);
     alert("加载流水线列表失败");
+    pipelines.value = [];
+    totalPipelines.value = 0;
+    totalPages.value = 0;
   } finally {
     loading.value = false;
   }
@@ -3368,24 +2213,6 @@ async function savePipeline() {
       return;
     }
 
-    // 检查名字是否重复
-    const duplicatePipeline = pipelines.value.find((p) => {
-      const nameMatch = p.name && p.name.trim() === pipelineName;
-      if (editingPipeline.value) {
-        // 编辑模式：排除当前流水线
-        return nameMatch && p.pipeline_id !== editingPipeline.value.pipeline_id;
-      } else {
-        // 创建模式：检查所有流水线
-        return nameMatch;
-      }
-    });
-
-    if (duplicatePipeline) {
-      alert("流水线名称已存在，请使用其他名称");
-      saving.value = false;
-      return;
-    }
-
     // 调试信息
     console.log("保存流水线参数:", {
       use_project_dockerfile: payload.use_project_dockerfile,
@@ -3393,20 +2220,19 @@ async function savePipeline() {
       project_type: payload.project_type,
     });
 
-    if (editingPipeline.value) {
-      // 更新
+    const isEdit = !!editingPipeline.value;
+    if (isEdit) {
       await axios.put(
         `/api/pipelines/${editingPipeline.value.pipeline_id}`,
         payload
       );
       alert("流水线更新成功");
     } else {
-      // 创建
       await axios.post("/api/pipelines", payload);
       alert("流水线创建成功");
     }
     closeModal();
-    loadPipelines();
+    loadPipelines({ resetPage: !isEdit });
   } catch (error) {
     console.error("保存流水线失败:", error);
     alert(error.response?.data?.detail || "保存流水线失败");
@@ -3574,25 +2400,12 @@ async function createPipelineFromJson() {
       return;
     }
 
-    // 检查流水线名字是否重复
-    const pipelineName = pipelineData.name && pipelineData.name.trim();
-    const duplicatePipeline = pipelines.value.find((p) => {
-      const nameMatch = p.name && p.name.trim() === pipelineName;
-      return nameMatch;
-    });
-
-    if (duplicatePipeline) {
-      jsonError.value = "流水线名称已存在，请使用其他名称";
-      savingJson.value = false;
-      return;
-    }
-
     // 调用API创建流水线
     const response = await axios.post("/api/pipelines/json", pipelineData);
 
     alert("流水线创建成功！");
     closeJsonCreateModal();
-    loadPipelines();
+    loadPipelines({ resetPage: true });
   } catch (error) {
     console.error("通过JSON创建流水线失败:", error);
     const errorMsg =
@@ -5356,7 +4169,13 @@ function formatDateTime(isoString) {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+function openPipelinePermission(pipeline) {
+  permissionPipeline.value = pipeline;
+  permissionDialogOpen.value = true;
+}
+
 function showHistory(pipeline) {
+  historyPipeline.value = pipeline;
   currentPipeline.value = pipeline;
   historyFilter.value = {
     trigger_source: "",
@@ -5375,6 +4194,7 @@ function showHistory(pipeline) {
 
 function closeHistoryModal() {
   showHistoryModal.value = false;
+  historyPipeline.value = null;
   currentPipeline.value = null;
   historyTasks.value = [];
   historyPagination.value = {
@@ -5647,111 +4467,20 @@ function calculateLogDuration(start, end) {
 }
 
 function viewTaskLogs(taskId, task) {
-  if (!taskId) {
-    alert("任务ID不存在，无法查看日志");
-    return;
-  }
-
-  if (viewingLogs.value === taskId) {
-    return;
-  }
-
-  viewingLogs.value = taskId;
-
-  // 确保 task 对象有 task_id 属性
-  if (task) {
-    if (!task.task_id) {
-      task = { ...task, task_id: taskId };
-    }
-    if (!task.image) {
-      task.image = task.image_name || "未知";
-    }
-    if (!task.tag) {
-      task.tag = "latest";
-    }
-  } else {
-    task = {
-      task_id: taskId,
-      status: "unknown",
-      image: "未知",
-      tag: "latest",
-    };
-  }
-
-  selectedTask.value = task;
-  showLogModal.value = true;
-  taskLogs.value = "加载中...";
-
-  // 加载日志
-  fetchTaskLogs(taskId);
-
-  // 如果任务正在运行，开始轮询
-  if (task.status === "running" || task.status === "pending") {
-    startLogPolling(taskId);
-  }
-
-  // 监听任务状态变化
-  let statusCheckInterval = setInterval(async () => {
-    try {
-      const res = await axios.get(`/api/build-tasks/${taskId}`);
-      if (res.data && res.data.status) {
-        if (selectedTask.value && selectedTask.value.task_id === taskId) {
-          selectedTask.value.status = res.data.status;
-          if (
-            res.data.status === "completed" ||
-            res.data.status === "failed" ||
-            res.data.status === "stopped"
-          ) {
-            stopLogPolling();
-            clearInterval(statusCheckInterval);
-            // 刷新一次日志
-            fetchTaskLogs(taskId);
-            // 刷新流水线列表
-            loadPipelines();
-          } else if (
-            res.data.status === "running" ||
-            res.data.status === "pending"
-          ) {
-            startLogPolling(taskId);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("检查任务状态失败:", error);
-    }
-  }, 3000);
-
-  // 当模态框关闭时，清理状态检查
-  const unwatchStatus = watch(
-    () => showLogModal.value,
-    (newVal) => {
-      if (!newVal) {
-        if (statusCheckInterval) {
-          clearInterval(statusCheckInterval);
-        }
-        unwatchStatus();
-      }
-    }
-  );
-
-  // 延迟清除 viewingLogs
-  setTimeout(() => {
-    if (viewingLogs.value === taskId) {
-      viewingLogs.value = null;
-    }
-  }, 100);
+  pipelineTaskLogs.viewTaskLogs(taskId, task);
 }
 
 // 显示多服务配置模态框
 async function showMultiServiceConfig(pipeline) {
-  // 先刷新流水线列表，确保获取最新数据
-  await loadPipelines();
-
-  // 从最新列表中查找对应的流水线，确保使用最新数据
-  const latestPipeline = pipelines.value.find(
-    (p) => p.pipeline_id === pipeline.pipeline_id
-  );
-  const pipelineToUse = latestPipeline || pipeline;
+  let pipelineToUse = pipeline;
+  try {
+    const res = await axios.get(`/api/pipelines/${pipeline.pipeline_id}`);
+    if (res.data) {
+      pipelineToUse = res.data;
+    }
+  } catch (error) {
+    console.warn("获取流水线详情失败，使用列表数据:", error);
+  }
 
   console.log("showMultiServiceConfig - pipelineToUse:", {
     pipeline_id: pipelineToUse.pipeline_id,
@@ -6357,16 +5086,17 @@ async function saveMultiServiceConfig() {
 
     alert("多服务配置已保存");
 
-    // 重新加载流水线列表
     await loadPipelines();
 
-    // 从更新后的列表中查找对应的流水线并更新 multiServiceConfigPipeline
-    const updatedPipeline = pipelines.value.find(
-      (p) => p.pipeline_id === multiServiceConfigPipeline.value.pipeline_id
-    );
-    if (updatedPipeline) {
-      // 更新 multiServiceConfigPipeline，这样如果用户再次打开多服务配置，会显示最新数据
-      multiServiceConfigPipeline.value = updatedPipeline;
+    try {
+      const res = await axios.get(
+        `/api/pipelines/${multiServiceConfigPipeline.value.pipeline_id}`
+      );
+      if (res.data) {
+        multiServiceConfigPipeline.value = res.data;
+      }
+    } catch (error) {
+      console.warn("刷新流水线详情失败:", error);
     }
 
     // 如果当前正在编辑这个流水线，需要更新 editingPipeline 和 formData

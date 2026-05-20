@@ -1,0 +1,532 @@
+/* 流水线配置页 */
+
+.pipeline-config-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* 顶栏 */
+.pipeline-config-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgb(226 232 240);
+}
+
+.pipeline-config-toolbar__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem 0.75rem;
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+
+.pipeline-config-toolbar__meta {
+  flex: 1 1 12rem;
+}
+
+.pipeline-config-toolbar__name {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: rgb(15 23 42);
+  word-break: break-word;
+}
+
+.pipeline-config-toolbar__hint {
+  margin: 0.125rem 0 0;
+  font-size: 0.8125rem;
+  color: rgb(100 116 139);
+}
+
+.pipeline-config-toolbar__actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* 主区域（不再套内层卡片，避免与 Admin 面板双重边框） */
+.pipeline-config-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  gap: 0;
+}
+
+.pipeline-config-body--loading {
+  align-items: center;
+  justify-content: center;
+  min-height: 14rem;
+  padding: 2rem 0;
+}
+
+/* Tab */
+.pipeline-config-page .pipeline-config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.125rem 0.25rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid rgb(226 232 240);
+}
+
+.pipeline-config-page .pipeline-config-tabs .nav-item {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.pipeline-config-page .pipeline-config-tabs .nav-link {
+  white-space: nowrap;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0.375rem 0.375rem 0 0;
+  margin-bottom: -1px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(71 85 105);
+  background: transparent;
+}
+
+.pipeline-config-page .pipeline-config-tabs .nav-link:hover {
+  background-color: rgb(241 245 249);
+  color: rgb(15 23 42);
+}
+
+.pipeline-config-page .pipeline-config-tabs .nav-link.active {
+  border-bottom-color: rgb(37 99 235);
+  color: rgb(37 99 235);
+  font-weight: 600;
+  background: #fff;
+}
+
+.pipeline-config-page .pipeline-form-editor,
+.pipeline-config-page .pipeline-form-editor .pipeline-config-pane {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pipeline-config-page .pipeline-form-editor .pipeline-config-pane {
+  display: block;
+}
+
+/* 表单字段栅格 */
+.pipeline-config-page .pipeline-form-editor .pipeline-field-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .pipeline-config-page .pipeline-form-editor .pipeline-field-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pipeline-config-page .pipeline-form-editor .pipeline-field-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.pipeline-config-page .pipeline-form-editor .pipeline-field {
+  min-width: 0;
+}
+
+.pipeline-config-page .pipeline-form-editor .pipeline-field--full {
+  grid-column: 1 / -1;
+}
+
+.pipeline-config-page .pipeline-form-editor .pipeline-field label {
+  margin-bottom: 0.375rem;
+}
+
+.pipeline-config-page .pipeline-form-editor .card {
+  width: 100%;
+  border-color: rgb(226 232 240);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.pipeline-config-page .pipeline-form-editor .card-header {
+  padding: 0.75rem 1rem;
+  background: rgb(248 250 252);
+  border-bottom: 1px solid rgb(226 232 240);
+}
+
+.pipeline-config-page .pipeline-form-editor .card-body {
+  padding: 1rem;
+}
+
+@media (min-width: 768px) {
+  .pipeline-config-page .pipeline-form-editor .card-body {
+    padding: 1.25rem;
+  }
+}
+
+.pipeline-config-page .pipeline-form-editor .input-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.375rem;
+  width: 100%;
+}
+
+.pipeline-config-page .pipeline-form-editor .input-group > select,
+.pipeline-config-page .pipeline-form-editor .input-group > input,
+.pipeline-config-page .pipeline-form-editor .input-group > .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pipeline-config-page .pipeline-form-editor .input-group > button,
+.pipeline-config-page .pipeline-form-editor .input-group > .btn {
+  flex-shrink: 0;
+}
+
+.pipeline-config-page .pipeline-branch-mapping-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .pipeline-config-page .pipeline-branch-mapping-row {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .pipeline-config-page .pipeline-branch-mapping-row__arrow {
+    display: none;
+  }
+
+  .pipeline-config-page .pipeline-branch-mapping-row__action {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+}
+
+/* 底部操作（小屏） */
+.pipeline-config-footer {
+  display: none;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(226 232 240);
+}
+
+@media (max-width: 767px) {
+  .pipeline-config-toolbar__actions {
+    display: none;
+  }
+
+  .pipeline-config-footer {
+    display: flex;
+  }
+}
+
+/* 多服务 Tab */
+.pipeline-config-page .pipeline-multi-service-tab .push-mode-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.pipeline-config-page .pipeline-multi-service-tab .push-mode-group label {
+  flex-direction: column;
+  text-align: center;
+  gap: 0.25rem;
+}
+
+.pipeline-config-page .pipeline-multi-service-tab .service-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 兼容旧类名 */
+.pipeline-detail-page .pipeline-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgb(226 232 240);
+}
+
+.pipeline-detail-page .pipeline-history-tab table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.pipeline-detail-page .pipeline-history-tab th,
+.pipeline-detail-page .pipeline-history-tab td {
+  border-bottom: 1px solid rgb(226 232 240);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.pipeline-detail-page .pipeline-history-tab th {
+  background-color: rgb(248 250 252);
+  font-weight: 600;
+  color: rgb(51 65 85);
+}
+
+@media (max-width: 640px) {
+  .pipeline-config-page .pipeline-config-tabs .nav-link {
+    font-size: 0.8125rem;
+    padding: 0.4375rem 0.625rem;
+  }
+}
+
+/* Webhook / 构建后 Webhook 统一区块 */
+.pipeline-webhook-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pipeline-webhook-block {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 1rem;
+}
+
+@media (min-width: 768px) {
+  .pipeline-webhook-block {
+    padding: 1.25rem;
+  }
+}
+
+.pipeline-webhook-block__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.pipeline-webhook-block__head--tight {
+  margin-bottom: 0.5rem;
+}
+
+.pipeline-webhook-block__title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: rgb(15 23 42);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.pipeline-webhook-block__title .fas,
+.pipeline-webhook-block__title .fab {
+  color: rgb(37 99 235);
+}
+
+.pipeline-webhook-block__desc {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: rgb(100 116 139);
+}
+
+.pipeline-webhook-block__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pipeline-webhook-block__body > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.pipeline-webhook-field label,
+.pipeline-webhook-field .pipeline-webhook-field__label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(51 65 85);
+}
+
+.pipeline-webhook-field__hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: rgb(100 116 139);
+}
+
+.pipeline-webhook-url-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.pipeline-webhook-url-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pipeline-webhook-strategy {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.pipeline-webhook-strategy .btn-check {
+  position: absolute;
+  clip: rect(0, 0, 0, 0);
+  pointer-events: none;
+}
+
+.pipeline-webhook-strategy__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  min-height: 4.25rem;
+  padding: 0.5rem 0.625rem;
+  text-align: center;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgb(51 65 85);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.pipeline-webhook-strategy__option:hover {
+  border-color: rgb(203 213 225);
+  background: rgb(248 250 252);
+}
+
+.pipeline-webhook-strategy__option small {
+  font-weight: 400;
+  font-size: 0.6875rem;
+  color: rgb(100 116 139);
+  line-height: 1.3;
+}
+
+.pipeline-webhook-strategy .btn-check:checked + .pipeline-webhook-strategy__option {
+  border-color: rgb(37 99 235);
+  background: rgb(239 246 255);
+  color: rgb(29 78 216);
+}
+
+.pipeline-webhook-strategy__option .fas {
+  font-size: 1rem;
+  margin-bottom: 0.125rem;
+  color: rgb(100 116 139);
+}
+
+.pipeline-webhook-strategy .btn-check:checked + .pipeline-webhook-strategy__option .fas {
+  color: rgb(37 99 235);
+}
+
+.pipeline-webhook-list-box {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  background: rgb(248 250 252);
+}
+
+.pipeline-webhook-list-box--scroll {
+  max-height: 12.5rem;
+  overflow-y: auto;
+}
+
+.pipeline-webhook-item {
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  background: rgb(248 250 252 / 0.5);
+  overflow: hidden;
+}
+
+.pipeline-webhook-item + .pipeline-webhook-item {
+  margin-top: 0.75rem;
+}
+
+.pipeline-webhook-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid rgb(226 232 240);
+  background: rgb(248 250 252);
+}
+
+.pipeline-webhook-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.pipeline-webhook-item__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(15 23 42);
+}
+
+.pipeline-webhook-item__title > .fas {
+  color: rgb(37 99 235);
+}
+
+.pipeline-webhook-field__label .fas {
+  color: rgb(37 99 235);
+}
+
+.pipeline-webhook-field__hint .fas {
+  margin-right: 0.25rem;
+  color: rgb(59 130 246);
+}
+
+.pipeline-webhook-empty {
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgb(100 116 139);
+  border: 1px dashed rgb(203 213 225);
+  border-radius: 0.375rem;
+  background: rgb(248 250 252);
+}
+
+.pipeline-webhook-empty .fas {
+  margin-right: 0.25rem;
+  color: rgb(59 130 246);
+}

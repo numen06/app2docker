@@ -444,13 +444,18 @@
             <DockerManager
               v-if="activeTab === 'docker' && hasPermission('menu.docker')"
             />
-            <PipelineEditorPage
-              v-if="isPipelineEditorRoute && hasPermission('menu.pipeline')"
+            <PipelineConfigPage
+              v-if="isPipelineCreateRoute && hasPermission('menu.pipeline')"
+              mode="create"
+            />
+            <PipelineConfigPage
+              v-if="isPipelineDetailRoute && hasPermission('menu.pipeline')"
+              mode="edit"
             />
             <PipelinePanel
               v-if="
                 activeTab === 'pipeline' &&
-                !isPipelineEditorRoute &&
+                !isPipelinePipelineSubRoute &&
                 hasPermission('menu.pipeline')
               "
             />
@@ -675,7 +680,7 @@ import DockerManager from "@/components/DockerManager.vue";
 import ExportPanel from "@/components/ExportPanel.vue";
 import OperationLogs from "@/components/OperationLogs.vue";
 import PipelinePanel from "@/components/PipelinePanel.vue";
-import PipelineEditorPage from "@/pages/PipelineEditorPage.vue";
+import PipelineConfigPage from "@/pages/PipelineConfigPage.vue";
 import RegistryPanel from "@/components/RegistryPanel.vue";
 import ResourcePackagePanel from "@/components/ResourcePackagePanel.vue";
 import RoleManagement from "@/components/RoleManagement.vue";
@@ -830,18 +835,24 @@ const ACTIVE_TAB_STORAGE_KEY = "app2docker-active-tab";
 
 const username = computed(() => authStore.username || getUsername() || "User");
 
+const isPipelineCreateRoute = computed(() => route.name === "pipeline-create");
+
+const isPipelineDetailRoute = computed(() => route.name === "pipeline-detail");
+
+const isPipelinePipelineSubRoute = computed(
+  () => isPipelineCreateRoute.value || isPipelineDetailRoute.value
+);
+
 const activeTab = computed(() => {
+  if (isPipelinePipelineSubRoute.value) {
+    return "";
+  }
   const p = route.params.tab;
   return typeof p === "string" && p.length ? p : "dashboard";
 });
 
-const isPipelineEditorRoute = computed(
-  () =>
-    route.name === "pipeline-create" || route.name === "pipeline-edit"
-);
-
 const sidebarActiveTab = computed(() => {
-  if (isPipelineEditorRoute.value) return "pipeline";
+  if (isPipelinePipelineSubRoute.value) return "pipeline";
   return activeTab.value;
 });
 
@@ -992,7 +1003,7 @@ watch(
 
 const pageTitle = computed(() => {
   if (route.name === "pipeline-create") return "新建流水线";
-  if (route.name === "pipeline-edit") return "编辑流水线";
+  if (route.name === "pipeline-detail") return "流水线配置";
   return PAGE_TITLES[activeTab.value] || "App2Docker";
 });
 

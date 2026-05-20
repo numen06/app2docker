@@ -1220,25 +1220,6 @@ async function savePipeline() {
       return;
     }
 
-    // 检查名字是否重复
-    await fetchPipelineNames();
-    const duplicatePipeline = pipelines.value.find((p) => {
-      const nameMatch = p.name && p.name.trim() === pipelineName;
-      if (editingPipeline.value) {
-        // 编辑模式：排除当前流水线
-        return nameMatch && p.pipeline_id !== editingPipeline.value.pipeline_id;
-      } else {
-        // 创建模式：检查所有流水线
-        return nameMatch;
-      }
-    });
-
-    if (duplicatePipeline) {
-      alert("流水线名称已存在，请使用其他名称");
-      saving.value = false;
-      return;
-    }
-
     // 调试信息
     console.log("保存流水线参数:", {
       use_project_dockerfile: payload.use_project_dockerfile,
@@ -1281,8 +1262,6 @@ function resetFormState() {
   repoVerified.value = false;
 }
 
-// 从表单数据更新JSON
-async // 刷新分支列表
 async function refreshBranches(forceRefresh = true) {
   const sourceId = formData.value.source_id;
   if (!sourceId) {
@@ -2584,8 +2563,6 @@ function generateUUID() {
         alert("流水线不存在");
         return false;
       }
-      await fetchPipelineNames();
-      activeTab.value = "basic";
       applyPipelineToForm(pipeline);
       return true;
     } catch (error) {
@@ -2672,6 +2649,7 @@ function generateUUID() {
     onTemplateChange,
     getDeployWebhookUrl,
     onDeployTaskSelected,
+    loadDeployTasks,
     formatGitUrl,
     regenerateWebhookToken,
     regenerateWebhookSecret,

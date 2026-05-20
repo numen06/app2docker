@@ -1,134 +1,41 @@
 <template>
   <div class="pipeline-form-editor">
-            <form @submit.prevent>
-              <!-- Tab 导航 -->
-              <ul class="nav nav-tabs mb-3" role="tablist">
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'basic' }"
-                    type="button"
-                    @click="activeTab = 'basic'"
-                    id="basic-tab"
-                  >
-                    <i class="fas fa-info-circle"></i> 基本信息
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'git' }"
-                    type="button"
-                    @click="activeTab = 'git'"
-                    id="git-tab"
-                  >
-                    <i class="fas fa-code-branch"></i> Git 配置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'build' }"
-                    type="button"
-                    @click="activeTab = 'build'"
-                    id="build-tab"
-                  >
-                    <i class="fas fa-cogs"></i> 编辑构建配置JSON
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'dockerfile' }"
-                    type="button"
-                    @click="activeTab = 'dockerfile'"
-                    id="dockerfile-tab"
-                  >
-                    <i class="fas fa-file-code"></i> Dockerfile 配置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'resource' }"
-                    type="button"
-                    @click="activeTab = 'resource'"
-                    id="resource-tab"
-                  >
-                    <i class="fas fa-archive"></i> 资源包配置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'webhook' }"
-                    type="button"
-                    @click="activeTab = 'webhook'"
-                    id="webhook-tab"
-                  >
-                    <i class="fas fa-link"></i> Webhook 设置
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'post_webhook' }"
-                    type="button"
-                    @click="activeTab = 'post_webhook'"
-                    id="post-webhook-tab"
-                  >
-                    <i class="fas fa-bell"></i> 构建后 Webhook
-                  </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button
-                    class="nav-link"
-                    :class="{ active: activeTab === 'other' }"
-                    type="button"
-                    @click="activeTab = 'other'"
-                    id="other-tab"
-                  >
-                    <i class="fas fa-sliders-h"></i> 其他选项
-                  </button>
-                </li>
-              </ul>
-
-              <!-- Tab 内容 -->
-              <div class="tab-content">
                 <!-- 基本信息 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'basic' }"
+                  v-if="section === 'basic'"
+                  class="pipeline-config-pane"
                   role="tabpanel"
                   id="basic-pane"
                 >
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700"
-                      >流水线名称 <span class="text-red-500">*</span></label
-                    >
-                    <input
-                      v-model="formData.name"
-                      type="text"
-                      class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                      required
-                      placeholder="例如：主分支自动构建"
-                    />
-                  </div>
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700">描述</label>
-                    <input
-                      v-model="formData.description"
-                      type="text"
-                      class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                      placeholder="流水线描述（可选）"
-                    />
+                  <div class="pipeline-field-grid pipeline-field-grid--2">
+                    <div class="pipeline-field">
+                      <label class="block text-sm font-medium text-slate-700"
+                        >流水线名称 <span class="text-red-500">*</span></label
+                      >
+                      <input
+                        v-model="formData.name"
+                        type="text"
+                        class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                        required
+                        placeholder="例如：主分支自动构建"
+                      />
+                    </div>
+                    <div class="pipeline-field pipeline-field--full">
+                      <label class="block text-sm font-medium text-slate-700">描述</label>
+                      <input
+                        v-model="formData.description"
+                        type="text"
+                        class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                        placeholder="流水线描述（可选）"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <!-- Git 配置 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'git' }"
+                  v-if="section === 'git'"
+                  class="pipeline-config-pane"
                   role="tabpanel"
                   id="git-pane"
                 >
@@ -139,8 +46,8 @@
                       </h6>
                     </div>
                     <div class="card-body">
-                      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        <div class="col-md-6">
+                      <div class="pipeline-field-grid pipeline-field-grid--3">
+                        <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700">Git 数据源</label>
                           <select
                             v-model="formData.source_id"
@@ -163,7 +70,7 @@
                             可以从已保存的数据源中选择，或手动输入 Git 仓库地址
                           </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700"
                             >Git 仓库地址
                             <span class="text-red-500">*</span></label
@@ -176,7 +83,7 @@
                             placeholder="https://github.com/user/repo.git"
                           />
                         </div>
-                        <div class="col-md-6">
+                        <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700">分支名称</label>
                           <div class="input-group">
                             <select
@@ -271,7 +178,7 @@
                             <span v-else>请先选择数据源</span>
                           </small>
                         </div>
-                        <div class="col-md-6">
+                        <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700"
                             >项目类型 <span class="text-red-500">*</span></label
                           >
@@ -286,7 +193,7 @@
                             <option value="web">静态网站</option>
                           </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700">子路径</label>
                           <input
                             v-model="formData.sub_path"
@@ -300,10 +207,15 @@
                   </div>
                 </div>
 
+                <PipelineMultiServiceTab
+                  v-if="section === 'services'"
+                  embedded
+                />
+
                 <!-- Dockerfile & 镜像配置 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'build' }"
+                  v-if="section === 'build'"
+                  class="pipeline-config-pane"
                   role="tabpanel"
                   id="build-pane"
                 >
@@ -393,8 +305,8 @@
                         </h6>
                       </div>
                       <div class="card-body">
-                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          <div class="col-12">
+                        <div class="pipeline-field-grid pipeline-field-grid--3">
+                          <div class="pipeline-field pipeline-field--full">
                             <label class="block text-sm font-medium text-slate-700">Dockerfile 来源</label>
                             <div class="btn-group w-full mb-2" role="group">
                               <input
@@ -430,7 +342,7 @@
                           </div>
                           <div
                             v-if="formData.use_project_dockerfile"
-                            class="col-md-6"
+                            class="pipeline-field"
                           >
                             <label class="block text-sm font-medium text-slate-700">Dockerfile 文件名</label>
                             <div v-if="scanningDockerfiles" class="mb-2">
@@ -524,7 +436,7 @@
                               <i class="fas fa-info-circle"></i> 请先选择分支
                             </small>
                           </div>
-                          <div v-else class="col-md-6">
+                          <div v-else class="pipeline-field">
                             <label class="block text-sm font-medium text-slate-700">模板名称</label>
 
                             <!-- 当前选择提示 -->
@@ -604,8 +516,8 @@
                         </h6>
                       </div>
                       <div class="card-body">
-                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          <div class="col-md-6">
+                        <div class="pipeline-field-grid pipeline-field-grid--3">
+                          <div class="pipeline-field">
                             <label class="block text-sm font-medium text-slate-700"
                               >镜像名称
                               <span class="text-red-500">*</span></label
@@ -628,7 +540,7 @@
                               </span>
                             </small>
                           </div>
-                          <div class="col-md-6">
+                          <div class="pipeline-field">
                             <label class="block text-sm font-medium text-slate-700">镜像标签</label>
                             <input
                               v-model="formData.tag"
@@ -641,7 +553,7 @@
                               所有服务使用此标签，支持动态日期占位符
                             </small>
                           </div>
-                          <div class="col-md-6">
+                          <div class="pipeline-field">
                             <div class="form-check mt-4">
                               <input
                                 v-model="formData.push"
@@ -686,8 +598,8 @@
 
                 <!-- Dockerfile 配置 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'dockerfile' }"
+                  v-if="section === 'dockerfile'"
+                  class="pipeline-config-pane"
                   role="tabpanel"
                   id="dockerfile-pane"
                 >
@@ -950,8 +862,8 @@
 
                 <!-- 资源包配置 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'resource' }"
+                  v-if="section === 'resource'"
+                  class="pipeline-config-pane"
                   role="tabpanel"
                   id="resource-pane"
                 >
@@ -1012,64 +924,68 @@
 
                 <!-- Webhook 设置 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'webhook' }"
+                  v-if="section === 'webhook'"
+                  class="pipeline-config-pane pipeline-webhook-pane"
                   role="tabpanel"
                   id="webhook-pane"
                 >
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700">Webhook Token（用于 URL）</label>
-                    <div class="input-group input-group-sm">
-                      <input
-                        v-model="formData.webhook_token"
-                        type="text"
-                        class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
-                        placeholder="留空自动生成"
-                      />
-                      <Button
-                        variant="outline" size="sm"
-                        type="button"
-                        @click="regenerateWebhookToken"
-                        title="重新生成 Token"
-                      >
-                        <i class="fas fa-sync-alt"></i> 重新生成
-                      </Button>
+                  <PipelineWebhookUrlBlock :webhook-token="formData.webhook_token" />
+
+                  <section class="pipeline-webhook-block">
+                    <h3 class="pipeline-webhook-block__title">
+                      <i class="fas fa-key"></i> 认证配置
+                    </h3>
+                    <div class="pipeline-field-grid pipeline-field-grid--2">
+                      <div class="pipeline-webhook-field">
+                        <label class="pipeline-webhook-field__label">Webhook Token（用于 URL）</label>
+                        <div class="input-group">
+                          <input
+                            v-model="formData.webhook_token"
+                            type="text"
+                            class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 font-mono text-sm"
+                            placeholder="留空自动生成"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            @click="regenerateWebhookToken"
+                            title="重新生成 Token"
+                          >
+                            <i class="fas fa-sync-alt"></i> 重新生成
+                          </Button>
+                        </div>
+                        <span class="pipeline-webhook-field__hint">留空将自动生成 UUID</span>
+                      </div>
+                      <div class="pipeline-webhook-field">
+                        <label class="pipeline-webhook-field__label">Webhook 密钥</label>
+                        <div class="input-group">
+                          <input
+                            v-model="formData.webhook_secret"
+                            type="text"
+                            class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 font-mono text-sm"
+                            placeholder="留空自动生成"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            @click="regenerateWebhookSecret"
+                            title="重新生成密钥"
+                          >
+                            <i class="fas fa-sync-alt"></i> 重新生成
+                          </Button>
+                        </div>
+                        <span class="pipeline-webhook-field__hint">用于验证 Webhook 签名（可选）</span>
+                      </div>
                     </div>
-                    <small class="text-slate-500"
-                      >用于构建 Webhook URL，留空将自动生成 UUID</small
-                    >
-                  </div>
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700">Webhook 密钥</label>
-                    <div class="input-group input-group-sm">
-                      <input
-                        v-model="formData.webhook_secret"
-                        type="text"
-                        class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
-                        placeholder="留空自动生成"
-                      />
-                      <Button
-                        variant="outline" size="sm"
-                        type="button"
-                        @click="regenerateWebhookSecret"
-                        title="重新生成密钥"
-                      >
-                        <i class="fas fa-sync-alt"></i> 重新生成
-                      </Button>
-                    </div>
-                    <small class="text-slate-500"
-                      >用于验证 Webhook 签名（可选）</small
-                    >
-                  </div>
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700"
-                      ><strong>Webhook 分支策略</strong></label
-                    >
-                    <div
-                      class="btn-group w-full flex flex-wrap"
-                      role="group"
-                      style="gap: 0.25rem"
-                    >
+                  </section>
+
+                  <section class="pipeline-webhook-block">
+                    <h3 class="pipeline-webhook-block__title">
+                      <i class="fas fa-code-branch"></i> 分支触发策略
+                    </h3>
+                    <div class="pipeline-webhook-strategy" role="group">
                       <input
                         type="radio"
                         class="btn-check"
@@ -1077,18 +993,10 @@
                         value="use_push"
                         v-model="formData.webhook_branch_strategy"
                       />
-                      <label
-                        class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                        for="strategy-use-push"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-code-branch block mb-1"></i>
-                        <small class="block fw-bold">使用推送分支</small>
-                        <small
-                          class="text-slate-500 block"
-                          style="font-size: 0.7rem"
-                          >所有分支都触发</small
-                        >
+                      <label class="pipeline-webhook-strategy__option" for="strategy-use-push">
+                        <i class="fas fa-code-branch"></i>
+                        使用推送分支
+                        <small>所有分支都触发</small>
                       </label>
 
                       <input
@@ -1098,18 +1006,10 @@
                         value="filter_match"
                         v-model="formData.webhook_branch_strategy"
                       />
-                      <label
-                        class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                        for="strategy-filter-match"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-filter block mb-1"></i>
-                        <small class="block fw-bold">只允许匹配分支</small>
-                        <small
-                          class="text-slate-500 block"
-                          style="font-size: 0.7rem"
-                          >使用推送分支构建</small
-                        >
+                      <label class="pipeline-webhook-strategy__option" for="strategy-filter-match">
+                        <i class="fas fa-filter"></i>
+                        只允许匹配分支
+                        <small>使用推送分支构建</small>
                       </label>
 
                       <input
@@ -1119,18 +1019,10 @@
                         value="use_configured"
                         v-model="formData.webhook_branch_strategy"
                       />
-                      <label
-                        class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                        for="strategy-use-configured"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-cog block mb-1"></i>
-                        <small class="block fw-bold">使用配置分支</small>
-                        <small
-                          class="text-slate-500 block"
-                          style="font-size: 0.7rem"
-                          >所有分支都触发</small
-                        >
+                      <label class="pipeline-webhook-strategy__option" for="strategy-use-configured">
+                        <i class="fas fa-cog"></i>
+                        使用配置分支
+                        <small>所有分支都触发</small>
                       </label>
 
                       <input
@@ -1140,21 +1032,13 @@
                         value="select_branches"
                         v-model="formData.webhook_branch_strategy"
                       />
-                      <label
-                        class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                        for="strategy-select-branches"
-                        style="white-space: normal; padding: 0.5rem"
-                      >
-                        <i class="fas fa-check-square block mb-1"></i>
-                        <small class="block fw-bold">选择分支触发</small>
-                        <small
-                          class="text-slate-500 block"
-                          style="font-size: 0.7rem"
-                          >仅选中的分支触发</small
-                        >
+                      <label class="pipeline-webhook-strategy__option" for="strategy-select-branches">
+                        <i class="fas fa-check-square"></i>
+                        选择分支触发
+                        <small>仅选中的分支触发</small>
                       </label>
                     </div>
-                    <small class="text-slate-500 block mt-2">
+                    <p class="pipeline-webhook-field__hint mt-2 mb-0">
                       <span
                         v-if="formData.webhook_branch_strategy === 'use_push'"
                       >
@@ -1181,20 +1065,17 @@
                         <i class="fas fa-info-circle"></i>
                         任何分支推送都会触发，但使用配置的分支进行构建
                       </span>
-                    </small>
-                  </div>
+                    </p>
+                  </section>
 
-                  <!-- 选择分支触发配置 -->
-                  <div
-                    v-if="
-                      formData.webhook_branch_strategy === 'select_branches'
-                    "
-                    class="mb-3"
+                  <section
+                    v-if="formData.webhook_branch_strategy === 'select_branches'"
+                    class="pipeline-webhook-block"
                   >
-                    <label class="block text-sm font-medium text-slate-700">
-                      <strong>允许触发的分支</strong>
-                      <span class="text-red-500">*</span>
-                    </label>
+                    <h3 class="pipeline-webhook-block__title">
+                      <i class="fas fa-list-check"></i> 允许触发的分支
+                      <span class="text-red-500 text-sm font-normal">*</span>
+                    </h3>
                     <div
                       v-if="
                         !branchesAndTags.branches ||
@@ -1207,8 +1088,7 @@
                     </div>
                     <div
                       v-else
-                      class="border rounded p-2"
-                      style="max-height: 200px; overflow-y: auto"
+                      class="pipeline-webhook-list-box pipeline-webhook-list-box--scroll"
                     >
                       <div class="form-check mb-2">
                         <input
@@ -1247,68 +1127,66 @@
                         </label>
                       </div>
                     </div>
-                    <small class="text-slate-500 block mt-1">
-                      <i class="fas fa-info-circle"></i>
-                      只有选中的分支推送时才会触发构建。如果未选择任何分支，则不会触发。
-                    </small>
-                  </div>
+                    <p class="pipeline-webhook-field__hint mt-2 mb-0">
+                      只有选中的分支推送时才会触发构建；未选择任何分支则不会触发。
+                    </p>
+                  </section>
 
-                  <!-- 构建后Webhook配置 -->
-                  <!-- 分支标签映射 -->
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700">
-                      <strong>分支标签映射</strong>
+                  <section class="pipeline-webhook-block">
+                    <div class="pipeline-webhook-block__head">
+                      <div>
+                        <h3 class="pipeline-webhook-block__title">
+                          <i class="fas fa-tags"></i> 分支标签映射
+                        </h3>
+                        <p class="pipeline-webhook-block__desc">
+                          为不同分支设置镜像标签，支持通配符（如 feature/*）；多标签用半角逗号分隔；支持
+                          ${DATE}、${TIMESTAMP} 等占位符。
+                        </p>
+                      </div>
                       <Button
                         type="button"
-                        variant="outline" size="sm"
+                        variant="outline"
+                        size="sm"
                         @click="addBranchTagMapping"
                         title="添加映射"
                       >
                         <i class="fas fa-plus"></i> 添加
                       </Button>
-                    </label>
-                    <small class="text-slate-500 block mb-2">
-                      为不同分支设置不同的镜像标签，支持通配符（如
-                      feature/*）。一个分支可以设置多个标签，用半角逗号（,）分隔（如：latest,v1.0.0）。标签支持动态日期占位符（${DATE}、${DATE:YYYY-MM-DD}、${TIMESTAMP}）
-                    </small>
+                    </div>
                     <div
                       v-if="
                         formData.branch_tag_mapping &&
                         formData.branch_tag_mapping.length > 0
                       "
-                      class="border rounded p-2"
+                      class="pipeline-webhook-list-box"
                     >
                       <div
                         v-for="(mapping, index) in formData.branch_tag_mapping"
                         :key="index"
-                        class="pipeline-branch-mapping-row row g-2 mb-2 items-center"
+                        class="pipeline-branch-mapping-row"
                       >
-                        <div class="col-md-5">
-                          <input
-                            v-model="mapping.branch"
-                            type="text"
-                            class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                            placeholder="分支名（如：main 或 feature/*）"
-                          />
-                        </div>
-                        <div class="col-md-1 text-center">
-                          <i class="fas fa-arrow-right text-slate-500"></i>
-                        </div>
-                        <div class="col-md-5">
-                          <input
-                            :value="mapping.tag"
-                            type="text"
-                            class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                            placeholder="标签（如：latest 或 latest,v1.0.0）"
-                            title="多个标签用半角逗号（,）分隔"
-                            @input="
-                              mapping.tag = normalizeAsciiCommaSeparators(
-                                $event.target.value
-                              )
-                            "
-                          />
-                        </div>
-                        <div class="col-md-1">
+                        <input
+                          v-model="mapping.branch"
+                          type="text"
+                          class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                          placeholder="分支名（如：main 或 feature/*）"
+                        />
+                        <span class="pipeline-branch-mapping-row__arrow text-center text-slate-500">
+                          <i class="fas fa-arrow-right"></i>
+                        </span>
+                        <input
+                          :value="mapping.tag"
+                          type="text"
+                          class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                          placeholder="标签（如：latest 或 latest,v1.0.0）"
+                          title="多个标签用半角逗号（,）分隔"
+                          @input="
+                            mapping.tag = normalizeAsciiCommaSeparators(
+                              $event.target.value
+                            )
+                          "
+                        />
+                        <div class="pipeline-branch-mapping-row__action">
                           <Button
                             type="button"
                             variant="destructive" size="sm"
@@ -1320,84 +1198,79 @@
                         </div>
                       </div>
                     </div>
-                    <div v-else class="text-slate-500 small">
-                      暂无映射，点击"添加"按钮添加分支标签映射
+                    <div v-else class="pipeline-webhook-empty">
+                      <i class="fas fa-info-circle"></i> 暂无映射，点击「添加」创建
                     </div>
-                  </div>
+                  </section>
                 </div>
 
                 <!-- 构建后 Webhook Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'post_webhook' }"
+                  v-if="section === 'post_webhook'"
+                  class="pipeline-config-pane pipeline-webhook-pane"
                   role="tabpanel"
                   id="post-webhook-pane"
                 >
-                  <div class="mb-3">
-                    <label class="block text-sm font-medium text-slate-700">
-                      <strong>构建后Webhook（构建完成后触发）</strong>
+                  <section class="pipeline-webhook-block">
+                    <div class="pipeline-webhook-block__head">
+                      <div>
+                        <h3 class="pipeline-webhook-block__title">
+                          <i class="fas fa-bell"></i> 构建后 Webhook
+                        </h3>
+                        <p class="pipeline-webhook-block__desc">
+                          构建成功完成后回调外部地址。支持变量：{task_id}、{image}、{tag}、{status}、{branch}、{pipeline_id}、{pipeline_name}、{created_at}、{completed_at}
+                        </p>
+                      </div>
                       <Button
                         type="button"
-                        variant="outline" size="sm"
+                        variant="outline"
+                        size="sm"
                         @click="addPostBuildWebhook"
-                        title="添加Webhook"
+                        title="添加 Webhook"
                       >
                         <i class="fas fa-plus"></i> 添加
                       </Button>
-                    </label>
-                    <small class="text-slate-500 block mb-2">
-                      构建任务成功完成后，将触发配置的Webhook。支持模板变量：{task_id},
-                      {image}, {tag}, {status}, {branch}, {pipeline_id},
-                      {pipeline_name}, {created_at}, {completed_at}
-                    </small>
+                    </div>
+
                     <div
                       v-if="
                         formData.post_build_webhooks &&
                         formData.post_build_webhooks.length > 0
                       "
-                      class="border rounded p-2"
+                      class="pipeline-webhook-block__body"
                     >
                       <div
                         v-for="(webhook, index) in formData.post_build_webhooks"
                         :key="index"
-                        class="card mb-2"
+                        class="pipeline-webhook-item"
                       >
-                        <div class="card-body">
-                          <div
-                            class="flex justify-between items-start mb-2"
+                        <div class="pipeline-webhook-item__head">
+                          <label class="pipeline-webhook-item__title mb-0">
+                            <input
+                              class="form-check-input mt-0"
+                              type="checkbox"
+                              :id="`post-webhook-enabled-${index}`"
+                              v-model="webhook.enabled"
+                            />
+                            <i class="fas fa-bell"></i>
+                            Webhook {{ index + 1 }}
+                          </label>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            @click="removePostBuildWebhook(index)"
+                            title="删除"
                           >
-                            <div class="form-check form-switch">
-                              <input
-                                class="form-check-input"
-                                type="checkbox"
-                                :id="`post-webhook-enabled-${index}`"
-                                v-model="webhook.enabled"
-                              />
-                              <label
-                                class="form-check-label fw-bold"
-                                :for="`post-webhook-enabled-${index}`"
-                              >
-                                Webhook {{ index + 1 }}
-                              </label>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="destructive" size="sm"
-                              @click="removePostBuildWebhook(index)"
-                              title="删除"
-                            >
-                              <i class="fas fa-trash"></i>
-                            </Button>
-                          </div>
-                          <div class="mb-2">
-                            <label class="form-label small"
-                              >分支策略</label
-                            >
-                            <div
-                              class="btn-group w-full flex flex-wrap"
-                              role="group"
-                              style="gap: 0.25rem"
-                            >
+                            <i class="fas fa-trash"></i>
+                          </Button>
+                        </div>
+                        <div class="pipeline-webhook-item__body">
+                          <div class="pipeline-webhook-field">
+                            <h3 class="pipeline-webhook-block__title">
+                              <i class="fas fa-code-branch"></i> 分支触发策略
+                            </h3>
+                            <div class="pipeline-webhook-strategy" role="group">
                               <input
                                 type="radio"
                                 class="btn-check"
@@ -1406,11 +1279,12 @@
                                 v-model="webhook.branch_strategy"
                               />
                               <label
-                                class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                                class="pipeline-webhook-strategy__option"
                                 :for="`post-wh-branch-all-${index}`"
-                                style="white-space: normal; padding: 0.35rem"
                               >
-                                <small class="fw-bold">所有分支</small>
+                                <i class="fas fa-code-branch"></i>
+                                所有分支
+                                <small>任意分支构建完成</small>
                               </label>
                               <input
                                 type="radio"
@@ -1420,11 +1294,12 @@
                                 v-model="webhook.branch_strategy"
                               />
                               <label
-                                class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                                class="pipeline-webhook-strategy__option"
                                 :for="`post-wh-branch-select-${index}`"
-                                style="white-space: normal; padding: 0.35rem"
                               >
-                                <small class="fw-bold">选择分支</small>
+                                <i class="fas fa-check-square"></i>
+                                选择分支
+                                <small>精确匹配分支名</small>
                               </label>
                               <input
                                 type="radio"
@@ -1434,34 +1309,45 @@
                                 v-model="webhook.branch_strategy"
                               />
                               <label
-                                class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                                class="pipeline-webhook-strategy__option"
                                 :for="`post-wh-branch-match-${index}`"
-                                style="white-space: normal; padding: 0.35rem"
                               >
-                                <small class="fw-bold">匹配分支</small>
+                                <i class="fas fa-filter"></i>
+                                匹配分支
+                                <small>支持 feature/*</small>
                               </label>
                             </div>
-                            <small class="text-slate-500 block mt-1">
+                            <p class="pipeline-webhook-field__hint mt-2 mb-0">
                               <span v-if="webhook.branch_strategy === 'all'">
+                                <i class="fas fa-info-circle"></i>
                                 所有分支构建完成后都触发此 Webhook
                               </span>
                               <span v-else-if="webhook.branch_strategy === 'select_branches'">
+                                <i class="fas fa-info-circle"></i>
                                 仅指定分支构建完成后触发（精确匹配）
                               </span>
                               <span v-else>
+                                <i class="fas fa-info-circle"></i>
                                 仅匹配指定模式的分支触发（支持通配符，如 feature/*）
                               </span>
-                            </small>
+                            </p>
                           </div>
                           <div
                             v-if="webhook.branch_strategy === 'select_branches' || webhook.branch_strategy === 'filter_match'"
-                            class="mb-2"
+                            class="pipeline-webhook-field"
                           >
-                            <label class="form-label small">
+                            <h3 class="pipeline-webhook-block__title">
+                              <i
+                                :class="
+                                  webhook.branch_strategy === 'select_branches'
+                                    ? 'fas fa-list-check'
+                                    : 'fas fa-filter'
+                                "
+                              ></i>
                               <span v-if="webhook.branch_strategy === 'select_branches'">允许的分支</span>
                               <span v-else>匹配模式</span>
-                              <span class="text-red-500">*</span>
-                            </label>
+                              <span class="text-red-500 text-sm font-normal">*</span>
+                            </h3>
                             <input
                               type="text"
                               class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
@@ -1471,24 +1357,28 @@
                               :value="(webhook.branches || []).join(', ')"
                               @input="onPostBuildWebhookBranchesInput(webhook, $event)"
                             />
-                            <small class="text-slate-500"
-                              >多个分支用半角逗号（,）分隔；输入全角逗号会自动变为半角</small
-                            >
+                            <p class="pipeline-webhook-field__hint mb-0">
+                              <i class="fas fa-info-circle"></i>
+                              多个分支用半角逗号分隔
+                            </p>
                           </div>
-                          <div class="mb-2">
-                            <label class="form-label small">
-                              URL <span class="text-red-500">*</span>
+                          <div class="pipeline-webhook-field">
+                            <div class="pipeline-webhook-block__head pipeline-webhook-block__head--tight">
+                              <h3 class="pipeline-webhook-block__title mb-0">
+                                <i class="fas fa-link"></i> 回调 URL
+                                <span class="text-red-500 text-sm font-normal">*</span>
+                              </h3>
                               <Button
                                 type="button"
-                                variant="outline" size="sm"
-                                style="font-size: 0.7rem; vertical-align: middle"
+                                variant="outline"
+                                size="sm"
                                 title="从部署任务中选择"
                                 @click="loadDeployTasks"
                               >
-                                <i class="fas fa-link"></i> 从部署任务选择
+                                <i class="fas fa-rocket"></i> 从部署任务选择
                               </Button>
-                            </label>
-                            <div class="input-group input-group-sm">
+                            </div>
+                            <div class="pipeline-webhook-url-row">
                               <input
                                 v-model="webhook.url"
                                 type="text"
@@ -1496,11 +1386,11 @@
                                 placeholder="https://example.com/webhook"
                               />
                               <select
-                                class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
-                                style="max-width: 200px; flex: none"
+                                class="flex h-9 shrink-0 rounded-md border border-slate-200 px-2 py-1 text-sm"
+                                style="max-width: 11rem"
                                 @change="onDeployTaskSelected(webhook, $event.target.value); $event.target.value = ''"
                               >
-                                <option value="" disabled>选择部署任务...</option>
+                                <option value="" disabled>部署任务…</option>
                                 <option
                                   v-for="task in deployTaskList"
                                   :key="task.task_id"
@@ -1510,14 +1400,19 @@
                                 </option>
                               </select>
                             </div>
-                            <small class="text-slate-500 block mt-1" v-if="webhook.url && webhook.url.includes('/api/webhook/deploy/')">
+                            <p
+                              v-if="webhook.url && webhook.url.includes('/api/webhook/deploy/')"
+                              class="pipeline-webhook-field__hint mt-2 mb-0"
+                            >
                               <i class="fas fa-info-circle"></i>
                               已自动填充部署任务 Webhook URL
-                            </small>
+                            </p>
                           </div>
-                          <div class="row g-2 mb-2">
-                            <div class="col-md-6">
-                              <label class="form-label small">请求方法</label>
+                          <div class="pipeline-field-grid pipeline-field-grid--3">
+                            <div class="pipeline-webhook-field">
+                              <label class="pipeline-webhook-field__label">
+                                <i class="fas fa-paper-plane text-blue-600 mr-1"></i>请求方法
+                              </label>
                               <select
                                 v-model="webhook.method"
                                 class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
@@ -1528,47 +1423,45 @@
                               </select>
                             </div>
                           </div>
-                          <div class="mb-2">
-                            <label class="form-label small"
-                              >请求头（JSON格式，可选）</label
-                            >
+                          <div class="pipeline-webhook-field">
+                            <label class="pipeline-webhook-field__label">
+                              <i class="fas fa-heading text-blue-600 mr-1"></i>请求头（JSON，可选）
+                            </label>
                             <textarea
                               v-model="webhook.headers_json"
-                              class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 font-mono text-sm"
+                              class="flex min-h-[4rem] w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
                               rows="2"
-                              placeholder='{"Content-Type": "application/json", "Authorization": "Bearer token"}'
+                              placeholder='{"Content-Type": "application/json"}'
                             ></textarea>
                           </div>
-                          <div class="mb-2">
-                            <label class="form-label small"
-                              >请求体模板（支持变量替换）</label
-                            >
+                          <div class="pipeline-webhook-field">
+                            <label class="pipeline-webhook-field__label">
+                              <i class="fas fa-file-code text-blue-600 mr-1"></i>请求体模板
+                            </label>
                             <textarea
                               v-model="webhook.body_template"
-                              class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 font-mono text-sm"
+                              class="flex min-h-[6rem] w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
                               rows="4"
-                              placeholder='{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}'
+                              placeholder='{"task_id": "{task_id}", "status": "{status}"}'
                             ></textarea>
-                            <small class="text-slate-500"
-                              >支持变量：{task_id}, {image}, {tag}, {status},
-                              {branch}, {pipeline_id}, {pipeline_name},
-                              {created_at}, {completed_at}</small
-                            >
+                            <p class="pipeline-webhook-field__hint mb-0">
+                              <i class="fas fa-info-circle"></i>
+                              支持 {task_id}、{image}、{tag}、{status}、{branch}、{pipeline_id} 等变量
+                            </p>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div v-else class="alert alert-info py-2">
-                      <i class="fas fa-info-circle"></i>
-                      暂无构建后Webhook配置，点击"添加"按钮添加
+                    <div v-else class="pipeline-webhook-empty">
+                      <i class="fas fa-info-circle"></i> 暂无配置，点击「添加」创建构建后 Webhook
                     </div>
-                  </div>
+                  </section>
                 </div>
 
                 <!-- 其他选项 Tab -->
                 <div
-                  class="tab-pane fade"
-                  :class="{ 'show active': activeTab === 'other' }"
+                  v-if="section === 'other'"
+                  class="pipeline-config-pane"
                   role="tabpanel"
                   id="other-pane"
                 >
@@ -1617,9 +1510,21 @@
                       </small>
                     </div>
                   </div>
+                  <div
+                    v-if="editingPipeline"
+                    class="mt-6 rounded-lg border border-red-200 bg-red-50/50 p-4"
+                  >
+                    <h6 class="mb-2 text-red-700">
+                      <i class="fas fa-exclamation-triangle mr-1"></i> 危险操作
+                    </h6>
+                    <p class="mb-3 text-sm text-slate-600">
+                      删除后将无法恢复，相关构建历史可能一并清理。
+                    </p>
+                    <Button variant="destructive" size="sm" type="button" @click="deletePipeline">
+                      <i class="fas fa-trash mr-1"></i> 删除流水线
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </form>
 
 <!-- 资源包选择模态框 -->
     <div
@@ -1648,11 +1553,11 @@
               <p class="mb-0">暂无资源包</p>
               <small class="text-slate-500">请先在"资源包"标签页上传资源包</small>
             </div>
-            <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div v-else class="pipeline-field-grid pipeline-field-grid--3">
               <div
                 v-for="pkg in resourcePackages"
                 :key="pkg.package_id"
-                class="col-md-6"
+                class="pipeline-field"
               >
                 <div
                   class="card h-full"
@@ -1789,13 +1694,37 @@
 </template>
 
 <script setup>
-import { inject } from "vue";
+import { inject, watch } from "vue";
+import { useRouter } from "vue-router";
+import axios from "axios";
 import Button from "@/components/ui/button/Button.vue";
 import { Codemirror } from "vue-codemirror";
+import PipelineMultiServiceTab from "@/components/pipeline/detail/PipelineMultiServiceTab.vue";
+import PipelineWebhookUrlBlock from "@/components/pipeline/detail/PipelineWebhookUrlBlock.vue";
 
-const editor = inject("pipelineEditor");
+const props = defineProps({
+  section: {
+    type: String,
+    required: true,
+  },
+});
+
+const editor = inject("pipelineEditor", null);
+if (!editor) {
+  throw new Error("PipelineFormEditor 需要在 pipelineEditor 上下文中使用");
+}
 const formData = editor.formData;
-const activeTab = editor.activeTab;
+
+watch(
+  () => props.section,
+  (tab) => {
+    if (tab === "build" && editor.buildConfigJson && editor.buildConfigJsonText) {
+      editor.buildConfigJsonText.value = editor.buildConfigJson.value;
+      editor.buildConfigJsonError.value = "";
+    }
+  },
+  { immediate: true }
+);
 const editingPipeline = editor.editingPipeline;
 const gitSources = editor.gitSources;
 const templates = editor.templates;
@@ -1863,4 +1792,19 @@ const onPostBuildWebhookBranchesInput = editor.onPostBuildWebhookBranchesInput;
 const onDeployTaskSelected = editor.onDeployTaskSelected;
 const closeBuildConfigJsonModal = editor.closeBuildConfigJsonModal;
 const saveBuildConfigJson = editor.saveBuildConfigJson;
+
+const router = useRouter();
+
+async function deletePipeline() {
+  const p = editingPipeline.value;
+  if (!p?.pipeline_id) return;
+  if (!confirm(`确定要删除流水线「${p.name}」吗？`)) return;
+  try {
+    await axios.delete(`/api/pipelines/${p.pipeline_id}`);
+    alert("流水线已删除");
+    router.push("/app/pipeline");
+  } catch (error) {
+    alert(error.response?.data?.detail || "删除失败");
+  }
+}
 </script>

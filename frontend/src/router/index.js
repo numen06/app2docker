@@ -55,7 +55,14 @@ const router = createRouter({
     },
     {
       path: '/app/pipeline/:pipelineId/edit',
-      name: 'pipeline-edit',
+      redirect: (to) => ({
+        path: `/app/pipeline/${to.params.pipelineId}`,
+        query: { tab: 'basic' },
+      }),
+    },
+    {
+      path: '/app/pipeline/:pipelineId',
+      name: 'pipeline-detail',
       component: AdminLayout,
       meta: { requiresAuth: true },
     },
