@@ -16,6 +16,15 @@
         </div>
       </div>
       <div v-if="pageState === 'ready'" class="pipeline-config-toolbar__actions">
+        <Button
+          v-if="isEdit"
+          type="button"
+          variant="outline"
+          size="sm"
+          @click="goToHistory"
+        >
+          <i class="fas fa-history mr-1"></i> 历史构建
+        </Button>
         <Button type="button" variant="outline" size="sm" :disabled="saving" @click="goBack">
           取消
         </Button>
@@ -143,6 +152,14 @@ const pageTitle = computed(() => {
 
 function goBack() {
   router.push("/app/pipeline");
+}
+
+function goToHistory() {
+  if (!pipelineId.value) return;
+  router.push({
+    name: "pipeline-history",
+    params: { pipelineId: pipelineId.value },
+  });
 }
 
 async function onSave() {

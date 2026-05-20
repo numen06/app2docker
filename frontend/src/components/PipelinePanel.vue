@@ -743,11 +743,6 @@
       </div>
     </div>
 
-    <PipelineHistoryDialog
-      v-model:open="showHistoryModal"
-      :pipeline="historyPipeline"
-      :view-task-logs="pipelineTaskLogs.viewTaskLogs"
-    />
     <ResourceMemberPermissionDialog
       v-model="permissionDialogOpen"
       resource-type="pipeline"
@@ -762,7 +757,6 @@
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
-import PipelineHistoryDialog from "@/components/pipeline/PipelineHistoryDialog.vue";
 import PipelineTaskLogDialog from "@/components/pipeline/PipelineTaskLogDialog.vue";
 import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
 import { usePipelineTaskLogs } from "@/composables/usePipelineTaskLogs";
@@ -854,8 +848,6 @@ const loadingServicesKey = ref(""); // 当前加载服务的唯一标识（用�
 const isVerifyingServices = ref(false); // 是否正在验证服务列表（编辑模式下防止重复验证）
 const showModal = ref(false);
 const showWebhookModal = ref(false);
-const showHistoryModal = ref(false);
-const historyPipeline = ref(null);
 const permissionDialogOpen = ref(false);
 const permissionPipeline = ref(null);
 const showMultiServiceConfigModal = ref(false);
@@ -883,19 +875,6 @@ const webhookUrl = ref("");
 const webhookUrlInput = ref(null);
 const deployTaskList = ref([]); // 部署任务列表（用于构建后Webhook快捷选择）
 const editingPipeline = ref(null);
-const currentPipeline = ref(null);
-const historyTasks = ref([]);
-const historyLoading = ref(false);
-const historyFilter = ref({
-  trigger_source: "",
-  status: "",
-});
-const historyPagination = ref({
-  currentPage: 1,
-  pageSize: 20,
-  total: 0,
-  hasMore: false,
-});
 const showLogModal = ref(false);
 const selectedTask = ref(null);
 const viewingLogs = ref(null);
@@ -4175,122 +4154,15 @@ function openPipelinePermission(pipeline) {
 }
 
 function showHistory(pipeline) {
-  historyPipeline.value = pipeline;
-  currentPipeline.value = pipeline;
-  historyFilter.value = {
-    trigger_source: "",
-    status: "",
-  };
-  historyPagination.value = {
-    currentPage: 1,
-    // 默认每页 10 条
-    pageSize: 10,
-    total: 0,
-    hasMore: false,
-  };
-  showHistoryModal.value = true;
-  loadHistory();
-}
-
-function closeHistoryModal() {
-  showHistoryModal.value = false;
-  historyPipeline.value = null;
-  currentPipeline.value = null;
-  historyTasks.value = [];
-  historyPagination.value = {
-    currentPage: 1,
-    // 默认每页 10 条
-    pageSize: 10,
-    total: 0,
-    hasMore: false,
-  };
-}
-
-async function loadHistory(page = null) {
-  if (!currentPipeline.value) return;
-
-  // 获取pipeline_id，支持两种字段名
-  const pipelineId =
-    currentPipeline.value.pipeline_id || currentPipeline.value.id;
-  if (!pipelineId) {
-    console.error("流水线ID不存在:", currentPipeline.value);
-    alert("无法获取流水线ID");
+  const id = pipeline.pipeline_id || pipeline.id;
+  if (!id) {
+    alert("无法获取流水线 ID");
     return;
   }
-
-  // 如果指定了页码，更新当前页
-  if (page !== null) {
-    historyPagination.value.currentPage = page;
-  }
-
-  historyLoading.value = true;
-  try {
-    const params = new URLSearchParams();
-    if (historyFilter.value.trigger_source) {
-      params.append("trigger_source", historyFilter.value.trigger_source);
-    }
-    if (historyFilter.value.status) {
-      params.append("status", historyFilter.value.status);
-    }
-
-    params.append("page", historyPagination.value.currentPage.toString());
-    params.append("page_size", historyPagination.value.pageSize.toString());
-
-    const url = `/api/pipelines/${pipelineId}/tasks?${params.toString()}`;
-    const res = await axios.get(url);
-
-    // 检查响应数据结构
-    if (res.data && Array.isArray(res.data.tasks)) {
-      historyTasks.value = res.data.tasks || [];
-      // 更新分页信息
-      historyPagination.value.total = res.data.total || 0;
-      historyPagination.value.hasMore = res.data.has_more || false;
-      // 如果后端返回了 total_pages，可以使用它来更新分页显示
-      if (res.data.total_pages !== undefined) {
-        // total_pages 已由后端计算，前端可以直接使用
-      }
-    } else if (Array.isArray(res.data)) {
-      // 兼容旧格式：如果直接返回数组
-      historyTasks.value = res.data;
-      historyPagination.value.total = res.data.length;
-      historyPagination.value.hasMore = false;
-    } else {
-      console.warn("意外的响应格式:", res.data);
-      historyTasks.value = [];
-      historyPagination.value.total = 0;
-      historyPagination.value.hasMore = false;
-    }
-  } catch (error) {
-    console.error("加载历史构建失败:", error);
-    const errorMsg =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.message ||
-      "加载历史构建失败";
-
-    // 如果是 404 错误（流水线不存在），显示更友好的提示
-    if (error.response?.status === 404) {
-      console.warn(`流水线 ${pipelineId} 不存在，可能是数据不一致`);
-      alert(`流水线不存在，请刷新页面后重试`);
-    } else {
-      alert(`加载历史构建失败: ${errorMsg}`);
-    }
-
-    historyTasks.value = [];
-    historyPagination.value.total = 0;
-    historyPagination.value.hasMore = false;
-  } finally {
-    historyLoading.value = false;
-  }
-}
-
-function changeHistoryPage(page) {
-  if (page < 1) return;
-  const totalPages = Math.ceil(
-    historyPagination.value.total / historyPagination.value.pageSize
-  );
-  if (page > totalPages) return;
-  loadHistory(page);
+  router.push({
+    name: "pipeline-history",
+    params: { pipelineId: id },
+  });
 }
 
 // 判断最后构建是否正在运行

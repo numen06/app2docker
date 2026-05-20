@@ -61,6 +61,12 @@ const router = createRouter({
       }),
     },
     {
+      path: '/app/pipeline/:pipelineId/history',
+      name: 'pipeline-history',
+      component: AdminLayout,
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/app/pipeline/:pipelineId',
       name: 'pipeline-detail',
       component: AdminLayout,

@@ -308,7 +308,10 @@
                         <div class="pipeline-field-grid pipeline-field-grid--3">
                           <div class="pipeline-field pipeline-field--full">
                             <label class="block text-sm font-medium text-slate-700">Dockerfile 来源</label>
-                            <div class="btn-group w-full mb-2" role="group">
+                            <div
+                              class="pipeline-option-group pipeline-option-group--2"
+                              role="group"
+                            >
                               <input
                                 type="radio"
                                 class="btn-check"
@@ -617,7 +620,10 @@
                           >Dockerfile 来源
                           <span class="text-red-500">*</span></label
                         >
-                        <div class="btn-group w-full" role="group">
+                        <div
+                          class="pipeline-option-group pipeline-option-group--2"
+                          role="group"
+                        >
                           <input
                             type="radio"
                             class="btn-check"
@@ -1266,7 +1272,7 @@
                           </Button>
                         </div>
                         <div class="pipeline-webhook-item__body">
-                          <div class="pipeline-webhook-field">
+                          <section class="pipeline-webhook-block">
                             <h3 class="pipeline-webhook-block__title">
                               <i class="fas fa-code-branch"></i> 分支触发策略
                             </h3>
@@ -1283,23 +1289,8 @@
                                 :for="`post-wh-branch-all-${index}`"
                               >
                                 <i class="fas fa-code-branch"></i>
-                                所有分支
-                                <small>任意分支构建完成</small>
-                              </label>
-                              <input
-                                type="radio"
-                                class="btn-check"
-                                :id="`post-wh-branch-select-${index}`"
-                                value="select_branches"
-                                v-model="webhook.branch_strategy"
-                              />
-                              <label
-                                class="pipeline-webhook-strategy__option"
-                                :for="`post-wh-branch-select-${index}`"
-                              >
-                                <i class="fas fa-check-square"></i>
-                                选择分支
-                                <small>精确匹配分支名</small>
+                                所有分支触发
+                                <small>构建完成后均回调</small>
                               </label>
                               <input
                                 type="radio"
@@ -1313,39 +1304,47 @@
                                 :for="`post-wh-branch-match-${index}`"
                               >
                                 <i class="fas fa-filter"></i>
-                                匹配分支
-                                <small>支持 feature/*</small>
+                                只允许匹配分支
+                                <small>支持 feature/* 通配符</small>
+                              </label>
+                              <input
+                                type="radio"
+                                class="btn-check"
+                                :id="`post-wh-branch-select-${index}`"
+                                value="select_branches"
+                                v-model="webhook.branch_strategy"
+                              />
+                              <label
+                                class="pipeline-webhook-strategy__option"
+                                :for="`post-wh-branch-select-${index}`"
+                              >
+                                <i class="fas fa-check-square"></i>
+                                选择分支触发
+                                <small>仅选中的分支触发</small>
                               </label>
                             </div>
                             <p class="pipeline-webhook-field__hint mt-2 mb-0">
                               <span v-if="webhook.branch_strategy === 'all'">
                                 <i class="fas fa-info-circle"></i>
-                                所有分支构建完成后都触发此 Webhook
+                                任意分支构建成功完成后都会触发此 Webhook
+                              </span>
+                              <span v-else-if="webhook.branch_strategy === 'filter_match'">
+                                <i class="fas fa-info-circle"></i>
+                                仅当构建分支与下方匹配模式一致时触发（支持通配符）
                               </span>
                               <span v-else-if="webhook.branch_strategy === 'select_branches'">
                                 <i class="fas fa-info-circle"></i>
-                                仅指定分支构建完成后触发（精确匹配）
-                              </span>
-                              <span v-else>
-                                <i class="fas fa-info-circle"></i>
-                                仅匹配指定模式的分支触发（支持通配符，如 feature/*）
+                                仅当选中分支构建成功完成后触发
                               </span>
                             </p>
-                          </div>
-                          <div
-                            v-if="webhook.branch_strategy === 'select_branches' || webhook.branch_strategy === 'filter_match'"
-                            class="pipeline-webhook-field"
+                          </section>
+
+                          <section
+                            v-if="webhook.branch_strategy === 'filter_match'"
+                            class="pipeline-webhook-block"
                           >
                             <h3 class="pipeline-webhook-block__title">
-                              <i
-                                :class="
-                                  webhook.branch_strategy === 'select_branches'
-                                    ? 'fas fa-list-check'
-                                    : 'fas fa-filter'
-                                "
-                              ></i>
-                              <span v-if="webhook.branch_strategy === 'select_branches'">允许的分支</span>
-                              <span v-else>匹配模式</span>
+                              <i class="fas fa-filter"></i> 匹配分支模式
                               <span class="text-red-500 text-sm font-normal">*</span>
                             </h3>
                             <input
@@ -1353,15 +1352,38 @@
                               class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                               inputmode="text"
                               autocomplete="off"
-                              :placeholder="webhook.branch_strategy === 'filter_match' ? 'main, feature/*, release/*' : 'main, develop, staging'"
+                              placeholder="main, feature/*, release/*"
                               :value="(webhook.branches || []).join(', ')"
                               @input="onPostBuildWebhookBranchesInput(webhook, $event)"
                             />
-                            <p class="pipeline-webhook-field__hint mb-0">
+                            <p class="pipeline-webhook-field__hint mt-2 mb-0">
                               <i class="fas fa-info-circle"></i>
-                              多个分支用半角逗号分隔
+                              多个模式用半角逗号分隔，支持通配符（如 feature/*）
                             </p>
-                          </div>
+                          </section>
+
+                          <section
+                            v-if="webhook.branch_strategy === 'select_branches'"
+                            class="pipeline-webhook-block"
+                          >
+                            <h3 class="pipeline-webhook-block__title">
+                              <i class="fas fa-list-check"></i> 允许触发的分支
+                              <span class="text-red-500 text-sm font-normal">*</span>
+                            </h3>
+                            <input
+                              type="text"
+                              class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                              inputmode="text"
+                              autocomplete="off"
+                              placeholder="main, develop, staging"
+                              :value="(webhook.branches || []).join(', ')"
+                              @input="onPostBuildWebhookBranchesInput(webhook, $event)"
+                            />
+                            <p class="pipeline-webhook-field__hint mt-2 mb-0">
+                              <i class="fas fa-info-circle"></i>
+                              多个分支用半角逗号分隔；仅精确匹配分支名
+                            </p>
+                          </section>
                           <div class="pipeline-webhook-field">
                             <div class="pipeline-webhook-block__head pipeline-webhook-block__head--tight">
                               <h3 class="pipeline-webhook-block__title mb-0">

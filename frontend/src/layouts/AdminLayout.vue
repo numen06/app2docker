@@ -452,6 +452,9 @@
               v-if="isPipelineDetailRoute && hasPermission('menu.pipeline')"
               mode="edit"
             />
+            <PipelineHistoryPage
+              v-if="isPipelineHistoryRoute && hasPermission('menu.pipeline')"
+            />
             <PipelinePanel
               v-if="
                 activeTab === 'pipeline' &&
@@ -681,6 +684,7 @@ import ExportPanel from "@/components/ExportPanel.vue";
 import OperationLogs from "@/components/OperationLogs.vue";
 import PipelinePanel from "@/components/PipelinePanel.vue";
 import PipelineConfigPage from "@/pages/PipelineConfigPage.vue";
+import PipelineHistoryPage from "@/pages/PipelineHistoryPage.vue";
 import RegistryPanel from "@/components/RegistryPanel.vue";
 import ResourcePackagePanel from "@/components/ResourcePackagePanel.vue";
 import RoleManagement from "@/components/RoleManagement.vue";
@@ -839,8 +843,13 @@ const isPipelineCreateRoute = computed(() => route.name === "pipeline-create");
 
 const isPipelineDetailRoute = computed(() => route.name === "pipeline-detail");
 
+const isPipelineHistoryRoute = computed(() => route.name === "pipeline-history");
+
 const isPipelinePipelineSubRoute = computed(
-  () => isPipelineCreateRoute.value || isPipelineDetailRoute.value
+  () =>
+    isPipelineCreateRoute.value ||
+    isPipelineDetailRoute.value ||
+    isPipelineHistoryRoute.value
 );
 
 const activeTab = computed(() => {
@@ -1004,6 +1013,7 @@ watch(
 const pageTitle = computed(() => {
   if (route.name === "pipeline-create") return "新建流水线";
   if (route.name === "pipeline-detail") return "流水线配置";
+  if (route.name === "pipeline-history") return "历史构建";
   return PAGE_TITLES[activeTab.value] || "App2Docker";
 });
 

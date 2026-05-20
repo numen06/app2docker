@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="pipeline-multi-service-tab space-y-4">
 <div class="alert alert-info mb-3">
               <i class="fas fa-info-circle"></i>
@@ -9,7 +9,10 @@
             <!-- 推送模式选择 -->
             <div class="mb-3">
               <label class="block text-sm font-medium text-slate-700"><strong>推送模式</strong></label>
-              <div class="push-mode-group" role="group">
+              <div
+                class="pipeline-option-group pipeline-option-group--2 pipeline-option-group--stacked"
+                role="group"
+              >
                 <input
                   type="radio"
                   class="btn-check"
@@ -137,7 +140,7 @@
                 class="flex justify-between items-center mb-3"
               >
                 <label class="form-label mb-0"><strong>服务列表</strong></label>
-                <div class="btn-group" role="group">
+                <div class="pipeline-action-group" role="group">
                   <Button
                     type="button"
                     variant="outline" size="sm"
