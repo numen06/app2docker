@@ -27,27 +27,63 @@
           </div>
 
           <div class="admin-topbar-actions ms-auto flex shrink-0 items-center gap-2">
-            <!-- 全局团队选择 -->
+            <!-- 全局团队选择（左侧图标区分管理者 / 成员） -->
             <div
               v-if="teamStore.memberships.length"
-              class="flex max-w-[200px] items-center gap-1.5 md:max-w-[260px]"
+              ref="teamDropdownWrap"
+              class="relative max-w-[9.5rem] sm:max-w-[11rem]"
             >
-              <i class="fas fa-people-group hidden shrink-0 text-blue-600 sm:inline" aria-hidden="true"></i>
-              <NativeSelect
-                class="admin-topbar-control flex-1 text-sm"
-                :value="teamStore.activeTeamId"
+              <button
+                type="button"
+                class="admin-topbar-control admin-team-switcher-trigger inline-flex w-full max-w-full items-center gap-1.5 rounded-lg border border-slate-300 px-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 :disabled="teamSwitching"
-                title="切换当前团队"
-                @change="onGlobalTeamChange"
+                :aria-expanded="teamMenuOpen ? 'true' : 'false'"
+                :title="activeTeamMenuTitle"
+                @click.stop="toggleTeamMenu"
               >
-                <option
-                  v-for="m in teamStore.memberships"
-                  :key="m.team.team_id"
-                  :value="m.team.team_id"
-                >
-                  {{ m.team.name }}（{{ teamRoleLabel(m.role) }}）
-                </option>
-              </NativeSelect>
+                <i
+                  :class="teamRoleIconClass(activeMembership?.role)"
+                  class="shrink-0 text-xs"
+                  aria-hidden="true"
+                ></i>
+                <span class="min-w-0 flex-1 truncate text-left">{{
+                  activeTeamDisplayName
+                }}</span>
+                <i
+                  class="fas fa-chevron-down shrink-0 text-[10px] text-slate-400"
+                  aria-hidden="true"
+                ></i>
+              </button>
+              <ul
+                v-show="teamMenuOpen"
+                class="admin-team-switcher-menu absolute right-0 top-full z-[1055] mt-1 max-h-[min(60vh,16rem)] min-w-[11rem] max-w-[15rem] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+              >
+                <li v-for="m in teamStore.memberships" :key="m.team.team_id">
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    :class="
+                      m.team.team_id === teamStore.activeTeamId
+                        ? 'bg-blue-50 text-blue-800'
+                        : ''
+                    "
+                    :title="teamOptionTitle(m)"
+                    @click="selectTeam(m.team.team_id)"
+                  >
+                    <i
+                      :class="teamRoleIconClass(m.role)"
+                      class="shrink-0 text-xs"
+                      aria-hidden="true"
+                    ></i>
+                    <span class="min-w-0 flex-1 truncate">{{ m.team.name }}</span>
+                    <i
+                      v-if="m.team.team_id === teamStore.activeTeamId"
+                      class="fas fa-check shrink-0 text-xs text-blue-600"
+                      aria-hidden="true"
+                    ></i>
+                  </button>
+                </li>
+              </ul>
             </div>
             <RouterLink
               v-else-if="!authStore.isGlobalAdmin"
@@ -665,7 +701,6 @@ import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
-import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
 import { useModalEscape } from "@/composables/useModalEscape";
@@ -915,9 +950,11 @@ const runningTasksCount = ref(0);
 const runningTasksList = ref([]);
 const runningTasksDropdownWrap = ref(null);
 const runningTasksDropdownMenu = ref(null);
+const teamDropdownWrap = ref(null);
 const userDropdownWrap = ref(null);
 const userDropdownMenu = ref(null);
 const runningTasksMenuOpen = ref(false);
+const teamMenuOpen = ref(false);
 const userMenuOpen = ref(false);
 const runningTasksMenuStyle = ref({});
 const userMenuStyle = ref({});
@@ -1177,8 +1214,46 @@ function teamRoleLabel(role) {
   return map[role] || role;
 }
 
-async function onGlobalTeamChange(ev) {
-  const nextId = ev.target?.value;
+/** 管理者（所有者/管理员）与成员用不同图标 */
+function teamRoleIconClass(role) {
+  if (role === "owner" || role === "admin") {
+    return "fas fa-user-shield text-blue-600";
+  }
+  return "fas fa-user text-slate-500";
+}
+
+const activeMembership = computed(() =>
+  teamStore.memberships.find((m) => m.team?.team_id === teamStore.activeTeamId)
+);
+
+const activeTeamDisplayName = computed(
+  () => activeMembership.value?.team?.name || "选择团队"
+);
+
+const activeTeamMenuTitle = computed(() => {
+  const m = activeMembership.value;
+  if (!m?.team?.name) return "切换当前团队";
+  return `${m.team.name} · ${teamRoleLabel(m.role)}`;
+});
+
+function teamOptionTitle(m) {
+  return `${m.team?.name || ""} · ${teamRoleLabel(m.role)}`;
+}
+
+function closeTeamMenu() {
+  teamMenuOpen.value = false;
+}
+
+function toggleTeamMenu() {
+  teamMenuOpen.value = !teamMenuOpen.value;
+  if (teamMenuOpen.value) {
+    closeRunningTasksMenu();
+    closeUserMenu();
+  }
+}
+
+async function selectTeam(nextId) {
+  closeTeamMenu();
   if (!nextId || nextId === teamStore.activeTeamId) return;
   teamSwitching.value = true;
   try {
@@ -1276,14 +1351,17 @@ function handleTopbarResize() {
 
 function closeTopbarMenus() {
   closeRunningTasksMenu();
+  closeTeamMenu();
   closeUserMenu();
 }
 
 function handleTopbarOutsideClick(event) {
   const inRunning = runningTasksDropdownWrap.value?.contains(event.target);
+  const inTeam = teamDropdownWrap.value?.contains(event.target);
   const inUser = userDropdownWrap.value?.contains(event.target);
   const inFlyout = event.target.closest?.("[data-sidebar-flyout]");
   if (!inRunning) closeRunningTasksMenu();
+  if (!inTeam) closeTeamMenu();
   if (!inUser) closeUserMenu();
   if (!inFlyout) {
     flyoutOpenGroupId.value = null;
@@ -1293,6 +1371,7 @@ function handleTopbarOutsideClick(event) {
 function toggleRunningTasksMenu() {
   runningTasksMenuOpen.value = !runningTasksMenuOpen.value;
   if (runningTasksMenuOpen.value) {
+    closeTeamMenu();
     closeUserMenu();
     nextTick(() => {
       adjustRunningTasksMenuPosition();
@@ -1303,6 +1382,7 @@ function toggleRunningTasksMenu() {
 function toggleUserMenu() {
   userMenuOpen.value = !userMenuOpen.value;
   if (userMenuOpen.value) {
+    closeTeamMenu();
     closeRunningTasksMenu();
     userMenuStyle.value = {};
     nextTick(() => {
@@ -1673,10 +1753,12 @@ watch(runningTasksCount, () => {
   min-height: 2.25rem;
 }
 
-.admin-topbar-actions select.admin-topbar-control {
-  padding-top: 0;
-  padding-bottom: 0;
-  line-height: 1.25rem;
+.admin-team-switcher-trigger {
+  max-width: 100%;
+}
+
+.admin-team-switcher-menu {
+  z-index: 1055;
 }
 
 .admin-running-dropdown {

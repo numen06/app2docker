@@ -57,6 +57,18 @@ export function isUserNotFoundResponse(error) {
   return status === 401 || status === 404
 }
 
+/** 解析登录页 redirect 参数（支持 encodeURIComponent 编码的完整路径含 query） */
+export function parseLoginRedirect(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return ''
+  let path = raw.trim()
+  try {
+    path = decodeURIComponent(path)
+  } catch {
+    /* 保持原值 */
+  }
+  return path.startsWith('/') ? path : ''
+}
+
 /** 清除本地会话并跳转登录页 */
 export function redirectToLoginAfterStaleSession() {
   const { pathname, search } = window.location

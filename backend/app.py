@@ -5,7 +5,7 @@ import sys
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,18 +46,29 @@ if os.path.exists("dist/assets"):
 if os.path.isdir("dist/landing"):
     app.mount("/landing", StaticFiles(directory="dist/landing"), name="landing")
 
+# 字体等静态资源（Vite 构建到 dist/fonts）
+if os.path.isdir("dist/fonts"):
+    app.mount("/fonts", StaticFiles(directory="dist/fonts"), name="fonts")
+
+INDEX_FILE = "dist/index.html"
+# 不走 SPA 回退的路径前缀（API、静态资源、健康检查等）
+_SPA_SKIP_PREFIXES = ("api/", "assets/", "landing/", "fonts/")
+
+
+def _serve_spa_index():
+    if os.path.exists(INDEX_FILE):
+        return FileResponse(INDEX_FILE)
+    return HTMLResponse(
+        content="<h1>前端未构建</h1><p>请先运行前端开发服务器或构建前端</p>",
+        status_code=404,
+    )
+
 
 # 前端页面路由
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
     """提供前端页面"""
-    index_file = "dist/index.html"
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return HTMLResponse(
-        content="<h1>前端未构建</h1><p>请先运行前端开发服务器或构建前端</p>",
-        status_code=404,
-    )
+    return _serve_spa_index()
 
 
 @app.get("/favicon.ico")
@@ -101,6 +112,14 @@ async def health_check_root():
 async def health_check_api():
     """健康检查（API 路径）"""
     return {"status": "healthy", "service": "app2docker"}
+
+
+@app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
+async def serve_spa(full_path: str):
+    """Vue Router history 模式：/onboarding、/login、/app/* 等回退到 index.html"""
+    if full_path.startswith(_SPA_SKIP_PREFIXES):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return _serve_spa_index()
 
 
 # 全局变量：本地 Agent WebSocket 客户端

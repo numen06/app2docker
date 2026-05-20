@@ -41,15 +41,16 @@
       </CardContent>
       <CardFooter class="flex-col gap-2 text-center text-sm text-slate-600">
         <span>已有账号？</span>
-        <RouterLink to="/login" class="font-medium text-blue-600 hover:text-blue-700">去登录</RouterLink>
+        <RouterLink :to="loginLink" class="font-medium text-blue-600 hover:text-blue-700">去登录</RouterLink>
       </CardFooter>
     </Card>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { parseLoginRedirect } from "@/utils/auth";
 import axios from "axios";
 import { RouterLink } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
@@ -65,8 +66,15 @@ import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const teamStore = useTeamStore();
+
+const loginLink = computed(() => {
+  const redirect = parseLoginRedirect(route.query.redirect);
+  if (!redirect) return "/login";
+  return `/login?redirect=${encodeURIComponent(redirect)}`;
+});
 
 const username = ref("");
 const password = ref("");
@@ -99,6 +107,12 @@ async function submit() {
       await authStore.fetchMe();
     } catch {
       /* ignore */
+    }
+    const redirect = parseLoginRedirect(route.query.redirect);
+    if (redirect) {
+      await router.replace(redirect);
+      loading.value = false;
+      return;
     }
     await teamStore.fetchTeams();
     const id = teamStore.currentTeamId;

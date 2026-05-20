@@ -132,10 +132,7 @@ const error = ref("");
 async function handleStaleSession(e) {
   if (!isUserNotFoundResponse(e)) return false;
   await authStore.logout();
-  await router.replace({
-    path: "/login",
-    query: { redirect: route.fullPath },
-  });
+  await router.replace(`/login?redirect=${encodeURIComponent(route.fullPath)}`);
   return true;
 }
 
@@ -213,7 +210,9 @@ onMounted(async () => {
     if (await handleStaleSession(e)) return;
   }
   await teamStore.fetchMyTeams();
-  if (teamStore.memberships.length) {
+  const hasInvite =
+    typeof fromQuery === "string" && fromQuery.trim().length > 0;
+  if (teamStore.memberships.length && !hasInvite) {
     const id =
       teamStore.activeTeamId || teamStore.memberships[0]?.team?.team_id;
     if (id) {

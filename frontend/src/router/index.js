@@ -138,14 +138,14 @@ router.beforeEach(async (to, _from, next) => {
   const authed = needsAuthCheck ? await resolveAuthed() : authStore.isAuthenticated
 
   if (to.meta.requiresAuth && !authed) {
-    next({ path: '/login', query: { redirect: to.fullPath } })
+    next(`/login?redirect=${encodeURIComponent(to.fullPath)}`)
     return
   }
 
   if (authed) {
     const ctxOk = await ensureAuthContext(authStore, teamStore)
     if (!ctxOk) {
-      next({ path: '/login', query: { redirect: to.fullPath } })
+      next(`/login?redirect=${encodeURIComponent(to.fullPath)}`)
       return
     }
   }
@@ -180,7 +180,9 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  if (authed && to.path === '/onboarding' && teamStore.hasTeams) {
+  const hasInviteQuery =
+    typeof to.query.invite === 'string' && to.query.invite.trim().length > 0
+  if (authed && to.path === '/onboarding' && teamStore.hasTeams && !hasInviteQuery) {
     next(await defaultAuthedPath(authStore, teamStore))
     return
   }

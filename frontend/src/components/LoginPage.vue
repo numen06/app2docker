@@ -48,7 +48,7 @@
       <CardFooter class="flex-col gap-3 text-center text-sm text-slate-600">
         <div>
           还没有账号？
-          <RouterLink to="/register" class="font-medium text-blue-600 hover:text-blue-700">立即注册</RouterLink>
+          <RouterLink :to="registerLink" class="font-medium text-blue-600 hover:text-blue-700">立即注册</RouterLink>
         </div>
         <div>
           <RouterLink to="/" class="text-slate-500 hover:text-slate-700">← 返回首页</RouterLink>
@@ -82,8 +82,9 @@
 
 <script setup>
 import axios from "axios";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import { parseLoginRedirect } from "@/utils/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
 import Button from "@/components/ui/button/Button.vue";
@@ -103,6 +104,12 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const teamStore = useTeamStore();
+
+const registerLink = computed(() => {
+  const redirect = parseLoginRedirect(route.query.redirect);
+  if (!redirect) return "/register";
+  return `/register?redirect=${encodeURIComponent(redirect)}`;
+});
 
 const appVersion = ref("");
 const username = ref("");
@@ -131,8 +138,8 @@ async function finishLogin(token, name) {
     username: name,
     remember: rememberMe.value,
   });
-  const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "";
-  if (redirect && redirect.startsWith("/")) {
+  const redirect = parseLoginRedirect(route.query.redirect);
+  if (redirect) {
     await router.replace(redirect);
     return;
   }
