@@ -38,7 +38,6 @@ export const PIPELINE_CONFIG_TABS = PIPELINE_CONFIG_TAB_KEYS.map((key) => ({
 }));
 
 export const PIPELINE_DETAIL_TABS = PIPELINE_CONFIG_TABS;
-export const PIPELINE_CREATE_TABS = PIPELINE_CONFIG_TABS;
 export const PIPELINE_DETAIL_TAB_KEYS = PIPELINE_CONFIG_TAB_KEYS;
 
 export function normalizePipelineConfigTab(raw) {

@@ -64,6 +64,11 @@ const scanningDockerfiles = ref(false); // 正在扫描 Dockerfile
 const dockerfilesError = ref(""); // Dockerfile 扫描错误
 const repoVerified = ref(false); // 仓库是否已验证
 
+/** 创建向导：用户强制单应用（忽略 Dockerfile 多服务解析） */
+const wizardForceSingleMode = ref(false);
+/** 创建向导：是否已完成 Dockerfile 服务分析 */
+const wizardServiceAnalysisDone = ref(false);
+
 const activeTab = ref("basic"); // 当前激活的Tab
 const showResourcePackageModal = ref(false);
 const showBuildConfigJsonModal = ref(false); // 显示构建配置JSON模态框
@@ -632,6 +637,8 @@ function initCreateForm() {
   servicesError.value = "";
   // 初始化Dockerfile编辑器内容
   dockerfileContentText.value = "";
+  wizardForceSingleMode.value = false;
+  wizardServiceAnalysisDone.value = false;
 // 初始化JSON编辑器内容（新建模式）
   nextTick(() => {
     if (activeTab.value === "build") {
@@ -1234,16 +1241,99 @@ async function savePipeline() {
         payload
       );
       alert("流水线更新成功");
+      if (onSaved) onSaved(editingPipeline.value.pipeline_id);
+      return editingPipeline.value.pipeline_id;
     } else {
       // 创建
-      await axios.post("/api/pipelines", payload);
+      const res = await axios.post("/api/pipelines", payload);
+      const newId = res.data?.pipeline_id;
       alert("流水线创建成功");
+      if (onSaved) onSaved(newId);
+      return newId || true;
     }
-    if (onSaved) onSaved();
-    return true;
   } catch (error) {
     console.error("保存流水线失败:", error);
     alert(error.response?.data?.detail || "保存流水线失败");
+  } finally {
+    saving.value = false;
+  }
+}
+
+/** 向导创建：仅提交基础字段，跳过完整配置校验 */
+async function createPipelineMinimal() {
+  if (saving.value) {
+    return null;
+  }
+
+  const pipelineName = formData.value.name?.trim();
+  if (!pipelineName) {
+    alert("请输入流水线名称");
+    return null;
+  }
+
+  const hasGit =
+    Boolean(formData.value.source_id) ||
+    Boolean(formData.value.git_url?.trim());
+  if (!hasGit) {
+    alert("请选择数据源或填写 Git 仓库地址");
+    return null;
+  }
+
+  if (!formData.value.push_mode) {
+    alert("请选择单服务或多服务模式");
+    return null;
+  }
+
+  saving.value = true;
+  try {
+    const payload = {
+      name: pipelineName,
+      description: formData.value.description || "",
+      git_url: formData.value.git_url?.trim() || null,
+      branch: formData.value.branch || null,
+      source_id: formData.value.source_id || null,
+      project_type: formData.value.project_type || "jar",
+      sub_path: formData.value.sub_path || null,
+      push_mode: formData.value.push_mode,
+      use_project_dockerfile: true,
+      dockerfile_name: formData.value.dockerfile_name || "Dockerfile",
+      template: "",
+      tag: "latest",
+      push: false,
+      enabled: true,
+      webhook_branch_filter: false,
+      webhook_use_push_branch: true,
+      cron_expression: null,
+      branch_tag_mapping: null,
+      selected_services:
+        formData.value.push_mode === "multi" &&
+        formData.value.selected_services?.length > 0
+          ? formData.value.selected_services
+          : null,
+      service_push_config:
+        formData.value.push_mode === "multi" &&
+        formData.value.service_push_config &&
+        Object.keys(formData.value.service_push_config).length > 0
+          ? formData.value.service_push_config
+          : null,
+      service_template_params: null,
+      resource_package_configs: null,
+      post_build_webhooks: null,
+      webhook_token: null,
+      webhook_secret: null,
+      webhook_allowed_branches: null,
+    };
+
+    const res = await axios.post("/api/pipelines", payload);
+    const newId = res.data?.pipeline_id;
+    if (onSaved && newId) {
+      onSaved(newId);
+    }
+    return newId || null;
+  } catch (error) {
+    console.error("创建流水线失败:", error);
+    alert(error.response?.data?.detail || "创建流水线失败");
+    return null;
   } finally {
     saving.value = false;
   }
@@ -1260,6 +1350,94 @@ function resetFormState() {
   scanningDockerfiles.value = false;
   dockerfilesError.value = "";
   repoVerified.value = false;
+  wizardForceSingleMode.value = false;
+  wizardServiceAnalysisDone.value = false;
+}
+
+/** 根据 Dockerfile/模板解析结果设置单服务或多服务推送模式 */
+function applyPushModeFromDockerfileAnalysis(forceSingle = false) {
+  const useSingle =
+    forceSingle ||
+    wizardForceSingleMode.value ||
+    services.value.length === 0;
+
+  if (useSingle) {
+    formData.value.push_mode = "single";
+    formData.value.selected_services = [];
+    formData.value.selected_service = "";
+  } else {
+    formData.value.push_mode = "multi";
+    formData.value.selected_service = "";
+    formData.value.selected_services = services.value.map((s) => s.name);
+    initializeServiceConfigs();
+  }
+}
+
+function switchWizardToSingleAppMode() {
+  wizardForceSingleMode.value = true;
+  applyPushModeFromDockerfileAnalysis(true);
+}
+
+function switchWizardToMultiAppMode() {
+  wizardForceSingleMode.value = false;
+  applyPushModeFromDockerfileAnalysis(false);
+}
+
+/** 向导内用户手动切换推送模式（可覆盖 Dockerfile 自动识别结果） */
+function setWizardPushMode(mode) {
+  if (mode === "single") {
+    switchWizardToSingleAppMode();
+    return;
+  }
+  wizardForceSingleMode.value = false;
+  formData.value.push_mode = "multi";
+  formData.value.selected_service = "";
+  if (services.value.length > 0) {
+    formData.value.selected_services = services.value.map((s) => s.name);
+    initializeServiceConfigs();
+  } else {
+    formData.value.selected_services = [];
+    formData.value.service_push_config = {};
+  }
+}
+
+/** 创建向导进入「服务模式」步骤前：扫描 Dockerfile 并解析服务 */
+async function analyzeDockerfileForWizard() {
+  wizardServiceAnalysisDone.value = false;
+  wizardForceSingleMode.value = false;
+  servicesError.value = "";
+
+  if (!formData.value.git_url?.trim() && !formData.value.source_id) {
+    servicesError.value = "请先选择数据源或填写 Git 仓库地址";
+    return false;
+  }
+
+  if (!formData.value.branch?.trim()) {
+    const defaultBranch = branchesAndTags.value.default_branch;
+    if (defaultBranch) {
+      formData.value.branch = defaultBranch;
+    } else if (formData.value.source_id || formData.value.git_url) {
+      await refreshBranches(false);
+    }
+  }
+
+  formData.value.use_project_dockerfile = true;
+
+  try {
+    if (formData.value.git_url && (formData.value.branch || branchesAndTags.value.default_branch)) {
+      await scanDockerfiles(false, false);
+    }
+    await loadServices(true);
+    applyPushModeFromDockerfileAnalysis(false);
+    wizardServiceAnalysisDone.value = true;
+    return true;
+  } catch (error) {
+    console.error("向导分析 Dockerfile 失败:", error);
+    services.value = [];
+    applyPushModeFromDockerfileAnalysis(false);
+    wizardServiceAnalysisDone.value = true;
+    return false;
+  }
 }
 
 async function refreshBranches(forceRefresh = true) {
@@ -1856,31 +2034,15 @@ async function loadServicesInternal(
       if (servicesList && servicesList.length > 0) {
         services.value = servicesList;
 
-        // 编辑模式下：保持原有的服务选择和推送模式，只有在切换 Dockerfile 时才重新识别
         if (isEditing && !isDockerfileChanged) {
-          // 编辑模式且未切换 Dockerfile：保持原有配置，不做任何自动初始化
-          // 注意：服务验证已经在 loadServices 函数中完成，这里不再重复验证
-          // 避免重复更新导致卡死
+          // 编辑模式且未切换 Dockerfile：保持原有配置
         } else {
-          // 新建模式或切换 Dockerfile：自动初始化服务选择
-          if (
-            !formData.value.selected_services ||
-            formData.value.selected_services.length === 0
-          ) {
-            if (formData.value.push_mode === "multi") {
-              formData.value.selected_services = services.value.map(
-                (s) => s.name
-              );
-              initializeServiceConfigs();
-            }
-          }
+          applyPushModeFromDockerfileAnalysis(wizardForceSingleMode.value);
         }
       } else {
         services.value = [];
-        // 如果没有服务，清空选择（但编辑模式下保持推送模式）
         if (!isEditing || isDockerfileChanged) {
-          formData.value.selected_services = [];
-          formData.value.selected_service = "";
+          applyPushModeFromDockerfileAnalysis(true);
         }
       }
     } else if (formData.value.template) {
@@ -1895,33 +2057,15 @@ async function loadServicesInternal(
       if (templateServices.length > 0) {
         services.value = templateServices;
 
-        // 编辑模式下：保持原有的服务选择和推送模式
         if (isEditing && !isDockerfileChanged) {
           // 编辑模式且未切换模板：保持原有配置
-          // 注意：服务验证已经在 loadServices 函数中完成，这里不再重复验证
-          // 避免重复更新导致卡死
         } else {
-          // 新建模式或切换模板：根据推送模式初始化
-          if (
-            !formData.value.selected_services ||
-            formData.value.selected_services.length === 0
-          ) {
-            if (formData.value.push_mode === "single") {
-              formData.value.selected_services = [];
-            } else {
-              formData.value.selected_services = services.value.map(
-                (s) => s.name
-              );
-              initializeServiceConfigs();
-            }
-          }
+          applyPushModeFromDockerfileAnalysis(wizardForceSingleMode.value);
         }
       } else {
         services.value = [];
-        // 如果没有服务，清空选择（但编辑模式下保持推送模式）
         if (!isEditing || isDockerfileChanged) {
-          formData.value.selected_services = [];
-          formData.value.selected_service = "";
+          applyPushModeFromDockerfileAnalysis(true);
         }
       }
     } else {
@@ -2610,6 +2754,14 @@ function generateUUID() {
     applyPipelineToForm,
     loadPipelineForEdit,
     savePipeline,
+    createPipelineMinimal,
+    analyzeDockerfileForWizard,
+    applyPushModeFromDockerfileAnalysis,
+    switchWizardToSingleAppMode,
+    switchWizardToMultiAppMode,
+    setWizardPushMode,
+    wizardForceSingleMode,
+    wizardServiceAnalysisDone,
     resetFormState,
     loadGitSources,
     onSourceSelected,

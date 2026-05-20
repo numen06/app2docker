@@ -1718,6 +1718,7 @@
 <script setup>
 import { inject, watch } from "vue";
 import { useRouter } from "vue-router";
+import { goToPipelineList } from "@/utils/pipelineNavigation.js";
 import axios from "axios";
 import Button from "@/components/ui/button/Button.vue";
 import { Codemirror } from "vue-codemirror";
@@ -1823,8 +1824,8 @@ async function deletePipeline() {
   if (!confirm(`确定要删除流水线「${p.name}」吗？`)) return;
   try {
     await axios.delete(`/api/pipelines/${p.pipeline_id}`);
+    await goToPipelineList(router);
     alert("流水线已删除");
-    router.push("/app/pipeline");
   } catch (error) {
     alert(error.response?.data?.detail || "删除失败");
   }

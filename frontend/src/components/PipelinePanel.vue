@@ -393,7 +393,7 @@
                       variant="outline" size="sm"
                       style="width: 24px; height: 24px; line-height: 1"
                       @click.stop="
-                        viewTaskLogs(
+                        buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
                           pipeline.last_build
                         )
@@ -443,7 +443,7 @@
                       variant="outline" size="sm"
                       style="width: 24px; height: 24px; line-height: 1"
                       @click.stop="
-                        viewTaskLogs(
+                        buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
                           pipeline.last_build
                         )
@@ -750,23 +750,24 @@
       :team-id="teamStore.activeTeamId"
       :resource-name="permissionPipeline?.name || ''"
     />
-    <PipelineTaskLogDialog :logs="pipelineTaskLogs" />
+    <BuildTaskLogModal :controller="buildTaskLogs" />
   </div>
 </template>
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
-import PipelineTaskLogDialog from "@/components/pipeline/PipelineTaskLogDialog.vue";
+import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
-import { usePipelineTaskLogs } from "@/composables/usePipelineTaskLogs";
+import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 import { useTeamStore } from "@/stores/team";
 import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { goToPipelineList } from "@/utils/pipelineNavigation.js";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
 import { getDockerfilesWithCache } from "../utils/dockerfileCache.js";
@@ -800,8 +801,9 @@ const projectTypesList = ref(getProjectTypesSync()); // 从缓存获取项目类
 
 const teamStore = useTeamStore();
 const router = useRouter();
+const route = useRoute();
 
-const pipelineTaskLogs = usePipelineTaskLogs({
+const buildTaskLogs = useBuildTaskLogs({
   onTaskFinished: () => loadPipelines(),
 });
 
@@ -875,14 +877,6 @@ const webhookUrl = ref("");
 const webhookUrlInput = ref(null);
 const deployTaskList = ref([]); // 部署任务列表（用于构建后Webhook快捷选择）
 const editingPipeline = ref(null);
-const showLogModal = ref(false);
-const selectedTask = ref(null);
-const viewingLogs = ref(null);
-const taskLogs = ref("");
-const logContainer = ref(null);
-const logPollingInterval = ref(null);
-const autoScroll = ref(true);
-const refreshingLogs = ref(false);
 const showResourcePackageModal = ref(false);
 const resourcePackages = ref([]); // 资源包列表
 const showJsonCreateModal = ref(false); // JSON创建流水线模态框
@@ -962,6 +956,18 @@ watch(
   () => teamStore.activeTeamId,
   () => {
     loadPipelines({ resetPage: true });
+  }
+);
+
+watch(
+  () =>
+    route.name === "admin" &&
+    route.params.tab === "pipeline" &&
+    !route.params.pipelineId,
+  (onList) => {
+    if (onList) {
+      loadPipelines({ resetPage: true });
+    }
   }
 );
 
@@ -3666,8 +3672,15 @@ async function deletePipeline(pipeline) {
 
   try {
     await axios.delete(`/api/pipelines/${pipeline.pipeline_id}`);
+    const onDetailOfDeleted =
+      route.name === "pipeline-detail" &&
+      route.params.pipelineId === pipeline.pipeline_id;
+    if (onDetailOfDeleted) {
+      await goToPipelineList(router);
+    } else {
+      loadPipelines();
+    }
     alert("流水线已删除");
-    loadPipelines();
   } catch (error) {
     console.error("删除流水线失败:", error);
     alert(error.response?.data?.detail || "删除流水线失败");
@@ -4172,174 +4185,6 @@ function isLastBuildRunning(pipeline) {
     (pipeline.last_build.status === "running" ||
       pipeline.last_build.status === "pending")
   );
-}
-
-// 计算任务是否正在运行（用于日志模态框）
-const isLogTaskRunning = computed(() => {
-  if (!selectedTask.value) return false;
-  const status = selectedTask.value.status;
-  return status === "running" || status === "pending";
-});
-
-// 获取任务日志
-async function fetchTaskLogs(taskId, silent = false) {
-  if (!silent) {
-    refreshingLogs.value = true;
-  }
-
-  try {
-    const res = await axios.get(`/api/build-tasks/${taskId}/logs`);
-    const oldLength = taskLogs.value.length;
-    if (typeof res.data === "string") {
-      taskLogs.value = res.data || "暂无日志";
-    } else {
-      taskLogs.value = JSON.stringify(res.data, null, 2);
-    }
-
-    // 如果有新内容，自动滚动到底部
-    if (taskLogs.value.length > oldLength && autoScroll.value) {
-      setTimeout(() => {
-        scrollLogToBottom();
-      }, 50);
-    }
-  } catch (error) {
-    console.error("获取任务日志失败:", error);
-    taskLogs.value = `获取日志失败: ${error.message || "未知错误"}`;
-  } finally {
-    refreshingLogs.value = false;
-  }
-}
-
-// 滚动日志到底部
-// 滚动日志到顶部
-function scrollLogToTop() {
-  if (logContainer.value) {
-    autoScroll.value = false; // 滚动到顶部时关闭自动滚动
-    nextTick(() => {
-      if (logContainer.value) {
-        logContainer.value.scrollTop = 0;
-      }
-    });
-  }
-}
-
-function scrollLogToBottom() {
-  if (logContainer.value) {
-    nextTick(() => {
-      if (logContainer.value) {
-        logContainer.value.scrollTop = logContainer.value.scrollHeight;
-      }
-    });
-  }
-}
-
-// 开始日志轮询
-function startLogPolling(taskId) {
-  stopLogPolling();
-  if (
-    selectedTask.value &&
-    (selectedTask.value.status === "running" ||
-      selectedTask.value.status === "pending")
-  ) {
-    logPollingInterval.value = setInterval(() => {
-      fetchTaskLogs(taskId, true);
-    }, 2000);
-  }
-}
-
-// 停止日志轮询
-function stopLogPolling() {
-  if (logPollingInterval.value) {
-    clearInterval(logPollingInterval.value);
-    logPollingInterval.value = null;
-  }
-}
-
-// 刷新日志
-function refreshLogs() {
-  if (selectedTask.value?.task_id) {
-    fetchTaskLogs(selectedTask.value.task_id);
-  }
-}
-
-// 切换自动滚动
-function toggleAutoScroll() {
-  autoScroll.value = !autoScroll.value;
-  if (autoScroll.value) {
-    scrollLogToBottom();
-  }
-}
-
-async function copyLogs() {
-  if (taskLogs.value) {
-    const success = await copyToClipboard(taskLogs.value);
-    if (success) {
-      alert("日志已复制到剪贴板");
-    } else {
-      alert("复制失败");
-    }
-  }
-}
-
-// 关闭日志模态框
-function closeLogModal() {
-  showLogModal.value = false;
-  stopLogPolling();
-  taskLogs.value = "";
-  selectedTask.value = null;
-  viewingLogs.value = null;
-}
-
-// 日志状态相关函数
-function getLogStatusHeaderClass(status) {
-  if (status === "failed") return "bg-danger text-white";
-  if (status === "completed") return "bg-success text-white";
-  if (status === "stopped") return "bg-warning text-dark";
-  return "bg-primary text-white";
-}
-
-function getLogStatusSummaryClass(status) {
-  if (status === "failed") return "bg-danger-subtle";
-  if (status === "completed") return "bg-success-subtle";
-  if (status === "stopped") return "bg-warning-subtle";
-  return "";
-}
-
-function getLogStatusIcon(status) {
-  if (status === "failed") return "fas fa-times-circle";
-  if (status === "completed") return "fas fa-check-circle";
-  if (status === "stopped") return "fas fa-stop-circle";
-  if (status === "running") return "fas fa-spinner fa-spin";
-  if (status === "pending") return "fas fa-clock";
-  return "fas fa-info-circle";
-}
-
-function getLogStatusText(status) {
-  if (status === "failed") return "构建失败";
-  if (status === "completed") return "构建成功";
-  if (status === "stopped") return "构建已停止";
-  if (status === "running") return "构建中";
-  if (status === "pending") return "等待中";
-  return "未知状态";
-}
-
-function formatLogTime(time) {
-  if (!time) return "未知";
-  return new Date(time).toLocaleString("zh-CN");
-}
-
-function calculateLogDuration(start, end) {
-  if (!start || !end) return "未知";
-  const startTime = new Date(start).getTime();
-  const endTime = new Date(end).getTime();
-  const duration = Math.floor((endTime - startTime) / 1000);
-  const minutes = Math.floor(duration / 60);
-  const seconds = duration % 60;
-  return `${minutes}分${seconds}秒`;
-}
-
-function viewTaskLogs(taskId, task) {
-  pipelineTaskLogs.viewTaskLogs(taskId, task);
 }
 
 // 显示多服务配置模态框

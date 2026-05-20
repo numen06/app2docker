@@ -1,77 +1,12 @@
 <template>
   <div class="step-build-panel">
 
-    <p class="steps-mobile-hint mb-2 text-center text-sm text-slate-500 md:hidden">
-      步骤 {{ currentStep }} / 5
-    </p>
-
-    <!-- 步骤指示器 -->
-    <div class="steps-indicator mb-4">
-      <div
-        class="step-item"
-        :class="{ 
-          active: currentStep === 1, 
-          completed: currentStep > 1,
-          disabled: currentStep < 1
-        }"
-        @click="goToStep(1)"
-      >
-        <div class="step-number">1</div>
-        <div class="step-label">选择数据源</div>
-      </div>
-      <div class="step-connector" :class="{ completed: currentStep > 1 }"></div>
-      <div
-        class="step-item"
-        :class="{ 
-          active: currentStep === 2, 
-          completed: currentStep > 2,
-          disabled: currentStep < 2
-        }"
-        @click="goToStep(2)"
-      >
-        <div class="step-number">2</div>
-        <div class="step-label">Dockerfile配置</div>
-      </div>
-      <div class="step-connector" :class="{ completed: currentStep > 2 }"></div>
-      <div
-        class="step-item"
-        :class="{ 
-          active: currentStep === 3, 
-          completed: currentStep > 3,
-          disabled: currentStep < 3
-        }"
-        @click="goToStep(3)"
-      >
-        <div class="step-number">3</div>
-        <div class="step-label">选择服务</div>
-      </div>
-      <div class="step-connector" :class="{ completed: currentStep > 3 }"></div>
-      <div
-        class="step-item"
-        :class="{ 
-          active: currentStep === 4, 
-          completed: currentStep > 4,
-          disabled: currentStep < 4
-        }"
-        @click="goToStep(4)"
-      >
-        <div class="step-number">4</div>
-        <div class="step-label">选择资源包</div>
-      </div>
-      <div class="step-connector" :class="{ completed: currentStep > 4 }"></div>
-      <div
-        class="step-item"
-        :class="{ 
-          active: currentStep === 5, 
-          completed: currentStep > 5,
-          disabled: currentStep < 5
-        }"
-        @click="goToStep(5)"
-      >
-        <div class="step-number">5</div>
-        <div class="step-label">开始构建</div>
-      </div>
-    </div>
+    <StepsIndicator
+      :steps="buildStepIndicators"
+      :current-step="currentStep"
+      class-name="mb-4"
+      @step-click="goToStep"
+    />
 
     <!-- 步骤内容 -->
     <div class="step-content">
@@ -277,7 +212,7 @@
           </div>
         </div>
 
-        <div class="flex justify-end mt-4">
+        <div class="step-nav step-nav--end">
           <Button
             size="sm"
             @click="nextStep"
@@ -298,7 +233,7 @@
           <label class="block text-sm font-medium text-slate-700">
             项目类型 <span class="text-red-500">*</span>
           </label>
-          <div class="btn-group w-full" role="group">
+          <div class="btn-group btn-group--multi w-full" role="group">
             <button
               v-for="type in projectTypes"
               :key="type.value"
@@ -313,7 +248,7 @@
             >
               <i :class="getProjectTypeIcon(type.value)"></i>
               {{ type.label }}
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -496,7 +431,7 @@
           </div>
         </div>
 
-        <div class="step-nav flex justify-between mt-4">
+        <div class="step-nav">
           <Button variant="outline" size="sm" @click="prevStep">
             <i class="fas fa-arrow-left mr-1"></i> 上一步
           </Button>
@@ -1198,7 +1133,7 @@
           </div>
         </div>
 
-        <div class="step-nav flex justify-between mt-4">
+        <div class="step-nav">
           <Button variant="outline" size="sm" @click="prevStep">
             <i class="fas fa-arrow-left mr-1"></i> 上一步
           </Button>
@@ -1339,7 +1274,7 @@
           <strong>{{ selectedResourcePackages.length }}</strong> 个资源包
         </div>
 
-        <div class="step-nav flex justify-between mt-4">
+        <div class="step-nav">
           <Button variant="outline" size="sm" @click="prevStep">
             <i class="fas fa-arrow-left mr-1"></i> 上一步
           </Button>
@@ -1659,7 +1594,7 @@
           </div>
         </div>
 
-        <div class="step-nav flex justify-between mt-4">
+        <div class="step-nav">
           <Button
             variant="outline" size="sm"
             @click="prevStep"
@@ -1761,6 +1696,7 @@
 
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
+import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
@@ -1779,6 +1715,13 @@ import {
 } from '../utils/projectTypes.js';
 
 const currentStep = ref(1);
+const buildStepIndicators = [
+  { num: 1, label: "选择数据源" },
+  { num: 2, label: "Dockerfile配置" },
+  { num: 3, label: "选择服务" },
+  { num: 4, label: "选择资源包" },
+  { num: 5, label: "开始构建" },
+];
 const building = ref(false);
 
 // 构建配置
@@ -3842,103 +3785,77 @@ onMounted(() => {
   }
 }
 
-.steps-indicator {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 20px 0;
-  max-width: 100%;
-}
-
-.step-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-}
-
-.step-number {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #e9ecef;
-  color: #6c757d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  transition: all 0.3s;
-}
-
-.step-item.active .step-number {
-  background-color: #0d6efd;
-  color: white;
-}
-
-.step-item.completed .step-number {
-  background-color: #198754;
-  color: white;
-}
-
-.step-label {
-  margin-top: 8px;
-  font-size: 0.875rem;
-  color: #6c757d;
-  transition: all 0.3s;
-}
-
-.step-item.active .step-label {
-  color: #0d6efd;
-  font-weight: 500;
-}
-
-.step-item.completed .step-label {
-  color: #198754;
-}
-
-.step-item.disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.step-item.disabled .step-number {
-  background-color: #e9ecef;
-  color: #adb5bd;
-}
-
-.step-item.disabled .step-label {
-  color: #adb5bd;
-}
-
-.step-item:not(.disabled) {
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.step-item:not(.disabled):hover {
-  transform: scale(1.05);
-}
-
-.step-item:not(.disabled):hover .step-number {
-  background-color: #0d6efd;
-  color: white;
-}
-
-.step-connector {
-  width: 60px;
-  height: 2px;
-  background-color: #e9ecef;
-  margin: 0 10px;
-  transition: all 0.3s;
-}
-
-.step-connector.completed {
-  background-color: #198754;
-}
-
-.step-panel {
+.step-build-panel .step-panel {
   min-height: 400px;
   padding: 20px;
+}
+
+.step-build-panel .btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.step-build-panel .btn-group.w-full > .btn,
+.step-build-panel .btn-group.w-full > button,
+.step-build-panel .btn-group.w-full > label {
+  flex: 1 1 calc(50% - 0.25rem);
+  min-width: 0;
+}
+
+.step-build-panel .btn-group--multi > .btn,
+.step-build-panel .btn-group--multi > button {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+}
+
+.step-build-panel .input-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.step-build-panel .input-group > input,
+.step-build-panel .input-group > select,
+.step-build-panel .input-group > .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-radius: 0.375rem !important;
+}
+
+.step-build-panel .input-group > .btn,
+.step-build-panel .input-group > button,
+.step-build-panel .input-group > [class*="Button"] {
+  flex-shrink: 0;
+}
+
+.step-build-panel .input-group .input-group-text {
+  border-radius: 0.375rem;
+  border-right: 1px solid rgb(226 232 240);
+}
+
+.step-build-panel .input-group .input-group-text + input {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.step-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.step-nav--end {
+  justify-content: flex-end;
+}
+
+.step-nav > .btn,
+.step-nav > button {
+  min-width: 6.5rem;
 }
 
 .alert-sm {
@@ -3947,68 +3864,34 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .steps-indicator {
-    justify-content: flex-start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 12px 4px;
-    margin-left: -4px;
-    margin-right: -4px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-
-  .step-item {
-    flex-shrink: 0;
-  }
-
-  .step-number {
-    width: 32px;
-    height: 32px;
-    font-size: 0.8125rem;
-  }
-
-  .step-label {
-    margin-top: 6px;
-    font-size: 0.625rem;
-    max-width: 3.5rem;
-    text-align: center;
-    line-height: 1.2;
-    word-break: keep-all;
-  }
-
-  .step-connector {
-    width: 20px;
-    margin: 16px 4px 0;
-    flex-shrink: 0;
-  }
-
-  .step-panel {
+  .step-build-panel .step-panel {
     min-height: 0;
     padding: 12px 0;
   }
 
-  .step-build-panel .btn-group {
-    flex-wrap: wrap;
-    gap: 0.25rem;
-  }
-
-  .step-build-panel .btn-group > .btn,
-  .step-build-panel .btn-group > button {
-    flex: 1 1 calc(50% - 0.25rem);
-    min-width: 0;
+  .step-build-panel .btn-group.w-full > .btn,
+  .step-build-panel .btn-group.w-full > button,
+  .step-build-panel .btn-group.w-full > label {
     white-space: normal;
     line-height: 1.25;
     padding-top: 0.375rem;
     padding-bottom: 0.375rem;
   }
 
+  .step-build-panel .btn-group--multi > .btn,
+  .step-build-panel .btn-group--multi > button {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
   .step-nav {
     flex-direction: column-reverse;
     align-items: stretch;
-    gap: 0.5rem;
+    gap: 0.625rem;
   }
 
+  .step-nav > .btn,
+  .step-nav > button,
   .step-nav > * {
     width: 100%;
     justify-content: center;

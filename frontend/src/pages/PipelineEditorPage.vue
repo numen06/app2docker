@@ -1,7 +1,7 @@
 <template>
-  <PipelineConfigPage mode="create" />
+  <PipelineCreatePage />
 </template>
 
 <script setup>
-import PipelineConfigPage from "@/pages/PipelineConfigPage.vue";
+import PipelineCreatePage from "@/pages/PipelineCreatePage.vue";
 </script>

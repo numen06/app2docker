@@ -1,54 +1,59 @@
 <template>
-  <div v-show="shouldShow" class="host-manager-panel">
+  <div class="host-manager-root">
+  <div v-show="shouldShow && showList" class="host-manager-panel">
     <div v-if="loading" class="py-12 text-center text-slate-500">
       <i class="fas fa-spinner fa-spin"></i> 加载中...
     </div>
     <EmptyState v-else-if="filteredHosts.length === 0" message="暂无 SSH 主机" icon="fa-server" />
-    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div v-else class="host-cards-grid">
       <Card
         v-for="host in filteredHosts"
         :key="host.host_id"
-        class="flex h-full flex-col transition hover:-translate-y-0.5 hover:shadow-md"
+        class="flex h-full min-h-[15rem] flex-col transition hover:shadow-md"
       >
-        <CardHeader class="space-y-3 border-b border-slate-100 pb-3">
-          <CardTitle class="text-base">{{ host.name }}</CardTitle>
+        <CardHeader class="space-y-2 border-b border-slate-100 pb-3">
+          <div class="flex items-start justify-between gap-2">
+            <CardTitle class="min-w-0 flex-1 truncate text-base">{{ host.name }}</CardTitle>
+            <div class="host-card__tools flex shrink-0 flex-wrap justify-end gap-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                :disabled="testingConnection === host.host_id"
+                title="测试连接"
+                @click="testConnection(host)"
+              >
+                <i v-if="testingConnection === host.host_id" class="fas fa-spinner fa-spin"></i>
+                <i v-else class="fas fa-plug"></i>
+              </Button>
+              <Button variant="ghost" size="sm" title="编辑" @click="editHost(host)">
+                <i class="fas fa-edit"></i>
+              </Button>
+              <Button variant="ghost" size="sm" title="成员授权" @click="openResourcePermission(host)">
+                <i class="fas fa-user-shield"></i>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="text-red-600 hover:text-red-700"
+                title="删除"
+                @click="deleteHost(host)"
+              >
+                <i class="fas fa-trash"></i>
+              </Button>
+            </div>
+          </div>
           <div class="flex flex-wrap gap-1">
-            <Badge><i class="fas fa-server mr-1"></i>SSH 主机</Badge>
+            <Badge><i class="fas fa-server mr-1"></i>SSH</Badge>
             <Badge v-if="host.has_private_key" variant="info"><i class="fas fa-key mr-1"></i>密钥</Badge>
             <Badge v-else-if="host.has_password">密码</Badge>
             <Badge v-else variant="warning">未配置</Badge>
           </div>
-          <p v-if="host.description" class="text-sm text-slate-500">{{ host.description }}</p>
-          <div class="flex w-full gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              class="flex-1"
-              :disabled="testingConnection === host.host_id"
-              title="测试连接"
-              @click="testConnection(host)"
-            >
-              <i v-if="testingConnection === host.host_id" class="fas fa-spinner fa-spin"></i>
-              <i v-else class="fas fa-plug"></i>
-            </Button>
-            <Button variant="outline" size="sm" class="flex-1" title="编辑" @click="editHost(host)">
-              <i class="fas fa-edit"></i>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              class="flex-1"
-              title="成员授权"
-              @click="openResourcePermission(host)"
-            >
-              <i class="fas fa-user-shield"></i>
-            </Button>
-            <Button variant="destructive" size="sm" class="flex-1" title="删除" @click="deleteHost(host)">
-              <i class="fas fa-trash"></i>
-            </Button>
-          </div>
+          <p
+            class="min-h-0 text-sm text-slate-500 line-clamp-2"
+            :class="{ invisible: !host.description }"
+          >{{ host.description }}</p>
         </CardHeader>
-        <CardContent class="space-y-3 p-4 text-sm">
+        <CardContent class="flex flex-1 flex-col space-y-3 p-4 text-sm">
           <div class="flex items-start gap-2 text-slate-600">
             <i class="fas fa-network-wired mt-0.5 w-4 text-slate-400"></i>
             <div>
@@ -68,12 +73,13 @@
               </p>
             </template>
           </div>
-          <p class="border-t border-slate-100 pt-2 text-xs text-slate-500">
+          <p class="mt-auto min-h-11 border-t border-slate-100 pt-2 text-xs text-slate-500">
             <i class="fas fa-clock mr-1"></i>{{ formatTime(host.created_at) }}
           </p>
         </CardContent>
       </Card>
     </div>
+  </div>
 
     <FormDialog
       :model-value="showAddModal || showEditModal"
@@ -230,7 +236,11 @@ export default {
     AlertBanner,
     ResourceMemberPermissionDialog,
   },
-  props: { filterType: { type: String, default: "all" } },
+  props: {
+    filterType: { type: String, default: "all" },
+    /** 为 false 时仅保留弹窗能力（供「全部」视图委托 SSH 编辑，不切换筛选） */
+    showList: { type: Boolean, default: true },
+  },
   data() {
     return {
       hosts: [],

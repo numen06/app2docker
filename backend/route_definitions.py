@@ -6227,6 +6227,8 @@ async def update_pipeline(
     try:
         username = require_auth(http_request)
         user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
         db = get_db_session()
         try:
             require_resource_permission(db, user_id, "pipeline", pipeline_id, "edit")
@@ -6291,6 +6293,8 @@ async def delete_pipeline(pipeline_id: str, http_request: Request):
     try:
         username = require_auth(http_request)
         user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
         db = get_db_session()
         try:
             require_resource_permission(db, user_id, "pipeline", pipeline_id, "admin")
@@ -6322,6 +6326,8 @@ async def run_pipeline(
     try:
         username = require_auth(http_request)
         user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
         db = get_db_session()
         try:
             require_resource_permission(db, user_id, "pipeline", pipeline_id, "run")

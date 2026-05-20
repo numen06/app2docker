@@ -41,7 +41,7 @@
       <PipelineHistoryTab />
     </div>
 
-    <PipelineTaskLogDialog :logs="pipelineTaskLogs" />
+    <BuildTaskLogModal :controller="buildTaskLogs" />
   </div>
 </template>
 
@@ -51,9 +51,9 @@ import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import Button from "@/components/ui/button/Button.vue";
 import PipelineHistoryTab from "@/components/pipeline/detail/PipelineHistoryTab.vue";
-import PipelineTaskLogDialog from "@/components/pipeline/PipelineTaskLogDialog.vue";
+import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import { PIPELINE_DETAIL_KEY } from "@/composables/pipelineDetailContext";
-import { usePipelineTaskLogs } from "@/composables/usePipelineTaskLogs";
+import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 
 const route = useRoute();
 const router = useRouter();
@@ -63,7 +63,7 @@ const pipeline = ref(null);
 const pageState = ref("loading");
 const errorMessage = ref("");
 
-const pipelineTaskLogs = usePipelineTaskLogs();
+const buildTaskLogs = useBuildTaskLogs();
 
 const pageTitle = computed(() => {
   const name = pipeline.value?.name;
@@ -76,8 +76,8 @@ provide(PIPELINE_DETAIL_KEY, {
   error: errorMessage,
   refresh: bootstrap,
   setTab: () => {},
-  viewTaskLogs: pipelineTaskLogs.viewTaskLogs,
-  viewingLogs: pipelineTaskLogs.viewingLogs,
+  viewTaskLogs: buildTaskLogs.viewTaskLogs,
+  viewingLogs: buildTaskLogs.viewingLogs,
 });
 
 function goBack() {

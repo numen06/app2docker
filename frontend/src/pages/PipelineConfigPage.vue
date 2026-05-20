@@ -7,17 +7,15 @@
         </Button>
         <div class="pipeline-config-toolbar__meta min-w-0">
           <p class="pipeline-config-toolbar__name">{{ pageTitle }}</p>
-          <p v-if="isEdit" class="pipeline-config-toolbar__hint">编辑配置 · 修改后请点击保存</p>
-          <p v-else class="pipeline-config-toolbar__hint">新建流水线 · 填写后保存</p>
+          <p class="pipeline-config-toolbar__hint">编辑配置 · 修改后请点击保存</p>
         </div>
-        <div v-if="isEdit && pipeline" class="flex shrink-0 flex-wrap gap-1">
+        <div v-if="pipeline" class="flex shrink-0 flex-wrap gap-1">
           <span v-if="pipeline.enabled" class="badge bg-success">已启用</span>
           <span v-else class="badge bg-secondary">已禁用</span>
         </div>
       </div>
       <div v-if="pageState === 'ready'" class="pipeline-config-toolbar__actions">
         <Button
-          v-if="isEdit"
           type="button"
           variant="outline"
           size="sm"
@@ -34,6 +32,24 @@
           {{ saving ? "保存中…" : "保存" }}
         </Button>
       </div>
+    </div>
+
+    <div
+      v-if="showCreatedBanner"
+      class="mb-3 flex items-start justify-between gap-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800"
+    >
+      <span>
+        <i class="fas fa-check-circle mr-1"></i>
+        流水线已创建，请继续完善 Dockerfile、多服务与 Webhook 等配置。
+      </span>
+      <button
+        type="button"
+        class="shrink-0 rounded p-1 text-green-700 hover:bg-green-100"
+        aria-label="关闭提示"
+        @click="dismissCreatedBanner"
+      >
+        <i class="fas fa-times"></i>
+      </button>
     </div>
 
     <p v-if="pageState === 'error'" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -94,23 +110,20 @@ import {
   normalizePipelineConfigTab,
 } from "@/constants/pipelineDetailTabs";
 import { usePipelineEditor } from "@/composables/usePipelineEditor";
-
-const props = defineProps({
-  mode: {
-    type: String,
-    default: "edit",
-    validator: (v) => v === "create" || v === "edit",
-  },
-});
+import { goToPipelineList } from "@/utils/pipelineNavigation.js";
 
 const route = useRoute();
 const router = useRouter();
 
-const isEdit = computed(() => props.mode === "edit");
 const pipelineId = computed(() => String(route.params.pipelineId || ""));
 
 const pageState = ref("loading");
 const errorMessage = ref("");
+const createdBannerDismissed = ref(false);
+
+const showCreatedBanner = computed(
+  () => route.query.created === "1" && !createdBannerDismissed.value
+);
 
 const activeSection = computed({
   get() {
@@ -119,12 +132,14 @@ const activeSection = computed({
     return normalizePipelineConfigTab(raw);
   },
   set(tab) {
-    const name = isEdit.value ? "pipeline-detail" : "pipeline-create";
-    const params = isEdit.value ? { pipelineId: pipelineId.value } : {};
+    const query = { tab: normalizePipelineConfigTab(tab) };
+    if (route.query.created === "1") {
+      query.created = "1";
+    }
     router.replace({
-      name,
-      params,
-      query: { tab: normalizePipelineConfigTab(tab) },
+      name: "pipeline-detail",
+      params: { pipelineId: pipelineId.value },
+      query,
     });
   },
 });
@@ -134,24 +149,27 @@ function setSection(tab) {
 }
 
 const editor = usePipelineEditor({
-  onSaved: () => {
-    router.push("/app/pipeline");
+  onSaved: (id) => {
+    if (id) {
+      router.replace({
+        name: "pipeline-detail",
+        params: { pipelineId: id },
+        query: { tab: activeSection.value },
+      });
+    }
   },
 });
 
 provide("pipelineEditor", editor);
 
-const { saving, initCreateForm, loadPipelineForEdit, editingPipeline } = editor;
+const { saving, loadPipelineForEdit, editingPipeline } = editor;
 
 const pipeline = computed(() => editingPipeline.value);
 
-const pageTitle = computed(() => {
-  if (!isEdit.value) return "新建流水线";
-  return pipeline.value?.name || "流水线配置";
-});
+const pageTitle = computed(() => pipeline.value?.name || "流水线配置");
 
 function goBack() {
-  router.push("/app/pipeline");
+  goToPipelineList(router);
 }
 
 function goToHistory() {
@@ -159,6 +177,16 @@ function goToHistory() {
   router.push({
     name: "pipeline-history",
     params: { pipelineId: pipelineId.value },
+  });
+}
+
+function dismissCreatedBanner() {
+  createdBannerDismissed.value = true;
+  const { created, ...rest } = { ...route.query };
+  router.replace({
+    name: "pipeline-detail",
+    params: { pipelineId: pipelineId.value },
+    query: rest,
   });
 }
 
@@ -178,12 +206,6 @@ async function bootstrap() {
   pageState.value = "loading";
   errorMessage.value = "";
   syncLegacyTabQuery();
-
-  if (!isEdit.value) {
-    initCreateForm();
-    pageState.value = "ready";
-    return;
-  }
 
   if (!pipelineId.value) {
     errorMessage.value = "缺少流水线 ID";
@@ -205,7 +227,7 @@ onMounted(() => {
 });
 
 watch(pipelineId, () => {
-  if (isEdit.value) bootstrap();
+  bootstrap();
 });
 
 watch(

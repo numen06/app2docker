@@ -31,14 +31,49 @@ function onKeydown(e) {
   }
 }
 
+let bodyScrollLockCount = 0;
+let savedBodyOverflow = "";
+let savedBodyPaddingRight = "";
+
+function lockBodyScroll() {
+  if (typeof document === "undefined") return;
+  if (bodyScrollLockCount === 0) {
+    savedBodyOverflow = document.body.style.overflow;
+    savedBodyPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+  }
+  bodyScrollLockCount += 1;
+}
+
+function unlockBodyScroll() {
+  if (typeof document === "undefined") return;
+  bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
+  if (bodyScrollLockCount === 0) {
+    document.body.style.overflow = savedBodyOverflow;
+    document.body.style.paddingRight = savedBodyPaddingRight;
+  }
+}
+
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) window.addEventListener("keydown", onKeydown);
-    else window.removeEventListener("keydown", onKeydown);
+    if (open) {
+      lockBodyScroll();
+      window.addEventListener("keydown", onKeydown);
+    } else {
+      unlockBodyScroll();
+      window.removeEventListener("keydown", onKeydown);
+    }
   },
   { immediate: true }
 );
 
-onUnmounted(() => window.removeEventListener("keydown", onKeydown));
+onUnmounted(() => {
+  if (props.modelValue) unlockBodyScroll();
+  window.removeEventListener("keydown", onKeydown);
+});
 </script>

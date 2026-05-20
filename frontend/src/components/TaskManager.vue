@@ -350,7 +350,7 @@
             variant="outline"
             size="sm"
             title="查看日志"
-            @click="viewLogs(task)"
+            @click="buildTaskLogs.viewLogs(task)"
           >
             <i class="fas fa-terminal"></i>
           </Button>
@@ -583,8 +583,8 @@
                   variant="outline"
                   size="sm"
                   title="查看构建日志"
-                  :disabled="viewingLogs === task.task_id"
-                  @click="viewLogs(task)"
+                  :disabled="buildTaskLogs.isViewingLog(task.task_id)"
+                  @click="buildTaskLogs.viewLogs(task)"
                 >
                   <i class="fas fa-terminal"></i>
                 </Button>
@@ -623,8 +623,8 @@
                   variant="outline"
                   size="sm"
                   title="查看部署日志"
-                  :disabled="viewingLogs === task.task_id"
-                  @click="viewLogs(task)"
+                  :disabled="buildTaskLogs.isViewingLog(task.task_id)"
+                  @click="buildTaskLogs.viewLogs(task)"
                 >
                   <i class="fas fa-terminal"></i>
                 </Button>
@@ -711,9 +711,8 @@
 
     <AlertBanner :message="error || ''" />
 
-    <TaskLogModal
-      v-model="showLogModal"
-      :task="selectedTask"
+    <BuildTaskLogModal
+      :controller="buildTaskLogs"
       @task-status-updated="onTaskStatusUpdated"
     />
 
@@ -815,7 +814,8 @@ import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from "vue-codemirror";
-import TaskLogModal from "./TaskLogModal.vue";
+import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
+import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
 import StatCard from "@/components/ui/StatCard.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
@@ -849,9 +849,7 @@ const rebuilding = ref(null); // 重建中的任务ID
 const retrying = ref(null); // 重试中的任务ID
 const retryingDeploy = ref(null); // 重试部署中的任务ID
 const stopping = ref(null); // 停止中的任务ID
-const viewingLogs = ref(null);
-const showLogModal = ref(false);
-const selectedTask = ref(null);
+const buildTaskLogs = useBuildTaskLogs();
 // 错误弹窗已移除，错误信息现在显示在日志顶部
 const currentPage = ref(1); // 当前页码
 const pageSize = ref(10); // 每页显示数量（默认10）
@@ -1358,26 +1356,13 @@ async function refreshRunningTasks() {
 
 // 任务状态更新处理（不刷新整个页面，只更新当前任务状态）
 function onTaskStatusUpdated(newStatus) {
-  if (selectedTask.value) {
-    selectedTask.value.status = newStatus;
-    // 更新任务列表中的对应任务状态，不刷新整个列表
-    const index = tasks.value.findIndex(
-      (t) => t.task_id === selectedTask.value.task_id
-    );
-    if (index !== -1) {
-      tasks.value[index].status = newStatus;
-    }
+  const task = buildTaskLogs.selectedTask.value;
+  if (!task?.task_id) return;
+  // 更新任务列表中的对应任务状态，不刷新整个列表
+  const index = tasks.value.findIndex((t) => t.task_id === task.task_id);
+  if (index !== -1) {
+    tasks.value[index].status = newStatus;
   }
-}
-
-async function viewLogs(task) {
-  if (viewingLogs.value) return;
-
-  viewingLogs.value = task.task_id;
-  selectedTask.value = task;
-  showLogModal.value = true;
-
-  viewingLogs.value = null;
 }
 
 // 查看任务配置JSON

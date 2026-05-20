@@ -148,22 +148,4 @@ export default {
   padding: 0;
   min-height: 100%;
 }
-
-.btn-group .btn-check:checked + .btn {
-  background-color: #0d6efd;
-  border-color: #0d6efd;
-  color: white;
-}
-
-/* 当显示全部时，两个组件之间添加分隔 */
-.unified-host-manager .host-manager-panel:not(:last-child) {
-  margin-bottom: 2rem;
-  padding-bottom: 2rem;
-  border-bottom: 2px solid #dee2e6;
-}
-
-/* 确保内容可以正常滚动 */
-.unified-host-manager .row {
-  margin-bottom: 1rem;
-}
 </style>

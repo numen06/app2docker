@@ -1,5 +1,5 @@
 <template>
-  <PipelineConfigPage mode="edit" />
+  <PipelineConfigPage />
 </template>
 
 <script setup>

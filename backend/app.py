@@ -235,6 +235,11 @@ async def startup_event():
 
     init_db()
 
+    # 启动操作日志自动清理（默认保留 90 天）
+    from backend.handlers import OperationLogger
+
+    OperationLogger()
+
     # 导出 + 构建类任务恢复（不依赖 Agent WebSocket），在调度器启动前执行
     from backend.handlers import (
         recover_non_deploy_tasks_after_restart,

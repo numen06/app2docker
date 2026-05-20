@@ -297,6 +297,13 @@
   border-bottom: 1px solid rgb(241 245 249);
 }
 
+.table-light th,
+thead.table-light th {
+  background-color: rgb(248 250 252);
+  color: rgb(100 116 139);
+  font-weight: 600;
+}
+
 .d-none {
   display: none !important;
 }

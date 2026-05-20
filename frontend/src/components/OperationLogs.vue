@@ -1,26 +1,27 @@
 <template>
   <div>
-    <PageToolbar title="操作日志" icon="fa-history">
-      <template #actions>
+    <div
+      class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+    >
+      <p class="text-xs text-slate-500 lg:max-w-md">
+        系统自动保留最近 90 天，过期日志每小时自动清理
+      </p>
+      <div class="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
         <Input
           v-model="filterUsername"
           type="text"
           class="w-full min-w-0 sm:w-36"
           placeholder="过滤用户名"
         />
-        <NativeSelect v-model="filterOperation" class="w-full min-w-0 sm:w-36">
+        <NativeSelect v-model="filterOperation" class="w-full min-w-0 sm:w-40">
           <option value="">全部操作</option>
-          <option value="login">登录</option>
-          <option value="logout">登出</option>
-          <option value="change_password">修改密码</option>
-          <option value="build">构建镜像</option>
-          <option value="export">导出镜像</option>
-          <option value="delete_export_task">删除导出任务</option>
-          <option value="save_config">保存配置</option>
-          <option value="save_registries">保存仓库配置</option>
-          <option value="template_create">创建模板</option>
-          <option value="template_update">更新模板</option>
-          <option value="template_delete">删除模板</option>
+          <option
+            v-for="opt in OPERATION_LOG_FILTER_OPTIONS"
+            :key="opt.value"
+            :value="opt.value"
+          >
+            {{ opt.label }}
+          </option>
         </NativeSelect>
         <Button variant="outline" size="sm" :disabled="loading" @click="loadLogs">
           <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
@@ -47,94 +48,97 @@
             <i class="fas fa-exclamation-triangle mr-2 w-4"></i> 清空所有日志
           </DropdownMenuItem>
         </DropdownMenu>
-      </template>
-    </PageToolbar>
+      </div>
+    </div>
 
-    <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
+    <div v-if="error" class="mb-4">
+      <AlertBanner :message="error" />
+    </div>
+
+    <div
+      v-if="loading"
+      class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"
+    >
       <i class="fas fa-spinner fa-spin"></i>
       加载中…
     </div>
 
-    <EmptyState v-else-if="logs.length === 0" message="暂无操作日志" />
-
-    <template v-else>
-    <div class="space-y-3 md:hidden">
-      <div
-        v-for="log in logs"
-        :key="log.timestamp + log.username + log.operation"
-        class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
-      >
-        <div class="flex flex-wrap items-center gap-2">
-          <Badge variant="info">{{ getOperationName(log.operation) }}</Badge>
-          <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
-            log.username
-          }}</code>
-        </div>
-        <p class="mt-1 text-xs text-slate-500">{{ formatTime(log.timestamp) }}</p>
-        <p
-          v-if="log.details && Object.keys(log.details).length > 0"
-          class="mt-2 break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600"
-        >
-          {{ JSON.stringify(log.details) }}
-        </p>
-      </div>
-    </div>
-
-    <div class="hidden md:block">
-    <Table min-width-class="min-w-[44rem]">
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-[180px]">时间</TableHead>
-            <TableHead class="w-[120px]">用户名</TableHead>
-            <TableHead class="w-[150px]">操作</TableHead>
-            <TableHead>详情</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow
-            v-for="log in logs"
-            :key="log.timestamp + log.username + log.operation"
-          >
-            <TableCell class="text-sm text-slate-600">{{ formatTime(log.timestamp) }}</TableCell>
-            <TableCell>
-              <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
-                log.username
-              }}</code>
-            </TableCell>
-            <TableCell>
-              <Badge variant="info">{{ getOperationName(log.operation) }}</Badge>
-            </TableCell>
-            <TableCell class="text-sm text-slate-500">
-              <code
-                v-if="log.details && Object.keys(log.details).length > 0"
-                class="block max-w-xl truncate rounded bg-slate-50 px-1.5 py-0.5 text-xs"
-              >
-                {{ JSON.stringify(log.details) }}
-              </code>
-              <span v-else>—</span>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-    </Table>
-    </div>
-    </template>
-
-    <PaginationBar
-      :page="currentPage"
-      :page-size="pageSize"
-      :total="totalLogs"
-      :total-pages="totalPages"
-      @update:page="onPageChange"
+    <EmptyState
+      v-else-if="!error && logs.length === 0"
+      :message="hasFilters ? '没有匹配的操作日志' : '暂无操作日志'"
     />
 
-    <AlertBanner :message="error || ''" />
+    <template v-else-if="!error && logs.length > 0">
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="(log, index) in logs"
+          :key="logKey(log, index)"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <Badge variant="info">{{ getOperationLogLabel(log.operation) }}</Badge>
+            <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
+              log.username
+            }}</code>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">{{ formatTime(log.timestamp) }}</p>
+          <pre
+            v-if="log.details && Object.keys(log.details).length > 0"
+            class="mt-2 max-h-32 overflow-auto break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600 whitespace-pre-wrap"
+          >{{ formatDetails(log.details) }}</pre>
+        </div>
+      </div>
+
+      <div class="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
+        <Table min-width-class="min-w-[44rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-[180px]">时间</TableHead>
+              <TableHead class="w-[120px]">用户名</TableHead>
+              <TableHead class="w-[160px]">操作</TableHead>
+              <TableHead>详情</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="(log, index) in logs" :key="logKey(log, index)">
+              <TableCell class="text-sm text-slate-600 whitespace-nowrap">{{
+                formatTime(log.timestamp)
+              }}</TableCell>
+              <TableCell>
+                <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
+                  log.username
+                }}</code>
+              </TableCell>
+              <TableCell>
+                <Badge variant="info">{{ getOperationLogLabel(log.operation) }}</Badge>
+              </TableCell>
+              <TableCell class="text-sm text-slate-500">
+                <pre
+                  v-if="log.details && Object.keys(log.details).length > 0"
+                  class="max-h-24 max-w-xl overflow-auto rounded bg-slate-50 px-1.5 py-0.5 font-mono text-xs whitespace-pre-wrap"
+                  :title="formatDetails(log.details)"
+                >{{ formatDetails(log.details) }}</pre>
+                <span v-else>—</span>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+
+      <PaginationBar
+        :page="currentPage"
+        :page-size="pageSize"
+        :total="totalLogs"
+        :total-pages="totalPages"
+        @update:page="onPageChange"
+      />
+    </template>
   </div>
 </template>
 
 <script setup>
 import axios from "axios";
-import { onMounted, ref, watch } from "vue";
-import PageToolbar from "@/components/ui/PageToolbar.vue";
+import { computed, onMounted, ref, watch } from "vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
@@ -150,6 +154,10 @@ import TableBody from "@/components/ui/table/TableBody.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
+import {
+  OPERATION_LOG_FILTER_OPTIONS,
+  getOperationLogLabel,
+} from "@/constants/operationLogActions.js";
 
 const logs = ref([]);
 const loading = ref(false);
@@ -161,15 +169,25 @@ const pageSize = ref(10);
 const totalLogs = ref(0);
 const totalPages = ref(0);
 
+const hasFilters = computed(
+  () => Boolean(filterUsername.value?.trim() || filterOperation.value)
+);
+
+function logKey(log, index) {
+  return `${log.timestamp || ""}-${log.username || ""}-${log.operation || ""}-${index}`;
+}
+
 function onPageChange(page) {
-  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+  if (page < 1 || (totalPages.value > 0 && page > totalPages.value)) return;
+  if (page === currentPage.value) return;
   currentPage.value = page;
   loadLogs();
 }
 
 function formatTime(isoString) {
-  if (!isoString) return "-";
+  if (!isoString) return "—";
   const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
   return date.toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
@@ -181,21 +199,12 @@ function formatTime(isoString) {
   });
 }
 
-function getOperationName(operation) {
-  const names = {
-    login: "登录",
-    logout: "登出",
-    change_password: "修改密码",
-    build: "构建镜像",
-    export: "导出镜像",
-    delete_export_task: "删除导出任务",
-    save_config: "保存配置",
-    save_registries: "保存仓库配置",
-    template_create: "创建模板",
-    template_update: "更新模板",
-    template_delete: "删除模板",
-  };
-  return names[operation] || operation;
+function formatDetails(details) {
+  try {
+    return JSON.stringify(details, null, 2);
+  } catch {
+    return String(details);
+  }
 }
 
 async function loadLogs() {
@@ -203,13 +212,19 @@ async function loadLogs() {
   error.value = null;
   try {
     const params = { page: currentPage.value, page_size: pageSize.value };
-    if (filterUsername.value) params.username = filterUsername.value;
+    if (filterUsername.value?.trim()) params.username = filterUsername.value.trim();
     if (filterOperation.value) params.operation = filterOperation.value;
 
     const res = await axios.get("/api/operation-logs", { params });
     logs.value = res.data.logs || [];
     totalLogs.value = res.data.total || 0;
     totalPages.value = res.data.total_pages || 0;
+
+    if (totalPages.value > 0 && currentPage.value > totalPages.value) {
+      currentPage.value = totalPages.value;
+      loading.value = false;
+      return loadLogs();
+    }
   } catch (err) {
     error.value =
       err.response?.data?.detail ||
@@ -237,6 +252,7 @@ async function clearLogs(days) {
     const params = days ? { days } : {};
     const res = await axios.delete("/api/operation-logs", { params });
     alert(res.data.message || "清理成功");
+    currentPage.value = 1;
     await loadLogs();
   } catch (err) {
     alert(err.response?.data?.detail || err.message || "清理失败");

@@ -8,10 +8,11 @@
 
             <!-- 推送模式选择 -->
             <div class="mb-3">
-              <label class="block text-sm font-medium text-slate-700"><strong>推送模式</strong></label>
+              <label class="block text-sm font-medium text-slate-700 mb-2"><strong>推送模式</strong></label>
               <div
-                class="pipeline-option-group pipeline-option-group--2 pipeline-option-group--stacked"
+                class="pipeline-webhook-strategy pipeline-push-mode-strategy"
                 role="group"
+                aria-label="推送模式"
               >
                 <input
                   type="radio"
@@ -20,12 +21,10 @@
                   value="single"
                   v-model="multiServiceFormData.push_mode"
                 />
-                <label
-                  class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                  for="ms-mode-single"
-                >
-                  <i class="fas fa-cube block mb-1"></i>
-                  <small class="block fw-bold">单服务模式</small>
+                <label class="pipeline-webhook-strategy__option" for="ms-mode-single">
+                  <i class="fas fa-cube"></i>
+                  单服务模式
+                  <small>一个镜像对应整仓构建</small>
                 </label>
 
                 <input
@@ -35,12 +34,10 @@
                   value="multi"
                   v-model="multiServiceFormData.push_mode"
                 />
-                <label
-                  class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
-                  for="ms-mode-multi"
-                >
-                  <i class="fas fa-sitemap block mb-1"></i>
-                  <small class="block fw-bold">多服务模式</small>
+                <label class="pipeline-webhook-strategy__option" for="ms-mode-multi">
+                  <i class="fas fa-sitemap"></i>
+                  多服务模式
+                  <small>按阶段拆分镜像</small>
                 </label>
               </div>
             </div>

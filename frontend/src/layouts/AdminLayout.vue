@@ -444,13 +444,11 @@
             <DockerManager
               v-if="activeTab === 'docker' && hasPermission('menu.docker')"
             />
-            <PipelineConfigPage
+            <PipelineCreatePage
               v-if="isPipelineCreateRoute && hasPermission('menu.pipeline')"
-              mode="create"
             />
             <PipelineConfigPage
               v-if="isPipelineDetailRoute && hasPermission('menu.pipeline')"
-              mode="edit"
             />
             <PipelineHistoryPage
               v-if="isPipelineHistoryRoute && hasPermission('menu.pipeline')"
@@ -684,6 +682,7 @@ import ExportPanel from "@/components/ExportPanel.vue";
 import OperationLogs from "@/components/OperationLogs.vue";
 import PipelinePanel from "@/components/PipelinePanel.vue";
 import PipelineConfigPage from "@/pages/PipelineConfigPage.vue";
+import PipelineCreatePage from "@/pages/PipelineCreatePage.vue";
 import PipelineHistoryPage from "@/pages/PipelineHistoryPage.vue";
 import RegistryPanel from "@/components/RegistryPanel.vue";
 import ResourcePackagePanel from "@/components/ResourcePackagePanel.vue";

@@ -7108,6 +7108,9 @@ class ExportTaskManager:
             db.close()
 
 
+DEFAULT_OPERATION_LOG_RETENTION_DAYS = 90
+
+
 # ============ 操作日志管理器 ============
 class OperationLogger:
     """操作日志管理器 - 记录用户操作（基于数据库）"""
@@ -7131,6 +7134,23 @@ class OperationLogger:
         except:
             pass
         self.lock = threading.Lock()
+        self._start_cleanup_task()
+
+    def _start_cleanup_task(self):
+        """启动自动清理过期操作日志的后台线程"""
+
+        def cleanup_loop():
+            import time
+
+            while True:
+                try:
+                    self.cleanup_expired_logs()
+                except Exception as e:
+                    print(f"⚠️ 自动清理操作日志出错: {e}")
+                time.sleep(3600)
+
+        cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True)
+        cleanup_thread.start()
 
     @classmethod
     def log(
@@ -7227,6 +7247,18 @@ class OperationLogger:
             return 0
         finally:
             db.close()
+
+    def cleanup_expired_logs(self, days: Optional[int] = None):
+        """自动清理过期操作日志（默认保留 90 天）"""
+        retention_days = (
+            days if days is not None else DEFAULT_OPERATION_LOG_RETENTION_DAYS
+        )
+        deleted = self.clear_logs(days=retention_days, team_id=None)
+        if deleted > 0:
+            print(
+                f"🗑️ 已自动清理 {deleted} 条过期操作日志（保留最近 {retention_days} 天）"
+            )
+        return deleted
 
 
 async def _trigger_post_build_webhooks(
