@@ -101,7 +101,9 @@ export function setupAxiosInterceptors() {
       }
       try {
         const teamStore = useTeamStore()
-        const teamId = teamStore.activeTeamIdForApi
+        const teamId =
+          teamStore.activeTeamIdForApi ||
+          teamStore.memberships[0]?.team?.team_id
         const url = config.url || ''
         if (teamId && urlNeedsTeamScope(url)) {
           attachTeamId(config, teamId)

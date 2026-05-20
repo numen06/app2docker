@@ -107,6 +107,7 @@ async function ensureAuthContext(authStore, teamStore) {
     return false
   }
   await teamStore.fetchTeams()
+  teamStore.ensureActiveTeam()
   return true
 }
 

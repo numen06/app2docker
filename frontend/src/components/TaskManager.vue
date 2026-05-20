@@ -2107,6 +2107,11 @@ async function rebuildTask(task) {
   error.value = null;
 
   try {
+    await ensureTeamContextForTasks();
+    const teamId = teamStore.activeTeamIdForApi;
+    if (!teamId) {
+      throw new Error("请先加入或选择团队后再操作");
+    }
     // 优先使用后端重试API，它会使用任务保存的完整JSON配置
     const res = await axios.post(
       `/api/build-tasks/${task.task_id}/retry`,

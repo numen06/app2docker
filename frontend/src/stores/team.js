@@ -95,8 +95,16 @@ export const useTeamStore = defineStore('team', {
       if (fromApi !== null) return fromApi
       return false
     },
+    /** 业务 API 必须带 team_id：有成员时绝不返回空（与顶部当前团队一致） */
     activeTeamIdForApi(state) {
-      return state.activeTeamId || null
+      const explicit = (state.activeTeamId || '').trim()
+      if (
+        explicit &&
+        state.memberships.some((m) => m.team?.team_id === explicit)
+      ) {
+        return explicit
+      }
+      return state.memberships[0]?.team?.team_id || null
     },
     menuPermissionsSet(state) {
       return new Set(state.menuPermissions || [])
@@ -131,8 +139,31 @@ export const useTeamStore = defineStore('team', {
       if (eff === undefined) return false
       return eff >= need
     },
+    /** 登录用户始终有当前团队；无 id 时落到首个成员团队 */
+    ensureActiveTeam() {
+      if (!this.memberships.length) return ''
+      const explicit = (this.activeTeamId || '').trim()
+      const valid =
+        explicit &&
+        this.memberships.some((m) => m.team?.team_id === explicit)
+      const tid = valid ? explicit : this.memberships[0]?.team?.team_id || ''
+      if (tid && tid !== this.activeTeamId) {
+        this.activeTeamId = tid
+        try {
+          sessionStorage.setItem(STORAGE_KEY, tid)
+        } catch {
+          /* ignore */
+        }
+      }
+      return tid
+    },
     setCurrentTeam(id) {
-      this.persistActiveTeam(id || '')
+      const next = (id || '').trim()
+      if (!next && this.memberships.length) {
+        this.ensureActiveTeam()
+        return
+      }
+      this.persistActiveTeam(next)
     },
     _normalizeActiveTeamId(id) {
       const next = (id || '').trim()
@@ -146,7 +177,10 @@ export const useTeamStore = defineStore('team', {
       return next
     },
     async persistActiveTeam(id) {
-      const normalized = this._normalizeActiveTeamId(id)
+      let normalized = this._normalizeActiveTeamId(id)
+      if (!normalized && this.memberships.length) {
+        normalized = this.memberships[0]?.team?.team_id || ''
+      }
       this.activeTeamId = normalized
       try {
         if (normalized) sessionStorage.setItem(STORAGE_KEY, normalized)
@@ -184,17 +218,7 @@ export const useTeamStore = defineStore('team', {
             /* ignore */
           }
         }
-        if (!this.activeTeamId && this.memberships.length) {
-          const tid = this.memberships[0]?.team?.team_id
-          if (tid) {
-            this.activeTeamId = tid
-            try {
-              sessionStorage.setItem(STORAGE_KEY, tid)
-            } catch {
-              /* ignore */
-            }
-          }
-        }
+        this.ensureActiveTeam()
         if (this.activeTeamId) {
           await this.fetchMenuPermissions(this.activeTeamId)
         }

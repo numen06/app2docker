@@ -1692,21 +1692,17 @@
       </div>
     </div>
 
-    <BuildTaskLogModal :controller="buildTaskLogs" />
 </div>
 </template>
 
 <script setup>
 import Button from "@/components/ui/button/Button.vue";
-import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
-import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 import { showToast } from "@/composables/useToast";
 import { useTeamStore } from "@/stores/team";
 import StepsIndicator from "@/components/common/StepsIndicator.vue";
 import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { copyToClipboard } from "../utils/clipboard.js";
 import { Codemirror } from 'vue-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -1723,17 +1719,6 @@ import {
 } from '../utils/projectTypes.js';
 
 const teamStore = useTeamStore();
-const router = useRouter();
-const buildTaskLogs = useBuildTaskLogs({
-  onTaskFinished: () => {
-    building.value = false;
-    window.dispatchEvent(
-      new CustomEvent("taskFinished", {
-        detail: { terminal: true },
-      })
-    );
-  },
-});
 
 const currentStep = ref(1);
 const buildStepIndicators = [
@@ -3423,21 +3408,11 @@ async function startBuild() {
       const imageName = buildConfig.value.imageName || "未知镜像";
       const tag = buildConfig.value.tag || "latest";
       showToast({
-        message: `构建任务已创建：${imageName}:${tag}，可在「任务管理」查看进度`,
+        message: `构建任务已加入队列：${imageName}:${tag}，可在「任务管理」查看进度`,
         variant: "success",
       });
 
       building.value = false;
-
-      buildTaskLogs.viewTaskLogs(taskId, {
-        task_id: taskId,
-        task_type: "build",
-        image: imageName,
-        tag,
-        status: "pending",
-        source:
-          buildConfig.value.sourceType === "file" ? "文件上传" : "Git源码",
-      });
 
       try {
         sessionStorage.setItem("tasksNeedRefresh", "1");
@@ -3456,8 +3431,6 @@ async function startBuild() {
           },
         })
       );
-
-      router.push("/app/tasks").catch(() => {});
     } else {
       throw new Error("未返回 task_id");
     }
