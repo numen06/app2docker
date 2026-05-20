@@ -4,6 +4,7 @@ import {
   clearAuth,
   getToken,
   getUsername,
+  isUserNotFoundResponse,
   logout as logoutRequest,
   saveAuth,
 } from '@/utils/auth'
@@ -73,8 +74,8 @@ export const useAuthStore = defineStore('auth', {
       } catch (e) {
         this.cookieSessionOk = false
         this.isGlobalAdmin = false
-        if (!getToken()) {
-          this.username = ''
+        if (!getToken() || isUserNotFoundResponse(e)) {
+          this.clearSession()
         }
         throw e
       }

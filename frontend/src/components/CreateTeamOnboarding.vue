@@ -104,6 +104,7 @@
 import { onMounted, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { extractInviteToken } from "@/utils/teamInvite";
+import { isUserNotFoundResponse } from "@/utils/auth";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
@@ -128,6 +129,16 @@ const inviteToken = ref("");
 const loading = ref(false);
 const error = ref("");
 
+async function handleStaleSession(e) {
+  if (!isUserNotFoundResponse(e)) return false;
+  await authStore.logout();
+  await router.replace({
+    path: "/login",
+    query: { redirect: route.fullPath },
+  });
+  return true;
+}
+
 async function goToAppDashboard(teamId) {
   await teamStore.setCurrentTeam(teamId);
   await teamStore.fetchMyTeams();
@@ -150,6 +161,7 @@ async function createTeam() {
     }
     await goToAppDashboard(teamId);
   } catch (e) {
+    if (await handleStaleSession(e)) return;
     const detail = e?.response?.data?.detail;
     error.value =
       typeof detail === "string" ? detail : e?.message || "创建团队失败";
@@ -178,6 +190,7 @@ async function joinTeam() {
     }
     await goToAppDashboard(teamId);
   } catch (e) {
+    if (await handleStaleSession(e)) return;
     const detail = e?.response?.data?.detail;
     error.value =
       typeof detail === "string" ? detail : e?.message || "接受邀请失败";
@@ -196,8 +209,8 @@ onMounted(async () => {
   authStore.applyAxiosAuthHeader();
   try {
     await authStore.fetchMe();
-  } catch {
-    /* ignore */
+  } catch (e) {
+    if (await handleStaleSession(e)) return;
   }
   await teamStore.fetchMyTeams();
   if (teamStore.memberships.length) {

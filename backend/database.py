@@ -148,6 +148,9 @@ def init_db():
     # 迁移：任务/导出/主机/资源包/操作日志 team_id
     migrate_add_team_id_to_misc_tables()
 
+    # 迁移：默认团队 + 超级管理员 + 历史数据 team_id 回填
+    migrate_backfill_default_team()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -1378,6 +1381,179 @@ def migrate_add_team_id_to_misc_tables():
         print("✅ 杂项表 team_id 字段迁移完成")
     except Exception as e:
         print(f"⚠️ 杂项表 team_id 迁移失败: {e}")
+
+
+def migrate_backfill_default_team():
+    """迁移：创建默认团队，将系统 admin 设为 owner，并为无 team_id 的历史数据回填"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    from datetime import datetime
+
+    from backend.models import Role, Team, TeamMember, User, UserRole
+
+    DEFAULT_TEAM_NAME = "默认团队"
+    DEFAULT_TEAM_SLUG = "default"
+
+    RESOURCE_TABLES = (
+        "pipelines",
+        "deploy_configs",
+        "git_sources",
+        "agent_hosts",
+        "hosts",
+        "resource_packages",
+        "tasks",
+        "export_tasks",
+        "operation_logs",
+    )
+
+    db = get_db_session()
+    try:
+        admin_role = db.query(Role).filter(Role.name == "admin").first()
+        if not admin_role:
+            print("⚠️ 未找到 admin 角色，跳过默认团队回填")
+            return
+
+        admin_user_ids = [
+            row[0]
+            for row in db.query(UserRole.user_id)
+            .filter(UserRole.role_id == admin_role.role_id)
+            .all()
+        ]
+        if not admin_user_ids:
+            print("⚠️ 无超级管理员用户，跳过默认团队回填")
+            return
+
+        admin_users = (
+            db.query(User)
+            .filter(User.user_id.in_(admin_user_ids), User.enabled.is_(True))
+            .order_by(User.created_at.asc())
+            .all()
+        )
+        if not admin_users:
+            print("⚠️ 无可用超级管理员账号，跳过默认团队回填")
+            return
+
+        owner_user = next(
+            (u for u in admin_users if u.username == "admin"), admin_users[0]
+        )
+
+        team = db.query(Team).filter(Team.slug == DEFAULT_TEAM_SLUG).first()
+        if not team:
+            team = Team(
+                team_id=str(uuid.uuid4()),
+                name=DEFAULT_TEAM_NAME,
+                slug=DEFAULT_TEAM_SLUG,
+                description="系统升级时自动创建，承接历史数据",
+                created_by=owner_user.user_id,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(team)
+            db.flush()
+            print(f"🔄 已创建默认团队: {DEFAULT_TEAM_NAME} ({team.team_id})")
+        else:
+            print(f"✅ 默认团队已存在: {team.name} ({team.team_id})")
+
+        for user in admin_users:
+            existing = (
+                db.query(TeamMember)
+                .filter(
+                    TeamMember.team_id == team.team_id,
+                    TeamMember.user_id == user.user_id,
+                )
+                .first()
+            )
+            if existing:
+                if existing.role != "owner":
+                    existing.role = "owner"
+                continue
+            db.add(
+                TeamMember(
+                    team_id=team.team_id,
+                    user_id=user.user_id,
+                    role="owner",
+                    joined_at=datetime.now(),
+                )
+            )
+            print(f"✅ 已将超级管理员 {user.username} 加入默认团队 (owner)")
+
+        db.commit()
+
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        team_id = team.team_id
+        total_updated = 0
+
+        for table in RESOURCE_TABLES:
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            )
+            if not cursor.fetchone():
+                continue
+            cursor.execute(f"PRAGMA table_info({table})")
+            if "team_id" not in [row[1] for row in cursor.fetchall()]:
+                continue
+            cursor.execute(
+                f"UPDATE {table} SET team_id = ? WHERE team_id IS NULL",
+                (team_id,),
+            )
+            n = cursor.rowcount
+            if n:
+                print(f"🔄 {table}: 回填 {n} 条记录的 team_id")
+                total_updated += n
+
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET team_id = (
+                SELECT p.team_id FROM pipelines p
+                WHERE p.pipeline_id = tasks.pipeline_id AND p.team_id IS NOT NULL
+            )
+            WHERE team_id IS NULL AND pipeline_id IS NOT NULL
+            """
+        )
+        if cursor.rowcount:
+            print(f"🔄 tasks: 从流水线继承 {cursor.rowcount} 条 team_id")
+            total_updated += cursor.rowcount
+
+        cursor.execute(
+            """
+            UPDATE tasks
+            SET team_id = (
+                SELECT d.team_id FROM deploy_configs d
+                WHERE d.config_id = tasks.deploy_config_id AND d.team_id IS NOT NULL
+            )
+            WHERE team_id IS NULL AND deploy_config_id IS NOT NULL
+            """
+        )
+        if cursor.rowcount:
+            print(f"🔄 tasks: 从部署配置继承 {cursor.rowcount} 条 team_id")
+            total_updated += cursor.rowcount
+
+        cursor.execute(
+            "UPDATE tasks SET team_id = ? WHERE team_id IS NULL", (team_id,)
+        )
+        if cursor.rowcount:
+            print(f"🔄 tasks: 默认团队回填 {cursor.rowcount} 条")
+            total_updated += cursor.rowcount
+
+        conn.commit()
+        conn.close()
+
+        if total_updated:
+            print(f"✅ 默认团队数据回填完成，共更新 {total_updated} 条")
+        else:
+            print("✅ 无需回填 team_id（数据已归属团队）")
+    except Exception as e:
+        db.rollback()
+        import traceback
+
+        traceback.print_exc()
+        print(f"⚠️ 默认团队回填失败: {e}")
+    finally:
+        db.close()
 
 
 def close_db():

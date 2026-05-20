@@ -76,25 +76,25 @@ async function resolveAuthed() {
   const authStore = useAuthStore()
   if (getToken()) {
     authStore.syncFromStorage()
-    return true
   }
   try {
     await authStore.fetchMe()
     return authStore.isAuthenticated
   } catch {
+    authStore.clearSession()
     return false
   }
 }
 
 async function ensureAuthContext(authStore, teamStore) {
-  if (!authStore.isGlobalAdmin && authStore.username) {
-    try {
-      await authStore.fetchMe()
-    } catch {
-      /* ignore */
-    }
+  try {
+    await authStore.fetchMe()
+  } catch {
+    authStore.clearSession()
+    return false
   }
   await teamStore.fetchTeams()
+  return true
 }
 
 async function defaultAuthedPath(authStore, teamStore) {
@@ -130,7 +130,11 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (authed) {
-    await ensureAuthContext(authStore, teamStore)
+    const ctxOk = await ensureAuthContext(authStore, teamStore)
+    if (!ctxOk) {
+      next({ path: '/login', query: { redirect: to.fullPath } })
+      return
+    }
   }
 
   if (authed && to.path === '/') {

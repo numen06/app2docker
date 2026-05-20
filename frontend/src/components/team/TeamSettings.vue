@@ -64,7 +64,58 @@
         </p>
       </div>
 
-      <TeamMemberList :team-id="teamStore.activeTeamId" @invite="inviteOpen = true" />
+      <div
+        v-if="isOwner"
+        class="rounded-lg border border-amber-200 bg-amber-50/40 p-6 shadow-sm"
+      >
+        <h3 class="mb-2 font-semibold text-slate-900">转移所有权</h3>
+        <p class="mb-4 text-sm text-slate-600">
+          将团队所有权转移给其他成员后，对方将成为所有者，您将变为管理员。删除团队等仅所有者可执行的操作将不再对您开放。
+        </p>
+        <p
+          v-if="!transferCandidates.length && !membersLoading"
+          class="text-sm text-slate-600"
+        >
+          请先邀请至少一名其他成员后再转移所有权。
+        </p>
+        <div
+          v-else
+          class="flex flex-col gap-3 sm:flex-row sm:items-end"
+        >
+          <div class="grow space-y-2">
+            <Label for="transfer-target">新所有者</Label>
+            <NativeSelect
+              id="transfer-target"
+              v-model="transferTargetId"
+              :disabled="membersLoading || transferring"
+              class="min-h-11"
+            >
+              <option value="">请选择成员</option>
+              <option
+                v-for="m in transferCandidates"
+                :key="m.user_id"
+                :value="m.user_id"
+              >
+                {{ m.username }}{{ m.email ? ` (${m.email})` : "" }}
+              </option>
+            </NativeSelect>
+          </div>
+          <Button
+            type="button"
+            variant="destructive"
+            :disabled="!transferTargetId || membersLoading || transferring"
+            @click="transferOwnership"
+          >
+            {{ transferring ? "转移中…" : "转移所有权" }}
+          </Button>
+        </div>
+      </div>
+
+      <TeamMemberList
+        ref="memberListRef"
+        :team-id="teamStore.activeTeamId"
+        @invite="inviteOpen = true"
+      />
 
       <InviteMemberDialog
         v-if="teamStore.activeTeamId"
@@ -81,25 +132,97 @@
 import axios from "axios";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
+import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 import InviteMemberDialog from "@/components/team/InviteMemberDialog.vue";
 import TeamMemberList from "@/components/team/TeamMemberList.vue";
 
 const teamStore = useTeamStore();
+const authStore = useAuthStore();
 
 const teamName = ref("");
 const taskCleanupDays = ref(7);
 const savingName = ref(false);
 const savingCleanupDays = ref(false);
 const inviteOpen = ref(false);
+const memberListRef = ref(null);
+const teamMembers = ref([]);
+const membersLoading = ref(false);
+const transferTargetId = ref("");
+const transferring = ref(false);
 
 const isOwner = computed(() => {
   const m = teamStore.activeMembership;
   return m?.role === "owner";
 });
+
+const transferCandidates = computed(() => {
+  const me = (authStore.username || "").trim();
+  return teamMembers.value.filter(
+    (m) => m.role !== "owner" && m.username !== me
+  );
+});
+
+async function loadMembersForTransfer(teamId) {
+  if (!teamId || !isOwner.value) {
+    teamMembers.value = [];
+    transferTargetId.value = "";
+    return;
+  }
+  membersLoading.value = true;
+  try {
+    const res = await axios.get(`/api/teams/${teamId}/members`);
+    teamMembers.value = Array.isArray(res.data)
+      ? res.data.map((x) => ({ ...x }))
+      : [];
+    if (
+      transferTargetId.value &&
+      !transferCandidates.value.some((m) => m.user_id === transferTargetId.value)
+    ) {
+      transferTargetId.value = "";
+    }
+  } catch {
+    teamMembers.value = [];
+    transferTargetId.value = "";
+  } finally {
+    membersLoading.value = false;
+  }
+}
+
+async function transferOwnership() {
+  const teamId = teamStore.activeTeamId;
+  const targetId = transferTargetId.value;
+  if (!teamId || !targetId) return;
+  const target = transferCandidates.value.find((m) => m.user_id === targetId);
+  if (!target) return;
+  const label = target.username || target.email || "该成员";
+  if (
+    !confirm(
+      `确定将团队所有权转移给「${label}」吗？\n\n转移后对方将成为所有者，您将变为管理员，且无法再删除团队。`
+    )
+  ) {
+    return;
+  }
+  transferring.value = true;
+  try {
+    await axios.patch(`/api/teams/${teamId}/members/${targetId}`, {
+      role: "owner",
+    });
+    transferTargetId.value = "";
+    await teamStore.fetchMyTeams();
+    await loadMembersForTransfer(teamId);
+    await memberListRef.value?.load?.();
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    alert(typeof detail === "string" ? detail : "转移所有权失败");
+  } finally {
+    transferring.value = false;
+  }
+}
 
 watch(
   () => teamStore.activeTeam,
@@ -123,9 +246,19 @@ watch(
   () => teamStore.activeTeamId,
   (id) => {
     loadTeamSettings(id);
+    loadMembersForTransfer(id);
   },
   { immediate: true }
 );
+
+watch(isOwner, (owner) => {
+  if (owner && teamStore.activeTeamId) {
+    loadMembersForTransfer(teamStore.activeTeamId);
+  } else {
+    teamMembers.value = [];
+    transferTargetId.value = "";
+  }
+});
 
 async function saveTeamName() {
   const id = teamStore.activeTeamId;
@@ -162,7 +295,11 @@ async function saveTaskCleanupDays() {
   }
 }
 
-function onInvited() {
-  /* optional refresh member list via TeamMemberList watch teamId */
+async function onInvited() {
+  const id = teamStore.activeTeamId;
+  if (isOwner.value && id) {
+    await loadMembersForTransfer(id);
+  }
+  await memberListRef.value?.load?.();
 }
 </script>

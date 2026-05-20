@@ -184,4 +184,6 @@ watch(
   () => load(),
   { immediate: true }
 );
+
+defineExpose({ load });
 </script>

@@ -429,6 +429,9 @@ def patch_member_role(
         if current_owner and current_owner.user_id != target_user_id:
             current_owner.role = "admin"
         target.role = "owner"
+        team = db.query(Team).filter(Team.team_id == team_id).first()
+        if team:
+            team.created_by = target_user_id
     else:
         if target.role == "owner" and new_role != "owner":
             others = (

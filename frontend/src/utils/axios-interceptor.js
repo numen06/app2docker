@@ -2,7 +2,12 @@
  * Axios 拦截器配置
  */
 import axios from 'axios'
-import { clearAuth, getToken } from './auth'
+import {
+  clearAuth,
+  getToken,
+  isUserNotFoundResponse,
+  redirectToLoginAfterStaleSession,
+} from './auth'
 import { useTeamStore } from '@/stores/team'
 
 const TEAM_SCOPED_API_PREFIXES = [
@@ -110,29 +115,58 @@ export function setupAxiosInterceptors() {
       return response
     },
     (error) => {
-      if (error.response?.status === 401) {
-        // 如果是登录接口，不处理（让页面自己处理错误）
-        const url = error.config?.url || ''
-        const isAuthPublicRequest =
-          url.includes('/api/login') ||
-          url.includes('/api/register') ||
-          url.includes('/api/auth/me')
+      const url = error.config?.url || ''
+      const isAuthPublicRequest =
+        url.includes('/api/login') ||
+        url.includes('/api/register') ||
+        url.includes('/api/auth/me')
 
+      if (
+        isUserNotFoundResponse(error) &&
+        getToken() &&
+        !url.includes('/api/auth/me')
+      ) {
+        console.warn('⚠️ 登录用户已失效，正在跳转登录页...')
+        redirectToLoginAfterStaleSession()
+        return Promise.reject(error)
+      }
+
+      const teamAccessDenied =
+        error.response?.status === 403 &&
+        (error.response?.data?.detail === '无权访问该团队' ||
+          String(error.response?.data?.detail || '').includes('无权访问该团队'))
+
+      if (teamAccessDenied) {
+        try {
+          const teamStore = useTeamStore()
+          if (teamStore.activeTeamId) {
+            teamStore.activeTeamId = ''
+            try {
+              sessionStorage.removeItem('app2docker-active-team-id')
+            } catch {
+              /* ignore */
+            }
+            teamStore.fetchMyTeams().catch(() => {})
+          }
+        } catch {
+          /* pinia 未就绪时忽略 */
+        }
+      }
+
+      if (error.response?.status === 401) {
         if (!isAuthPublicRequest && getToken()) {
-          // Token 过期或无效，清除认证信息
-          const errorMessage = error.response?.data?.detail || error.response?.data?.message || 'Token已过期，请重新登录'
-          
-          // 检查是否是token过期
+          const errorMessage =
+            error.response?.data?.detail ||
+            error.response?.data?.message ||
+            'Token已过期，请重新登录'
+
           if (errorMessage.includes('过期') || errorMessage.includes('expired')) {
             console.warn('⚠️ Token已过期，正在退出登录...')
           } else {
             console.warn('⚠️ 认证失败，正在退出登录...')
           }
-          
-          // 清除认证信息
+
           clearAuth()
-          
-          // 重新加载页面，跳转到登录页
           window.location.reload()
         }
       }

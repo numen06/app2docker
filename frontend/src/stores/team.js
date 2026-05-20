@@ -73,16 +73,28 @@ export const useTeamStore = defineStore('team', {
     setCurrentTeam(id) {
       this.persistActiveTeam(id || '')
     },
+    _normalizeActiveTeamId(id) {
+      const next = (id || '').trim()
+      if (!next) return ''
+      if (
+        this.memberships.length &&
+        !this.memberships.some((m) => m.team?.team_id === next)
+      ) {
+        return this.memberships[0]?.team?.team_id || ''
+      }
+      return next
+    },
     async persistActiveTeam(id) {
-      this.activeTeamId = id || ''
+      const normalized = this._normalizeActiveTeamId(id)
+      this.activeTeamId = normalized
       try {
-        if (id) sessionStorage.setItem(STORAGE_KEY, id)
+        if (normalized) sessionStorage.setItem(STORAGE_KEY, normalized)
         else sessionStorage.removeItem(STORAGE_KEY)
       } catch {
         /* ignore */
       }
-      if (id) {
-        await this.fetchMenuPermissions(id)
+      if (normalized) {
+        await this.fetchMenuPermissions(normalized)
       } else {
         this.menuPermissions = []
         this.activeTeamRole = ''
@@ -131,6 +143,14 @@ export const useTeamStore = defineStore('team', {
           '加载团队失败（若后端未挂载 /api/teams 将无法使用团队功能）'
         this.error = typeof msg === 'string' ? msg : '加载团队失败'
         this.memberships = []
+        if (this.activeTeamId) {
+          this.activeTeamId = ''
+          try {
+            sessionStorage.removeItem(STORAGE_KEY)
+          } catch {
+            /* ignore */
+          }
+        }
       } finally {
         this.loading = false
       }

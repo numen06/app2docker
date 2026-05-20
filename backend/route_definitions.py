@@ -309,8 +309,16 @@ async def logout(request: Request):
 async def auth_me(request: Request):
     """当前登录用户（支持 Cookie 与 Bearer 双模式，供前端 fetchMe）。"""
     from backend.auth import check_role
+    from backend.database import get_db_session
+    from backend.models import User
 
     username = require_auth(request)
+    db = get_db_session()
+    try:
+        if not db.query(User).filter(User.username == username).first():
+            raise HTTPException(status_code=401, detail="用户不存在，请重新登录")
+    finally:
+        db.close()
     return JSONResponse(
         {
             "username": username,
@@ -3048,6 +3056,8 @@ async def get_all_tasks(
                 "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
 
@@ -3205,6 +3215,8 @@ async def get_running_tasks(
             result_tasks.append(result_task)
 
         return JSONResponse({"tasks": result_tasks})
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
 
