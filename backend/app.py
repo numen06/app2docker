@@ -42,6 +42,10 @@ app.include_router(resource_permissions_router, prefix="/api")
 if os.path.exists("dist/assets"):
     app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 
+# public/ 目录构建产物（首页截图等，Vite 会复制到 dist/landing/）
+if os.path.isdir("dist/landing"):
+    app.mount("/landing", StaticFiles(directory="dist/landing"), name="landing")
+
 
 # 前端页面路由
 @app.get("/", response_class=HTMLResponse)
