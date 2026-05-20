@@ -6803,11 +6803,35 @@ class ExportTaskManager:
 
             if not use_local:
                 # 需要从远程仓库拉取镜像
+                registry_config = registry_config or {}
                 username = registry_config.get("username")
                 password = registry_config.get("password")
+                registry_host = (registry_config.get("registry") or "").strip()
+
                 auth_config = None
                 if username and password:
-                    auth_config = {"username": username, "password": password}
+                    auth_config = {
+                        "username": username,
+                        "password": password,
+                    }
+                    # 与推送/仓库测试一致：私有仓库必须指定 serveraddress
+                    if registry_host and registry_host != "docker.io":
+                        auth_config["serveraddress"] = registry_host
+                    else:
+                        auth_config["serveraddress"] = "https://index.docker.io/v1/"
+
+                    # 先 login，避免未带认证时 registry 返回 not found
+                    if hasattr(docker_builder, "client") and docker_builder.client:
+                        login_registry = (
+                            registry_host
+                            if registry_host and registry_host != "docker.io"
+                            else None
+                        )
+                        docker_builder.client.login(
+                            username=username,
+                            password=password,
+                            registry=login_registry,
+                        )
 
                 # 拉取镜像
                 pull_stream = docker_builder.pull_image(image, tag, auth_config)

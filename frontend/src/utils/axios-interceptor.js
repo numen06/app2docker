@@ -27,6 +27,8 @@ const TEAM_SCOPED_API_PREFIXES = [
   '/api/resource-packages',
   '/api/registries',
   '/api/templates',
+  '/api/list-templates',
+  '/api/template-params',
   '/api/operation-logs',
   '/api/build-from-source',
   '/api/upload',
