@@ -142,6 +142,12 @@ def init_db():
     # 迁移：团队资源权限与分组
     migrate_add_team_resource_permissions()
 
+    # 迁移：团队任务清理天数
+    migrate_add_team_task_cleanup_days()
+
+    # 迁移：任务/导出/主机/资源包/操作日志 team_id
+    migrate_add_team_id_to_misc_tables()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -1323,6 +1329,55 @@ def _add_column_if_missing(cursor, table: str, column: str, ddl: str):
         print(f"✅ {column} 字段添加成功")
     else:
         print(f"✅ {table}.{column} 已存在")
+
+
+def migrate_add_team_task_cleanup_days():
+    """迁移：为 teams 表添加 task_cleanup_days 字段"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        _add_column_if_missing(
+            cursor,
+            "teams",
+            "task_cleanup_days",
+            "task_cleanup_days INTEGER DEFAULT 7",
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ 迁移 task_cleanup_days 字段失败: {e}")
+
+
+def migrate_add_team_id_to_misc_tables():
+    """迁移：为 tasks / export_tasks / hosts / resource_packages / operation_logs 添加 team_id 等字段"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        columns = [
+            ("tasks", "team_id", "team_id VARCHAR(36)"),
+            ("export_tasks", "team_id", "team_id VARCHAR(36)"),
+            ("hosts", "team_id", "team_id VARCHAR(36)"),
+            ("hosts", "created_by", "created_by VARCHAR(36)"),
+            ("resource_packages", "team_id", "team_id VARCHAR(36)"),
+            ("resource_packages", "created_by", "created_by VARCHAR(36)"),
+            ("operation_logs", "team_id", "team_id VARCHAR(36)"),
+        ]
+        for table, col, ddl in columns:
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            )
+            if cursor.fetchone():
+                _add_column_if_missing(cursor, table, col, ddl)
+        conn.commit()
+        conn.close()
+        print("✅ 杂项表 team_id 字段迁移完成")
+    except Exception as e:
+        print(f"⚠️ 杂项表 team_id 迁移失败: {e}")
 
 
 def close_db():

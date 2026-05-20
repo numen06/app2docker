@@ -588,14 +588,14 @@
         <template #footer>
           <button
             type="button"
-            class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 sm:w-auto sm:py-1.5"
             @click="versionDialogOpen = false"
           >
             关闭
           </button>
           <button
             type="button"
-            class="rounded-md border border-blue-200 bg-white px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+            class="w-full rounded-md border border-blue-200 bg-white px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 disabled:opacity-50 sm:w-auto sm:py-1.5"
             :disabled="checkLoading"
             @click="refreshVersionCheck"
           >
@@ -604,7 +604,7 @@
           </button>
           <button
             type="button"
-            class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            class="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto sm:py-1.5"
             :disabled="checkLoading"
             @click="openReleaseUrl"
           >
@@ -624,7 +624,7 @@
       <transition name="fade">
         <div
           v-if="updateSnackVisible"
-          class="fixed bottom-4 right-4 z-[2100] max-w-sm rounded-lg border border-slate-200 bg-white p-4 shadow-xl"
+          class="fixed bottom-4 left-4 right-4 z-[2100] max-w-sm rounded-lg border border-slate-200 bg-white p-4 shadow-xl sm:left-auto"
           role="status"
         >
           <div class="flex items-start gap-2">

@@ -499,3 +499,50 @@
   white-space: nowrap;
   border-width: 0;
 }
+
+/* 移动端统一：按钮组换行、弹窗底栏、面板内边距 */
+@media (max-width: 767px) {
+  .btn-group.w-full {
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  .btn-group.w-full > .btn,
+  .btn-group.w-full > button {
+    flex: 1 1 auto;
+    min-width: 2.75rem;
+  }
+
+  .pipeline-card-actions.btn-group > * {
+    flex: 0 1 auto;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .modal-footer > .btn,
+  .modal-footer > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-content-panel__header {
+    padding: 0.75rem 0.875rem;
+  }
+
+  .admin-content-panel__body {
+    padding: 0.875rem;
+  }
+
+  .export-panel .inline-flex.rounded-lg {
+    display: flex;
+    width: 100%;
+  }
+
+  .export-panel .inline-flex.rounded-lg > button {
+    flex: 1 1 50%;
+    justify-content: center;
+  }
+}

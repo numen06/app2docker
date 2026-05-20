@@ -13,7 +13,44 @@
       </template>
     </PageToolbar>
 
-    <Table min-width-class="min-w-[40rem]">
+    <div class="space-y-3 md:hidden">
+      <EmptyState v-if="roles.length === 0" message="暂无角色" />
+
+      <div
+        v-for="role in roles"
+        :key="role.role_id"
+        class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+      >
+        <div class="min-w-0">
+          <div class="font-medium text-slate-900">
+            {{ role.name }}
+            <Badge v-if="isSystemRole(role.name)" variant="info" class="ml-2">系统角色</Badge>
+          </div>
+          <p class="mt-1 text-sm text-slate-600">{{ role.description || "—" }}</p>
+          <p class="mt-1 text-xs text-slate-500">权限 {{ role.permissions?.length || 0 }} 项</p>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+          <Button variant="outline" size="sm" title="编辑" @click="editRole(role)">
+            <i class="fas fa-edit"></i>
+          </Button>
+          <Button variant="outline" size="sm" title="查看权限" @click="viewPermissions(role)">
+            <i class="fas fa-eye"></i>
+          </Button>
+          <Button
+            v-if="!isSystemRole(role.name)"
+            variant="destructive"
+            size="sm"
+            title="删除"
+            @click="deleteRole(role)"
+          >
+            <i class="fas fa-trash"></i>
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hidden md:block">
+      <Table min-width-class="min-w-[40rem]">
         <TableHeader>
           <TableRow>
             <TableHead>角色名称</TableHead>
@@ -53,11 +90,12 @@
             </TableCell>
           </TableRow>
         </TableBody>
-    </Table>
+      </Table>
+    </div>
 
     <!-- 创建/编辑 -->
     <BaseDialog v-model="formDialogOpen">
-      <div class="flex max-h-[90vh] w-full max-w-2xl flex-col">
+      <div class="flex max-h-[90vh] w-full max-w-[calc(100vw-1rem)] flex-col sm:max-w-2xl">
         <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h3 class="text-lg font-semibold text-slate-900">
             {{ showCreateModal ? "创建角色" : "编辑角色" }}
@@ -131,9 +169,9 @@
             <AlertBanner :message="error" />
           </form>
         </div>
-        <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <Button variant="outline" type="button" @click="closeModal">取消</Button>
-          <Button type="button" @click="saveRole">保存</Button>
+        <div class="modal-footer flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
+          <Button variant="outline" type="button" class="w-full sm:w-auto" @click="closeModal">取消</Button>
+          <Button type="button" class="w-full sm:w-auto" @click="saveRole">保存</Button>
         </div>
       </div>
     </BaseDialog>

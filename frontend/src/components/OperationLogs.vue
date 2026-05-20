@@ -57,7 +57,31 @@
 
     <EmptyState v-else-if="logs.length === 0" message="暂无操作日志" />
 
-    <Table v-else min-width-class="min-w-[44rem]">
+    <template v-else>
+    <div class="space-y-3 md:hidden">
+      <div
+        v-for="log in logs"
+        :key="log.timestamp + log.username + log.operation"
+        class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <Badge variant="info">{{ getOperationName(log.operation) }}</Badge>
+          <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
+            log.username
+          }}</code>
+        </div>
+        <p class="mt-1 text-xs text-slate-500">{{ formatTime(log.timestamp) }}</p>
+        <p
+          v-if="log.details && Object.keys(log.details).length > 0"
+          class="mt-2 break-all rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600"
+        >
+          {{ JSON.stringify(log.details) }}
+        </p>
+      </div>
+    </div>
+
+    <div class="hidden md:block">
+    <Table min-width-class="min-w-[44rem]">
         <TableHeader>
           <TableRow>
             <TableHead class="w-[180px]">时间</TableHead>
@@ -92,6 +116,8 @@
           </TableRow>
         </TableBody>
     </Table>
+    </div>
+    </template>
 
     <PaginationBar
       :page="currentPage"

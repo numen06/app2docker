@@ -80,6 +80,16 @@ from backend.app_key_manager import (
     delete_app_key,
     toggle_app_key,
 )
+from backend.team_permissions import get_user_id_by_username, require_team_member
+from backend.team_scope import (
+    require_export_task_in_team,
+    require_host_in_team,
+    require_resource_package_in_team,
+    require_task_in_team,
+    resolve_team_scope,
+    resolve_team_scope_from_request,
+    task_belongs_to_team,
+)
 import jwt
 
 
@@ -488,8 +498,12 @@ async def toggle_my_app_key(key_id: str, request: Request):
 
 # === 用户管理 API ===
 @router.get("/users")
-async def get_users(request: Request):
-    """获取用户列表（需要管理员权限）"""
+async def get_users(
+    request: Request,
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
+):
+    """获取用户列表（需要管理员权限，支持分页）"""
     try:
         from backend.auth import check_role
         from backend.database import get_db_session
@@ -503,7 +517,15 @@ async def get_users(request: Request):
 
         db = get_db_session()
         try:
-            users = db.query(User).all()
+            query = db.query(User)
+            total = query.count()
+            offset = (page - 1) * page_size
+            users = (
+                query.order_by(User.created_at.desc())
+                .offset(offset)
+                .limit(page_size)
+                .all()
+            )
             result = []
             for user in users:
                 # 获取用户角色
@@ -531,7 +553,17 @@ async def get_users(request: Request):
                     }
                 )
 
-            return JSONResponse({"users": result})
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+            return JSONResponse(
+                {
+                    "users": result,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                }
+            )
         finally:
             db.close()
     except HTTPException:
@@ -1308,20 +1340,28 @@ async def get_current_user_permissions(request: Request):
 
 @router.get("/operation-logs")
 async def get_operation_logs(
+    request: Request,
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
     username: Optional[str] = Query(None, description="过滤用户名"),
     operation: Optional[str] = Query(None, description="过滤操作类型"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """获取操作日志（支持分页）"""
     try:
         from backend.database import get_db_session
         from backend.models import OperationLog
 
+        auth_username = require_auth(request)
         db = get_db_session()
         try:
+            scoped_team_id = resolve_team_scope_from_request(
+                db, auth_username, team_id
+            )
             # 构建查询
-            query = db.query(OperationLog)
+            query = db.query(OperationLog).filter(
+                OperationLog.team_id == scoped_team_id
+            )
 
             if username:
                 query = query.filter(OperationLog.username == username)
@@ -1662,40 +1702,114 @@ async def save_registries(request: SaveRegistriesRequest, http_request: Request)
 class TestRegistryRequest(BaseModel):
     """测试Registry登录请求"""
 
-    name: str
+    name: str = ""
     registry: str
-    username: str
+    username: str = ""
     password: Optional[str] = None  # 可选，如果不提供则从配置中获取
+
+
+def _registry_v2_url(registry_host: str) -> str:
+    """构建 Registry HTTP API v2 探测地址"""
+    host = (registry_host or "docker.io").strip().rstrip("/")
+    if host.startswith("http://") or host.startswith("https://"):
+        base = host.rstrip("/")
+    elif host in ("docker.io", "index.docker.io"):
+        base = "https://registry-1.docker.io"
+    else:
+        base = f"https://{host}"
+    return f"{base}/v2/"
+
+
+def _test_registry_connectivity(registry_host: str) -> dict:
+    """探测 Registry 是否可达（无需认证）"""
+    import urllib.error
+    import urllib.request
+
+    url = _registry_v2_url(registry_host)
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if 200 <= resp.status < 300:
+                return {
+                    "success": True,
+                    "message": f"仓库可访问，无需认证。Registry: {registry_host or 'docker.io'}",
+                    "details": f"HTTP {resp.status} {url}",
+                }
+            return {
+                "success": False,
+                "message": f"仓库响应异常: HTTP {resp.status}",
+                "details": url,
+            }
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return {
+                "success": False,
+                "message": "仓库可达，但需要认证。请配置用户名和密码",
+                "details": f"HTTP 401 {url}",
+                "suggestions": [
+                    "该仓库为私有仓库，需要填写账号和密码",
+                    "若使用访问令牌，请将令牌填入密码字段",
+                ],
+            }
+        return {
+            "success": False,
+            "message": f"仓库探测失败: HTTP {e.code}",
+            "details": str(e),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"无法连接仓库: {e}",
+            "details": url,
+            "suggestions": [
+                "请检查 Registry 地址是否正确",
+                "确认本机网络可访问该仓库",
+            ],
+        }
 
 
 @router.post("/registries/test")
 async def test_registry_login(request: TestRegistryRequest, http_request: Request):
-    """测试Registry登录（测试仓库的用户名和密码是否正确）
+    """测试 Registry：有账号密码时验证登录；无认证时探测仓库是否可达。
 
     注意：
     - 需要系统 token 认证才能使用此功能（安全考虑）
     - 但测试的是仓库的登录信息（request.username 和 request.password），与系统用户无关
     - 如果系统 token 无效，返回 400 而不是 401，避免前端退出登录
     - 如果未提供密码，则从配置中获取解密后的密码
+    - 未配置用户名和密码时，仅探测 Registry v2 API 连通性（适用于公开仓库）
     """
     try:
         # 验证系统 token（需要系统认证才能使用此功能）
-        username = require_auth(http_request)
+        require_auth(http_request)
+
+        registry_host = request.registry
+        registry_username = (request.username or "").strip()
 
         # 如果未提供密码，从配置中获取
         test_password = request.password
-        if not test_password:
+        if not test_password and request.name:
             from backend.config import get_registry_password
 
             test_password = get_registry_password(request.name)
-            if not test_password:
+
+        has_credentials = bool(registry_username and test_password)
+
+        # 无认证：仅探测连通性
+        if not has_credentials:
+            if registry_username or test_password:
                 return JSONResponse(
-                    {"success": False, "message": "仓库密码未配置，请先配置密码"},
+                    {
+                        "success": False,
+                        "message": "用户名和密码需同时填写，或均留空（公开仓库无需认证）",
+                    },
                     status_code=400,
                 )
+            result = _test_registry_connectivity(registry_host)
+            status_code = 200 if result.get("success") else 400
+            return JSONResponse(result, status_code=status_code)
 
-        # 系统认证通过后，使用传入的仓库用户名和密码测试仓库连接
-        # 注意：这里的 username 和 password 是仓库的认证信息，不是系统的
+        # 有认证：通过 Docker 客户端登录验证
         from backend.handlers import docker_builder
 
         if not docker_builder or not docker_builder.is_available():
@@ -1704,18 +1818,11 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
                 status_code=400,
             )
 
-        registry_host = request.registry
-        username = request.username
-        password = test_password  # 使用从配置获取的密码或传入的密码
-
-        if not username or not password:
-            return JSONResponse(
-                {"success": False, "message": "用户名和密码不能为空"}, status_code=400
-            )
+        password = test_password
 
         # 构建auth_config
         auth_config = {
-            "username": username,
+            "username": registry_username,
             "password": password,
         }
 
@@ -1734,7 +1841,7 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
                     else None
                 )
                 login_result = docker_builder.client.login(
-                    username=username,
+                    username=registry_username,
                     password=password,
                     registry=login_registry,
                 )
@@ -2583,10 +2690,19 @@ async def build_from_source(
         None,
         description="资源包配置列表 [{package_id, target_path}]，target_path 为相对路径，如 'test/b.txt' 或 'resources'",
     ),
+    team_id: Optional[str] = Body(None, description="当前团队 ID"),
 ):
     """从 Git 源码构建镜像"""
     try:
-        username = get_current_username(request)
+        username = require_auth(request)
+        from backend.database import get_db_session
+        from backend.team_scope import resolve_team_scope_from_request
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
 
         # 解析模板参数
         params_dict = {}
@@ -2646,6 +2762,7 @@ async def build_from_source(
                     service_template_params=service_template_params_dict,  # 传递服务模板参数
                     resource_package_ids=resource_package_configs
                     or [],  # 传递资源包配置
+                    team_id=scoped_team_id,
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")
@@ -2685,6 +2802,7 @@ async def build_from_source(
                     "branch": branch,
                     "push": push == "on",
                 },
+                team_id=scoped_team_id,
             )
         except Exception as log_error:
             print(f"⚠️ 记录操作日志失败: {log_error}")
@@ -2709,13 +2827,26 @@ async def build_from_source(
 
 @router.get("/build-tasks")
 async def get_build_tasks(
+    request: Request,
     status: Optional[str] = Query(None, description="任务状态过滤"),
     task_type: Optional[str] = Query(None, description="任务类型过滤"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """获取构建任务列表"""
     try:
+        from backend.database import get_db_session
+        from backend.team_scope import resolve_team_scope_from_request
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
-        tasks = manager.list_tasks(status=status, task_type=task_type)
+        tasks = manager.list_tasks(
+            status=status, task_type=task_type, team_id=scoped_team_id
+        )
         return JSONResponse({"tasks": tasks})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取构建任务列表失败: {str(e)}")
@@ -2723,16 +2854,30 @@ async def get_build_tasks(
 
 @router.get("/tasks")
 async def get_all_tasks(
+    request: Request,
     status: Optional[str] = Query(None, description="任务状态过滤"),
     task_type: Optional[str] = Query(
         None, description="任务类型过滤: build, build_from_source, export, deploy"
     ),
     deploy_config_id: Optional[str] = Query(None, description="按部署配置ID筛选"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
 ):
     """获取所有任务（构建任务 + 导出任务 + 部署任务），支持后台分页"""
     try:
+        from backend.database import get_db_session
+        from backend.team_scope import resolve_team_scope_from_request, task_belongs_to_team
+
+        username = require_auth(request)
+        db_scope = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(
+                db_scope, username, team_id
+            )
+        finally:
+            db_scope.close()
+
         all_tasks = []
 
         # 获取构建任务（排除部署任务）
@@ -2742,7 +2887,7 @@ async def get_all_tasks(
         else:
             build_task_type = task_type if task_type and task_type != "deploy" else None
             build_tasks = build_manager.list_tasks(
-                status=status, task_type=build_task_type
+                status=status, task_type=build_task_type, team_id=scoped_team_id
             )
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
 
@@ -2786,6 +2931,12 @@ async def get_all_tasks(
                     if deploy_config_id:
                         query = query.filter(Task.deploy_config_id == deploy_config_id)
                     deploy_tasks = query.order_by(Task.created_at.desc()).all()
+                    if scoped_team_id:
+                        deploy_tasks = [
+                            t
+                            for t in deploy_tasks
+                            if task_belongs_to_team(db, t, scoped_team_id)
+                        ]
 
                     # 只查询关联到的部署配置（避免全表加载）
                     deploy_config_ids = list({t.deploy_config_id for t in deploy_tasks if t.deploy_config_id})
@@ -2860,7 +3011,9 @@ async def get_all_tasks(
         # 获取导出任务
         if not task_type or task_type == "export":
             export_manager = ExportTaskManager()
-            export_tasks = export_manager.list_tasks(status=status)
+            export_tasks = export_manager.list_tasks(
+                status=status, team_id=scoped_team_id
+            )
             for task in export_tasks:
                 task["task_category"] = "export"  # 标记为导出任务
                 all_tasks.append(task)
@@ -2890,16 +3043,33 @@ async def get_all_tasks(
 
 
 @router.get("/tasks/running")
-async def get_running_tasks():
+async def get_running_tasks(
+    request: Request,
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
+):
     """获取所有运行中的任务（running 或 pending 状态）"""
     try:
+        from backend.database import get_db_session
+        from backend.team_scope import resolve_team_scope_from_request, task_belongs_to_team
+
+        username = require_auth(request)
+        db_scope = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(
+                db_scope, username, team_id
+            )
+        finally:
+            db_scope.close()
+
         all_running_tasks = []
 
         # 获取构建任务和部署任务（running 或 pending）
         build_manager = BuildTaskManager()
 
         # 一次查询获取 running 和 pending 状态的构建任务（避免两次全表扫描）
-        all_build_tasks = build_manager.list_tasks(status="running,pending")
+        all_build_tasks = build_manager.list_tasks(
+            status="running,pending", team_id=scoped_team_id
+        )
         for task in all_build_tasks:
             # 排除部署任务
             if task.get("task_type") != "deploy":
@@ -2921,6 +3091,12 @@ async def get_running_tasks():
                 )
                 .all()
             )
+            if scoped_team_id:
+                running_deploy_tasks = [
+                    t
+                    for t in running_deploy_tasks
+                    if task_belongs_to_team(db, t, scoped_team_id)
+                ]
 
             # 只查询关联到的部署配置（避免全表加载）
             deploy_config_ids = list({t.deploy_config_id for t in running_deploy_tasks if t.deploy_config_id})
@@ -2975,12 +3151,16 @@ async def get_running_tasks():
 
         # 获取导出任务（running 或 pending）
         export_manager = ExportTaskManager()
-        running_export_tasks = export_manager.list_tasks(status="running")
+        running_export_tasks = export_manager.list_tasks(
+            status="running", team_id=scoped_team_id
+        )
         for task in running_export_tasks:
             task["task_category"] = "export"
             all_running_tasks.append(task)
 
-        pending_export_tasks = export_manager.list_tasks(status="pending")
+        pending_export_tasks = export_manager.list_tasks(
+            status="pending", team_id=scoped_team_id
+        )
         for task in pending_export_tasks:
             task["task_category"] = "export"
             # 避免重复添加
@@ -3023,9 +3203,22 @@ async def get_running_tasks():
 
 
 @router.get("/build-tasks/{task_id}")
-async def get_build_task(task_id: str):
+async def get_build_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取构建任务详情"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
         task = manager.get_task(task_id)
         if not task:
@@ -3038,9 +3231,22 @@ async def get_build_task(task_id: str):
 
 
 @router.get("/build-tasks/{task_id}/logs")
-async def get_build_task_logs(task_id: str):
+async def get_build_task_logs(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取构建任务日志"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
         logs = manager.get_logs(task_id)
         return PlainTextResponse(logs)
@@ -3049,10 +3255,23 @@ async def get_build_task_logs(task_id: str):
 
 
 @router.post("/build-tasks/{task_id}/stop")
-async def stop_build_task(task_id: str, request: Request):
+async def stop_build_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """停止构建任务"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
         if manager.stop_task(task_id):
             OperationLogger.log(username, "stop_build_task", {"task_id": task_id})
@@ -3069,9 +3288,22 @@ async def stop_build_task(task_id: str, request: Request):
 
 
 @router.get("/build-tasks/{task_id}/config")
-async def get_build_task_config(task_id: str):
+async def get_build_task_config(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取构建任务的配置JSON"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
         task = manager.get_task(task_id)
         if not task:
@@ -3113,10 +3345,23 @@ async def get_build_task_config(task_id: str):
 
 
 @router.post("/build-tasks/{task_id}/retry")
-async def retry_build_task(task_id: str, request: Request):
+async def retry_build_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """重试构建任务（使用任务保存的JSON配置）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
         task = manager.get_task(task_id)
 
@@ -3186,10 +3431,23 @@ async def retry_build_task(task_id: str, request: Request):
 
 
 @router.delete("/build-tasks/{task_id}")
-async def delete_build_task(task_id: str, request: Request):
+async def delete_build_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """删除构建任务（只有停止、完成或失败的任务才能删除）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         manager = BuildTaskManager()
         task = manager.get_task(task_id)
         if not task:
@@ -3221,10 +3479,18 @@ async def cleanup_tasks(
     ),
     days: Optional[int] = Body(None, description="清理N天前的任务"),
     task_type: Optional[str] = Body(None, description="任务类型：build, export"),
+    team_id: Optional[str] = Body(None, description="当前团队 ID"),
 ):
     """批量清理任务"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         removed_count = 0
 
         # 清理构建任务
@@ -3237,7 +3503,7 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = build_manager.list_tasks()
+                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3253,7 +3519,10 @@ async def cleanup_tasks(
             elif status:
                 # 清理指定状态的任务
                 tasks_to_remove = [
-                    task["task_id"] for task in build_manager.list_tasks(status=status)
+                    task["task_id"]
+                    for task in build_manager.list_tasks(
+                        status=status, team_id=scoped_team_id
+                    )
                 ]
 
                 # 执行删除
@@ -3262,7 +3531,7 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = build_manager.list_tasks()
+                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3284,7 +3553,7 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = export_manager.list_tasks()
+                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3300,7 +3569,10 @@ async def cleanup_tasks(
             elif status:
                 # 清理指定状态的任务
                 tasks_to_remove = [
-                    task["task_id"] for task in export_manager.list_tasks(status=status)
+                    task["task_id"]
+                    for task in export_manager.list_tasks(
+                        status=status, team_id=scoped_team_id
+                    )
                 ]
 
                 # 执行删除
@@ -3309,7 +3581,7 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = export_manager.list_tasks()
+                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3331,6 +3603,7 @@ async def cleanup_tasks(
                 "days": days,
                 "task_type": task_type,
             },
+            team_id=scoped_team_id,
         )
 
         return JSONResponse(
@@ -3369,11 +3642,26 @@ async def get_exports_stats(request: Request):
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
-    request: Request, force_refresh: bool = Query(False, description="是否强制刷新缓存")
+    request: Request,
+    force_refresh: bool = Query(False, description="是否强制刷新缓存"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """获取仪表盘统计数据（带缓存）"""
     try:
-        return dashboard_cache.get_stats(force_refresh=force_refresh)
+        if team_id:
+            user_id = _resolve_user_id(request)
+            from backend.database import get_db_session
+
+            db = get_db_session()
+            try:
+                require_team_member(db, team_id, user_id)
+            finally:
+                db.close()
+        return dashboard_cache.get_stats(
+            team_id=team_id, force_refresh=force_refresh
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取仪表盘统计失败: {str(e)}")
 
@@ -3970,10 +4258,18 @@ async def create_export_task(
     compress: str = Body("none", description="压缩格式: none, gzip"),
     registry: Optional[str] = Body(None, description="仓库名称（用于获取认证信息）"),
     use_local: bool = Body(False, description="是否使用本地仓库（不执行 pull）"),
+    team_id: Optional[str] = Body(None, description="当前团队 ID"),
 ):
     """创建导出任务"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         if not DOCKER_AVAILABLE:
             raise HTTPException(
                 status_code=503, detail="Docker 服务不可用，无法导出镜像"
@@ -4005,6 +4301,7 @@ async def create_export_task(
             compress=compress,
             registry=registry,
             use_local=use_local,
+            team_id=scoped_team_id,
         )
 
         # 记录操作日志
@@ -4016,6 +4313,7 @@ async def create_export_task(
                 "image": f"{image_name}:{tag_name}",
                 "compress": compress,
             },
+            team_id=scoped_team_id,
         )
 
         return JSONResponse(
@@ -4035,23 +4333,46 @@ async def create_export_task(
 
 @router.get("/export-tasks")
 async def list_export_tasks(
+    request: Request,
     status: Optional[str] = Query(
         None, description="任务状态过滤: pending, running, completed, failed"
     ),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
     """获取导出任务列表"""
     try:
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
         task_manager = ExportTaskManager()
-        tasks = task_manager.list_tasks(status=status)
+        tasks = task_manager.list_tasks(status=status, team_id=scoped_team_id)
         return JSONResponse({"tasks": tasks})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
 
 
 @router.get("/export-tasks/{task_id}")
-async def get_export_task(task_id: str):
+async def get_export_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """获取导出任务详情"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_export_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         task_manager = ExportTaskManager()
         task = task_manager.get_task(task_id)
         if not task:
@@ -4064,9 +4385,22 @@ async def get_export_task(task_id: str):
 
 
 @router.get("/export-tasks/{task_id}/download")
-async def download_export_task(task_id: str):
+async def download_export_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """下载导出任务的文件"""
     try:
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_export_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         task_manager = ExportTaskManager()
         task = task_manager.get_task(task_id)
         if not task:
@@ -4105,10 +4439,23 @@ async def download_export_task(task_id: str):
 
 
 @router.post("/export-tasks/{task_id}/stop")
-async def stop_export_task(task_id: str, request: Request):
+async def stop_export_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """停止导出任务"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_export_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         task_manager = ExportTaskManager()
         if task_manager.stop_task(task_id):
             OperationLogger.log(username, "stop_export_task", {"task_id": task_id})
@@ -4125,10 +4472,23 @@ async def stop_export_task(task_id: str, request: Request):
 
 
 @router.post("/export-tasks/{task_id}/retry")
-async def retry_export_task(task_id: str, request: Request):
+async def retry_export_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """重试导出任务（失败或停止的任务可以重试）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_export_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         task_manager = ExportTaskManager()
         if task_manager.retry_task(task_id):
             OperationLogger.log(username, "retry_export_task", {"task_id": task_id})
@@ -4145,10 +4505,23 @@ async def retry_export_task(task_id: str, request: Request):
 
 
 @router.delete("/export-tasks/{task_id}")
-async def delete_export_task(task_id: str, request: Request):
+async def delete_export_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """删除导出任务（只有停止、完成或失败的任务才能删除）"""
     try:
-        username = get_current_username(request)
+        from backend.database import get_db_session
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_export_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
         task_manager = ExportTaskManager()
         task = task_manager.get_task(task_id)
         if not task:
@@ -5104,8 +5477,6 @@ from backend.resource_permissions import (
     require_resource_permission,
     user_can_access_resource,
 )
-from backend.team_permissions import get_user_id_by_username, require_team_member
-
 # === Git 数据源管理 ===
 from backend.git_source_manager import GitSourceManager
 
@@ -5117,6 +5488,18 @@ def _resolve_user_id(http_request: Request) -> str:
     db = get_db_session()
     try:
         return get_user_id_by_username(db, username)
+    finally:
+        db.close()
+
+
+def _require_scoped_team(http_request: Request, team_id: Optional[str]) -> str:
+    """校验 team_id 并返回（业务接口租户隔离）"""
+    from backend.database import get_db_session
+
+    db = get_db_session()
+    try:
+        username = require_auth(http_request)
+        return resolve_team_scope_from_request(db, username, team_id)
     finally:
         db.close()
 
@@ -6558,40 +6941,18 @@ async def webhook_trigger(webhook_token: str, request: Request):
                         "tag": first_tag,
                     }
                 )
-            elif duplicate_result == "running_same_config":
-                # 运行中的任务也是相同配置，直接返回排队状态，不创建新任务
-                current_task_id = manager.get_pipeline_running_task(pipeline_id)
-                queue_length = manager.get_queue_length(pipeline_id)
+
+            # 相同配置正在运行或已在队列：仍创建任务并强制排队，不丢弃 webhook 触发
+            webhook_force_queue = duplicate_result in (
+                "running_same_config",
+                "queued_same_config",
+            )
+            if webhook_force_queue:
                 print(
-                    f"🚫 流水线 {pipeline.get('name')} 触发被屏蔽（运行中的任务也是相同配置）: branch={branch}, tag={first_tag}, current_task_id={current_task_id[:8] if current_task_id else 'None'}..."
+                    f"📋 流水线 {pipeline.get('name')} webhook 将排队（{duplicate_result}）: branch={branch}, tag={first_tag}"
                 )
-                return JSONResponse(
-                    {
-                        "message": "运行中的任务也是相同配置，已忽略重复触发",
-                        "status": "running_same_config",
-                        "pipeline": pipeline.get("name"),
-                        "branch": branch,
-                        "tag": first_tag,
-                        "current_task_id": current_task_id,
-                        "queue_length": queue_length,
-                    }
-                )
-            elif duplicate_result == "queued_same_config":
-                # 队列中已有相同配置的任务，直接返回，不创建新任务
-                queue_length = manager.get_queue_length(pipeline_id)
-                print(
-                    f"🚫 流水线 {pipeline.get('name')} 触发被屏蔽（队列中已有相同配置的任务）: branch={branch}, tag={first_tag}"
-                )
-                return JSONResponse(
-                    {
-                        "message": "队列中已有相同配置的任务，已忽略重复触发",
-                        "status": "queued_same_config",
-                        "pipeline": pipeline.get("name"),
-                        "branch": branch,
-                        "tag": first_tag,
-                        "queue_length": queue_length,
-                    }
-                )
+        else:
+            webhook_force_queue = False
 
         # 基于分支的任务创建逻辑：相同分支需要排队，不同分支可以并发
         print(
@@ -6599,8 +6960,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
         )
         
         # 检查是否有相同分支的任务在运行或排队
-        has_same_branch_task = manager.check_same_branch_task_running_or_queued(
-            pipeline_id, branch
+        has_same_branch_task = (
+            webhook_force_queue
+            or manager.check_same_branch_task_running_or_queued(pipeline_id, branch)
         )
         
         queued_task_ids = []

@@ -72,7 +72,7 @@
               </p>
             </div>
             <!-- 操作按钮行 -->
-            <div class="btn-group btn-group-sm w-full">
+            <div class="pipeline-card-actions btn-group btn-group-sm w-full flex flex-wrap gap-1">
               <Button
                 variant="outline" size="sm"
                 @click="runPipeline(pipeline)"
@@ -855,7 +855,7 @@
                     <div class="pipeline-json-editor">
                       <codemirror
                         v-model="buildConfigJsonText"
-                        :style="{ height: '500px', fontSize: '13px' }"
+                        :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
                         :extensions="jsonEditorExtensions"
                       />
                     </div>
@@ -3530,7 +3530,7 @@
             <div class="pipeline-json-editor">
               <codemirror
                 v-model="buildConfigJsonText"
-                :style="{ height: '500px', fontSize: '13px' }"
+                :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
                 :disabled="!editingPipeline"
                 :extensions="jsonEditorExtensions"
               />

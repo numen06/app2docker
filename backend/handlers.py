@@ -2152,7 +2152,7 @@ class BuildManager:
                         else:
                             log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
                 else:
-                    log(f"⚠️  registry未配置认证信息，推送可能失败\n")
+                    log(f"ℹ️  未配置认证信息，将使用匿名推送（适用于公开仓库）\n")
 
                 try:
                     log(f"🚀 开始推送，repository: {push_repository}, tag: {tag}\n")
@@ -2395,6 +2395,7 @@ class BuildManager:
         service_template_params: dict = None,  # 服务模板参数
         resource_package_ids: list = None,  # 资源包ID列表或配置列表
         trigger_source: str = "manual",  # 触发来源
+        team_id: str = None,
     ):
         """从 Git 源码开始构建"""
         try:
@@ -2424,6 +2425,7 @@ class BuildManager:
                 or {},  # 传递服务模板参数
                 resource_package_ids=resource_package_ids or [],  # 传递资源包ID列表
                 trigger_source=trigger_source,  # 传递触发来源
+                team_id=team_id,
             )
             print(f"✅ 任务创建成功: task_id={task_id}")
         except Exception as e:
@@ -3728,7 +3730,7 @@ logs/
                         else:
                             log(f"⚠️  继续尝试推送（推送时会使用auth_config）\n")
                 else:
-                    log(f"⚠️  registry未配置认证信息，推送可能失败\n")
+                    log(f"ℹ️  未配置认证信息，将使用匿名推送（适用于公开仓库）\n")
 
                 # 推送并处理错误（支持重试）
                 push_retried = False
@@ -4687,6 +4689,26 @@ def pipeline_to_task_config(
     return task_config_result
 
 
+DEFAULT_TASK_CLEANUP_DAYS = 7
+
+
+def get_task_cleanup_days(team_id: Optional[str] = None) -> int:
+    """获取任务自动清理保留天数，优先使用团队设置，否则默认 7 天。"""
+    if not team_id:
+        return DEFAULT_TASK_CLEANUP_DAYS
+    from backend.database import get_db_session
+    from backend.models import Team
+
+    db = get_db_session()
+    try:
+        team = db.query(Team).filter(Team.team_id == team_id).first()
+        if team and team.task_cleanup_days is not None:
+            return max(1, int(team.task_cleanup_days))
+        return DEFAULT_TASK_CLEANUP_DAYS
+    finally:
+        db.close()
+
+
 # ============ 构建任务管理器 ============
 class BuildTaskManager:
     """构建任务管理器 - 管理镜像构建任务，支持异步构建和日志存储"""
@@ -4843,9 +4865,20 @@ class BuildTaskManager:
             # 保存任务到数据库
             from backend.database import get_db_session
             from backend.models import Task
+            from backend.team_scope import infer_team_id_for_new_task
 
             db = get_db_session()
             try:
+                resolved_team_id = infer_team_id_for_new_task(
+                    db,
+                    team_id=serializable_kwargs.get("team_id"),
+                    pipeline_id=serializable_kwargs.get("pipeline_id"),
+                    deploy_config_id=serializable_kwargs.get("deploy_config_id"),
+                    task_config=task_config,
+                )
+                if task_config and isinstance(task_config, dict) and resolved_team_id:
+                    task_config = {**task_config, "team_id": resolved_team_id}
+
                 task_obj = Task(
                     task_id=task_id,
                     task_type=task_type,
@@ -4855,6 +4888,7 @@ class BuildTaskManager:
                     created_at=created_at,
                     task_config=task_config,
                     source=source,
+                    team_id=resolved_team_id,
                     pipeline_id=serializable_kwargs.get("pipeline_id"),
                     git_url=serializable_kwargs.get("git_url"),
                     branch=serializable_kwargs.get("branch"),
@@ -4935,6 +4969,7 @@ class BuildTaskManager:
             "use_project_dockerfile": task.use_project_dockerfile,
             "dockerfile_name": task.dockerfile_name,
             "trigger_source": task.trigger_source,
+            "team_id": getattr(task, "team_id", None),
         }
 
     def get_task(self, task_id: str) -> dict:
@@ -4963,10 +4998,13 @@ class BuildTaskManager:
         finally:
             db.close()
 
-    def list_tasks(self, status: str = None, task_type: str = None) -> list:
-        """列出所有任务"""
+    def list_tasks(
+        self, status: str = None, task_type: str = None, team_id: str = None
+    ) -> list:
+        """列出所有任务（可选按团队过滤）"""
         from backend.database import get_db_session
         from backend.models import Task
+        from backend.team_scope import task_belongs_to_team
 
         db = get_db_session()
         try:
@@ -4981,6 +5019,8 @@ class BuildTaskManager:
             if task_type:
                 query = query.filter(Task.task_type == task_type)
             tasks = query.order_by(Task.created_at.desc()).all()
+            if team_id:
+                tasks = [t for t in tasks if task_belongs_to_team(db, t, team_id)]
             return [self._to_dict(t) for t in tasks]
         finally:
             db.close()
@@ -5426,15 +5466,36 @@ class BuildTaskManager:
             db.close()
 
     def cleanup_expired_tasks(self):
-        """清理过期任务（超过1天）"""
+        """清理过期任务（按团队 task_cleanup_days 配置，默认 7 天）"""
         from backend.database import get_db_session
-        from backend.models import Task, TaskLog
-
-        cutoff_time = datetime.now() - timedelta(days=1)
+        from backend.models import Pipeline, Task, TaskLog, Team
 
         db = get_db_session()
         try:
-            expired_tasks = db.query(Task).filter(Task.created_at < cutoff_time).all()
+            team_days = {
+                t.team_id: max(1, int(t.task_cleanup_days or DEFAULT_TASK_CLEANUP_DAYS))
+                for t in db.query(Team).all()
+            }
+            pipeline_rows = db.query(Pipeline.pipeline_id, Pipeline.team_id).all()
+            pipeline_team = {p.pipeline_id: p.team_id for p in pipeline_rows}
+
+            now = datetime.now()
+            all_tasks = db.query(Task).all()
+            expired_tasks = []
+            for task in all_tasks:
+                if not task.created_at:
+                    continue
+                team_id = pipeline_team.get(task.pipeline_id)
+                if not team_id and isinstance(task.task_config, dict):
+                    team_id = task.task_config.get("team_id")
+                days = (
+                    team_days.get(team_id, DEFAULT_TASK_CLEANUP_DAYS)
+                    if team_id
+                    else DEFAULT_TASK_CLEANUP_DAYS
+                )
+                cutoff_time = now - timedelta(days=days)
+                if task.created_at < cutoff_time:
+                    expired_tasks.append(task)
 
             expired_tasks_info = []
             cleaned_count = 0
@@ -6470,6 +6531,7 @@ class ExportTaskManager:
         compress: str = "none",
         registry: str = None,
         use_local: bool = False,
+        team_id: str = None,
     ) -> str:
         """创建导出任务"""
         from backend.database import get_db_session
@@ -6490,6 +6552,7 @@ class ExportTaskManager:
                 use_local=use_local,
                 status="pending",
                 source="手动导出",
+                team_id=team_id,
                 created_at=created_at,
             )
 
@@ -6804,6 +6867,7 @@ class ExportTaskManager:
                 task.completed_at.isoformat() if task.completed_at else None
             ),
             "error": task.error,
+            "team_id": getattr(task, "team_id", None),
         }
 
     def get_task(self, task_id: str) -> dict:
@@ -6818,8 +6882,8 @@ class ExportTaskManager:
         finally:
             db.close()
 
-    def list_tasks(self, status: str = None) -> list:
-        """列出所有任务"""
+    def list_tasks(self, status: str = None, team_id: str = None) -> list:
+        """列出所有任务（可选按团队过滤）"""
         from backend.database import get_db_session
         from backend.models import ExportTask
 
@@ -6828,6 +6892,8 @@ class ExportTaskManager:
             query = db.query(ExportTask)
             if status:
                 query = query.filter(ExportTask.status == status)
+            if team_id:
+                query = query.filter(ExportTask.team_id == team_id)
             tasks = query.order_by(ExportTask.created_at.desc()).all()
             return [self._to_dict(t) for t in tasks]
         finally:
@@ -7017,13 +7083,13 @@ class ExportTaskManager:
         finally:
             db.close()
 
-    def cleanup_expired_tasks(self, days: int = 1):
-        """清理过期任务（默认保留1天）"""
+    def cleanup_expired_tasks(self, days: Optional[int] = None):
+        """清理过期导出任务（默认保留 7 天，可指定 days 覆盖）"""
         from backend.database import get_db_session
         from backend.models import ExportTask
-        from datetime import timedelta
 
-        cutoff_time = datetime.now() - timedelta(days=days)
+        retention_days = days if days is not None else DEFAULT_TASK_CLEANUP_DAYS
+        cutoff_time = datetime.now() - timedelta(days=retention_days)
 
         db = get_db_session()
         try:
@@ -7066,7 +7132,13 @@ class OperationLogger:
         self.lock = threading.Lock()
 
     @classmethod
-    def log(cls, username: str, operation: str, details: dict = None):
+    def log(
+        cls,
+        username: str,
+        operation: str,
+        details: dict = None,
+        team_id: str = None,
+    ):
         """记录操作日志"""
         from backend.database import get_db_session
         from backend.models import OperationLog
@@ -7077,6 +7149,7 @@ class OperationLogger:
                 username=username,
                 action=operation,
                 details=details or {},
+                team_id=team_id,
                 timestamp=datetime.now(),
             )
             db.add(log_entry)

@@ -1,7 +1,7 @@
 <template>
   <BaseDialog :model-value="modelValue" @update:model-value="$emit('update:modelValue', $event)">
     <div
-      class="relative z-10 mx-auto flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl"
+      class="relative z-10 mx-auto flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-xl max-w-[calc(100vw-1rem)] sm:max-w-none"
       :class="widthClass"
       @click.stop
     >
@@ -24,7 +24,7 @@
       </div>
       <div
         v-if="$slots.footer"
-        class="flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3"
+        class="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end"
       >
         <slot name="footer" />
       </div>

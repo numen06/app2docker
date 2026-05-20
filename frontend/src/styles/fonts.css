@@ -1,0 +1,14 @@
+@font-face {
+  font-family: 'MiSans';
+  src: url('/fonts/misans/MiSans-VF.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-sans:
+    'MiSans', system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Courier New', monospace;
+}

@@ -219,10 +219,20 @@
               <button
                 type="button"
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                @click="cleanupByDays(7)"
+              >
+                <i class="fas fa-calendar-alt w-4"></i>
+                清理7天前的任务（默认）
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 @click="cleanupByDaysPrompt"
               >
                 <i class="fas fa-calendar-alt w-4"></i>
-                清理N天前的任务
+                清理N天前的任务…
               </button>
             </li>
             <li class="my-1 border-t border-slate-100"></li>
@@ -296,7 +306,77 @@
 
     <EmptyState v-else-if="paginatedTasks.length === 0" message="暂无任务" />
 
-    <Table v-else min-width-class="min-w-[72rem]">
+    <template v-else>
+    <div class="space-y-3 md:hidden">
+      <div
+        v-for="task in paginatedTasks"
+        :key="task.task_id"
+        class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div class="flex flex-wrap gap-1">
+            <Badge v-if="task.task_category === 'build'" variant="info">
+              <i class="fas fa-hammer mr-1"></i> 构建
+            </Badge>
+            <Badge v-else-if="task.task_category === 'deploy'" variant="success">
+              <i class="fas fa-rocket mr-1"></i> 部署
+            </Badge>
+            <Badge v-else variant="default">
+              <i class="fas fa-download mr-1"></i> 导出
+            </Badge>
+            <Badge v-if="task.status === 'pending'" variant="default">等待中</Badge>
+            <Badge v-else-if="task.status === 'running'" variant="default">进行中</Badge>
+            <Badge v-else-if="task.status === 'stopped'" variant="warning">已停止</Badge>
+            <Badge v-else-if="task.status === 'completed'" variant="success">已完成</Badge>
+            <Badge v-else-if="task.status === 'failed'" variant="danger">失败</Badge>
+          </div>
+          <span class="text-xs text-slate-500">{{ formatTime(task.created_at) }}</span>
+        </div>
+        <p class="mt-2 truncate text-sm font-medium text-slate-900">
+          <template v-if="task.source === '流水线' && task.pipeline_name">
+            {{ task.pipeline_name }}
+          </template>
+          <template v-else>
+            {{ task.image || task.task_type || "未知" }}
+            <span v-if="task.tag" class="text-slate-500">:{{ task.tag }}</span>
+          </template>
+        </p>
+        <p v-if="task.branch" class="mt-1 text-xs text-slate-500">
+          <i class="fas fa-code-branch mr-1"></i>{{ task.branch }}
+        </p>
+        <div class="mt-3 flex flex-wrap gap-1 border-t border-slate-200 pt-3">
+          <Button
+            v-if="task.task_category === 'build' || task.task_category === 'deploy'"
+            variant="outline"
+            size="sm"
+            title="查看日志"
+            @click="viewLogs(task)"
+          >
+            <i class="fas fa-terminal"></i>
+          </Button>
+          <Button
+            v-if="task.task_category === 'export' && task.status === 'completed'"
+            size="sm"
+            title="下载"
+            :disabled="downloading === task.task_id"
+            @click="downloadTask(task)"
+          >
+            <i class="fas fa-download"></i>
+          </Button>
+          <Button
+            size="sm"
+            :variant="task.status === 'running' || task.status === 'pending' ? 'outline' : 'destructive'"
+            :title="task.status === 'running' || task.status === 'pending' ? '停止' : '删除'"
+            @click="task.status === 'running' || task.status === 'pending' ? stopTask(task) : deleteTask(task)"
+          >
+            <i :class="task.status === 'running' || task.status === 'pending' ? 'fas fa-stop' : 'fas fa-trash'"></i>
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hidden md:block">
+    <Table min-width-class="min-w-[72rem]">
       <TableHeader>
         <TableRow>
           <TableHead class="w-[100px]">类型</TableHead>
@@ -617,6 +697,8 @@
         </TableRow>
       </TableBody>
     </Table>
+    </div>
+    </template>
 
     <PaginationBar
       v-if="!loading && !filtering && totalTasks > 0"
@@ -649,7 +731,7 @@
       </div>
       <codemirror
         v-model="taskConfigJsonText"
-        :style="{ height: '500px', fontSize: '13px' }"
+        :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
         :disabled="true"
         :extensions="jsonEditorExtensions"
       />
@@ -1595,23 +1677,11 @@ async function cleanupByStatus(status) {
   }
 }
 
-async function cleanupByDaysPrompt() {
+const DEFAULT_CLEANUP_DAYS = 7;
+
+async function cleanupByDays(days) {
   closeCleanupMenu();
   if (cleaning.value) return;
-
-  const daysInput = prompt(
-    "请输入要清理的天数（例如：7 表示清理7天前的任务）：",
-    "7"
-  );
-  if (!daysInput) {
-    return;
-  }
-
-  const days = parseInt(daysInput);
-  if (isNaN(days) || days < 1) {
-    alert("请输入有效的天数（必须大于0）");
-    return;
-  }
 
   if (
     !confirm(
@@ -1637,6 +1707,27 @@ async function cleanupByDaysPrompt() {
   } finally {
     cleaning.value = false;
   }
+}
+
+async function cleanupByDaysPrompt() {
+  closeCleanupMenu();
+  if (cleaning.value) return;
+
+  const daysInput = prompt(
+    `请输入要清理的天数（默认 ${DEFAULT_CLEANUP_DAYS} 天）：`,
+    String(DEFAULT_CLEANUP_DAYS)
+  );
+  if (!daysInput) {
+    return;
+  }
+
+  const days = parseInt(daysInput, 10);
+  if (isNaN(days) || days < 1) {
+    alert("请输入有效的天数（必须大于0）");
+    return;
+  }
+
+  await cleanupByDays(days);
 }
 
 async function cleanupOrphanDirs() {

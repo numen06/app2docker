@@ -158,7 +158,7 @@
         <Label>文件内容</Label>
         <Codemirror
           v-model="editContent"
-          :style="{ height: '500px', fontSize: '13px' }"
+          :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
           :autofocus="true"
           :indent-with-tab="false"
           :tab-size="2"

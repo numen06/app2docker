@@ -122,6 +122,7 @@ class Task(Base):
     source = Column(String(50), default="手动构建")
     pipeline_id = Column(String(36), ForeignKey("pipelines.pipeline_id"), nullable=True)
     deploy_config_id = Column(String(36), ForeignKey("deploy_configs.config_id"), nullable=True)  # 关联到部署配置
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
 
     # 向后兼容字段（从 task_config 中提取）
     git_url = Column(String(512))
@@ -145,6 +146,7 @@ class Task(Base):
         Index("idx_task_created", "created_at"),
         Index("idx_task_type_status", "task_type", "status"),
         Index("idx_task_type_deploy_config", "task_type", "deploy_config_id"),
+        Index("idx_task_team", "team_id"),
     )
 
 
@@ -212,10 +214,16 @@ class Host(Base):
     docker_version = Column(String(255))
     description = Column(Text, default="")
 
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    __table_args__ = (Index("idx_host_name", "name"),)
+    __table_args__ = (
+        Index("idx_host_name", "name"),
+        Index("idx_host_team", "team_id"),
+    )
 
 
 class ResourcePackage(Base):
@@ -230,10 +238,16 @@ class ResourcePackage(Base):
     size = Column(Integer, default=0)
     extracted = Column(Boolean, default=False)
 
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    __table_args__ = (Index("idx_resource_package_name", "name"),)
+    __table_args__ = (
+        Index("idx_resource_package_name", "name"),
+        Index("idx_resource_package_team", "team_id"),
+    )
 
 
 class OperationLog(Base):
@@ -245,12 +259,14 @@ class OperationLog(Base):
     username = Column(String(255), nullable=False)
     action = Column(String(100), nullable=False)
     details = Column(JSON, default=dict)
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
     timestamp = Column(DateTime, default=datetime.now)
 
     __table_args__ = (
         Index("idx_operation_log_user", "username"),
         Index("idx_operation_log_action", "action"),
         Index("idx_operation_log_time", "timestamp"),
+        Index("idx_operation_log_team", "team_id"),
     )
 
 
@@ -272,6 +288,7 @@ class ExportTask(Base):
     file_path = Column(String(512))
     file_size = Column(Integer)
     source = Column(String(50), default="手动导出")
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     completed_at = Column(DateTime)
     error = Column(Text)
@@ -279,6 +296,7 @@ class ExportTask(Base):
     __table_args__ = (
         Index("idx_export_task_status", "status"),
         Index("idx_export_task_created", "created_at"),
+        Index("idx_export_task_team", "team_id"),
     )
 
 
@@ -567,6 +585,7 @@ class Team(Base):
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    task_cleanup_days = Column(Integer, default=7)  # 任务自动清理保留天数
 
     members = relationship(
         "TeamMember",

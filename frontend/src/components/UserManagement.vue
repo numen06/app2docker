@@ -149,6 +149,14 @@
       </Table>
     </div>
 
+    <PaginationBar
+      :page="currentPage"
+      :page-size="pageSize"
+      :total="totalUsers"
+      :total-pages="totalPages"
+      @update:page="changePage"
+    />
+
     <FormDialog
       :model-value="showCreateModal || showEditModal"
       :title="showCreateModal ? '创建用户' : '编辑用户'"
@@ -382,8 +390,13 @@ import TableBody from "@/components/ui/table/TableBody.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
 
 const users = ref([]);
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalUsers = ref(0);
+const totalPages = ref(0);
 const availableRoles = ref([]);
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
@@ -429,13 +442,33 @@ onMounted(async () => {
   await loadRoles();
 });
 
+function changePage(page) {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+  currentPage.value = page;
+  loadUsers();
+}
+
 async function loadUsers() {
   try {
-    const res = await axios.get("/api/users");
+    const res = await axios.get("/api/users", {
+      params: {
+        page: currentPage.value,
+        page_size: pageSize.value,
+      },
+    });
     users.value = res.data.users || [];
+    totalUsers.value = res.data.total ?? users.value.length;
+    totalPages.value = res.data.total_pages ?? 0;
+    if (users.value.length === 0 && currentPage.value > 1 && totalPages.value > 0) {
+      currentPage.value = totalPages.value;
+      return loadUsers();
+    }
   } catch (err) {
     console.error("加载用户列表失败:", err);
     alert("加载用户列表失败: " + (err.response?.data?.detail || err.message));
+    users.value = [];
+    totalUsers.value = 0;
+    totalPages.value = 0;
   }
 }
 
@@ -487,6 +520,7 @@ async function saveUser() {
         roles: form.value.roles,
       });
       alert("用户创建成功");
+      currentPage.value = 1;
     } else {
       await axios.put(`/api/users/${form.value.user_id}`, {
         email: form.value.email || null,

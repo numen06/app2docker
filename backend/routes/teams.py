@@ -129,6 +129,14 @@ class MenuPermissionsOut(BaseModel):
     permissions: List[str]
 
 
+class TeamSettingsOut(BaseModel):
+    task_cleanup_days: int = Field(default=7, ge=1, le=365)
+
+
+class TeamSettingsUpdate(BaseModel):
+    task_cleanup_days: int = Field(..., ge=1, le=365)
+
+
 def _team_to_out(t: Team) -> TeamOut:
     return TeamOut(
         team_id=t.team_id,
@@ -460,3 +468,39 @@ def remove_member(
     db.delete(target)
     db.commit()
     return None
+
+
+@router.get("/{team_id}/settings", response_model=TeamSettingsOut)
+def get_team_settings(
+    team_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_team_member(db, team_id, user_id)
+    team = db.query(Team).filter(Team.team_id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="团队不存在")
+    days = team.task_cleanup_days if team.task_cleanup_days is not None else 7
+    return TeamSettingsOut(task_cleanup_days=max(1, int(days)))
+
+
+@router.put("/{team_id}/settings", response_model=TeamSettingsOut)
+def update_team_settings(
+    team_id: str,
+    body: TeamSettingsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_team_admin(db, team_id, user_id)
+    team = db.query(Team).filter(Team.team_id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="团队不存在")
+    team.task_cleanup_days = body.task_cleanup_days
+    team.updated_at = datetime.now()
+    db.commit()
+    db.refresh(team)
+    return TeamSettingsOut(task_cleanup_days=team.task_cleanup_days)

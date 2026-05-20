@@ -63,7 +63,7 @@
     />
     <codemirror
       v-model="form.content"
-      :style="{ height: '500px', fontSize: '13px' }"
+      :style="{ height: 'min(500px, 60vh)', fontSize: '13px' }"
       :autofocus="true"
       :indent-with-tab="false"
       :tab-size="4"

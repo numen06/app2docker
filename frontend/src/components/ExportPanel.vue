@@ -1,9 +1,9 @@
 <template>
   <div class="export-panel">
-    <div class="mb-4 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+    <div class="mb-4 flex w-full flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 sm:inline-flex sm:w-auto">
       <button
         type="button"
-        class="rounded-md px-4 py-2 text-sm font-medium transition"
+        class="flex-1 rounded-md px-4 py-2 text-sm font-medium transition sm:flex-none"
         :class="exportMode === 'single' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
         @click="exportMode = 'single'"
       >
@@ -11,7 +11,7 @@
       </button>
       <button
         type="button"
-        class="rounded-md px-4 py-2 text-sm font-medium transition"
+        class="flex-1 rounded-md px-4 py-2 text-sm font-medium transition sm:flex-none"
         :class="exportMode === 'compose' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
         @click="exportMode = 'compose'"
       >

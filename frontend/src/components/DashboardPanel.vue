@@ -3,7 +3,7 @@
     <div class="mb-4 flex items-center justify-between gap-3">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
         <i class="fas fa-chart-line text-blue-600"></i>
-        系统仪表盘
+        {{ dashboardTitle }}
       </h2>
       <Button variant="outline" size="sm" :disabled="loading" @click="loadDashboard">
         <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
@@ -229,7 +229,8 @@
 
 <script setup>
 import axios from "axios";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { useTeamStore } from "@/stores/team";
 import Button from "@/components/ui/button/Button.vue";
 import Card from "@/components/ui/card/Card.vue";
 import CardHeader from "@/components/ui/card/CardHeader.vue";
@@ -240,6 +241,12 @@ import { Badge } from "@/components/ui/badge";
 import InfoBlock from "@/components/ui/InfoBlock.vue";
 
 defineEmits(["navigate"]);
+
+const teamStore = useTeamStore();
+const dashboardTitle = computed(() => {
+  const name = teamStore.activeTeam?.name;
+  return name ? `${name} · 团队仪表盘` : "系统仪表盘";
+});
 
 const loading = ref(false);
 const stats = ref(null);

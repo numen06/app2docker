@@ -3,7 +3,8 @@
 import threading
 import time
 from typing import Dict, Optional
-from datetime import datetime
+
+_GLOBAL_CACHE_KEY = "__global__"
 
 
 class DashboardCacheManager:
@@ -21,60 +22,85 @@ class DashboardCacheManager:
 
     def _init(self):
         """初始化缓存管理器"""
-        self._cache: Optional[Dict] = None
-        self._cache_time: Optional[float] = None
+        self._caches: Dict[str, Dict] = {}
+        self._cache_times: Dict[str, float] = {}
         self._cache_duration = 60  # 60秒缓存有效期
-        self._refreshing = False
+        self._refreshing_keys: set = set()
         self._refresh_lock = threading.Lock()
 
-    def _is_cache_valid(self) -> bool:
+    def _cache_key(self, team_id: Optional[str]) -> str:
+        return team_id if team_id else _GLOBAL_CACHE_KEY
+
+    def _is_cache_valid(self, cache_key: str) -> bool:
         """检查缓存是否有效"""
-        if self._cache is None or self._cache_time is None:
+        if cache_key not in self._caches or cache_key not in self._cache_times:
             return False
-        elapsed = time.time() - self._cache_time
+        elapsed = time.time() - self._cache_times[cache_key]
         return elapsed < self._cache_duration
 
-    def get_stats(self, force_refresh: bool = False) -> Dict:
+    def get_stats(
+        self, team_id: Optional[str] = None, force_refresh: bool = False
+    ) -> Dict:
         """
         获取仪表盘统计数据（带缓存）
 
         Args:
+            team_id: 团队 ID；为空时统计全站
             force_refresh: 是否强制刷新缓存
 
         Returns:
             统计数据字典
         """
+        cache_key = self._cache_key(team_id)
+
         with self._lock:
-            # 如果缓存有效且不强制刷新，直接返回
-            if not force_refresh and self._is_cache_valid():
-                return self._cache.copy()
+            if not force_refresh and self._is_cache_valid(cache_key):
+                return self._caches[cache_key].copy()
 
-            # 防止并发刷新
             with self._refresh_lock:
-                if self._refreshing and not force_refresh:
-                    # 如果正在刷新且不是强制刷新，返回旧缓存
-                    if self._cache:
-                        return self._cache.copy()
+                if cache_key in self._refreshing_keys and not force_refresh:
+                    if cache_key in self._caches:
+                        return self._caches[cache_key].copy()
 
-                self._refreshing = True
+                self._refreshing_keys.add(cache_key)
                 try:
-                    # 计算统计数据
-                    stats = self._calculate_stats()
-                    self._cache = stats
-                    self._cache_time = time.time()
+                    stats = self._calculate_stats(team_id=team_id)
+                    self._caches[cache_key] = stats
+                    self._cache_times[cache_key] = time.time()
                 finally:
-                    self._refreshing = False
+                    self._refreshing_keys.discard(cache_key)
 
-            return self._cache.copy()
+            return self._caches[cache_key].copy()
 
-    def _calculate_stats(self) -> Dict:
+    def _team_task_filter(self, db, team_id: str):
+        """构建团队任务查询过滤条件"""
+        from sqlalchemy import or_
+        from backend.models import Task, Pipeline, DeployConfig
+
+        pipeline_ids = db.query(Pipeline.pipeline_id).filter(
+            Pipeline.team_id == team_id
+        )
+        deploy_ids = db.query(DeployConfig.config_id).filter(
+            DeployConfig.team_id == team_id
+        )
+        return or_(
+            Task.pipeline_id.in_(pipeline_ids),
+            Task.deploy_config_id.in_(deploy_ids),
+        )
+
+    def _calculate_stats(self, team_id: Optional[str] = None) -> Dict:
         """计算仪表盘统计数据"""
         from backend.database import get_db_session
         from backend.models import (
-            Task, Pipeline, GitSource, Host, AgentHost, ResourcePackage, ExportTask,
+            Task,
+            Pipeline,
+            GitSource,
+            Host,
+            AgentHost,
+            ResourcePackage,
+            ExportTask,
         )
 
-        # 初始化默认值
         stats = {
             "totalTasks": 0,
             "runningTasks": 0,
@@ -94,46 +120,78 @@ class DashboardCacheManager:
         build_stats = {"total_size_mb": 0, "dir_count": 0}
         export_stats = {"total_size_mb": 0, "file_count": 0}
 
-        # 使用数据库 count 查询统计，避免加载全部数据（性能更好且无截断问题）
         db = get_db_session()
         try:
-            # 获取任务统计
             try:
-                stats["totalTasks"] = db.query(Task).count() + db.query(ExportTask).count()
-                stats["runningTasks"] = (
-                    db.query(Task).filter(Task.status == "running").count()
-                    + db.query(ExportTask).filter(ExportTask.status == "running").count()
-                )
-                stats["completedTasks"] = (
-                    db.query(Task).filter(Task.status == "completed").count()
-                    + db.query(ExportTask).filter(ExportTask.status == "completed").count()
-                )
+                if team_id:
+                    task_filter = self._team_task_filter(db, team_id)
+                    stats["totalTasks"] = db.query(Task).filter(task_filter).count()
+                    stats["runningTasks"] = (
+                        db.query(Task)
+                        .filter(task_filter, Task.status == "running")
+                        .count()
+                    )
+                    stats["completedTasks"] = (
+                        db.query(Task)
+                        .filter(task_filter, Task.status == "completed")
+                        .count()
+                    )
+                else:
+                    stats["totalTasks"] = (
+                        db.query(Task).count() + db.query(ExportTask).count()
+                    )
+                    stats["runningTasks"] = (
+                        db.query(Task).filter(Task.status == "running").count()
+                        + db.query(ExportTask)
+                        .filter(ExportTask.status == "running")
+                        .count()
+                    )
+                    stats["completedTasks"] = (
+                        db.query(Task).filter(Task.status == "completed").count()
+                        + db.query(ExportTask)
+                        .filter(ExportTask.status == "completed")
+                        .count()
+                    )
             except Exception as e:
                 print(f"⚠️ 获取任务统计失败: {e}")
                 import traceback
+
                 traceback.print_exc()
 
-            # 获取流水线统计
             try:
-                stats["pipelines"] = db.query(Pipeline).count()
-                stats["enabledPipelines"] = db.query(Pipeline).filter(Pipeline.enabled == True).count()
+                pipeline_q = db.query(Pipeline)
+                if team_id:
+                    pipeline_q = pipeline_q.filter(Pipeline.team_id == team_id)
+                stats["pipelines"] = pipeline_q.count()
+                stats["enabledPipelines"] = pipeline_q.filter(
+                    Pipeline.enabled == True
+                ).count()
                 stats["disabledPipelines"] = stats["pipelines"] - stats["enabledPipelines"]
             except Exception as e:
                 print(f"⚠️ 获取流水线统计失败: {e}")
 
-            # 获取数据源统计（直接 count 查询，避免 list_sources 的 50 条截断）
             try:
-                stats["datasources"] = db.query(GitSource).count()
+                ds_q = db.query(GitSource)
+                if team_id:
+                    ds_q = ds_q.filter(GitSource.team_id == team_id)
+                stats["datasources"] = ds_q.count()
             except Exception as e:
                 print(f"⚠️ 获取数据源统计失败: {e}")
 
-            # 获取主机统计（SSH主机 + Agent主机）
             try:
-                stats["hosts"] = db.query(Host).count() + db.query(AgentHost).count()
+                if team_id:
+                    stats["hosts"] = (
+                        db.query(AgentHost)
+                        .filter(AgentHost.team_id == team_id)
+                        .count()
+                    )
+                else:
+                    stats["hosts"] = (
+                        db.query(Host).count() + db.query(AgentHost).count()
+                    )
             except Exception as e:
                 print(f"⚠️ 获取主机统计失败: {e}")
 
-            # 获取资源包统计（直接 count 查询，避免 list_packages 中的文件存在性检查开销）
             try:
                 stats["resourcePackages"] = db.query(ResourcePackage).count()
             except Exception as e:
@@ -141,7 +199,6 @@ class DashboardCacheManager:
         finally:
             db.close()
 
-        # 获取仓库统计（配置文件数据，保持原有方式）
         try:
             from backend.config import get_all_registries
 
@@ -150,7 +207,6 @@ class DashboardCacheManager:
         except Exception as e:
             print(f"⚠️ 获取仓库统计失败: {e}")
 
-        # 获取模板统计（配置文件数据，保持原有方式）
         try:
             from backend.config import get_all_templates
 
@@ -159,7 +215,6 @@ class DashboardCacheManager:
         except Exception as e:
             print(f"⚠️ 获取模板统计失败: {e}")
 
-        # 获取存储统计
         try:
             from backend.stats_cache import StatsCacheManager
             from backend.handlers import BUILD_DIR, EXPORT_DIR
@@ -176,7 +231,6 @@ class DashboardCacheManager:
             export_stats["total_size_mb"] = export_storage_mb
             export_stats["file_count"] = export_stats_data.get("file_count", 0)
 
-            # 转换为字节
             stats["buildStorage"] = build_storage_mb * 1024 * 1024
             stats["exportStorage"] = export_storage_mb * 1024 * 1024
             stats["totalStorage"] = stats["buildStorage"] + stats["exportStorage"]
@@ -193,12 +247,16 @@ class DashboardCacheManager:
             "exportStats": export_stats,
         }
 
-    def clear_cache(self):
-        """清空缓存"""
+    def clear_cache(self, team_id: Optional[str] = None):
+        """清空缓存；team_id 为空时清空全部"""
         with self._lock:
-            self._cache = None
-            self._cache_time = None
+            if team_id is None:
+                self._caches.clear()
+                self._cache_times.clear()
+            else:
+                cache_key = self._cache_key(team_id)
+                self._caches.pop(cache_key, None)
+                self._cache_times.pop(cache_key, None)
 
 
-# 全局缓存实例
 dashboard_cache = DashboardCacheManager()

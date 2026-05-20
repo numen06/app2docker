@@ -72,10 +72,26 @@
             <span>前缀：{{ registry.registry_prefix }}</span>
           </div>
           <div class="flex gap-2 text-slate-600">
+            <i class="fas fa-shield-alt mt-0.5 w-4 shrink-0 text-slate-400"></i>
+            <span>{{
+              !registry.username && !registry.has_password
+                ? "无需认证（公开仓库）"
+                : registry.username && registry.has_password
+                  ? "已配置认证"
+                  : "认证不完整"
+            }}</span>
+          </div>
+          <div
+            v-if="registry.username || registry.has_password"
+            class="flex gap-2 text-slate-600"
+          >
             <i class="fas fa-user mt-0.5 w-4 shrink-0 text-slate-400"></i>
             <span>账号：{{ registry.username || "未设置" }}</span>
           </div>
-          <div class="flex gap-2 text-slate-600">
+          <div
+            v-if="registry.username || registry.has_password"
+            class="flex gap-2 text-slate-600"
+          >
             <i class="fas fa-key mt-0.5 w-4 shrink-0 text-slate-400"></i>
             <span>密码：{{ registry.has_password ? "已设置" : "未设置" }}</span>
           </div>
@@ -111,13 +127,17 @@
           <p class="text-xs text-slate-500">用于自动生成镜像名称的前缀</p>
         </div>
         <div class="space-y-2">
+          <Label>认证信息（可选）</Label>
+          <p class="text-xs text-slate-500">公开仓库可留空；私有仓库需填写用户名和密码</p>
+        </div>
+        <div class="space-y-2">
           <Label>账号</Label>
-          <Input v-model="registryForm.username" placeholder="用户名" />
+          <Input v-model="registryForm.username" placeholder="用户名（可选）" />
         </div>
         <div class="space-y-2">
           <Label>密码</Label>
           <div class="flex gap-2">
-            <Input v-model="registryForm.password" type="password" placeholder="密码" class="flex-1" />
+            <Input v-model="registryForm.password" type="password" placeholder="密码（可选）" class="flex-1" />
             <Button
               type="button"
               variant="outline"
@@ -286,20 +306,21 @@ async function saveRegistry() {
   try {
     if (editingRegistryIndex.value !== null) {
       const index = editingRegistryIndex.value;
-      const password =
-        registryForm.value.password && registryForm.value.password !== "******"
-          ? registryForm.value.password
-          : undefined;
+      const passwordUnchanged = registryForm.value.password === "******";
+      const password = passwordUnchanged ? undefined : (registryForm.value.password ?? "");
 
       const updatedRegistry = { ...registryForm.value };
-      if (password !== undefined) {
+      if (!passwordUnchanged) {
         updatedRegistry.password = password;
+      } else {
+        delete updatedRegistry.password;
       }
 
       registries.value[index] = {
         ...updatedRegistry,
-        has_password:
-          password !== undefined ? true : registries.value[index].has_password,
+        has_password: passwordUnchanged
+          ? registries.value[index].has_password
+          : Boolean(password),
       };
 
       if (registryForm.value.active) {
@@ -329,28 +350,31 @@ async function saveRegistry() {
 
 async function testCurrentRegistryLogin() {
   if (!registryForm.value.registry) {
-    alert("请先填写Registry地址");
+    alert("请先填写 Registry 地址");
     return;
   }
-  if (
-    !registryForm.value.username ||
-    !registryForm.value.password ||
-    registryForm.value.password === "******"
-  ) {
-    alert("请先填写用户名和密码");
+  const username = (registryForm.value.username || "").trim();
+  const password = registryForm.value.password;
+  const hasPassword = Boolean(password && password !== "******");
+  if ((username && !hasPassword) || (!username && hasPassword)) {
+    alert("用户名和密码需同时填写，或均留空（公开仓库）");
     return;
   }
+  const withAuth = Boolean(username && hasPassword);
 
   testingRegistry.value = "current";
   registryTestResult.value["current"] = null;
 
   try {
-    const res = await axios.post("/api/registries/test", {
-      name: registryForm.value.name,
+    const payload = {
+      name: registryForm.value.name || "",
       registry: registryForm.value.registry,
-      username: registryForm.value.username,
-      password: registryForm.value.password,
-    });
+      username: registryForm.value.username || "",
+    };
+    if (withAuth) {
+      payload.password = registryForm.value.password;
+    }
+    const res = await axios.post("/api/registries/test", payload);
     registryTestResult.value["current"] = {
       success: res.data.success,
       message: res.data.message,
@@ -384,15 +408,11 @@ function removeRegistry(index) {
 async function testRegistryLogin(index) {
   const registry = registries.value[index];
   if (!registry.registry) {
-    alert("请先填写Registry地址");
+    alert("请先填写 Registry 地址");
     return;
   }
-  if (!registry.username) {
-    alert("请先填写用户名");
-    return;
-  }
-  if (!registry.has_password) {
-    alert("请先配置密码");
+  if (registry.username && !registry.has_password) {
+    alert("已填写用户名但未配置密码，请补全或清空用户名");
     return;
   }
 
@@ -401,9 +421,9 @@ async function testRegistryLogin(index) {
 
   try {
     const res = await axios.post("/api/registries/test", {
-      name: registry.name,
+      name: registry.name || "",
       registry: registry.registry,
-      username: registry.username,
+      username: registry.username || "",
     });
     registryTestResult.value[index] = {
       success: res.data.success,
