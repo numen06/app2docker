@@ -68,6 +68,15 @@
             <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
               <i class="fas fa-pen"></i>
             </Button>
+            <Button
+              v-if="tpl.type === 'user' && tpl.template_id"
+              variant="outline"
+              size="sm"
+              title="成员授权"
+              @click="openResourcePermission(tpl)"
+            >
+              <i class="fas fa-user-shield"></i>
+            </Button>
             <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
               <i class="fas fa-trash"></i>
             </Button>
@@ -124,6 +133,15 @@
                   <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
                     <i class="fas fa-pen"></i>
                   </Button>
+                  <Button
+                    v-if="tpl.type === 'user' && tpl.template_id"
+                    variant="outline"
+                    size="sm"
+                    title="成员授权"
+                    @click="openResourcePermission(tpl)"
+                  >
+                    <i class="fas fa-user-shield"></i>
+                  </Button>
                   <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
                     <i class="fas fa-trash"></i>
                   </Button>
@@ -134,6 +152,14 @@
         </Table>
       </div>
     </template>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="template"
+      :resource-id="permissionTarget?.template_id || ''"
+      :team-id="teamStore.activeTeamId"
+      :resource-name="permissionTarget?.name || ''"
+    />
 
     <PaginationBar
       v-if="totalPages > 1"
@@ -279,6 +305,17 @@ import {
   getProjectTypesSync,
   getProjectTypeLabel,
 } from "../utils/projectTypes.js";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useTeamStore } from "@/stores/team";
+
+const teamStore = useTeamStore();
+const permissionDialogOpen = ref(false);
+const permissionTarget = ref(null);
+
+function openResourcePermission(tpl) {
+  permissionTarget.value = tpl;
+  permissionDialogOpen.value = true;
+}
 
 const projectTypesList = ref(getProjectTypesSync());
 

@@ -647,13 +647,25 @@ class DeployTaskManager:
                 if registry_address:
                     # 查找匹配的 registry 配置
                     from backend.config import get_all_registries
+                    from backend.registry_manager import (
+                        get_registry_password_for_row,
+                        resolve_registry,
+                    )
 
-                    registries = get_all_registries()
+                    deploy_team_id = getattr(deploy_config, "team_id", None)
+                    registries = get_all_registries(team_id=deploy_team_id)
 
                     for registry_config in registries:
                         registry_host = registry_config.get("registry", "")
                         username = registry_config.get("username", "")
                         password = registry_config.get("password", "")
+                        if not password and deploy_team_id:
+                            reg_key = registry_config.get("registry_id") or registry_config.get(
+                                "name"
+                            )
+                            row = resolve_registry(reg_key, team_id=deploy_team_id)
+                            if row:
+                                password = get_registry_password_for_row(row) or ""
 
                         # 匹配逻辑：检查 registry 地址是否匹配
                         if (

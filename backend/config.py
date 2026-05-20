@@ -157,8 +157,18 @@ def save_config(config):
         raise
 
 
-def get_active_registry():
+def get_active_registry(team_id: Optional[str] = None, user_id: Optional[str] = None):
     """获取当前激活的仓库配置（用于推送，返回解密后的密码）"""
+    try:
+        from backend.registry_manager import db_has_registries, get_active_registry_for_team
+
+        if db_has_registries() and team_id:
+            active = get_active_registry_for_team(team_id, user_id=user_id)
+            if active:
+                return active
+    except Exception as e:
+        print(f"⚠️ 从数据库获取激活仓库失败，回退 config: {e}")
+
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 
@@ -228,8 +238,25 @@ def get_active_registry():
     }
 
 
-def get_registry_by_name(name):
-    """根据名称获取仓库配置（返回包含解密密码的配置）"""
+def get_registry_by_name(
+    name, team_id: Optional[str] = None, user_id: Optional[str] = None
+):
+    """根据名称或 ID 获取仓库配置（返回包含解密密码的配置）"""
+    try:
+        from backend.registry_manager import (
+            db_has_registries,
+            get_registry_by_name_for_team,
+        )
+
+        if db_has_registries():
+            found = get_registry_by_name_for_team(
+                name, team_id=team_id, user_id=user_id, include_password=True
+            )
+            if found:
+                return found
+    except Exception as e:
+        print(f"⚠️ 从数据库按名称获取仓库失败，回退 config: {e}")
+
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 
@@ -265,17 +292,25 @@ def get_registry_by_name(name):
     return None
 
 
-def get_all_registries():
-    """获取所有仓库配置（不返回密码，只返回 has_password 标志）"""
+def get_all_registries(
+    team_id: Optional[str] = None, user_id: Optional[str] = None
+):
+    """获取仓库配置（不返回密码；优先从数据库按团队与权限过滤）"""
+    try:
+        from backend.registry_manager import db_has_registries, list_registries_for_user
+
+        if db_has_registries() and team_id and user_id:
+            return list_registries_for_user(user_id, team_id)
+    except Exception as e:
+        print(f"⚠️ 从数据库读取镜像仓库失败，回退 config: {e}")
+
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 
-    # 移除密码字段，添加 has_password 标志
     safe_registries = []
     for registry in registries:
         safe_registry = registry.copy()
         safe_registry["has_password"] = bool(registry.get("password"))
-        # 移除密码字段
         if "password" in safe_registry:
             del safe_registry["password"]
         safe_registries.append(safe_registry)
@@ -283,8 +318,24 @@ def get_all_registries():
     return safe_registries
 
 
-def get_registry_password(registry_name: str) -> Optional[str]:
+def get_registry_password(
+    registry_name: str, team_id: Optional[str] = None
+) -> Optional[str]:
     """获取指定仓库的解密后的密码（用于Docker推送等操作）"""
+    try:
+        from backend.registry_manager import (
+            db_has_registries,
+            get_registry_password_for_row,
+            resolve_registry,
+        )
+
+        if db_has_registries():
+            row = resolve_registry(registry_name, team_id=team_id)
+            if row:
+                return get_registry_password_for_row(row)
+    except Exception as e:
+        print(f"⚠️ 从数据库获取仓库密码失败，回退 config: {e}")
+
     config = load_config()
     registries = config.get("docker", {}).get("registries", [])
 

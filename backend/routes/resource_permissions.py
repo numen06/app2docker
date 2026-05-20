@@ -25,6 +25,12 @@ from backend.models import (
     DeployConfigPermission,
     GitSource,
     GitSourcePermission,
+    ResourcePackage,
+    ResourcePackagePermission,
+    DockerRegistry,
+    RegistryPermission,
+    TemplateRecord,
+    TemplatePermission,
     TeamMember,
 )
 from backend.route_definitions import require_auth
@@ -395,6 +401,248 @@ def delete_git_source_member_permission(
     user_id = get_user_id_by_username(db, username)
     require_resource_permission(db, user_id, "git_source", source_id, "admin")
     if not revoke_resource_permission(db, "git_source", source_id, target_user_id):
+        raise HTTPException(status_code=404, detail="成员权限不存在")
+    return None
+
+
+# --- Resource package members ---
+
+
+@router.get(
+    "/resource-packages/{package_id}/members", response_model=List[ResourceMemberOut]
+)
+def list_resource_package_members(
+    package_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "resource_package", package_id, "admin")
+    rows = (
+        db.query(ResourcePackagePermission)
+        .filter(ResourcePackagePermission.package_id == package_id)
+        .all()
+    )
+    return _perm_rows_to_members(db, rows)
+
+
+@router.get(
+    "/resource-packages/{package_id}/my-permission", response_model=MyPermissionOut
+)
+def my_resource_package_permission(
+    package_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    perm = get_effective_permission(db, user_id, "resource_package", package_id)
+    return MyPermissionOut(permission=perm, effective=perm is not None)
+
+
+@router.put("/resource-packages/{package_id}/members/{target_user_id}")
+def set_resource_package_member_permission(
+    package_id: str,
+    target_user_id: str,
+    body: SetPermissionBody,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "resource_package", package_id, "admin")
+    pkg = (
+        db.query(ResourcePackage)
+        .filter(ResourcePackage.package_id == package_id)
+        .first()
+    )
+    if not pkg:
+        raise HTTPException(status_code=404, detail="资源包不存在")
+    if pkg.team_id:
+        _ensure_target_team_member(db, pkg.team_id, target_user_id)
+    grant_resource_permission(
+        db,
+        "resource_package",
+        package_id,
+        target_user_id,
+        normalize_permission(body.permission),
+        user_id,
+    )
+    return {"message": "权限已更新"}
+
+
+@router.delete(
+    "/resource-packages/{package_id}/members/{target_user_id}", status_code=204
+)
+def delete_resource_package_member_permission(
+    package_id: str,
+    target_user_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "resource_package", package_id, "admin")
+    if not revoke_resource_permission(
+        db, "resource_package", package_id, target_user_id
+    ):
+        raise HTTPException(status_code=404, detail="成员权限不存在")
+    return None
+
+
+# --- Registry members ---
+
+
+@router.get("/registries/{registry_id}/members", response_model=List[ResourceMemberOut])
+def list_registry_members(
+    registry_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "registry", registry_id, "admin")
+    rows = (
+        db.query(RegistryPermission)
+        .filter(RegistryPermission.registry_id == registry_id)
+        .all()
+    )
+    return _perm_rows_to_members(db, rows)
+
+
+@router.get("/registries/{registry_id}/my-permission", response_model=MyPermissionOut)
+def my_registry_permission(
+    registry_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    perm = get_effective_permission(db, user_id, "registry", registry_id)
+    return MyPermissionOut(permission=perm, effective=perm is not None)
+
+
+@router.put("/registries/{registry_id}/members/{target_user_id}")
+def set_registry_member_permission(
+    registry_id: str,
+    target_user_id: str,
+    body: SetPermissionBody,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "registry", registry_id, "admin")
+    reg = (
+        db.query(DockerRegistry)
+        .filter(DockerRegistry.registry_id == registry_id)
+        .first()
+    )
+    if not reg:
+        raise HTTPException(status_code=404, detail="镜像仓库不存在")
+    if reg.team_id:
+        _ensure_target_team_member(db, reg.team_id, target_user_id)
+    grant_resource_permission(
+        db,
+        "registry",
+        registry_id,
+        target_user_id,
+        normalize_permission(body.permission),
+        user_id,
+    )
+    return {"message": "权限已更新"}
+
+
+@router.delete("/registries/{registry_id}/members/{target_user_id}", status_code=204)
+def delete_registry_member_permission(
+    registry_id: str,
+    target_user_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "registry", registry_id, "admin")
+    if not revoke_resource_permission(db, "registry", registry_id, target_user_id):
+        raise HTTPException(status_code=404, detail="成员权限不存在")
+    return None
+
+
+# --- Template members ---
+
+
+@router.get("/templates/{template_id}/members", response_model=List[ResourceMemberOut])
+def list_template_members(
+    template_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "template", template_id, "admin")
+    rows = (
+        db.query(TemplatePermission)
+        .filter(TemplatePermission.template_id == template_id)
+        .all()
+    )
+    return _perm_rows_to_members(db, rows)
+
+
+@router.get("/templates/{template_id}/my-permission", response_model=MyPermissionOut)
+def my_template_permission(
+    template_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    perm = get_effective_permission(db, user_id, "template", template_id)
+    return MyPermissionOut(permission=perm, effective=perm is not None)
+
+
+@router.put("/templates/{template_id}/members/{target_user_id}")
+def set_template_member_permission(
+    template_id: str,
+    target_user_id: str,
+    body: SetPermissionBody,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "template", template_id, "admin")
+    tpl = (
+        db.query(TemplateRecord)
+        .filter(TemplateRecord.template_id == template_id)
+        .first()
+    )
+    if not tpl:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    if tpl.team_id:
+        _ensure_target_team_member(db, tpl.team_id, target_user_id)
+    grant_resource_permission(
+        db,
+        "template",
+        template_id,
+        target_user_id,
+        normalize_permission(body.permission),
+        user_id,
+    )
+    return {"message": "权限已更新"}
+
+
+@router.delete("/templates/{template_id}/members/{target_user_id}", status_code=204)
+def delete_template_member_permission(
+    template_id: str,
+    target_user_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    require_resource_permission(db, user_id, "template", template_id, "admin")
+    if not revoke_resource_permission(db, "template", template_id, target_user_id):
         raise HTTPException(status_code=404, detail="成员权限不存在")
     return None
 

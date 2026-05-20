@@ -11,6 +11,7 @@ from backend.models import (
     AgentHost,
     DeployConfig,
     DeployConfigPermission,
+    DockerRegistry,
     GitSource,
     GitSourcePermission,
     HostGroupPermission,
@@ -18,7 +19,12 @@ from backend.models import (
     Pipeline,
     PipelineGroupPermission,
     PipelinePermission,
+    RegistryPermission,
+    ResourcePackage,
+    ResourcePackagePermission,
     TeamMember,
+    TemplatePermission,
+    TemplateRecord,
 )
 from backend.team_permissions import get_team_member, require_team_member
 
@@ -32,12 +38,23 @@ _TYPE_ALIASES = {
     "pipeline": "pipeline",
     "deploy_config": "deploy_config",
     "git_source": "git_source",
+    "resource_package": "resource_package",
+    "registry": "registry",
+    "template": "template",
 }
 
 
 def _canonical_type(resource_type: str) -> str:
     t = _TYPE_ALIASES.get(resource_type, resource_type)
-    if t not in ("pipeline", "host", "deploy_config", "git_source"):
+    if t not in (
+        "pipeline",
+        "host",
+        "deploy_config",
+        "git_source",
+        "resource_package",
+        "registry",
+        "template",
+    ):
         raise HTTPException(status_code=400, detail=f"未知资源类型: {resource_type}")
     return t
 
@@ -110,6 +127,24 @@ def _resource_row(
             .filter(GitSource.source_id == resource_id)
             .first()
         )
+    if rt == "resource_package":
+        return (
+            db.query(ResourcePackage)
+            .filter(ResourcePackage.package_id == resource_id)
+            .first()
+        )
+    if rt == "registry":
+        return (
+            db.query(DockerRegistry)
+            .filter(DockerRegistry.registry_id == resource_id)
+            .first()
+        )
+    if rt == "template":
+        return (
+            db.query(TemplateRecord)
+            .filter(TemplateRecord.template_id == resource_id)
+            .first()
+        )
     return None
 
 
@@ -153,6 +188,36 @@ def _resource_permission_level(
             .filter(
                 GitSourcePermission.source_id == resource_id,
                 GitSourcePermission.user_id == user_id,
+            )
+            .first()
+        )
+        return row[0] if row else None
+    if rt == "resource_package":
+        row = (
+            db.query(ResourcePackagePermission.permission)
+            .filter(
+                ResourcePackagePermission.package_id == resource_id,
+                ResourcePackagePermission.user_id == user_id,
+            )
+            .first()
+        )
+        return row[0] if row else None
+    if rt == "registry":
+        row = (
+            db.query(RegistryPermission.permission)
+            .filter(
+                RegistryPermission.registry_id == resource_id,
+                RegistryPermission.user_id == user_id,
+            )
+            .first()
+        )
+        return row[0] if row else None
+    if rt == "template":
+        row = (
+            db.query(TemplatePermission.permission)
+            .filter(
+                TemplatePermission.template_id == resource_id,
+                TemplatePermission.user_id == user_id,
             )
             .first()
         )
@@ -229,6 +294,12 @@ def user_can_access_resource(
             resource_id = resource.config_id
         elif rt == "git_source":
             resource_id = resource.source_id
+        elif rt == "resource_package":
+            resource_id = resource.package_id
+        elif rt == "registry":
+            resource_id = resource.registry_id
+        elif rt == "template":
+            resource_id = resource.template_id
         else:
             return False
     return user_can_list_resource(db, user_id, resource_type, resource_id)
@@ -293,6 +364,12 @@ def require_resource_permission_on_row(
         resource_id = resource.config_id
     elif rt == "git_source":
         resource_id = resource.source_id
+    elif rt == "resource_package":
+        resource_id = resource.package_id
+    elif rt == "registry":
+        resource_id = resource.registry_id
+    elif rt == "template":
+        resource_id = resource.template_id
 
     effective = get_effective_permission(db, user_id, rt, resource_id)
     if not permission_satisfies(effective, min_level):
@@ -397,6 +474,69 @@ def grant_resource_permission(
                     granted_by=granted_by,
                 )
             )
+    elif rt == "resource_package":
+        existing = (
+            db.query(ResourcePackagePermission)
+            .filter(
+                ResourcePackagePermission.package_id == resource_id,
+                ResourcePackagePermission.user_id == target_user_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.permission = permission
+            existing.granted_by = granted_by
+        else:
+            db.add(
+                ResourcePackagePermission(
+                    package_id=resource_id,
+                    user_id=target_user_id,
+                    permission=permission,
+                    granted_by=granted_by,
+                )
+            )
+    elif rt == "registry":
+        existing = (
+            db.query(RegistryPermission)
+            .filter(
+                RegistryPermission.registry_id == resource_id,
+                RegistryPermission.user_id == target_user_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.permission = permission
+            existing.granted_by = granted_by
+        else:
+            db.add(
+                RegistryPermission(
+                    registry_id=resource_id,
+                    user_id=target_user_id,
+                    permission=permission,
+                    granted_by=granted_by,
+                )
+            )
+    elif rt == "template":
+        existing = (
+            db.query(TemplatePermission)
+            .filter(
+                TemplatePermission.template_id == resource_id,
+                TemplatePermission.user_id == target_user_id,
+            )
+            .first()
+        )
+        if existing:
+            existing.permission = permission
+            existing.granted_by = granted_by
+        else:
+            db.add(
+                TemplatePermission(
+                    template_id=resource_id,
+                    user_id=target_user_id,
+                    permission=permission,
+                    granted_by=granted_by,
+                )
+            )
     db.commit()
 
 
@@ -441,6 +581,33 @@ def revoke_resource_permission(
             .filter(
                 GitSourcePermission.source_id == resource_id,
                 GitSourcePermission.user_id == target_user_id,
+            )
+            .first()
+        )
+    elif rt == "resource_package":
+        row = (
+            db.query(ResourcePackagePermission)
+            .filter(
+                ResourcePackagePermission.package_id == resource_id,
+                ResourcePackagePermission.user_id == target_user_id,
+            )
+            .first()
+        )
+    elif rt == "registry":
+        row = (
+            db.query(RegistryPermission)
+            .filter(
+                RegistryPermission.registry_id == resource_id,
+                RegistryPermission.user_id == target_user_id,
+            )
+            .first()
+        )
+    elif rt == "template":
+        row = (
+            db.query(TemplatePermission)
+            .filter(
+                TemplatePermission.template_id == resource_id,
+                TemplatePermission.user_id == target_user_id,
             )
             .first()
         )

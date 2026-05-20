@@ -1498,6 +1498,19 @@ class BuildManager:
         # 更新任务状态为运行中
         self.task_manager.update_task_status(task_id, "running")
 
+        task_row = self.task_manager.get_task(task_id)
+        task_cfg = (
+            task_row.task_config
+            if task_row and isinstance(task_row.task_config, dict)
+            else {}
+        )
+        from backend.registry_manager import scope_from_task_like
+
+        reg_team_id, reg_user_id = scope_from_task_like(
+            team_id=getattr(task_row, "team_id", None),
+            task_config=task_cfg,
+        )
+
         def do_extract_archive(file_path: str, extract_to: str):
             """解压压缩文件"""
             try:
@@ -2040,23 +2053,31 @@ class BuildManager:
                     if len(parts) >= 2 and "." in parts[0]:
                         # 镜像名格式: registry.com/namespace/image
                         image_registry = parts[0]
-                        all_registries = get_all_registries()
+                        all_registries = get_all_registries(
+                            team_id=reg_team_id, user_id=reg_user_id
+                        )
                         for reg in all_registries:
                             reg_address = reg.get("registry", "")
+                            reg_key = reg.get("registry_id") or reg.get("name")
                             if reg_address and (
                                 image_registry == reg_address
                                 or image_registry.startswith(reg_address)
                                 or reg_address.startswith(image_registry)
                             ):
-                                # 使用get_registry_by_name获取包含解密密码的完整配置
-                                return get_registry_by_name(reg.get("name"))
+                                return get_registry_by_name(
+                                    reg_key,
+                                    team_id=reg_team_id,
+                                    user_id=reg_user_id,
+                                )
                     return None
 
                 # 尝试根据镜像名找到匹配的registry
                 push_registry_config = find_matching_registry_for_push(image_name)
                 if not push_registry_config:
                     # 如果找不到匹配的，使用激活的registry
-                    push_registry_config = get_active_registry()
+                    push_registry_config = get_active_registry(
+                        team_id=reg_team_id, user_id=reg_user_id
+                    )
                     log(
                         f"\n⚠️  未找到匹配的registry配置，使用激活仓库: {push_registry_config.get('name', 'Unknown')}\n"
                     )
@@ -3252,7 +3273,9 @@ logs/
                                         log(
                                             f"🔍 从镜像名提取registry: {img_registry}\n"
                                         )
-                                        all_registries = get_all_registries()
+                                        all_registries = get_all_registries(
+                                            team_id=reg_team_id, user_id=reg_user_id
+                                        )
                                         log(
                                             f"🔍 扫描所有 {len(all_registries)} 个registry配置...\n"
                                         )
@@ -3261,6 +3284,7 @@ logs/
                                         for reg in all_registries:
                                             reg_address = reg.get("registry", "")
                                             reg_name = reg.get("name", "Unknown")
+                                            reg_key = reg.get("registry_id") or reg_name
                                             if (
                                                 reg_address
                                                 and img_registry == reg_address
@@ -3268,13 +3292,17 @@ logs/
                                                 log(
                                                     f"✅ 找到完全匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
-                                                # 使用 get_registry_by_name 获取包含解密密码的配置
-                                                return get_registry_by_name(reg_name)
+                                                return get_registry_by_name(
+                                                    reg_key,
+                                                    team_id=reg_team_id,
+                                                    user_id=reg_user_id,
+                                                )
 
                                         # 次优匹配：包含关系
                                         for reg in all_registries:
                                             reg_address = reg.get("registry", "")
                                             reg_name = reg.get("name", "Unknown")
+                                            reg_key = reg.get("registry_id") or reg_name
                                             if reg_address and (
                                                 img_registry.startswith(reg_address)
                                                 or reg_address.startswith(img_registry)
@@ -3284,8 +3312,11 @@ logs/
                                                 log(
                                                     f"✅ 找到部分匹配的registry: {reg_name} (地址: {reg_address})\n"
                                                 )
-                                                # 使用 get_registry_by_name 获取包含解密密码的配置
-                                                return get_registry_by_name(reg_name)
+                                                return get_registry_by_name(
+                                                    reg_key,
+                                                    team_id=reg_team_id,
+                                                    user_id=reg_user_id,
+                                                )
 
                                         log(f"⚠️  未找到匹配的registry配置\n")
                                     return None
@@ -3297,7 +3328,9 @@ logs/
                                     )
                                     # 使用 get_registry_by_name 获取包含解密密码的配置
                                     registry_config = get_registry_by_name(
-                                        service_registry
+                                        service_registry,
+                                        team_id=reg_team_id,
+                                        user_id=reg_user_id,
                                     )
                                     if registry_config:
                                         log(
@@ -3317,7 +3350,9 @@ logs/
 
                                 if not registry_config:
                                     # 如果仍然找不到匹配的，使用激活的registry作为后备
-                                    registry_config = get_active_registry()
+                                    registry_config = get_active_registry(
+                                        team_id=reg_team_id, user_id=reg_user_id
+                                    )
                                     log(
                                         f"⚠️  未找到匹配的registry配置，使用激活仓库作为后备: {registry_config.get('name', 'Unknown')}\n"
                                     )
@@ -3610,11 +3645,14 @@ logs/
                         # 镜像名格式: registry.com/namespace/image
                         image_registry = parts[0]
                         log(f"🔍 从镜像名提取registry: {image_registry}\n")
-                        all_registries = get_all_registries()
+                        all_registries = get_all_registries(
+                            team_id=reg_team_id, user_id=reg_user_id
+                        )
                         log(f"🔍 共有 {len(all_registries)} 个registry配置\n")
                         for reg in all_registries:
                             reg_address = reg.get("registry", "")
                             reg_name = reg.get("name", "Unknown")
+                            reg_key = reg.get("registry_id") or reg_name
                             log(f"🔍 检查registry: {reg_name}, 地址: {reg_address}\n")
                             if reg_address and (
                                 image_registry == reg_address
@@ -3622,15 +3660,20 @@ logs/
                                 or reg_address.startswith(image_registry)
                             ):
                                 log(f"✅ 找到匹配的registry: {reg_name}\n")
-                                # 使用get_registry_by_name获取包含解密密码的完整配置
-                                return get_registry_by_name(reg_name)
+                                return get_registry_by_name(
+                                    reg_key,
+                                    team_id=reg_team_id,
+                                    user_id=reg_user_id,
+                                )
                     return None
 
                 # 尝试根据镜像名找到匹配的registry
                 registry_config = find_matching_registry_for_push(global_push_repository)
                 if not registry_config:
                     # 如果找不到匹配的，使用激活的registry
-                    registry_config = get_active_registry()
+                    registry_config = get_active_registry(
+                        team_id=reg_team_id, user_id=reg_user_id
+                    )
                     log(
                         f"⚠️  未找到匹配的registry配置，使用激活仓库: {registry_config.get('name', 'Unknown')}\n"
                     )
@@ -6711,9 +6754,20 @@ class ExportTaskManager:
                 get_registry_by_name,
             )
 
+            export_team_id = getattr(task, "team_id", None)
+            export_user_id = None
+            if isinstance(getattr(task, "task_config", None), dict):
+                export_user_id = task.task_config.get("created_by") or task.task_config.get(
+                    "user_id"
+                )
+
             registry_config = None
             if registry:
-                registry_config = get_registry_by_name(registry)
+                registry_config = get_registry_by_name(
+                    registry,
+                    team_id=export_team_id,
+                    user_id=export_user_id,
+                )
                 if not registry_config:
                     raise RuntimeError(f"指定的仓库 '{registry}' 不存在")
 
@@ -6723,7 +6777,9 @@ class ExportTaskManager:
                     parts = image_name.split("/")
                     if len(parts) >= 2 and "." in parts[0]:
                         image_registry = parts[0]
-                        all_registries = get_all_registries()
+                        all_registries = get_all_registries(
+                            team_id=export_team_id, user_id=export_user_id
+                        )
                         for reg in all_registries:
                             reg_address = reg.get("registry", "")
                             if reg_address and (
@@ -6731,12 +6787,19 @@ class ExportTaskManager:
                                 or image_registry.startswith(reg_address)
                                 or reg_address.startswith(image_registry)
                             ):
-                                return reg
+                                reg_key = reg.get("registry_id") or reg.get("name")
+                                return get_registry_by_name(
+                                    reg_key,
+                                    team_id=export_team_id,
+                                    user_id=export_user_id,
+                                )
                     return None
 
                 registry_config = find_matching_registry_for_export(image)
             if not registry_config:
-                registry_config = get_active_registry()
+                registry_config = get_active_registry(
+                    team_id=export_team_id, user_id=export_user_id
+                )
 
             if not use_local:
                 # 需要从远程仓库拉取镜像

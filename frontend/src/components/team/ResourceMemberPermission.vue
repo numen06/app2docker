@@ -93,6 +93,9 @@ const API_PREFIX = {
   git_source: "/api/git-sources",
   agent_host: "/api/hosts",
   deploy_config: "/api/deploy-configs",
+  resource_package: "/api/resource-packages",
+  registry: "/api/registries",
+  template: "/api/templates",
 };
 
 const props = defineProps({
@@ -100,7 +103,15 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (v) =>
-      ["pipeline", "git_source", "agent_host", "deploy_config"].includes(v),
+      [
+        "pipeline",
+        "git_source",
+        "agent_host",
+        "deploy_config",
+        "resource_package",
+        "registry",
+        "template",
+      ].includes(v),
   },
   resourceId: { type: String, default: "" },
   teamId: { type: String, default: "" },

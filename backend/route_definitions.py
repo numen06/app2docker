@@ -193,6 +193,7 @@ class TemplateRequest(BaseModel):
     project_type: str = "jar"
     original_name: str = None  # 用于更新时的原始名称
     old_project_type: str = None  # 用于项目类型变更
+    team_id: Optional[str] = None
 
 
 class ParseComposeRequest(BaseModel):
@@ -215,6 +216,25 @@ class RegistryModel(BaseModel):
 
 class SaveRegistriesRequest(BaseModel):
     registries: list[RegistryModel]
+
+
+class RegistryCreateRequest(BaseModel):
+    name: str
+    registry: str
+    registry_prefix: str = ""
+    username: str = ""
+    password: str = ""
+    active: bool = False
+    team_id: Optional[str] = None
+
+
+class RegistryUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    registry: Optional[str] = None
+    registry_prefix: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    active: Optional[bool] = None
 
 
 @router.get("/public/version")
@@ -1529,26 +1549,26 @@ async def get_config():
 
 @router.get("/registries")
 async def get_registries(
-    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配仓库名称、registry地址、前缀")
+    http_request: Request,
+    query: Optional[str] = Query(None, description="模糊搜索关键词，匹配仓库名称、registry地址、前缀"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
-    """获取所有仓库配置，支持模糊查询"""
+    """获取团队镜像仓库列表（按成员权限过滤）"""
     try:
-        registries = get_all_registries()
-        
-        # 如果提供了查询关键词，进行模糊搜索
-        if query:
-            query_lower = query.lower().strip()
-            registries = [
-                reg for reg in registries
-                if query_lower in reg.get("name", "").lower() or
-                   query_lower in reg.get("registry", "").lower() or
-                   query_lower in reg.get("registry_prefix", "").lower()
-            ]
-        
-        # 限制返回结果数量（最多50条）
-        if len(registries) > 50:
-            registries = registries[:50]
-        
+        from backend.registry_manager import list_registries_for_user
+
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+        finally:
+            db.close()
+
+        registries = list_registries_for_user(
+            user_id, scoped_team_id, query=query, limit=50
+        )
         return JSONResponse({"registries": registries})
     except HTTPException:
         raise
@@ -1557,171 +1577,114 @@ async def get_registries(
 
 
 @router.post("/registries")
-async def save_registries(request: SaveRegistriesRequest, http_request: Request):
-    """保存仓库配置列表"""
+async def create_registry_entry(
+    request: RegistryCreateRequest, http_request: Request
+):
+    """创建镜像仓库"""
     try:
+        from backend.registry_manager import create_registry
+        from backend.team_permissions import require_team_member
+
         username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
 
-        config = load_config()
-
-        # 备份原始配置，以防保存失败
-        import copy
-
-        config_backup = copy.deepcopy(config)
-
-        # 转换 Pydantic 模型为字典
-        registries_data = [reg.model_dump() for reg in request.registries]
-
-        # 确保至少有一个仓库被激活
-        has_active = any(reg.get("active", False) for reg in registries_data)
-        if not has_active and registries_data:
-            registries_data[0]["active"] = True
-
-        # 获取现有配置以处理密码占位符
-        from backend.config import get_all_registries as get_all_registries_safe
-
-        existing_registries = get_all_registries_safe()
-        existing_registry_map = {r.get("name"): r for r in existing_registries}
-
-        # 加载完整配置以获取现有密码
-        config_full = load_config()
-        existing_registries_full = config_full.get("docker", {}).get("registries", [])
-        existing_registry_full_map = {
-            r.get("name"): r for r in existing_registries_full
-        }
-
-        for registry in registries_data:
-            registry_name = registry.get("name")
-            password = registry.get("password", "")
-
-            # 如果密码是占位符或空，使用现有密码
-            if (
-                password in ["******", "***", ""]
-                and registry_name in existing_registry_full_map
-            ):
-                existing_password = existing_registry_full_map[registry_name].get(
-                    "password"
-                )
-                if existing_password:
-                    registry["password"] = existing_password
-                else:
-                    registry["password"] = ""
-            elif password and password not in ["******", "***"]:
-                # 新密码，需要加密
-                from backend.crypto_utils import encrypt_password
-
-                registry["password"] = encrypt_password(password)
-            else:
-                registry["password"] = ""
-
-        # 更新配置（只更新 docker.registries，不影响其他配置如 server、git、users 等）
-        if "docker" not in config:
-            config["docker"] = {}
-
-        # 确保保留 docker 配置中的其他字段（如 use_remote、remote 等）
-        docker_config = config.get("docker", {})
-        docker_config["registries"] = registries_data
-        config["docker"] = docker_config
-
-        # 保存配置（使用临时文件确保原子性）
+        db = get_db_session()
         try:
-            save_config(config)
-        except Exception as save_error:
-            # 如果保存失败，尝试恢复备份
-            try:
-                import yaml
-                import os
-
-                CONFIG_FILE = "data/config.yml"
-                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                    yaml.dump(
-                        config_backup,
-                        f,
-                        default_flow_style=False,
-                        allow_unicode=True,
-                        sort_keys=False,
-                    )
-            except:
-                pass
-            raise HTTPException(
-                status_code=500, detail=f"保存仓库配置失败: {str(save_error)}"
+            scoped_team_id = resolve_team_scope(
+                db, user_id, request.team_id
             )
+            require_team_member(db, scoped_team_id, user_id)
+        finally:
+            db.close()
 
-        # 验证配置是否保存成功且认证配置未被影响
-        try:
-            verify_config = load_config()
-            # 检查 server 配置是否还在
-            if "server" not in verify_config:
-                # 如果 server 配置丢失，恢复备份
-                print("⚠️ 检测到 server 配置丢失，正在恢复...")
-                import yaml
-                import os
-
-                CONFIG_FILE = "data/config.yml"
-                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                    yaml.dump(
-                        config_backup,
-                        f,
-                        default_flow_style=False,
-                        allow_unicode=True,
-                        sort_keys=False,
-                    )
-                # 重新保存，但这次只更新 registries
-                verify_config = load_config()
-                verify_config["docker"]["registries"] = registries_data
-                save_config(verify_config)
-        except Exception as verify_error:
-            print(f"⚠️ 验证配置失败: {verify_error}")
-            # 不抛出异常，因为主要操作已成功
-
-        # 重新初始化 Docker 构建器
-        try:
-            from backend.handlers import init_docker_builder
-
-            init_docker_builder()
-        except Exception as init_error:
-            print(f"⚠️ 重新初始化 Docker 构建器失败: {init_error}")
-            # 不抛出异常，因为配置已保存成功
-
-        # 记录操作日志
-        try:
-            OperationLogger.log(
-                username,
-                "save_registries",
-                {
-                    "registry_count": len(registries_data),
-                    "registry_names": [r.get("name") for r in registries_data],
-                },
-            )
-        except Exception as log_error:
-            print(f"⚠️ 记录操作日志失败: {log_error}")
-            # 不抛出异常，因为主要操作已成功
-
-        # 返回时移除密码字段
-        safe_registries_data = []
-        for reg in registries_data:
-            safe_reg = reg.copy()
-            safe_reg["has_password"] = bool(reg.get("password"))
-            if "password" in safe_reg:
-                del safe_reg["password"]
-            safe_registries_data.append(safe_reg)
-
-        return JSONResponse(
-            {"message": "仓库配置保存成功", "registries": safe_registries_data}
+        reg = create_registry(
+            team_id=scoped_team_id,
+            created_by=user_id,
+            name=request.name,
+            registry=request.registry,
+            registry_prefix=request.registry_prefix,
+            username=request.username,
+            password=request.password or "",
+            active=request.active,
         )
+        OperationLogger.log(
+            username, "registry_create", {"registry_id": reg["registry_id"]}
+        )
+        return JSONResponse({"message": "创建成功", "registry": reg})
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
+        raise HTTPException(status_code=500, detail=f"创建仓库失败: {str(e)}")
 
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"保存仓库配置失败: {str(e)}")
+
+@router.put("/registries/{registry_id}")
+async def update_registry_entry(
+    registry_id: str,
+    request: RegistryUpdateRequest,
+    http_request: Request,
+):
+    """更新镜像仓库"""
+    try:
+        from backend.registry_manager import update_registry
+
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        password = request.password
+        password_unchanged = True
+        pwd_value = ""
+        if password is not None:
+            password_unchanged = password in ["******", "***"]
+            if not password_unchanged:
+                pwd_value = password
+        reg = update_registry(
+            registry_id,
+            user_id,
+            name=request.name,
+            registry=request.registry,
+            registry_prefix=request.registry_prefix,
+            username=request.username,
+            password=pwd_value,
+            password_unchanged=password_unchanged,
+            active=request.active,
+        )
+        OperationLogger.log(
+            username, "registry_update", {"registry_id": registry_id}
+        )
+        return JSONResponse({"message": "更新成功", "registry": reg})
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新仓库失败: {str(e)}")
+
+
+@router.delete("/registries/{registry_id}")
+async def delete_registry_entry(registry_id: str, http_request: Request):
+    """删除镜像仓库"""
+    try:
+        from backend.registry_manager import delete_registry
+
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        if not delete_registry(registry_id, user_id):
+            raise HTTPException(status_code=404, detail="镜像仓库不存在")
+        OperationLogger.log(
+            username, "registry_delete", {"registry_id": registry_id}
+        )
+        return JSONResponse({"message": "删除成功"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除仓库失败: {str(e)}")
 
 
 class TestRegistryRequest(BaseModel):
     """测试Registry登录请求"""
 
     name: str = ""
+    registry_id: str = ""
     registry: str
     username: str = ""
     password: Optional[str] = None  # 可选，如果不提供则从配置中获取
@@ -1805,12 +1768,32 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
         registry_host = request.registry
         registry_username = (request.username or "").strip()
 
-        # 如果未提供密码，从配置中获取
+        # 如果未提供密码，从数据库或配置中获取
         test_password = request.password
-        if not test_password and request.name:
+        if not test_password:
             from backend.config import get_registry_password
+            from backend.registry_manager import (
+                get_registry_password_for_row,
+                resolve_registry,
+            )
 
-            test_password = get_registry_password(request.name)
+            user_id = _resolve_user_id(http_request)
+            from backend.database import get_db_session
+
+            db = get_db_session()
+            try:
+                scoped_team_id = resolve_team_scope_from_request(
+                    db, require_auth(http_request), None
+                )
+            finally:
+                db.close()
+            key = request.registry_id or request.name
+            if key:
+                row = resolve_registry(key, team_id=scoped_team_id)
+                if row:
+                    test_password = get_registry_password_for_row(row)
+                else:
+                    test_password = get_registry_password(key, team_id=scoped_team_id)
 
         has_credentials = bool(registry_username and test_password)
 
@@ -4662,29 +4645,23 @@ async def parse_compose(request: ParseComposeRequest):
 
 # === 模板相关 ===
 @router.get("/list-templates")
-async def list_templates():
-    """列出所有可用模板"""
+async def list_templates(
+    http_request: Request,
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
+):
+    """列出所有可用模板（按成员权限过滤）"""
     try:
-        templates = get_all_templates()
-        details = []
+        from backend.template_manager import list_templates_for_user
 
-        for name, info in templates.items():
-            try:
-                stat = os.stat(info["path"])
-                details.append(
-                    {
-                        "name": name,
-                        "filename": os.path.basename(info["path"]),
-                        "size": stat.st_size,
-                        "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                        "type": info["type"],
-                        "project_type": info.get("project_type", "jar"),
-                        "editable": info["type"] == "user",
-                    }
-                )
-            except OSError:
-                continue
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
 
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+        finally:
+            db.close()
+        details = list_templates_for_user(user_id, scoped_team_id)
         details.sort(key=lambda item: natural_sort_key(item["name"]))
         return JSONResponse(details)
     except HTTPException:
@@ -4695,11 +4672,26 @@ async def list_templates():
 
 @router.get("/template-params")
 async def get_template_params(
+    http_request: Request,
     template: str = Query(..., description="模板名称"),
     project_type: Optional[str] = Query(None, description="项目类型"),
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
 ):
     """获取模板的参数列表"""
     try:
+        from backend.template_manager import user_can_read_template_by_name
+
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+        finally:
+            db.close()
+        if not user_can_read_template_by_name(user_id, scoped_team_id, template):
+            raise HTTPException(status_code=403, detail="无权访问该模板")
+
         # 获取模板路径
         template_path = get_template_path(template, project_type)
         if not template_path or not os.path.exists(template_path):
@@ -4745,15 +4737,34 @@ async def get_project_types_api():
 
 @router.get("/templates")
 async def get_template(
+    http_request: Request,
     name: Optional[str] = Query(None),
     page: int = Query(1, ge=1, description="页码，从1开始"),
     page_size: int = Query(10, ge=1, le=1000, description="每页数量"),
     query: Optional[str] = Query(None, description="模糊搜索关键词，匹配模板名称、项目类型"),
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
 ):
-    """获取模板详情或列表（支持分页和模糊查询）"""
+    """获取模板详情或列表（支持分页和模糊查询，按成员权限过滤）"""
     try:
+        from backend.template_manager import (
+            get_template_record_by_name,
+            list_templates_for_user,
+            user_can_read_template_by_name,
+        )
+
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+        finally:
+            db.close()
+
         if name:
-            # 获取单个模板内容
+            if not user_can_read_template_by_name(user_id, scoped_team_id, name):
+                raise HTTPException(status_code=403, detail="无权访问该模板")
+
             templates = get_all_templates()
             if name not in templates:
                 raise HTTPException(status_code=404, detail="模板不存在")
@@ -4765,61 +4776,31 @@ async def get_template(
             with open(template_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
+            record = get_template_record_by_name(scoped_team_id, name)
             return JSONResponse(
                 {
                     "name": name,
                     "content": content,
                     "type": templates[name]["type"],
                     "project_type": templates[name].get("project_type", "jar"),
+                    "template_id": record.template_id if record else None,
                 }
             )
         else:
-            # 返回模板列表（支持分页和模糊查询）
-            templates = get_all_templates()
-            details = []
-
-            for name, info in templates.items():
-                try:
-                    stat = os.stat(info["path"])
-                    details.append(
-                        {
-                            "name": name,
-                            "filename": os.path.basename(info["path"]),
-                            "size": stat.st_size,
-                            "updated_at": datetime.fromtimestamp(
-                                stat.st_mtime
-                            ).isoformat(),
-                            "type": info["type"],
-                            "project_type": info.get("project_type", "jar"),
-                            "editable": info["type"] == "user",
-                        }
-                    )
-                except OSError:
-                    continue
-
-            # 如果提供了查询关键词，进行模糊搜索
-            if query:
-                query_lower = query.lower().strip()
-                details = [
-                    item for item in details
-                    if query_lower in item["name"].lower() or 
-                       query_lower in item.get("project_type", "").lower()
-                ]
-
+            details = list_templates_for_user(
+                user_id, scoped_team_id, query=query
+            )
             details.sort(key=lambda item: natural_sort_key(item["name"]))
 
-            # 限制搜索结果数量（最多50条）
             if len(details) > 50:
                 details = details[:50]
 
-            # 后端分页
             total = len(details)
             start = (page - 1) * page_size
             end = start + page_size
             paginated_items = details[start:end]
             total_pages = (total + page_size - 1) // page_size if total > 0 else 0
 
-            # 返回前端期望的格式
             return JSONResponse(
                 {
                     "items": paginated_items,
@@ -4870,12 +4851,39 @@ async def create_template(request: TemplateRequest, http_request: Request):
         print(f"✅ 模板已保存: {template_path}")
         print(f"📊 文件大小: {os.path.getsize(template_path)} bytes")
 
+        from backend.template_manager import create_template_record
+        from backend.team_permissions import require_team_member
+
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, request.team_id)
+            require_team_member(db, scoped_team_id, user_id)
+        finally:
+            db.close()
+
+        row = create_template_record(
+            team_id=scoped_team_id,
+            created_by=user_id,
+            name=name,
+            project_type=project_type,
+            file_path=template_path,
+        )
+
         # 记录操作日志
         OperationLogger.log(
             username, "template_create", {"name": name, "project_type": project_type}
         )
 
-        return JSONResponse({"message": "模板创建成功", "name": name})
+        return JSONResponse(
+            {
+                "message": "模板创建成功",
+                "name": name,
+                "template_id": row.template_id,
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -4935,6 +4943,24 @@ async def update_template(request: TemplateRequest, http_request: Request):
         if template_info.get("type") == "builtin":
             raise HTTPException(status_code=403, detail="不能修改内置模板")
 
+        from backend.template_manager import (
+            get_template_record_by_name,
+            update_template_record,
+        )
+
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, request.team_id)
+        finally:
+            db.close()
+
+        record = get_template_record_by_name(scoped_team_id, original_name)
+        if not record:
+            raise HTTPException(status_code=404, detail="模板元数据不存在，请重新创建")
+
         old_path = template_info.get("path")
         if not old_path:
             # 如果路径不存在，根据项目类型和名称构建路径
@@ -4975,6 +5001,25 @@ async def update_template(request: TemplateRequest, http_request: Request):
             with open(old_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
+        final_path = old_path
+        if (
+            request.old_project_type
+            and request.old_project_type != request.project_type
+        ):
+            final_path = os.path.join(
+                USER_TEMPLATES_DIR, request.project_type, f"{name}.Dockerfile"
+            )
+        elif original_name != name:
+            final_path = os.path.join(os.path.dirname(old_path), f"{name}.Dockerfile")
+
+        update_template_record(
+            record.template_id,
+            user_id,
+            name=name,
+            project_type=request.project_type,
+            file_path=final_path,
+        )
+
         # 记录操作日志
         OperationLogger.log(
             username,
@@ -4986,7 +5031,13 @@ async def update_template(request: TemplateRequest, http_request: Request):
             },
         )
 
-        return JSONResponse({"message": "模板更新成功", "name": name})
+        return JSONResponse(
+            {
+                "message": "模板更新成功",
+                "name": name,
+                "template_id": record.template_id,
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -5008,6 +5059,26 @@ async def delete_template(request: DeleteTemplateRequest, http_request: Request)
 
         if template_info["type"] == "builtin":
             raise HTTPException(status_code=403, detail="不能删除内置模板")
+
+        from backend.template_manager import (
+            delete_template_record,
+            get_template_record_by_name,
+        )
+
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope(db, user_id, None)
+        finally:
+            db.close()
+
+        record = get_template_record_by_name(scoped_team_id, name)
+        if record:
+            deleted = delete_template_record(record.template_id, user_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="模板不存在")
 
         template_path = template_info["path"]
 
@@ -8180,6 +8251,14 @@ async def upload_resource_package(
             created_by=user_id,
         )
 
+        db2 = get_db_session()
+        try:
+            grant_creator_admin(
+                db2, "resource_package", package_info["package_id"], user_id
+            )
+        finally:
+            db2.close()
+
         # 记录操作日志
         OperationLogger.log(
             username,
@@ -8215,15 +8294,37 @@ async def list_resource_packages(
     """获取资源包列表"""
     try:
         from backend.database import get_db_session
+        from backend.models import ResourcePackage
 
-        username = require_auth(request)
+        user_id = _resolve_user_id(request)
         db = get_db_session()
         try:
-            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
         finally:
             db.close()
         manager = ResourcePackageManager()
         packages = manager.list_packages(team_id=scoped_team_id)
+
+        db = get_db_session()
+        try:
+            filtered = []
+            for pkg in packages:
+                pid = pkg.get("package_id")
+                row = (
+                    db.query(ResourcePackage)
+                    .filter(ResourcePackage.package_id == pid)
+                    .first()
+                )
+                if row and user_can_access_resource(
+                    db, user_id, "resource_package", row
+                ):
+                    pkg["my_permission"] = get_effective_permission(
+                        db, user_id, "resource_package", pid
+                    )
+                    filtered.append(pkg)
+            packages = filtered
+        finally:
+            db.close()
 
         return JSONResponse(
             {
@@ -8251,9 +8352,8 @@ async def get_resource_package(
         db = get_db_session()
         try:
             user_id = _resolve_user_id(request)
-            scoped_team_id = resolve_team_scope(db, user_id, team_id)
-            require_resource_package_in_team(
-                db, user_id, package_id, scoped_team_id
+            require_resource_permission(
+                db, user_id, "resource_package", package_id, "view"
             )
         finally:
             db.close()
@@ -8292,9 +8392,8 @@ async def delete_resource_package(
         db = get_db_session()
         try:
             user_id = get_user_id_by_username(db, username)
-            scoped_team_id = resolve_team_scope(db, user_id, team_id)
-            require_resource_package_in_team(
-                db, user_id, package_id, scoped_team_id
+            require_resource_permission(
+                db, user_id, "resource_package", package_id, "admin"
             )
         finally:
             db.close()
@@ -8342,9 +8441,8 @@ async def get_resource_package_content(
         db = get_db_session()
         try:
             user_id = _resolve_user_id(request)
-            scoped_team_id = resolve_team_scope(db, user_id, team_id)
-            require_resource_package_in_team(
-                db, user_id, package_id, scoped_team_id
+            require_resource_permission(
+                db, user_id, "resource_package", package_id, "view"
             )
         finally:
             db.close()
@@ -8459,9 +8557,8 @@ async def update_resource_package_content(
         db = get_db_session()
         try:
             user_id = get_user_id_by_username(db, username)
-            scoped_team_id = resolve_team_scope(db, user_id, team_id)
-            require_resource_package_in_team(
-                db, user_id, package_id, scoped_team_id
+            require_resource_permission(
+                db, user_id, "resource_package", package_id, "edit"
             )
         finally:
             db.close()

@@ -27,7 +27,7 @@
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <Card
         v-for="(registry, index) in registries"
-        :key="index"
+        :key="registry.registry_id || index"
         :class="registry.active ? 'ring-2 ring-blue-500 ring-offset-1' : ''"
         class="flex h-full flex-col transition hover:-translate-y-0.5 hover:shadow-md"
       >
@@ -50,11 +50,19 @@
               <i class="fas fa-vial" :class="{ 'fa-spin': testingRegistry === index }"></i>
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              title="成员授权"
+              @click="openResourcePermission(registry)"
+            >
+              <i class="fas fa-user-shield"></i>
+            </Button>
+            <Button
               variant="destructive"
               size="sm"
               class="flex-1"
-              :disabled="registries.length === 1"
-              @click="removeRegistry(index)"
+              @click="removeRegistry(registry)"
             >
               <i class="fas fa-trash"></i>
             </Button>
@@ -108,7 +116,7 @@
 
     <FormDialog
       v-model="showRegistryModal"
-      :title="editingRegistryIndex !== null ? '编辑镜像仓库' : '新建镜像仓库'"
+      :title="editingRegistryId ? '编辑镜像仓库' : '新建镜像仓库'"
       icon="fa-box"
       size="lg"
     >
@@ -184,12 +192,31 @@
         </Button>
       </template>
     </FormDialog>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="registry"
+      :resource-id="permissionTarget?.registry_id || ''"
+      :team-id="teamStore.activeTeamId"
+      :resource-name="permissionTarget?.name || ''"
+    />
   </div>
 </template>
 
 <script setup>
 import axios from "axios";
 import { onMounted, ref } from "vue";
+import { useTeamStore } from "@/stores/team";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+
+const teamStore = useTeamStore();
+const permissionDialogOpen = ref(false);
+const permissionTarget = ref(null);
+
+function openResourcePermission(registry) {
+  permissionTarget.value = registry;
+  permissionDialogOpen.value = true;
+}
 import PageToolbar from "@/components/ui/PageToolbar.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
@@ -209,7 +236,7 @@ const savingRegistries = ref(false);
 const testingRegistry = ref(null);
 const registryTestResult = ref({});
 const showRegistryModal = ref(false);
-const editingRegistryIndex = ref(null);
+const editingRegistryId = ref(null);
 const registryForm = ref({
   name: "",
   registry: "",
@@ -222,29 +249,8 @@ const registryForm = ref({
 async function loadRegistries() {
   loadingRegistries.value = true;
   try {
-    const res = await axios.get("/api/get-config");
-    const docker = res.data.docker || {};
-    let registriesList = docker.registries || [];
-
-    if (!registriesList || registriesList.length === 0) {
-      registriesList = [
-        {
-          name: "Docker Hub",
-          registry: "docker.io",
-          registry_prefix: "",
-          username: "",
-          password: "",
-          active: true,
-        },
-      ];
-    }
-
-    const hasActive = registriesList.some((r) => r.active);
-    if (!hasActive && registriesList.length > 0) {
-      registriesList[0].active = true;
-    }
-
-    registries.value = registriesList;
+    const res = await axios.get("/api/registries");
+    registries.value = res.data.registries || [];
   } catch (error) {
     console.error("加载镜像仓库配置失败:", error);
     alert("加载镜像仓库配置失败");
@@ -254,7 +260,7 @@ async function loadRegistries() {
 }
 
 function showCreateRegistryModal() {
-  editingRegistryIndex.value = null;
+  editingRegistryId.value = null;
   registryForm.value = {
     name: "",
     registry: "docker.io",
@@ -268,8 +274,8 @@ function showCreateRegistryModal() {
 }
 
 function editRegistry(index) {
-  editingRegistryIndex.value = index;
   const registry = registries.value[index];
+  editingRegistryId.value = registry.registry_id || null;
   registryForm.value = {
     name: registry.name,
     registry: registry.registry,
@@ -284,7 +290,7 @@ function editRegistry(index) {
 
 function closeRegistryModal() {
   showRegistryModal.value = false;
-  editingRegistryIndex.value = null;
+  editingRegistryId.value = null;
   registryForm.value = {
     name: "",
     registry: "",
@@ -304,41 +310,29 @@ async function saveRegistry() {
 
   savingRegistries.value = true;
   try {
-    if (editingRegistryIndex.value !== null) {
-      const index = editingRegistryIndex.value;
-      const passwordUnchanged = registryForm.value.password === "******";
-      const password = passwordUnchanged ? undefined : (registryForm.value.password ?? "");
-
-      const updatedRegistry = { ...registryForm.value };
-      if (!passwordUnchanged) {
-        updatedRegistry.password = password;
-      } else {
-        delete updatedRegistry.password;
-      }
-
-      registries.value[index] = {
-        ...updatedRegistry,
-        has_password: passwordUnchanged
-          ? registries.value[index].has_password
-          : Boolean(password),
-      };
-
-      if (registryForm.value.active) {
-        registries.value.forEach((reg, i) => {
-          if (i !== index) reg.active = false;
-        });
-      }
-    } else {
-      const newRegistry = { ...registryForm.value };
-      if (newRegistry.active) {
-        registries.value.forEach((reg) => {
-          reg.active = false;
-        });
-      }
-      registries.value.push(newRegistry);
+    const passwordUnchanged = registryForm.value.password === "******";
+    const payload = {
+      name: registryForm.value.name,
+      registry: registryForm.value.registry,
+      registry_prefix: registryForm.value.registry_prefix || "",
+      username: registryForm.value.username || "",
+      active: registryForm.value.active,
+    };
+    if (!passwordUnchanged && registryForm.value.password) {
+      payload.password = registryForm.value.password;
+    } else if (!passwordUnchanged) {
+      payload.password = "";
     }
 
-    await saveRegistries();
+    if (editingRegistryId.value) {
+      await axios.put(`/api/registries/${editingRegistryId.value}`, payload);
+    } else {
+      await axios.post("/api/registries", {
+        ...payload,
+        team_id: teamStore.activeTeamId,
+      });
+    }
+    await loadRegistries();
     closeRegistryModal();
   } catch (error) {
     console.error("保存镜像仓库失败:", error);
@@ -368,6 +362,7 @@ async function testCurrentRegistryLogin() {
   try {
     const payload = {
       name: registryForm.value.name || "",
+      registry_id: editingRegistryId.value || "",
       registry: registryForm.value.registry,
       username: registryForm.value.username || "",
     };
@@ -393,15 +388,14 @@ async function testCurrentRegistryLogin() {
   }
 }
 
-function removeRegistry(index) {
-  if (registries.value.length === 1) {
-    alert("至少需要保留一个仓库");
-    return;
-  }
-  const wasActive = registries.value[index].active;
-  registries.value.splice(index, 1);
-  if (wasActive && registries.value.length > 0) {
-    registries.value[0].active = true;
+async function removeRegistry(registry) {
+  if (!registry?.registry_id) return;
+  if (!confirm(`确定删除镜像仓库「${registry.name}」吗？`)) return;
+  try {
+    await axios.delete(`/api/registries/${registry.registry_id}`);
+    await loadRegistries();
+  } catch (error) {
+    alert(error.response?.data?.detail || "删除失败");
   }
 }
 
@@ -422,6 +416,7 @@ async function testRegistryLogin(index) {
   try {
     const res = await axios.post("/api/registries/test", {
       name: registry.name || "",
+      registry_id: registry.registry_id || "",
       registry: registry.registry,
       username: registry.username || "",
     });
@@ -439,21 +434,6 @@ async function testRegistryLogin(index) {
     };
   } finally {
     testingRegistry.value = null;
-  }
-}
-
-async function saveRegistries() {
-  savingRegistries.value = true;
-  try {
-    await axios.post("/api/registries", { registries: registries.value });
-    alert("镜像仓库配置保存成功");
-    await loadRegistries();
-  } catch (error) {
-    const errorMsg =
-      error.response?.data?.detail || error.response?.data?.error || "保存配置失败";
-    alert(errorMsg);
-  } finally {
-    savingRegistries.value = false;
   }
 }
 

@@ -31,7 +31,15 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (v) =>
-      ["pipeline", "git_source", "agent_host", "deploy_config"].includes(v),
+      [
+        "pipeline",
+        "git_source",
+        "agent_host",
+        "deploy_config",
+        "resource_package",
+        "registry",
+        "template",
+      ].includes(v),
   },
   resourceId: { type: String, default: "" },
   teamId: { type: String, default: "" },
@@ -45,6 +53,9 @@ const typeLabels = {
   git_source: "数据源",
   agent_host: "主机",
   deploy_config: "部署配置",
+  resource_package: "资源包",
+  registry: "镜像仓库",
+  template: "模板",
 };
 
 const dialogTitle = computed(() => {

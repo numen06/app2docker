@@ -144,6 +144,7 @@ def init_db():
 
     # 迁移：团队资源权限与分组
     migrate_add_team_resource_permissions()
+    migrate_add_extended_resource_permissions()
 
     # 迁移：团队任务清理天数
     migrate_add_team_task_cleanup_days()
@@ -1377,6 +1378,189 @@ def migrate_add_team_resource_permissions():
         print("✅ 团队资源权限迁移完成")
     except Exception as e:
         print(f"⚠️ 团队资源权限迁移失败: {e}")
+
+
+def migrate_add_extended_resource_permissions():
+    """迁移：资源包/镜像仓库/模板权限表及 docker_registries、template_records"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        new_tables = {
+            "resource_package_permissions": """
+                CREATE TABLE resource_package_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    package_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(package_id, user_id)
+                )
+            """,
+            "docker_registries": """
+                CREATE TABLE docker_registries (
+                    registry_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36),
+                    created_by VARCHAR(36),
+                    name VARCHAR(255) NOT NULL,
+                    registry VARCHAR(255) NOT NULL DEFAULT 'docker.io',
+                    registry_prefix VARCHAR(255) DEFAULT '',
+                    username VARCHAR(255) DEFAULT '',
+                    password TEXT DEFAULT '',
+                    active INTEGER DEFAULT 0,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+            """,
+            "registry_permissions": """
+                CREATE TABLE registry_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    registry_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(registry_id, user_id)
+                )
+            """,
+            "template_records": """
+                CREATE TABLE template_records (
+                    template_id VARCHAR(36) PRIMARY KEY,
+                    team_id VARCHAR(36),
+                    created_by VARCHAR(36),
+                    name VARCHAR(255) NOT NULL,
+                    project_type VARCHAR(64) NOT NULL DEFAULT 'jar',
+                    file_path VARCHAR(512) NOT NULL,
+                    template_type VARCHAR(32) NOT NULL DEFAULT 'user',
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    UNIQUE(team_id, name)
+                )
+            """,
+            "template_permissions": """
+                CREATE TABLE template_permissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    template_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    permission VARCHAR(20) NOT NULL DEFAULT 'view',
+                    granted_by VARCHAR(36),
+                    created_at DATETIME,
+                    UNIQUE(template_id, user_id)
+                )
+            """,
+        }
+
+        for table_name, ddl in new_tables.items():
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (table_name,),
+            )
+            if not cursor.fetchone():
+                print(f"🔄 创建 {table_name} 表...")
+                cursor.execute(ddl)
+                print(f"✅ {table_name} 表创建成功")
+
+        conn.commit()
+        conn.close()
+        migrate_registries_from_config_to_db()
+        migrate_user_templates_to_records()
+        print("✅ 扩展资源权限迁移完成")
+    except Exception as e:
+        print(f"⚠️ 扩展资源权限迁移失败: {e}")
+
+
+def migrate_registries_from_config_to_db():
+    """将 config.json 中的 registries 迁移到 docker_registries（仅当表为空时）"""
+    try:
+        from backend.config import load_config
+        from backend.database import get_db_session
+        from backend.models import DockerRegistry, Team
+
+        db = get_db_session()
+        try:
+            if db.query(DockerRegistry).count() > 0:
+                return
+            config = load_config()
+            registries = config.get("docker", {}).get("registries", [])
+            if not registries:
+                return
+            team = db.query(Team).order_by(Team.created_at.asc()).first()
+            team_id = team.team_id if team else None
+            for reg in registries:
+                db.add(
+                    DockerRegistry(
+                        registry_id=str(uuid.uuid4()),
+                        team_id=team_id,
+                        name=reg.get("name") or "Registry",
+                        registry=reg.get("registry") or "docker.io",
+                        registry_prefix=reg.get("registry_prefix") or "",
+                        username=reg.get("username") or "",
+                        password=reg.get("password") or "",
+                        active=bool(reg.get("active", False)),
+                    )
+                )
+            db.commit()
+            print(f"✅ 已从 config 迁移 {len(registries)} 条镜像仓库记录")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ 镜像仓库 config 迁移失败: {e}")
+
+
+def migrate_user_templates_to_records():
+    """将已有用户模板文件同步到 template_records（仅当表为空时）"""
+    try:
+        import os
+        from backend.handlers import USER_TEMPLATES_DIR, get_all_templates
+        from backend.database import get_db_session
+        from backend.models import TemplateRecord, Team
+
+        db = get_db_session()
+        try:
+            if db.query(TemplateRecord).count() > 0:
+                return
+            team = db.query(Team).order_by(Team.created_at.asc()).first()
+            team_id = team.team_id if team else None
+            templates = get_all_templates()
+            count = 0
+            for name, info in templates.items():
+                if info.get("type") != "user":
+                    continue
+                path = info.get("path")
+                if not path or not os.path.exists(path):
+                    continue
+                existing = (
+                    db.query(TemplateRecord)
+                    .filter(
+                        TemplateRecord.team_id == team_id,
+                        TemplateRecord.name == name,
+                    )
+                    .first()
+                )
+                if existing:
+                    continue
+                db.add(
+                    TemplateRecord(
+                        template_id=str(uuid.uuid4()),
+                        team_id=team_id,
+                        name=name,
+                        project_type=info.get("project_type", "jar"),
+                        file_path=path,
+                        template_type="user",
+                    )
+                )
+                count += 1
+            if count:
+                db.commit()
+                print(f"✅ 已同步 {count} 条用户模板元数据")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️ 用户模板元数据迁移失败: {e}")
 
 
 def _add_column_if_missing(cursor, table: str, column: str, ddl: str):

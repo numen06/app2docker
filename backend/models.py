@@ -250,6 +250,107 @@ class ResourcePackage(Base):
     )
 
 
+class ResourcePackagePermission(Base):
+    """资源包成员权限"""
+
+    __tablename__ = "resource_package_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    package_id = Column(
+        String(36), ForeignKey("resource_packages.package_id"), nullable=False
+    )
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_resource_package_perm_pkg_user", "package_id", "user_id", unique=True),
+    )
+
+
+class DockerRegistry(Base):
+    """镜像仓库（团队级）"""
+
+    __tablename__ = "docker_registries"
+
+    registry_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    name = Column(String(255), nullable=False)
+    registry = Column(String(255), nullable=False, default="docker.io")
+    registry_prefix = Column(String(255), default="")
+    username = Column(String(255), default="")
+    password = Column(Text, default="")
+    active = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_docker_registry_team", "team_id"),
+        Index("idx_docker_registry_name", "name"),
+    )
+
+
+class RegistryPermission(Base):
+    """镜像仓库成员权限"""
+
+    __tablename__ = "registry_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    registry_id = Column(
+        String(36), ForeignKey("docker_registries.registry_id"), nullable=False
+    )
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_registry_perm_registry_user", "registry_id", "user_id", unique=True),
+    )
+
+
+class TemplateRecord(Base):
+    """用户模板元数据（团队级）"""
+
+    __tablename__ = "template_records"
+
+    template_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    name = Column(String(255), nullable=False)
+    project_type = Column(String(64), nullable=False, default="jar")
+    file_path = Column(String(512), nullable=False)
+    template_type = Column(String(32), nullable=False, default="user")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_template_record_team", "team_id"),
+        Index("uq_template_record_team_name", "team_id", "name", unique=True),
+    )
+
+
+class TemplatePermission(Base):
+    """模板成员权限"""
+
+    __tablename__ = "template_permissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    template_id = Column(
+        String(36), ForeignKey("template_records.template_id"), nullable=False
+    )
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False)
+    permission = Column(String(20), nullable=False, default="view")
+    granted_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("uq_template_perm_template_user", "template_id", "user_id", unique=True),
+    )
+
+
 class OperationLog(Base):
     """操作日志表"""
 

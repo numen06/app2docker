@@ -207,7 +207,12 @@ async function handleExport() {
     const res = await axios.post("/api/export-image", payload);
     alert(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到「任务管理」标签页查看进度和下载文件。`);
   } catch (error) {
-    alert(error.response?.data?.error || error.message || "创建导出任务失败");
+    alert(
+      error.response?.data?.detail ||
+        error.response?.data?.error ||
+        error.message ||
+        "创建导出任务失败"
+    );
   } finally {
     exporting.value = false;
   }

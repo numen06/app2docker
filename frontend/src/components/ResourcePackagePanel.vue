@@ -54,6 +54,14 @@
             >
               <i class="fas fa-edit"></i>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              title="成员授权"
+              @click="openResourcePermission(pkg)"
+            >
+              <i class="fas fa-user-shield"></i>
+            </Button>
             <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
               <i class="fas fa-trash"></i>
             </Button>
@@ -96,6 +104,14 @@
                   >
                     <i class="fas fa-edit"></i>
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title="成员授权"
+                    @click="openResourcePermission(pkg)"
+                  >
+                    <i class="fas fa-user-shield"></i>
+                  </Button>
                   <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
                     <i class="fas fa-trash"></i>
                   </Button>
@@ -106,6 +122,14 @@
         </Table>
       </div>
     </template>
+
+    <ResourceMemberPermissionDialog
+      v-model="permissionDialogOpen"
+      resource-type="resource_package"
+      :resource-id="permissionTarget?.package_id || ''"
+      :team-id="teamStore.activeTeamId"
+      :resource-name="permissionTarget?.name || ''"
+    />
 
     <FormDialog v-model="showUploadModal" title="上传资源包" icon="fa-upload">
       <form class="space-y-4" @submit.prevent="uploadPackage">
@@ -197,6 +221,8 @@ import TableBody from "@/components/ui/table/TableBody.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
+import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
+import { useTeamStore } from "@/stores/team";
 
 export default {
   name: "ResourcePackagePanel",
@@ -213,11 +239,18 @@ export default {
     TableRow,
     TableHead,
     TableCell,
+    ResourceMemberPermissionDialog,
+  },
+  setup() {
+    const teamStore = useTeamStore();
+    return { teamStore };
   },
   data() {
     return {
       packages: [],
       loading: false,
+      permissionDialogOpen: false,
+      permissionTarget: null,
       showUploadModal: false,
       uploading: false,
       selectedFile: null,
@@ -280,6 +313,10 @@ export default {
     this.loadPackages();
   },
   methods: {
+    openResourcePermission(pkg) {
+      this.permissionTarget = pkg;
+      this.permissionDialogOpen = true;
+    },
     async loadPackages() {
       this.loading = true;
       try {

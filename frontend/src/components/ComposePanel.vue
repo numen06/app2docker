@@ -190,7 +190,12 @@ async function downloadImage(img) {
       `导出任务已创建！\n镜像: ${img.image}${img.tag && img.tag !== "latest" ? ":" + img.tag : ""}\n任务ID: ${res.data.task_id}\n\n请到「导出任务」标签页查看进度和下载文件。`
     );
   } catch (error) {
-    alert(error.response?.data?.error || error.message || "创建导出任务失败");
+    alert(
+      error.response?.data?.detail ||
+        error.response?.data?.error ||
+        error.message ||
+        "创建导出任务失败"
+    );
   } finally {
     exporting.value = false;
     currentExporting.value = null;
