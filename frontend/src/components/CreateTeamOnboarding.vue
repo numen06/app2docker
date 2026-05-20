@@ -128,14 +128,6 @@ const inviteToken = ref("");
 const loading = ref(false);
 const error = ref("");
 
-function extractInviteToken(raw) {
-  const s = (raw || "").trim();
-  if (!s) return "";
-  const m = s.match(/invitations\/([^/?#]+)/i);
-  if (m) return m[1];
-  return s;
-}
-
 async function goToAppDashboard(teamId) {
   await teamStore.setCurrentTeam(teamId);
   await teamStore.fetchMyTeams();
@@ -195,6 +187,12 @@ async function joinTeam() {
 }
 
 onMounted(async () => {
+  const fromQuery = route.query.invite;
+  if (typeof fromQuery === "string" && fromQuery.trim()) {
+    mode.value = "join";
+    inviteToken.value = fromQuery.trim();
+  }
+
   authStore.applyAxiosAuthHeader();
   try {
     await authStore.fetchMe();
