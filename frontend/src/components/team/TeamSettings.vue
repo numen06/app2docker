@@ -119,7 +119,9 @@
         <p class="mb-4 text-sm text-slate-600">
           解散后团队及其关联数据将被永久删除，且无法恢复。此操作仅所有者可执行。
         </p>
-        <AlertBanner v-if="dissolveError && !showDissolveModal" :message="dissolveError" class="mb-4" />
+        <div v-if="dissolveError && !showDissolveModal" class="mb-4">
+          <AlertBanner :message="dissolveError" />
+        </div>
         <Button
           type="button"
           variant="destructive"
