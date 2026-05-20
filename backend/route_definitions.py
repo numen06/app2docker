@@ -8911,7 +8911,10 @@ class AgentHostRequest(BaseModel):
     host_type: str = "agent"  # agent 或 portainer
     description: str = ""
     portainer_url: Optional[str] = None
+    portainer_auth_mode: Optional[str] = "apiKey"  # apiKey | password
     portainer_api_key: Optional[str] = None
+    portainer_username: Optional[str] = None
+    portainer_password: Optional[str] = None
     portainer_endpoint_id: Optional[int] = None
 
 
@@ -8919,7 +8922,10 @@ class AgentHostUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     portainer_url: Optional[str] = None
+    portainer_auth_mode: Optional[str] = None
     portainer_api_key: Optional[str] = None
+    portainer_username: Optional[str] = None
+    portainer_password: Optional[str] = None
     portainer_endpoint_id: Optional[int] = None
 
 
@@ -8934,8 +8940,11 @@ class AgentSecretRequest(BaseModel):
 
 class PortainerTestRequest(BaseModel):
     portainer_url: str
-    api_key: str
     endpoint_id: int
+    auth_mode: str = "apiKey"  # apiKey | password
+    api_key: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 
 class PortainerTestByHostRequest(BaseModel):
@@ -8945,8 +8954,11 @@ class PortainerTestByHostRequest(BaseModel):
 
 class PortainerListEndpointsRequest(BaseModel):
     portainer_url: str
-    api_key: str
-    endpoint_id: int = 0  # 获取列表时不需要真实的 endpoint_id
+    endpoint_id: int = 0
+    auth_mode: str = "apiKey"
+    api_key: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 
 class PortainerListEndpointsByHostRequest(BaseModel):
@@ -8974,7 +8986,12 @@ async def test_portainer_connection(request: Request, test_req: PortainerTestReq
     try:
         manager = AgentHostManager()
         result = manager.test_portainer_connection(
-            test_req.portainer_url, test_req.api_key, test_req.endpoint_id
+            test_req.portainer_url,
+            test_req.endpoint_id,
+            api_key=test_req.api_key,
+            auth_mode=test_req.auth_mode or "apiKey",
+            username=test_req.username,
+            password=test_req.password,
         )
         return JSONResponse(result)
     except Exception as e:
@@ -8999,9 +9016,13 @@ async def test_portainer_connection_by_host(
 
         db = get_db_session()
         try:
+            from backend.agent_host_manager import _portainer_credentials_configured
+
             host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
-            if not host_obj or not host_obj.portainer_api_key:
-                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+            if not host_obj or not _portainer_credentials_configured(host_obj):
+                raise HTTPException(
+                    status_code=400, detail="Portainer 认证凭据未配置"
+                )
 
             portainer_url = test_req.portainer_url or host_obj.portainer_url
             endpoint_id = (
@@ -9015,9 +9036,22 @@ async def test_portainer_connection_by_host(
             if endpoint_id is None:
                 raise HTTPException(status_code=400, detail="Portainer Endpoint 未配置")
 
-            result = manager.test_portainer_connection(
-                str(portainer_url), str(host_obj.portainer_api_key), int(endpoint_id)
-            )
+            mode = host_obj.portainer_auth_mode or "apiKey"
+            if mode == "password":
+                result = manager.test_portainer_connection(
+                    str(portainer_url),
+                    int(endpoint_id),
+                    auth_mode="password",
+                    username=host_obj.portainer_username,
+                    password=host_obj.portainer_password,
+                )
+            else:
+                result = manager.test_portainer_connection(
+                    str(portainer_url),
+                    int(endpoint_id),
+                    api_key=str(host_obj.portainer_api_key),
+                    auth_mode="apiKey",
+                )
             return JSONResponse(result)
         finally:
             db.close()
@@ -9035,9 +9069,14 @@ async def list_portainer_endpoints(
     try:
         from backend.portainer_client import PortainerClient
 
-        client = PortainerClient(
-            test_req.portainer_url, test_req.api_key, 0
-        )  # endpoint_id 暂时不需要
+        client = PortainerClient.from_host_credentials(
+            test_req.portainer_url,
+            0,
+            api_key=test_req.api_key,
+            username=test_req.username,
+            password=test_req.password,
+            auth_mode=test_req.auth_mode or "apiKey",
+        )
 
         # 获取所有 endpoints
         endpoints = client._request("GET", "/endpoints", timeout=5)
@@ -9079,19 +9118,24 @@ async def list_portainer_endpoints_by_host(
 
         from backend.database import get_db_session
         from backend.models import AgentHost
-        from backend.portainer_client import PortainerClient
+        from backend.agent_host_manager import (
+            _portainer_credentials_configured,
+            create_portainer_client_from_host,
+        )
 
         db = get_db_session()
         try:
             host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
-            if not host_obj or not host_obj.portainer_api_key:
-                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+            if not host_obj or not _portainer_credentials_configured(host_obj):
+                raise HTTPException(
+                    status_code=400, detail="Portainer 认证凭据未配置"
+                )
 
             portainer_url = req.portainer_url or host_obj.portainer_url
             if not portainer_url:
                 raise HTTPException(status_code=400, detail="Portainer URL 未配置")
 
-            client = PortainerClient(portainer_url, host_obj.portainer_api_key, 0)
+            client = create_portainer_client_from_host(host_obj, endpoint_id=0)
             endpoints = client._request("GET", "/endpoints", timeout=5)
 
             return JSONResponse(
@@ -9134,19 +9178,20 @@ async def get_portainer_stacks(request: Request, host_id: str):
 
         from backend.database import get_db_session
         from backend.models import AgentHost
-        from backend.portainer_client import PortainerClient
+        from backend.agent_host_manager import (
+            _portainer_credentials_configured,
+            create_portainer_client_from_host,
+        )
 
         db = get_db_session()
         try:
             host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
-            if not host_obj or not host_obj.portainer_api_key:
-                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+            if not host_obj or not _portainer_credentials_configured(host_obj):
+                raise HTTPException(
+                    status_code=400, detail="Portainer 认证凭据未配置"
+                )
 
-            client = PortainerClient(
-                host_obj.portainer_url,
-                host_obj.portainer_api_key,
-                int(host_obj.portainer_endpoint_id),
-            )
+            client = create_portainer_client_from_host(host_obj)
             stacks = client.list_stacks()
             return JSONResponse(
                 {
@@ -9185,19 +9230,20 @@ async def get_portainer_stack_details(request: Request, host_id: str, stack_id: 
 
         from backend.database import get_db_session
         from backend.models import AgentHost
-        from backend.portainer_client import PortainerClient
+        from backend.agent_host_manager import (
+            _portainer_credentials_configured,
+            create_portainer_client_from_host,
+        )
 
         db = get_db_session()
         try:
             host_obj = db.query(AgentHost).filter(AgentHost.host_id == host_id).first()
-            if not host_obj or not host_obj.portainer_api_key:
-                raise HTTPException(status_code=400, detail="Portainer API Key 未配置")
+            if not host_obj or not _portainer_credentials_configured(host_obj):
+                raise HTTPException(
+                    status_code=400, detail="Portainer 认证凭据未配置"
+                )
 
-            client = PortainerClient(
-                host_obj.portainer_url,
-                host_obj.portainer_api_key,
-                int(host_obj.portainer_endpoint_id),
-            )
+            client = create_portainer_client_from_host(host_obj)
             stack = client.get_stack(stack_id)
             stack_file = client._request(
                 "GET",
@@ -9245,7 +9291,10 @@ async def add_agent_host(request: Request, host_req: AgentHostRequest):
             host_type=host_req.host_type,
             description=host_req.description,
             portainer_url=host_req.portainer_url,
+            portainer_auth_mode=host_req.portainer_auth_mode,
             portainer_api_key=host_req.portainer_api_key,
+            portainer_username=host_req.portainer_username,
+            portainer_password=host_req.portainer_password,
             portainer_endpoint_id=host_req.portainer_endpoint_id,
             team_id=host_req.team_id,
             group_id=host_req.group_id,
@@ -9524,7 +9573,10 @@ async def update_agent_host(
             name=host_req.name,
             description=host_req.description,
             portainer_url=host_req.portainer_url,
+            portainer_auth_mode=host_req.portainer_auth_mode,
             portainer_api_key=host_req.portainer_api_key,
+            portainer_username=host_req.portainer_username,
+            portainer_password=host_req.portainer_password,
             portainer_endpoint_id=host_req.portainer_endpoint_id,
         )
 

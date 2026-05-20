@@ -110,6 +110,9 @@ def init_db():
     # 迁移：添加Portainer相关字段到agent_hosts表（如果不存在）
     migrate_add_portainer_fields()
 
+    # 迁移：添加Portainer认证模式相关字段
+    migrate_add_portainer_auth_mode()
+
     # 迁移：修改token字段允许NULL（如果表已存在且token字段不允许NULL）
     migrate_token_nullable()
 
@@ -293,6 +296,59 @@ def migrate_add_portainer_fields():
             print(f"⚠️ 迁移Portainer字段失败: {e}")
     except Exception as e:
         print(f"⚠️ 迁移Portainer字段失败: {e}")
+
+
+def migrate_add_portainer_auth_mode():
+    """迁移：为 agent_hosts 表添加 Portainer 认证模式相关字段"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_hosts'"
+        )
+        if not cursor.fetchone():
+            conn.close()
+            return
+
+        cursor.execute("PRAGMA table_info(agent_hosts)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if "portainer_auth_mode" not in columns:
+            print("🔄 添加 portainer_auth_mode 字段到 agent_hosts 表...")
+            cursor.execute(
+                "ALTER TABLE agent_hosts ADD COLUMN portainer_auth_mode VARCHAR(20) DEFAULT 'apiKey'"
+            )
+            conn.commit()
+            print("✅ portainer_auth_mode 字段添加成功")
+
+        if "portainer_username" not in columns:
+            print("🔄 添加 portainer_username 字段到 agent_hosts 表...")
+            cursor.execute(
+                "ALTER TABLE agent_hosts ADD COLUMN portainer_username VARCHAR(255)"
+            )
+            conn.commit()
+            print("✅ portainer_username 字段添加成功")
+
+        if "portainer_password" not in columns:
+            print("🔄 添加 portainer_password 字段到 agent_hosts 表...")
+            cursor.execute(
+                "ALTER TABLE agent_hosts ADD COLUMN portainer_password TEXT"
+            )
+            conn.commit()
+            print("✅ portainer_password 字段添加成功")
+
+        conn.close()
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e).lower():
+            print("✅ Portainer 认证模式字段已存在")
+        else:
+            print(f"⚠️ 迁移Portainer认证模式字段失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 迁移Portainer认证模式字段失败: {e}")
 
 
 def migrate_token_nullable():

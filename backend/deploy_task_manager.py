@@ -1037,15 +1037,16 @@ class DeployTaskManager:
         Returns:
             执行结果字典
         """
-        from backend.portainer_client import PortainerClient
+        from backend.agent_host_manager import (
+            _portainer_credentials_configured,
+            create_portainer_client_from_host,
+        )
 
         logger.info(
             f"[Portainer] 开始执行 Portainer 部署任务: task_id={task_id}, target={target_name}, host={agent_host.get('name')}"
         )
 
         try:
-            # 注意：此方法已不再使用，保留仅用于向后兼容
-            # 从数据库获取完整的 Portainer 信息（包括 API Key）
             db = get_db_session()
             try:
                 host_obj = (
@@ -1053,27 +1054,20 @@ class DeployTaskManager:
                     .filter(AgentHost.host_id == agent_host.get("host_id"))
                     .first()
                 )
-                if not host_obj or not host_obj.portainer_api_key:
+                if not host_obj or not _portainer_credentials_configured(host_obj):
                     return {
                         "success": False,
-                        "message": "Portainer API Key 未配置",
+                        "message": "Portainer 认证凭据未配置",
                         "host_type": "portainer",
                         "deploy_method": "portainer_api",
                         "host_name": agent_host.get("name"),
                     }
-                portainer_api_key = host_obj.portainer_api_key
+                client = create_portainer_client_from_host(host_obj)
             finally:
                 db.close()
 
-            # 创建 Portainer 客户端
             logger.info(
                 f"[Portainer] 创建 Portainer 客户端: URL={agent_host.get('portainer_url')}, EndpointID={agent_host.get('portainer_endpoint_id')}"
-            )
-
-            client = PortainerClient(
-                agent_host.get("portainer_url"),
-                portainer_api_key,
-                agent_host.get("portainer_endpoint_id"),
             )
 
             deploy_mode = docker_config.get("deploy_mode", "docker_run")

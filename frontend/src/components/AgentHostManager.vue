@@ -605,22 +605,77 @@
                   <small class="text-slate-500">Portainer 服务器的 API 地址</small>
                 </div>
                 <div class="mb-3">
+                  <label class="block text-sm font-medium text-slate-700 mb-2">认证方式</label>
+                  <div class="flex flex-wrap gap-4">
+                    <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        class="form-check-input"
+                        v-model="hostForm.portainer_auth_mode"
+                        value="apiKey"
+                      />
+                      API Key
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        class="form-check-input"
+                        v-model="hostForm.portainer_auth_mode"
+                        value="password"
+                      />
+                      账号密码
+                    </label>
+                  </div>
+                </div>
+                <div v-if="hostForm.portainer_auth_mode === 'apiKey'" class="mb-3">
                   <label class="block text-sm font-medium text-slate-700">
                     Portainer API Key <span v-if="!editingHost" class="text-red-500">*</span>
                   </label>
-                  <input 
-                    type="password" 
-                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm" 
+                  <input
+                    type="password"
+                    class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                     v-model="hostForm.portainer_api_key"
-                    placeholder="ptc_xxxxxxxxxxxxx"
+                    placeholder="ptr_xxxxxxxxxxxxx 或 JWT"
                     @blur="autoLoadEndpoints"
-                    :required="!editingHost"
+                    :required="!editingHost && hostForm.portainer_auth_mode === 'apiKey'"
                   />
                   <small class="text-slate-500" v-if="editingHost">
                     留空表示继续使用已保存的 API Key；填写则更新为新 Key。
                   </small>
-                  <small class="text-slate-500" v-else>在 Portainer 设置中生成的 API Key</small>
+                  <small class="text-slate-500" v-else>在 Portainer 用户设置中生成的 Access Token</small>
                 </div>
+                <template v-else>
+                  <div class="mb-3">
+                    <label class="block text-sm font-medium text-slate-700">
+                      用户名 <span v-if="!editingHost" class="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                      v-model="hostForm.portainer_username"
+                      placeholder="admin"
+                      @blur="autoLoadEndpoints"
+                      :required="!editingHost && hostForm.portainer_auth_mode === 'password'"
+                    />
+                  </div>
+                  <div class="mb-3">
+                    <label class="block text-sm font-medium text-slate-700">
+                      密码 <span v-if="!editingHost" class="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
+                      v-model="hostForm.portainer_password"
+                      placeholder="Portainer 登录密码"
+                      @blur="autoLoadEndpoints"
+                      :required="!editingHost && hostForm.portainer_auth_mode === 'password'"
+                    />
+                    <small class="text-slate-500" v-if="editingHost">
+                      留空表示继续使用已保存的密码；填写则更新为新密码。
+                    </small>
+                    <small class="text-slate-500" v-else>使用 Portainer 管理员账号登录</small>
+                  </div>
+                </template>
                 <div class="mb-3">
                   <label class="block text-sm font-medium text-slate-700">
                     Endpoint <span class="text-red-500">*</span>
@@ -653,7 +708,7 @@
                       type="button" 
                       variant="outline" size="sm" 
                       @click="loadEndpoints"
-                      :disabled="loadingEndpoints || !hostForm.portainer_url || (!editingHost && !hostForm.portainer_api_key)"
+                      :disabled="loadingEndpoints || !hostForm.portainer_url || !canLoadPortainerEndpoints"
                       title="刷新 Endpoints 列表"
                     >
                       <span v-if="loadingEndpoints" class="fas fa-spinner fa-spin"></span>
@@ -1191,7 +1246,10 @@ export default {
         name: '',
         description: '',
         portainer_url: '',
+        portainer_auth_mode: 'apiKey',
         portainer_api_key: '',
+        portainer_username: '',
+        portainer_password: '',
         portainer_endpoint_id: null
       },
       testingConnection: false,
@@ -1255,6 +1313,27 @@ export default {
     hostFormDialogTitle() {
       if (this.editingHost) return '编辑主机'
       return this.hostForm.host_type === 'agent' ? '新建 Agent 主机' : '新建 Portainer 主机'
+    },
+    canLoadPortainerEndpoints() {
+      if (!this.hostForm.portainer_url) return false
+      if (this.canUseSavedPortainerCredentials) return true
+      if (this.hostForm.portainer_auth_mode === 'password') {
+        return !!(this.hostForm.portainer_username && this.hostForm.portainer_password)
+      }
+      return !!this.hostForm.portainer_api_key
+    },
+    canUseSavedPortainerCredentials() {
+      return !!(
+        this.editingHost &&
+        this.hostForm.host_type === 'portainer' &&
+        !this.hasManualPortainerCredentials
+      )
+    },
+    hasManualPortainerCredentials() {
+      if (this.hostForm.portainer_auth_mode === 'password') {
+        return !!(this.hostForm.portainer_username && this.hostForm.portainer_password)
+      }
+      return !!this.hostForm.portainer_api_key
     },
   },
   mounted() {
@@ -1375,7 +1454,10 @@ export default {
         name: '',
         description: '',
         portainer_url: '',
+        portainer_auth_mode: 'apiKey',
         portainer_api_key: '',
+        portainer_username: '',
+        portainer_password: '',
         portainer_endpoint_id: null
       }
       this.availableEndpoints = []
@@ -1404,10 +1486,28 @@ export default {
         name: '',
         description: '',
         portainer_url: '',
+        portainer_auth_mode: 'apiKey',
         portainer_api_key: '',
+        portainer_username: '',
+        portainer_password: '',
         portainer_endpoint_id: null
       }
       this.availableEndpoints = []
+    },
+    buildPortainerAuthPayload(extra = {}) {
+      const base = {
+        portainer_url: this.hostForm.portainer_url,
+        auth_mode: this.hostForm.portainer_auth_mode || 'apiKey',
+        endpoint_id: this.hostForm.portainer_endpoint_id ?? 0,
+        ...extra
+      }
+      if (base.auth_mode === 'password') {
+        base.username = this.hostForm.portainer_username
+        base.password = this.hostForm.portainer_password
+      } else {
+        base.api_key = this.hostForm.portainer_api_key
+      }
+      return base
     },
     editHost(host) {
       this.editingHost = host
@@ -1421,7 +1521,10 @@ export default {
         name: host.name,
         description: host.description || '',
         portainer_url: host.portainer_url || '',
-        portainer_api_key: '', // 不显示 API Key
+        portainer_auth_mode: host.portainer_auth_mode || 'apiKey',
+        portainer_api_key: '',
+        portainer_username: '',
+        portainer_password: '',
         portainer_endpoint_id: host.portainer_endpoint_id || null
       }
       this.availableEndpoints = []
@@ -1436,11 +1539,11 @@ export default {
       this.showEditModal = true
     },
     async autoLoadEndpoints() {
-      // 当 API Key 输入完成后，自动加载 endpoints
-      if (this.hostForm.host_type === 'portainer' && 
-          this.hostForm.portainer_url && 
-          this.hostForm.portainer_api_key &&
-          this.availableEndpoints.length === 0) {
+      if (
+        this.hostForm.host_type === 'portainer' &&
+        this.canLoadPortainerEndpoints &&
+        this.availableEndpoints.length === 0
+      ) {
         await this.loadEndpoints()
       }
     },
@@ -1453,28 +1556,26 @@ export default {
       this.loadingEndpoints = true
       try {
         let res
-        const isEditPortainer = this.editingHost && this.hostForm.host_type === 'portainer'
-        const hasManualApiKey = !!this.hostForm.portainer_api_key
-
-        if (isEditPortainer && !hasManualApiKey) {
-          // 编辑态且未输入新 API Key：使用后端已保存密钥拉取 endpoints
+        if (this.canUseSavedPortainerCredentials) {
           res = await axios.post(
             `/api/agent-hosts/${this.editingHost.host_id}/list-portainer-endpoints`,
             { portainer_url: this.hostForm.portainer_url },
             { timeout: 10000 }
           )
         } else {
-          if (!this.hostForm.portainer_api_key) {
-            alert('请先填写 Portainer API Key')
+          if (!this.hasManualPortainerCredentials) {
+            alert(
+              this.hostForm.portainer_auth_mode === 'password'
+                ? '请先填写 Portainer 用户名和密码'
+                : '请先填写 Portainer API Key'
+            )
             return
           }
-          res = await axios.post('/api/agent-hosts/list-portainer-endpoints', {
-            portainer_url: this.hostForm.portainer_url,
-            api_key: this.hostForm.portainer_api_key,
-            endpoint_id: 0 // 不需要真实的 endpoint_id
-          }, {
-            timeout: 10000
-          })
+          res = await axios.post(
+            '/api/agent-hosts/list-portainer-endpoints',
+            this.buildPortainerAuthPayload({ endpoint_id: 0 }),
+            { timeout: 10000 }
+          )
         }
         
         if (res.data.success) {
@@ -1493,12 +1594,10 @@ export default {
       } catch (error) {
         console.error('加载 Endpoints 失败:', error)
         if (
-          this.editingHost &&
-          this.hostForm.host_type === 'portainer' &&
-          !this.hostForm.portainer_api_key &&
+          this.canUseSavedPortainerCredentials &&
           error.response?.status === 404
         ) {
-          alert('当前后端未加载编辑态 Endpoint 接口，请重启后端服务后重试；或临时输入 API Key 再加载。')
+          alert('当前后端未加载编辑态 Endpoint 接口，请重启后端服务后重试；或临时填写认证信息再加载。')
           return
         }
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
@@ -1521,11 +1620,7 @@ export default {
       try {
         // 设置15秒超时
         let res
-        const isEditPortainer = this.editingHost && this.hostForm.host_type === 'portainer'
-        const hasManualApiKey = !!this.hostForm.portainer_api_key
-
-        if (isEditPortainer && !hasManualApiKey) {
-          // 编辑态且未输入新 API Key：使用后端已保存密钥测试连接
+        if (this.canUseSavedPortainerCredentials) {
           res = await axios.post(
             `/api/agent-hosts/${this.editingHost.host_id}/test-portainer`,
             {
@@ -1535,17 +1630,21 @@ export default {
             { timeout: 15000 }
           )
         } else {
-          if (!this.hostForm.portainer_api_key) {
-            alert('请先填写 Portainer API Key')
+          if (!this.hasManualPortainerCredentials) {
+            alert(
+              this.hostForm.portainer_auth_mode === 'password'
+                ? '请先填写 Portainer 用户名和密码'
+                : '请先填写 Portainer API Key'
+            )
             return
           }
-          res = await axios.post('/api/agent-hosts/test-portainer', {
-            portainer_url: this.hostForm.portainer_url,
-            api_key: this.hostForm.portainer_api_key,
-            endpoint_id: this.hostForm.portainer_endpoint_id
-          }, {
-            timeout: 15000 // 15秒超时
-          })
+          res = await axios.post(
+            '/api/agent-hosts/test-portainer',
+            this.buildPortainerAuthPayload({
+              endpoint_id: this.hostForm.portainer_endpoint_id
+            }),
+            { timeout: 15000 }
+          )
         }
         
         if (res.data.success) {
@@ -1562,12 +1661,10 @@ export default {
       } catch (error) {
         console.error('测试连接失败:', error)
         if (
-          this.editingHost &&
-          this.hostForm.host_type === 'portainer' &&
-          !this.hostForm.portainer_api_key &&
+          this.canUseSavedPortainerCredentials &&
           error.response?.status === 404
         ) {
-          alert('当前后端未加载编辑态测试接口，请重启后端服务后重试；或临时输入 API Key 再测试。')
+          alert('当前后端未加载编辑态测试接口，请重启后端服务后重试；或临时填写认证信息再测试。')
           return
         }
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
@@ -1600,10 +1697,16 @@ export default {
       }
       
       if (this.hostForm.host_type === 'portainer') {
-        if (
-            !this.hostForm.portainer_url ||
-            (!this.editingHost && !this.hostForm.portainer_api_key) ||
-            this.hostForm.portainer_endpoint_id === null || this.hostForm.portainer_endpoint_id === undefined) {
+        const missingEndpoint =
+          this.hostForm.portainer_endpoint_id === null ||
+          this.hostForm.portainer_endpoint_id === undefined
+        const missingAuthOnCreate =
+          !this.editingHost &&
+          ((this.hostForm.portainer_auth_mode === 'password' &&
+            (!this.hostForm.portainer_username || !this.hostForm.portainer_password)) ||
+            (this.hostForm.portainer_auth_mode !== 'password' &&
+              !this.hostForm.portainer_api_key))
+        if (!this.hostForm.portainer_url || missingEndpoint || missingAuthOnCreate) {
           alert('请填写完整的 Portainer 配置信息')
           return
         }
@@ -1612,8 +1715,15 @@ export default {
       this.saving = true
       try {
         const payload = { ...this.hostForm }
-        // 编辑 Portainer 主机时，空 API Key 不提交，避免清空数据库中的密钥
-        if (this.editingHost && payload.host_type === 'portainer' && !payload.portainer_api_key) {
+        if (this.editingHost && payload.host_type === 'portainer') {
+          if (!payload.portainer_api_key) delete payload.portainer_api_key
+          if (!payload.portainer_password) delete payload.portainer_password
+          if (!payload.portainer_username) delete payload.portainer_username
+        }
+        if (payload.host_type === 'portainer' && payload.portainer_auth_mode === 'apiKey') {
+          delete payload.portainer_username
+          delete payload.portainer_password
+        } else if (payload.host_type === 'portainer' && payload.portainer_auth_mode === 'password') {
           delete payload.portainer_api_key
         }
 

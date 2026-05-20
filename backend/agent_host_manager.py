@@ -17,6 +17,46 @@ from backend.portainer_client import PortainerClient
 
 logger = logging.getLogger(__name__)
 
+
+def _portainer_auth_mode(host_obj: AgentHost) -> str:
+    return getattr(host_obj, "portainer_auth_mode", None) or "apiKey"
+
+
+def _portainer_credentials_configured(host_obj: AgentHost) -> bool:
+    if _portainer_auth_mode(host_obj) == "password":
+        return bool(host_obj.portainer_username and host_obj.portainer_password)
+    return bool(host_obj.portainer_api_key)
+
+
+def create_portainer_client_from_host(
+    host_obj: AgentHost, endpoint_id: Optional[int] = None
+) -> PortainerClient:
+    """根据主机记录创建 Portainer 客户端。"""
+    eid = (
+        endpoint_id
+        if endpoint_id is not None
+        else host_obj.portainer_endpoint_id
+    )
+    if eid is None:
+        eid = 0
+    mode = _portainer_auth_mode(host_obj)
+    if mode == "password":
+        if not host_obj.portainer_username or not host_obj.portainer_password:
+            raise ValueError("Portainer 账号密码未配置")
+        return PortainerClient.from_host_credentials(
+            host_obj.portainer_url,
+            int(eid),
+            username=host_obj.portainer_username,
+            password=host_obj.portainer_password,
+            auth_mode="password",
+        )
+    if not host_obj.portainer_api_key:
+        raise ValueError("Portainer API Key 未配置")
+    return PortainerClient(
+        host_obj.portainer_url, host_obj.portainer_api_key, int(eid)
+    )
+
+
 # 确保数据库已初始化
 try:
     init_db()
@@ -60,6 +100,7 @@ class AgentHostManager:
             "token": host.token,
             "agent_unique_id": host.agent_unique_id,
             "portainer_url": host.portainer_url,
+            "portainer_auth_mode": _portainer_auth_mode(host),
             "portainer_endpoint_id": host.portainer_endpoint_id,
             "status": host.status,
             "last_heartbeat": (
@@ -81,7 +122,10 @@ class AgentHostManager:
         host_type: str = "agent",
         description: str = "",
         portainer_url: str = None,
+        portainer_auth_mode: str = "apiKey",
         portainer_api_key: str = None,
+        portainer_username: str = None,
+        portainer_password: str = None,
         portainer_endpoint_id: int = None,
         team_id: str = None,
         group_id: str = None,
@@ -116,16 +160,20 @@ class AgentHostManager:
                     while db.query(AgentHost).filter(AgentHost.token == token).first():
                         token = self._generate_token()
                 elif host_type == "portainer":
-                    # Portainer 类型：验证必需字段
-                    if (
-                        not portainer_url
-                        or not portainer_api_key
-                        or portainer_endpoint_id is None
-                    ):
+                    auth_mode = portainer_auth_mode or "apiKey"
+                    if not portainer_url or portainer_endpoint_id is None:
                         raise ValueError(
-                            "Portainer 类型主机需要提供 portainer_url、portainer_api_key 和 portainer_endpoint_id"
+                            "Portainer 类型主机需要提供 portainer_url 和 portainer_endpoint_id"
                         )
-                    # Portainer 类型不需要 token，明确设置为 None
+                    if auth_mode == "password":
+                        if not portainer_username or not portainer_password:
+                            raise ValueError(
+                                "账号密码模式需要提供 portainer_username 和 portainer_password"
+                            )
+                    elif not portainer_api_key:
+                        raise ValueError(
+                            "API Key 模式需要提供 portainer_api_key"
+                        )
                     token = None
 
                 # 构建创建参数，对于 Portainer 类型，token 为 None
@@ -146,10 +194,18 @@ class AgentHostManager:
                 if host_type == "agent":
                     create_params["token"] = token
                 elif host_type == "portainer":
-                    create_params["token"] = None  # Portainer 类型明确设置为 None
+                    create_params["token"] = None
                     create_params["portainer_url"] = portainer_url
-                    create_params["portainer_api_key"] = portainer_api_key
+                    create_params["portainer_auth_mode"] = portainer_auth_mode or "apiKey"
                     create_params["portainer_endpoint_id"] = portainer_endpoint_id
+                    if (portainer_auth_mode or "apiKey") == "password":
+                        create_params["portainer_username"] = portainer_username
+                        create_params["portainer_password"] = portainer_password
+                        create_params["portainer_api_key"] = None
+                    else:
+                        create_params["portainer_api_key"] = portainer_api_key
+                        create_params["portainer_username"] = None
+                        create_params["portainer_password"] = None
 
                 host_obj = AgentHost(**create_params)
 
@@ -234,7 +290,10 @@ class AgentHostManager:
         name: Optional[str] = None,
         description: Optional[str] = None,
         portainer_url: Optional[str] = None,
+        portainer_auth_mode: Optional[str] = None,
         portainer_api_key: Optional[str] = None,
+        portainer_username: Optional[str] = None,
+        portainer_password: Optional[str] = None,
         portainer_endpoint_id: Optional[int] = None,
     ) -> Optional[Dict]:
         """更新主机基本信息"""
@@ -264,8 +323,19 @@ class AgentHostManager:
                 if host_obj.host_type == "portainer":
                     if portainer_url is not None:
                         host_obj.portainer_url = portainer_url
+                    if portainer_auth_mode is not None:
+                        host_obj.portainer_auth_mode = portainer_auth_mode
+                        if portainer_auth_mode == "password":
+                            host_obj.portainer_api_key = None
+                        elif portainer_auth_mode == "apiKey":
+                            host_obj.portainer_username = None
+                            host_obj.portainer_password = None
                     if portainer_api_key is not None:
                         host_obj.portainer_api_key = portainer_api_key
+                    if portainer_username is not None:
+                        host_obj.portainer_username = portainer_username
+                    if portainer_password is not None:
+                        host_obj.portainer_password = portainer_password
                     if portainer_endpoint_id is not None:
                         host_obj.portainer_endpoint_id = portainer_endpoint_id
 
@@ -280,21 +350,38 @@ class AgentHostManager:
                 db.close()
 
     def test_portainer_connection(
-        self, portainer_url: str, api_key: str, endpoint_id: int
+        self,
+        portainer_url: str,
+        endpoint_id: int,
+        *,
+        api_key: Optional[str] = None,
+        auth_mode: str = "apiKey",
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         测试 Portainer 连接
 
         Args:
             portainer_url: Portainer API URL
-            api_key: Portainer API Key
             endpoint_id: Portainer Endpoint ID
+            api_key: API Key（apiKey 模式）
+            auth_mode: apiKey | password
+            username: 用户名（password 模式）
+            password: 密码（password 模式）
 
         Returns:
             测试结果
         """
         try:
-            client = PortainerClient(portainer_url, api_key, endpoint_id)
+            client = PortainerClient.from_host_credentials(
+                portainer_url,
+                endpoint_id,
+                api_key=api_key,
+                username=username,
+                password=password,
+                auth_mode=auth_mode,
+            )
             result = client.test_connection()
 
             if result.get("success"):
@@ -355,7 +442,7 @@ class AgentHostManager:
 
             if (
                 not host_obj.portainer_url
-                or not host_obj.portainer_api_key
+                or not _portainer_credentials_configured(host_obj)
                 or host_obj.portainer_endpoint_id is None
             ):
                 return None
@@ -366,11 +453,7 @@ class AgentHostManager:
 
             for attempt in range(retry_count):
                 try:
-                    client = PortainerClient(
-                        host_obj.portainer_url,
-                        host_obj.portainer_api_key,
-                        host_obj.portainer_endpoint_id,
-                    )
+                    client = create_portainer_client_from_host(host_obj)
 
                     # 测试连接（使用较短的超时时间，避免长时间等待）
                     test_result = client.test_connection()

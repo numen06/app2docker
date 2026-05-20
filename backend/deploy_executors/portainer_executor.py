@@ -52,11 +52,12 @@ class PortainerExecutor(DeployExecutor):
         if self.host_info.get("status") != "online":
             return False
         
-        # 检查是否有API Key
+        from backend.agent_host_manager import _portainer_credentials_configured
+
         db = get_db_session()
         try:
             host_obj = db.query(AgentHost).filter(AgentHost.host_id == self.host_id).first()
-            return host_obj is not None and host_obj.portainer_api_key is not None
+            return host_obj is not None and _portainer_credentials_configured(host_obj)
         finally:
             db.close()
     
@@ -67,21 +68,18 @@ class PortainerExecutor(DeployExecutor):
         Returns:
             PortainerClient 实例
         """
-        # 从数据库获取 API Key
+        from backend.agent_host_manager import create_portainer_client_from_host
+
         db = get_db_session()
         try:
             host_obj = db.query(AgentHost).filter(AgentHost.host_id == self.host_id).first()
-            if not host_obj or not host_obj.portainer_api_key:
-                raise ValueError("Portainer API Key 未配置")
-            api_key = host_obj.portainer_api_key
+            if not host_obj:
+                raise ValueError("Portainer 主机不存在")
+            return create_portainer_client_from_host(
+                host_obj, endpoint_id=self.portainer_endpoint_id
+            )
         finally:
             db.close()
-        
-        return PortainerClient(
-            self.portainer_url,
-            api_key,
-            self.portainer_endpoint_id
-        )
 
     @staticmethod
     def _is_retryable_error(error_text: str) -> bool:

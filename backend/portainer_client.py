@@ -13,35 +13,111 @@ logger = logging.getLogger(__name__)
 
 class PortainerClient:
     """Portainer API 客户端"""
-    
-    def __init__(self, url: str, api_key: str, endpoint_id: int):
+
+    @staticmethod
+    def _normalize_api_url(url: str) -> str:
+        base = url.rstrip("/")
+        if not base.endswith("/api"):
+            if base.endswith("/"):
+                base = f"{base}api"
+            else:
+                base = f"{base}/api"
+        return base
+
+    @classmethod
+    def from_host_credentials(
+        cls,
+        url: str,
+        endpoint_id: int,
+        *,
+        api_key: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        auth_mode: Optional[str] = None,
+    ) -> "PortainerClient":
+        """根据认证模式创建客户端。"""
+        mode = auth_mode or ("password" if username and password else "apiKey")
+        if mode == "password":
+            if not username or not password:
+                raise ValueError("账号密码模式需要提供 username 和 password")
+            jwt = cls.login_with_password(url, username, password)
+            return cls(url, jwt, endpoint_id)
+        if not api_key:
+            raise ValueError("API Key 模式需要提供 api_key")
+        return cls(url, api_key, endpoint_id)
+
+    @classmethod
+    def login_with_password(cls, url: str, username: str, password: str) -> str:
+        """使用用户名密码登录 Portainer，返回 JWT。"""
+        api_url = cls._normalize_api_url(url)
+        auth_url = f"{api_url}/auth"
+        try:
+            response = requests.post(
+                auth_url,
+                json={"Username": username, "Password": password},
+                headers={"Content-Type": "application/json"},
+                timeout=20,
+            )
+            if not response.ok:
+                try:
+                    err = response.json()
+                    msg = err.get("message", err.get("details", response.text))
+                except Exception:
+                    msg = response.text
+                raise Exception(f"登录失败 ({response.status_code}): {msg}")
+            data = response.json()
+            jwt = data.get("jwt") or data.get("Jwt")
+            if not jwt:
+                raise Exception("登录响应中未包含 JWT")
+            return jwt
+        except requests.exceptions.Timeout:
+            raise Exception("连接超时，请检查 Portainer URL 是否正确")
+        except requests.exceptions.ConnectionError as e:
+            raise Exception(f"无法连接到 Portainer 服务器: {str(e)}")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"登录请求失败: {str(e)}")
+
+    def __init__(
+        self,
+        url: str,
+        api_key: str,
+        endpoint_id: int,
+        *,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ):
         """
         初始化 Portainer 客户端
-        
+
         Args:
-            url: Portainer API URL（如：http://portainer.example.com:9000/api）
-            api_key: Portainer API Key
+            url: Portainer API URL（如：http://portainer.example.com:9000）
+            api_key: Portainer API Key 或 JWT
             endpoint_id: Portainer Endpoint ID
+            username: 账号密码模式用户名（与 password 同时传入时自动登录）
+            password: 账号密码模式密码
         """
-        self.url = url.rstrip('/')
-        # 确保 URL 以 /api 结尾
-        if not self.url.endswith('/api'):
-            if self.url.endswith('/'):
-                self.url = f"{self.url}api"
-            else:
-                self.url = f"{self.url}/api"
-        self.api_key = api_key
+        self.url = self._normalize_api_url(url)
         self.endpoint_id = endpoint_id
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
-        logger.info(f"PortainerClient 初始化: URL={self.url}, EndpointID={endpoint_id}")
+
+        if username and password:
+            self.api_key = self.login_with_password(url, username, password)
+            logger.info(
+                f"PortainerClient 初始化(账号密码): URL={self.url}, EndpointID={endpoint_id}"
+            )
+        else:
+            self.api_key = api_key or ""
+            logger.info(
+                f"PortainerClient 初始化: URL={self.url}, EndpointID={endpoint_id}"
+            )
 
     def _build_auth_headers(self, force_mode: Optional[str] = None) -> Dict[str, str]:
         """根据凭据格式构建鉴权头。"""
         auth_headers: Dict[str, str] = {}
         mode = force_mode
         if not mode:
-            if self.api_key.startswith("ptc_"):
+            if self.api_key.startswith(("ptc_", "ptr_")):
                 mode = "x_api_key"
             elif self.api_key.count(".") == 2:
                 mode = "bearer"

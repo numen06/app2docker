@@ -343,7 +343,12 @@ class AgentHost(Base):
     )  # Agent唯一标识（基于Docker socket生成，重启后不变）
     # Portainer 相关字段（Portainer 和 Portainer Agent 都通过 Portainer API 控制）
     portainer_url = Column(String(512))  # Portainer API URL
+    portainer_auth_mode = Column(
+        String(20), default="apiKey"
+    )  # apiKey | password
     portainer_api_key = Column(Text)  # Portainer API Key（加密存储）
+    portainer_username = Column(String(255))  # 账号密码模式用户名
+    portainer_password = Column(Text)  # 账号密码模式密码（加密存储）
     portainer_endpoint_id = Column(Integer)  # Portainer Endpoint ID
     status = Column(String(20), default="offline")  # offline, online, connecting
     last_heartbeat = Column(DateTime)  # 最后心跳时间

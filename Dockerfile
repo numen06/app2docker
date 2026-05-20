@@ -35,35 +35,24 @@ COPY --chown=node:node frontend/ ./
 RUN npm run build
 
 # ============ 阶段 2: Python 后端基础镜像 ============
-# docker:cli 仅提供 Docker/buildx；Python 用官方镜像，避免 51jbm/docker 内 apk python3 与 expat ABI 不匹配
+# docker:cli 提供 Docker/buildx 静态二进制；Python 用阿里云 alinux3（与 templates/python 一致，可拉取且避免 Alpine pyexpat 问题）
 FROM registry.cn-shanghai.aliyuncs.com/51jbm/docker:27.2.0-cli AS docker-tools
 
-FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.12-alpine AS backend-base
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/python:3.12.0 AS backend-base
 
 COPY --from=docker-tools /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-tools /usr/local/libexec/docker/cli-plugins/ /usr/local/libexec/docker/cli-plugins/
 
-# ✅ 替换 apk 源为阿里云镜像（关键！提速 5–10×）
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-
-RUN apk add --no-cache \
-    curl \
-    jq \
-    git \
-    make \
-    gcc \
-    musl-dev \
-    linux-headers \
-    docker-compose \
-    tzdata
-
 ENV TZ=Asia/Shanghai
-RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo "$TZ" > /etc/timezone
 
+RUN yum install -y curl jq git make gcc gcc-c++ python3-devel && \
+    yum clean all && \
+    rm -rf /var/cache/yum
+
 # 使用国内镜像源并增加超时时间，避免网络超时
-RUN python -c "import pyexpat" && \
-    python -m pip install --upgrade \
+RUN python -m pip install --upgrade \
     --index-url https://mirrors.aliyun.com/pypi/simple/ \
     --timeout 300 \
     --retries 5 \
@@ -89,7 +78,7 @@ RUN python -m venv .venv && \
     .venv/bin/pip config set global.retries 5 && \
     .venv/bin/pip install --upgrade pip && \
     .venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    echo "✅ docker-compose version:" && docker-compose --version || echo "⚠️ docker-compose not found"
+    echo "✅ compose version:" && (docker compose version || docker-compose --version || echo "⚠️ compose not found")
 
 # ✅ 设置 PATH，让 .venv/bin 优先（等效于 source .venv/bin/activate）
 ENV PATH="/app/.venv/bin:$PATH"
