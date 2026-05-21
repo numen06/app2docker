@@ -1,12 +1,18 @@
 <template>
-  <div class="image-migration-panel">
+  <div class="image-migration-panel min-w-0">
     <PageToolbar title="镜像迁移" icon="fa-right-left">
       <template #actions>
-        <Button variant="outline" size="sm" :disabled="loading" @click="loadTasks">
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-full min-h-11 sm:w-auto"
+          :disabled="loading"
+          @click="loadTasks"
+        >
           <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
           刷新
         </Button>
-        <Button size="sm" @click="openCreateDialog">
+        <Button size="sm" class="w-full min-h-11 sm:w-auto" @click="openCreateDialog">
           <i class="fas fa-plus"></i>
           新建迁移
         </Button>
@@ -27,7 +33,102 @@
       icon="fa-right-left"
     />
 
-    <div v-else class="overflow-x-auto rounded-lg border border-slate-200">
+    <template v-else>
+      <div class="space-y-3 md:hidden">
+        <div
+          v-for="task in tasks"
+          :key="`mobile-${task.task_id}`"
+          class="rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1 font-medium text-slate-900">
+              {{ task.task_name || "未命名任务" }}
+            </div>
+            <Badge v-if="task.status === 'idle'" variant="default" class="shrink-0">空闲</Badge>
+            <Badge v-else-if="task.status === 'pending'" class="shrink-0">
+              <i class="fas fa-clock mr-1"></i>排队
+            </Badge>
+            <Badge v-else-if="task.status === 'running'" variant="info" class="shrink-0">
+              <i class="fas fa-spinner fa-spin mr-1"></i>迁移中
+            </Badge>
+            <Badge v-else-if="task.status === 'completed'" variant="success" class="shrink-0">成功</Badge>
+            <Badge v-else-if="task.status === 'failed'" variant="danger" class="shrink-0">失败</Badge>
+            <Badge v-else-if="task.status === 'stopped'" variant="warning" class="shrink-0">已停止</Badge>
+            <Badge v-else class="shrink-0">{{ task.status }}</Badge>
+          </div>
+          <dl class="mt-2 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1.5 text-xs text-slate-600">
+            <dt class="text-slate-500">源镜像</dt>
+            <dd><code class="break-all text-slate-800">{{ task.source_image }}</code></dd>
+            <dt class="text-slate-500">目标</dt>
+            <dd><code class="break-all text-slate-800">{{ task.target_image }}</code></dd>
+            <dt class="text-slate-500">定时</dt>
+            <dd>
+              <span v-if="task.schedule_enabled && task.schedule_cron">
+                {{ cronPresetLabel(task.schedule_cron) }}
+                <code class="mt-0.5 block break-all text-slate-500">{{ task.schedule_cron }}</code>
+              </span>
+              <span v-else>仅手动</span>
+            </dd>
+            <dt class="text-slate-500">执行</dt>
+            <dd>{{ task.run_count || 0 }} 次 · {{ formatTime(task.last_run_at) }}</dd>
+          </dl>
+          <p
+            v-if="task.error && task.status === 'failed'"
+            class="mt-2 break-words text-xs text-red-600"
+          >
+            {{ task.error }}
+          </p>
+          <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+            <Button
+              size="sm"
+              variant="outline"
+              class="min-h-11 flex-1 sm:flex-none"
+              :disabled="task.status === 'running' || task.status === 'pending' || executingId === task.task_id"
+              @click="executeTask(task)"
+            >
+              <i class="fas fa-play mr-1"></i>执行
+            </Button>
+            <Button
+              v-if="task.schedule_cron"
+              size="sm"
+              variant="outline"
+              class="min-h-11"
+              @click="toggleSchedule(task)"
+            >
+              <i :class="task.schedule_enabled ? 'fas fa-pause' : 'fas fa-clock'"></i>
+            </Button>
+            <Button
+              v-if="task.status === 'running' || task.status === 'pending'"
+              size="sm"
+              variant="outline"
+              class="min-h-11"
+              @click="stopTask(task)"
+            >
+              <i class="fas fa-stop"></i>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="min-h-11"
+              :disabled="task.status === 'running'"
+              @click="openEditDialog(task)"
+            >
+              <i class="fas fa-edit"></i>
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              class="min-h-11"
+              :disabled="task.status === 'running'"
+              @click="deleteTask(task)"
+            >
+              <i class="fas fa-trash"></i>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
       <Table>
         <TableHeader>
           <TableRow>
@@ -135,7 +236,8 @@
           </TableRow>
         </TableBody>
       </Table>
-    </div>
+      </div>
+    </template>
 
     <FormDialog
       v-model="showDialog"
@@ -169,7 +271,7 @@
               </option>
             </NativeSelect>
           </div>
-          <div v-if="sourceReg" class="grid gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm md:grid-cols-2">
+          <div v-if="sourceReg" class="grid grid-cols-1 gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:grid-cols-2">
             <div class="text-slate-600">
               <span class="text-xs text-slate-500">仓库地址</span>
               <div class="font-mono text-slate-800">{{ sourceReg.registry || "docker.io" }}</div>
@@ -181,8 +283,8 @@
               </div>
             </div>
           </div>
-          <div class="grid gap-3 md:grid-cols-12">
-            <div class="space-y-2 md:col-span-8">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+            <div class="space-y-2 sm:col-span-8">
               <Label>镜像路径 <span class="text-red-600">*</span></Label>
               <Input
                 v-model="form.source_image_path"
@@ -193,20 +295,20 @@
               />
               <p class="text-xs text-slate-500">仅填路径部分，不含前缀；粘贴完整镜像名会自动拆分</p>
             </div>
-            <div class="space-y-2 md:col-span-4">
+            <div class="space-y-2 sm:col-span-4">
               <Label>标签</Label>
               <Input v-model="form.source_tag" type="text" @input="syncTargetFromSource" />
             </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <p v-if="sourcePreview" class="flex-1 text-xs text-slate-600">
-              完整源镜像：<code class="rounded bg-slate-100 px-1">{{ sourcePreview }}</code>
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <p v-if="sourcePreview" class="min-w-0 text-xs text-slate-600 sm:flex-1">
+              完整源镜像：<code class="mt-0.5 block break-all rounded bg-slate-100 px-1 py-0.5">{{ sourcePreview }}</code>
             </p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              class="shrink-0"
+              class="min-h-11 w-full shrink-0 sm:w-auto"
               :disabled="!canTestSourceImage || testingSource"
               @click="testSourceImage"
             >
@@ -242,7 +344,7 @@
               </option>
             </NativeSelect>
           </div>
-          <div v-if="targetReg" class="grid gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm md:grid-cols-2">
+          <div v-if="targetReg" class="grid grid-cols-1 gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:grid-cols-2">
             <div class="text-slate-600">
               <span class="text-xs text-slate-500">仓库地址</span>
               <div class="font-mono text-slate-800">{{ targetReg.registry || "docker.io" }}</div>
@@ -254,8 +356,8 @@
               </div>
             </div>
           </div>
-          <div class="grid gap-3 md:grid-cols-12">
-            <div class="space-y-2 md:col-span-8">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
+            <div class="space-y-2 sm:col-span-8">
               <Label>镜像路径 <span class="text-red-600">*</span></Label>
               <Input
                 v-model="form.target_image_path"
@@ -263,22 +365,22 @@
                 :placeholder="targetPathPlaceholder"
               />
             </div>
-            <div class="space-y-2 md:col-span-4">
+            <div class="space-y-2 sm:col-span-4">
               <Label>标签</Label>
               <Input v-model="form.target_tag" type="text" />
             </div>
           </div>
           <p v-if="targetPreview" class="text-xs text-slate-600">
-            完整目标镜像：<code class="rounded bg-slate-100 px-1">{{ targetPreview }}</code>
+            完整目标镜像：<code class="mt-0.5 block break-all rounded bg-slate-100 px-1 py-0.5">{{ targetPreview }}</code>
           </p>
         </div>
 
         <!-- 定时 -->
         <div class="rounded-lg border border-slate-200 p-3 space-y-3">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <Label class="mb-0!">定时执行</Label>
-            <label class="flex items-center gap-2 text-sm">
-              <input v-model="form.schedule_enabled" type="checkbox" class="h-4 w-4 rounded" />
+            <label class="flex min-h-11 items-center gap-2 text-sm">
+              <input v-model="form.schedule_enabled" type="checkbox" class="h-5 w-5 rounded" />
               启用定时
             </label>
           </div>
@@ -309,14 +411,21 @@
           <p v-else class="text-xs text-slate-500">未启用时仅支持手动「立即执行」。</p>
         </div>
 
-        <label v-if="!editingTaskId" class="flex items-center gap-2 text-sm text-slate-700">
-          <input v-model="form.execute_now" type="checkbox" class="h-4 w-4 rounded" />
+        <label v-if="!editingTaskId" class="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+          <input v-model="form.execute_now" type="checkbox" class="h-5 w-5 rounded" />
           保存后立即执行一次
         </label>
       </form>
       <template #footer>
-        <Button variant="outline" type="button" @click="showDialog = false">取消</Button>
-        <Button type="button" :disabled="saving || !registries.length" @click="saveTask">
+        <Button variant="outline" type="button" class="w-full sm:w-auto" @click="showDialog = false">
+          取消
+        </Button>
+        <Button
+          type="button"
+          class="w-full sm:w-auto"
+          :disabled="saving || !registries.length"
+          @click="saveTask"
+        >
           <i class="fas fa-save"></i>
           {{ saving ? "保存中…" : "保存" }}
         </Button>

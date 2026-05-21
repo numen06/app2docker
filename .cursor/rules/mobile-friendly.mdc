@@ -1,0 +1,31 @@
+---
+description: 前端页面需兼顾手机端布局与交互
+globs: frontend/**/*
+alwaysApply: true
+---
+
+# 手机端友好（Mobile-first）
+
+新增或修改 `frontend` 页面/组件时，必须同时考虑窄屏（&lt;768px），不能只按桌面表格布局实现。
+
+## 布局
+
+- 根容器加 `min-w-0`，避免 flex 子项撑破横向滚动。
+- 多列表格：桌面 `hidden md:block` + 表格；手机 `md:hidden` + **卡片列表**（参考 `ResourcePackagePanel.vue`）。
+- 表单栅格：默认单列，再用 `sm:` / `md:` 扩为多列（如 `grid-cols-1 sm:grid-cols-12`）。
+- 长文本（镜像名、URL、错误）：`break-all` 或 `break-words`，勿用 `truncate` 作为唯一展示方式。
+
+## 操作区
+
+- 工具栏按钮：`PageToolbar` 已支持换行；关键按钮可加 `w-full sm:w-auto`。
+- 弹窗底部：`flex-col-reverse gap-2 sm:flex-row`，按钮 `w-full sm:w-auto`。
+- 触控目标：可点击区域宜 ≥44px（`min-h-11` / `py-2.5`），避免仅 24px 图标按钮排成密集一行。
+
+## 弹窗
+
+- 全屏/底部抽屉式：遮罩 `items-end sm:items-center`，小屏 `p-2`，内容 `max-h-[90vh] overflow-y-auto`。
+- 对话框宽度：`w-full` + `max-w-*`，避免固定超宽。
+
+## 自检（改完必做）
+
+- 浏览器 DevTools 375px 宽度下：无横向滚动条、表格已切换为卡片、表单与弹窗按钮可点且不重叠。
