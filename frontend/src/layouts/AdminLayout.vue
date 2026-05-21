@@ -1052,6 +1052,20 @@ function groupHasActiveChild(group) {
   return group.children.some((c) => c.id === sidebarActiveTab.value);
 }
 
+/** 默认展开所有仍有可见子项的分组，避免菜单藏在折叠分组里 */
+function syncExpandedSidebarGroups() {
+  if (!permissionsLoaded.value) return;
+  const ids = visibleSidebarGroups.value.map((g) => g.id);
+  const activeGroup = SIDEBAR_GROUPS.find((grp) =>
+    grp.children.some((c) => c.id === sidebarActiveTab.value)
+  );
+  const next = new Set(ids);
+  if (activeGroup?.id) next.add(activeGroup.id);
+  expandedGroupIds.value = [...next];
+}
+
+watch(visibleSidebarGroups, syncExpandedSidebarGroups);
+
 watch(
   sidebarActiveTab,
   (newTab) => {
@@ -1205,6 +1219,12 @@ async function refreshEffectivePermissions() {
     if (teamStore.activeTeamId) {
       await teamStore.fetchMenuPermissions(teamStore.activeTeamId);
       const merged = new Set(teamStore.menuPermissions);
+      if (!merged.size) {
+        for (const p of global) {
+          if (p.startsWith("menu.")) merged.add(p);
+        }
+        if (!global.has("menu.users")) merged.delete("menu.users");
+      }
       if (authStore.isGlobalAdmin && global.has("menu.users")) {
         merged.add("menu.users");
       }
@@ -1556,6 +1576,7 @@ onMounted(async () => {
     userPermissions.value = new Set();
   } finally {
     permissionsLoaded.value = true;
+    syncExpandedSidebarGroups();
   }
 
   startRunningTasksTimer();

@@ -16,9 +16,9 @@ from backend.models import Team, TeamInvitation, TeamMember, User
 from backend.route_definitions import require_auth
 from backend.team_deletion import delete_team_cascade
 from backend.team_permissions import (
+    effective_menu_permissions_for_team_user,
     get_team_member,
     get_user_id_by_username,
-    menu_permissions_for_team_role,
     require_team_admin,
     require_team_member,
     require_team_owner,
@@ -384,11 +384,11 @@ def get_team_menu_permissions(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """根据当前用户在团队中的角色返回菜单权限。"""
+    """返回团队内菜单权限（系统角色 menu.* 为主）及团队管理能力。"""
     username = require_auth(request)
     user_id = get_user_id_by_username(db, username)
     member = require_team_member(db, team_id, user_id)
-    perms = menu_permissions_for_team_role(member.role)
+    perms = effective_menu_permissions_for_team_user(username, member.role)
     r = member.role
     return MenuPermissionsOut(
         team_id=team_id,

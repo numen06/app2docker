@@ -66,17 +66,19 @@ flowchart TB
 
 ### 2.2 菜单权限（UI 侧栏）
 
-由 `GET /api/teams/{team_id}/menu-permissions` 下发，逻辑在 `menu_permissions_for_team_role`：
+由 `GET /api/teams/{team_id}/menu-permissions` 下发，逻辑在 `effective_menu_permissions_for_team_user`（[`backend/team_permissions.py`](backend/team_permissions.py)）：
 
-| 角色 | 可见菜单（`permissions` 字段） |
-|------|--------------------------------|
-| **member** | `menu.dashboard`、`menu.pipeline`、`menu.host` |
-| **owner / admin** | `ALL_MENU_PERMISSIONS`（构建、导出、任务、数据源、仓库、模板、资源包、部署等） |
+| 来源 | 说明 |
+|------|------|
+| **主规则** | 侧栏 `menu.*` 以用户在 **角色管理** 中绑定的系统角色为准（`get_user_permissions` → `RolePermission`） |
+| **回退** | 若用户未绑定任何系统角色、无 `menu.*`，则按 `menu_permissions_for_team_role` 的团队角色默认列表（避免侧栏全空） |
+| **团队能力** | `can_manage_team` / `can_assign_admin` / `can_dissolve_team` 仍仅由 `TeamMember.role`（owner/admin/member）决定，与菜单项数量无关 |
 
 **注意：用户/角色管理**
 
-- 后端给 owner/admin 的列表里包含 `menu.users`，但前端「系统与安全」分组要求 **全局 `is_global_admin`**，且全局权限含 `menu.users`（`AdminLayout.vue`）。
-- **团队管理员 ≠ 系统用户管理员**；团队 admin 多的是业务菜单，不是全站用户管理。
+- `menu.users` 仅当系统角色已授予时出现；团队上下文不会单独为用户开通「用户/角色/团队管理」菜单。
+- 前端「系统与安全」分组还要求 **全局 `is_global_admin`**（`AdminLayout.vue`）。
+- **团队管理员 ≠ 系统用户管理员**；团队 admin 的邀请/改角色能力与侧栏可见菜单是两套逻辑。
 
 ---
 
@@ -193,10 +195,13 @@ def require_team_admin(db, team_id, user_id):
     if member.role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="需要团队管理员权限")
 
-def menu_permissions_for_team_role(role):
-    if role in ("owner", "admin"):
-        return TEAM_ADMIN_MENU_PERMISSIONS  # ALL_MENU_PERMISSIONS
-    return TEAM_MEMBER_MENU_PERMISSIONS     # dashboard, pipeline, host
+def effective_menu_permissions_for_team_user(username, team_role):
+    menu_codes = {p for p in get_user_permissions(username) if p.startswith("menu.")}
+    if "menu.users" not in get_user_permissions(username):
+        menu_codes.discard("menu.users")
+    if not menu_codes:
+        return menu_permissions_for_team_role(team_role)  # 无系统角色时回退
+    return sorted(menu_codes)
 ```
 
 ### 资源有效权限（仅 owner 特权）

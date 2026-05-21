@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import axios from 'axios'
+import { getUserPermissions } from '@/utils/permissions'
 
 const STORAGE_KEY = 'app2docker-active-team-id'
 const DEFAULT_TEAM_NAME = '默认团队'
@@ -264,10 +265,20 @@ export const useTeamStore = defineStore('team', {
         if (this.activeTeamId !== id) {
           return this.menuPermissions
         }
-        this.menuPermissions = []
+        try {
+          const global = await getUserPermissions()
+          const menuCodes = [...global].filter((p) => p.startsWith('menu.'))
+          if (!global.has('menu.users')) {
+            const i = menuCodes.indexOf('menu.users')
+            if (i >= 0) menuCodes.splice(i, 1)
+          }
+          this.menuPermissions = menuCodes
+        } catch {
+          this.menuPermissions = []
+        }
         this.activeTeamRole = ''
         this._clearCapabilities()
-        return []
+        return this.menuPermissions
       } finally {
         this.menuPermissionsLoading = false
       }
