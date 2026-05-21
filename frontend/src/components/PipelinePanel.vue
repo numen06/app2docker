@@ -171,6 +171,19 @@
               </Button>
               <Button
                 variant="outline" size="sm"
+                @click="copyPipeline(pipeline)"
+                :disabled="copying === pipeline.pipeline_id"
+                title="复制流水线"
+              >
+                <i
+                  v-if="copying === pipeline.pipeline_id"
+                  class="fas fa-spinner fa-spin"
+                ></i>
+                <i v-else class="fas fa-copy"></i>
+                复制
+              </Button>
+              <Button
+                variant="outline" size="sm"
                 @click="goToDetail(pipeline)"
                 title="配置流水线"
               >
@@ -845,6 +858,7 @@ const gitSources = ref([]);
 const loading = ref(false);
 const saving = ref(false); // 正在保存流水线
 const running = ref(null); // 正在运行的流水线ID
+const copying = ref(null); // 正在复制的流水线ID
 const debounceTimers = ref({}); // 防抖定时器
 const queuedPipelines = ref(new Set()); // 排队中的流水线ID集合
 const loadingServicesTimer = ref(null); // 加载服务的防抖定时器
@@ -3656,6 +3670,34 @@ async function copyBuildConfigJson() {
         selection.addRange(range);
       }
     });
+  }
+}
+
+async function copyPipeline(pipeline) {
+  if (copying.value === pipeline.pipeline_id) {
+    return;
+  }
+  if (
+    !(await showConfirm({
+      message: `确定要复制流水线「${pipeline.name}」吗？将生成新流水线（含 Webhook 新地址），构建后回调需重新配置。`,
+    }))
+  ) {
+    return;
+  }
+
+  copying.value = pipeline.pipeline_id;
+  try {
+    const res = await axios.post(`/api/pipelines/${pipeline.pipeline_id}/copy`);
+    const newName = res.data?.name;
+    await loadPipelines();
+    toastSuccess(
+      newName ? `流水线已复制为「${newName}」` : "流水线复制成功"
+    );
+  } catch (error) {
+    console.error("复制流水线失败:", error);
+    toastApiError(error, "复制流水线失败");
+  } finally {
+    copying.value = null;
   }
 }
 

@@ -6865,6 +6865,78 @@ async def delete_pipeline(pipeline_id: str, http_request: Request):
         raise HTTPException(status_code=500, detail=f"删除流水线失败: {str(e)}")
 
 
+@router.post("/pipelines/{pipeline_id}/copy")
+async def copy_pipeline(pipeline_id: str, http_request: Request):
+    """复制流水线配置"""
+    try:
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+        from backend.models import Pipeline
+
+        db = get_db_session()
+        try:
+            require_resource_permission(db, user_id, "pipeline", pipeline_id, "edit")
+            source = (
+                db.query(Pipeline).filter(Pipeline.pipeline_id == pipeline_id).first()
+            )
+            if not source:
+                raise HTTPException(status_code=404, detail="流水线不存在")
+            if source.team_id:
+                require_team_member(db, source.team_id, user_id)
+        finally:
+            db.close()
+
+        manager = PipelineManager()
+        new_pipeline_id = manager.copy_pipeline(pipeline_id, created_by=user_id)
+
+        db = get_db_session()
+        try:
+            from backend.models import PipelinePermission
+
+            has_perm = (
+                db.query(PipelinePermission)
+                .filter(
+                    PipelinePermission.pipeline_id == new_pipeline_id,
+                    PipelinePermission.user_id == user_id,
+                )
+                .first()
+            )
+            if not has_perm:
+                grant_creator_admin(db, "pipeline", new_pipeline_id, user_id)
+        finally:
+            db.close()
+
+        source_pipeline = manager.get_pipeline(pipeline_id)
+        OperationLogger.log(
+            username,
+            "pipeline_copy",
+            {
+                "source_pipeline_id": pipeline_id,
+                "pipeline_id": new_pipeline_id,
+                "source_name": source_pipeline.get("name") if source_pipeline else None,
+            },
+        )
+
+        new_pipeline = manager.get_pipeline(new_pipeline_id)
+        return JSONResponse(
+            {
+                "pipeline_id": new_pipeline_id,
+                "name": new_pipeline.get("name") if new_pipeline else None,
+                "message": "流水线复制成功",
+            }
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"复制流水线失败: {str(e)}")
+
+
 @router.post("/pipelines/{pipeline_id}/run")
 async def run_pipeline(
     pipeline_id: str,

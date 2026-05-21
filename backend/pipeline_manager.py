@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 from sqlalchemy.orm import Session
 from backend.database import get_db_session, init_db
-from backend.models import Pipeline, PipelineTaskHistory
+from backend.models import Pipeline, PipelinePermission, PipelineTaskHistory
 
 # 确保数据库已初始化
 try:
@@ -888,6 +888,105 @@ class PipelineManager:
             raise
         finally:
             db.close()
+
+    def _generate_copy_name(self, base_name: str, team_id: str = None) -> str:
+        """生成复制流水线的唯一名称，格式：原名(副本)、原名(副本2)..."""
+        base = (base_name or "").strip() or "流水线"
+        candidate = f"{base}(副本)"
+        if not self.pipeline_name_exists(candidate, team_id):
+            return candidate
+        n = 2
+        while n < 1000:
+            candidate = f"{base}(副本{n})"
+            if not self.pipeline_name_exists(candidate, team_id):
+                return candidate
+            n += 1
+        return f"{base}(副本{uuid.uuid4().hex[:6]})"
+
+    def copy_pipeline(self, pipeline_id: str, created_by: str = None) -> str:
+        """复制流水线配置（重新生成 webhook，清空构建后回调与任务状态，复制成员权限）"""
+        db = get_db_session()
+        try:
+            source = (
+                db.query(Pipeline).filter(Pipeline.pipeline_id == pipeline_id).first()
+            )
+            if not source:
+                raise ValueError("流水线不存在")
+
+            new_name = self._generate_copy_name(source.name, source.team_id)
+            source_perms = (
+                db.query(PipelinePermission)
+                .filter(PipelinePermission.pipeline_id == pipeline_id)
+                .all()
+            )
+        finally:
+            db.close()
+
+        new_id = self.create_pipeline(
+            name=new_name,
+            git_url=source.git_url,
+            branch=source.branch,
+            project_type=source.project_type or "jar",
+            template=source.template,
+            image_name=source.image_name,
+            tag=source.tag or "latest",
+            push=source.push,
+            push_registry=source.push_registry,
+            template_params=self._safe_get_json_field(source, "template_params", {}),
+            sub_path=source.sub_path,
+            use_project_dockerfile=source.use_project_dockerfile,
+            dockerfile_name=source.dockerfile_name or "Dockerfile",
+            webhook_secret=None,
+            webhook_token=None,
+            enabled=source.enabled,
+            description=source.description or "",
+            cron_expression=source.cron_expression,
+            webhook_branch_filter=source.webhook_branch_filter,
+            webhook_use_push_branch=source.webhook_use_push_branch,
+            webhook_allowed_branches=self._safe_get_json_field(
+                source, "webhook_allowed_branches", []
+            ),
+            branch_tag_mapping=self._safe_get_json_field(
+                source, "branch_tag_mapping", {}
+            ),
+            source_id=source.source_id,
+            selected_services=self._safe_get_json_field(source, "selected_services", []),
+            service_push_config=self._safe_get_json_field(
+                source, "service_push_config", {}
+            ),
+            service_template_params=self._safe_get_json_field(
+                source, "service_template_params", {}
+            ),
+            push_mode=source.push_mode or "multi",
+            resource_package_configs=self._safe_get_json_field(
+                source, "resource_package_configs", []
+            ),
+            post_build_webhooks=[],
+            team_id=source.team_id,
+            group_id=source.group_id,
+            created_by=created_by,
+        )
+
+        if source_perms:
+            db = get_db_session()
+            try:
+                for perm in source_perms:
+                    db.add(
+                        PipelinePermission(
+                            pipeline_id=new_id,
+                            user_id=perm.user_id,
+                            permission=perm.permission,
+                            granted_by=perm.granted_by or created_by,
+                        )
+                    )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+        return new_id
 
     def record_trigger(
         self,
