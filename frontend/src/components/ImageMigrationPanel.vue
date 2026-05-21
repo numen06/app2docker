@@ -20,7 +20,7 @@
     </PageToolbar>
 
     <p class="mb-4 text-sm text-slate-600">
-      选择已在「镜像仓库」中配置的源/目标仓库；镜像前缀随仓库配置，只需填写路径与标签。支持常用定时或自定义 Cron。
+      选择源/目标仓库；镜像前缀默认取自仓库配置，可在任务中修改。填写路径与标签，支持常用定时或自定义 Cron。
     </p>
 
     <div v-if="loading && !tasks.length" class="flex justify-center py-12 text-slate-500">
@@ -271,17 +271,20 @@
               </option>
             </NativeSelect>
           </div>
-          <div v-if="sourceReg" class="grid grid-cols-1 gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:grid-cols-2">
-            <div class="text-slate-600">
-              <span class="text-xs text-slate-500">仓库地址</span>
-              <div class="font-mono text-slate-800">{{ sourceReg.registry || "docker.io" }}</div>
-            </div>
-            <div class="text-slate-600">
-              <span class="text-xs text-slate-500">镜像前缀（随仓库）</span>
-              <div class="font-mono text-slate-800">
-                {{ sourceReg.registry_prefix?.trim() || "（无，使用仓库地址拼接）" }}
-              </div>
-            </div>
+          <div v-if="sourceReg" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+            <span class="text-xs text-slate-500">仓库地址</span>
+            <div class="font-mono text-slate-800">{{ sourceReg.registry || "docker.io" }}</div>
+          </div>
+          <div class="space-y-2">
+            <Label>镜像前缀</Label>
+            <Input
+              v-model="form.source_image_prefix"
+              class="font-mono text-sm"
+              :placeholder="sourcePrefixPlaceholder"
+            />
+            <p class="text-xs text-slate-500">
+              默认取自仓库配置，可按本任务修改；留空则使用仓库默认前缀或地址拼接
+            </p>
           </div>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
             <div class="space-y-2 sm:col-span-8">
@@ -344,17 +347,20 @@
               </option>
             </NativeSelect>
           </div>
-          <div v-if="targetReg" class="grid grid-cols-1 gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm sm:grid-cols-2">
-            <div class="text-slate-600">
-              <span class="text-xs text-slate-500">仓库地址</span>
-              <div class="font-mono text-slate-800">{{ targetReg.registry || "docker.io" }}</div>
-            </div>
-            <div class="text-slate-600">
-              <span class="text-xs text-slate-500">镜像前缀（随仓库）</span>
-              <div class="font-mono text-slate-800">
-                {{ targetReg.registry_prefix?.trim() || "（无，使用仓库地址拼接）" }}
-              </div>
-            </div>
+          <div v-if="targetReg" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+            <span class="text-xs text-slate-500">仓库地址</span>
+            <div class="font-mono text-slate-800">{{ targetReg.registry || "docker.io" }}</div>
+          </div>
+          <div class="space-y-2">
+            <Label>镜像前缀</Label>
+            <Input
+              v-model="form.target_image_prefix"
+              class="font-mono text-sm"
+              :placeholder="targetPrefixPlaceholder"
+            />
+            <p class="text-xs text-slate-500">
+              默认取自仓库配置，可按本任务修改；留空则使用仓库默认前缀或地址拼接
+            </p>
           </div>
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
             <div class="space-y-2 sm:col-span-8">
@@ -485,9 +491,11 @@ let refreshInterval = null;
 const emptyForm = () => ({
   task_name: "",
   source_registry_name: "",
+  source_image_prefix: "",
   source_image_path: "",
   source_tag: "latest",
   target_registry_name: "",
+  target_image_prefix: "",
   target_image_path: "",
   target_tag: "latest",
   schedule_cron: "",
@@ -507,10 +515,41 @@ const targetReg = computed(() => findRegistry(form.value.target_registry_name));
 const sourcePathPlaceholder = computed(() => "myapp/demo");
 const targetPathPlaceholder = computed(() => "myapp/demo");
 
-/** 去掉各仓库前缀，得到用户应填写的路径 */
-function stripAllRegistryPrefixes(path) {
+const sourcePrefixPlaceholder = computed(() => {
+  const d = defaultPrefixForRegistry(sourceReg.value);
+  return d || "如：your-namespace 或 registry.example.com/ns";
+});
+
+const targetPrefixPlaceholder = computed(() => {
+  const d = defaultPrefixForRegistry(targetReg.value);
+  return d || "如：your-namespace 或 registry.example.com/ns";
+});
+
+/** 仓库配置中的默认镜像前缀 */
+function defaultPrefixForRegistry(reg) {
+  if (!reg) return "";
+  const p = (reg.registry_prefix || "").trim();
+  if (p) return p;
+  const host = (reg.registry || "").trim();
+  if (host && host !== "docker.io") return host;
+  return "";
+}
+
+function stripPrefixFromPath(path, prefix) {
+  let p = (path || "").trim();
+  const pre = (prefix || "").trim();
+  if (!pre) return p;
+  if (p === pre) return "";
+  if (p.startsWith(`${pre}/`)) return p.slice(pre.length + 1);
+  if (p.startsWith(pre)) return p.slice(pre.length).replace(/^\//, "");
+  return p;
+}
+
+/** 去掉各仓库及当前任务前缀，得到用户应填写的路径 */
+function stripAllRegistryPrefixes(path, taskPrefix = "") {
   let p = (path || "").trim();
   if (!p) return "";
+  p = stripPrefixFromPath(p, taskPrefix);
   for (const reg of registries.value) {
     p = stripRegistryPrefix(p, reg);
   }
@@ -519,36 +558,67 @@ function stripAllRegistryPrefixes(path) {
 
 function stripRegistryPrefix(path, reg) {
   if (!path || !reg) return path || "";
-  let p = path.trim();
-  const prefix = (reg.registry_prefix || "").trim();
-  const host = (reg.registry || "").trim();
-  if (prefix) {
-    if (p === prefix) return "";
-    if (p.startsWith(`${prefix}/`)) return p.slice(prefix.length + 1);
-    if (p.startsWith(prefix)) return p.slice(prefix.length).replace(/^\//, "");
-  }
-  if (host && host !== "docker.io") {
-    if (p === host) return "";
-    if (p.startsWith(`${host}/`)) return p.slice(host.length + 1);
-  }
-  return p;
+  return stripPrefixFromPath(
+    path,
+    (reg.registry_prefix || "").trim() || defaultPrefixForRegistry(reg),
+  );
 }
 
-/** 拼接完整镜像引用：前缀随仓库，路径为用户输入 */
-function buildFullImageRef(registryName, imagePath, tag) {
-  const reg = findRegistry(registryName);
-  const rawPath = stripAllRegistryPrefixes(imagePath);
-  const t = (tag || "latest").trim() || "latest";
-  if (!rawPath && !reg) return "";
-
-  const prefix = (reg?.registry_prefix || "").trim();
+/** 从完整 repository 路径拆出前缀与镜像路径（编辑任务时用） */
+function splitRepoPathAndPrefix(repoPath, reg) {
+  const path = (repoPath || "").trim();
+  if (!path) {
+    return { prefix: defaultPrefixForRegistry(reg), imagePath: "" };
+  }
+  const candidates = new Set();
+  const def = defaultPrefixForRegistry(reg);
+  if (def) candidates.add(def);
+  const configured = (reg?.registry_prefix || "").trim();
+  if (configured) candidates.add(configured);
   const host = (reg?.registry || "").trim();
+  if (host && host !== "docker.io") candidates.add(host);
 
+  for (const prefix of [...candidates].sort((a, b) => b.length - a.length)) {
+    if (path === prefix) return { prefix, imagePath: "" };
+    if (path.startsWith(`${prefix}/`)) {
+      return { prefix, imagePath: path.slice(prefix.length + 1) };
+    }
+  }
+
+  const parts = path.split("/");
+  if (
+    parts.length >= 2 &&
+    (parts[0].includes(".") || parts[0].includes(":") || parts[0] === "localhost")
+  ) {
+    const prefix = parts.slice(0, -1).join("/");
+    return { prefix, imagePath: parts[parts.length - 1] };
+  }
+  return { prefix: def, imagePath: path };
+}
+
+function resolveImagePrefix(registryName, prefixOverride) {
+  const reg = findRegistry(registryName);
+  const custom = (prefixOverride ?? "").trim();
+  if (custom) return custom;
+  return defaultPrefixForRegistry(reg);
+}
+
+/** 拼接完整镜像引用：前缀可覆盖仓库默认值 */
+function buildFullImageRef(registryName, imagePath, tag, prefixOverride) {
+  const reg = findRegistry(registryName);
+  const prefix = resolveImagePrefix(registryName, prefixOverride);
+  const rawPath = stripAllRegistryPrefixes(imagePath, prefix);
+  const t = (tag || "latest").trim() || "latest";
+  if (!rawPath && !prefix && !reg) return "";
+
+  const host = (reg?.registry || "").trim();
   let repo = rawPath;
   if (prefix) {
     repo = rawPath ? `${prefix}/${rawPath}`.replace(/\/+/g, "/") : prefix;
   } else if (host && host !== "docker.io") {
     repo = rawPath ? `${host}/${rawPath}`.replace(/\/+/g, "/") : host;
+  } else {
+    repo = rawPath;
   }
 
   if (!repo) return "";
@@ -565,6 +635,7 @@ const sourcePreview = computed(() =>
     form.value.source_registry_name,
     form.value.source_image_path,
     form.value.source_tag,
+    form.value.source_image_prefix,
   ),
 );
 
@@ -573,6 +644,7 @@ const targetPreview = computed(() =>
     form.value.target_registry_name,
     form.value.target_image_path,
     form.value.target_tag,
+    form.value.target_image_prefix,
   ),
 );
 
@@ -636,21 +708,33 @@ function splitImageRef(fullRef) {
   return { path, tag };
 }
 
-function parseSourceImagePathAndTag(inputValue) {
+function applyParsedImageSide(side, inputValue) {
   if (!inputValue || typeof inputValue !== "string") return;
   const { path, tag } = splitImageRef(inputValue);
-  form.value.source_image_path = stripAllRegistryPrefixes(path);
-  if (tag) form.value.source_tag = tag;
+  const regName = form.value[`${side}_registry_name`];
+  const reg = findRegistry(regName);
+  const { prefix, imagePath } = splitRepoPathAndPrefix(path, reg);
+  form.value[`${side}_image_prefix`] = prefix;
+  form.value[`${side}_image_path`] = imagePath;
+  if (tag) form.value[`${side}_tag`] = tag;
+}
+
+function parseSourceImagePathAndTag(inputValue) {
+  applyParsedImageSide("source", inputValue);
 }
 
 function onSourceRegistryChange() {
   sourceTestResult.value = null;
   const reg = findRegistry(form.value.source_registry_name);
   if (!reg) return;
+  form.value.source_image_prefix = defaultPrefixForRegistry(reg);
   if (!form.value.source_image_path) {
     form.value.source_image_path = "myapp/demo";
   } else {
-    form.value.source_image_path = stripRegistryPrefix(form.value.source_image_path, reg);
+    form.value.source_image_path = stripPrefixFromPath(
+      stripRegistryPrefix(form.value.source_image_path, reg),
+      form.value.source_image_prefix,
+    );
   }
   syncTargetFromSource();
 }
@@ -658,8 +742,12 @@ function onSourceRegistryChange() {
 function onTargetRegistryChange() {
   const reg = findRegistry(form.value.target_registry_name);
   if (!reg) return;
+  form.value.target_image_prefix = defaultPrefixForRegistry(reg);
   if (form.value.target_image_path) {
-    form.value.target_image_path = stripRegistryPrefix(form.value.target_image_path, reg);
+    form.value.target_image_path = stripPrefixFromPath(
+      stripRegistryPrefix(form.value.target_image_path, reg),
+      form.value.target_image_prefix,
+    );
     return;
   }
   if (form.value.source_image_path) {
@@ -685,8 +773,13 @@ function onSourceImagePaste() {
 }
 
 function syncTargetFromSource() {
-  if (!form.value.target_registry_name || form.value.target_image_path) return;
-  form.value.target_image_path = form.value.source_image_path || "myapp/demo";
+  if (!form.value.target_registry_name) return;
+  if (!form.value.target_image_path) {
+    form.value.target_image_path = form.value.source_image_path || "myapp/demo";
+  }
+  if (!form.value.target_image_prefix && form.value.source_image_prefix) {
+    form.value.target_image_prefix = form.value.source_image_prefix;
+  }
   if (!form.value.target_tag && form.value.source_tag) {
     form.value.target_tag = form.value.source_tag;
   }
@@ -793,13 +886,17 @@ function openEditDialog(task) {
   const tgtRegObj = findRegistry(task.target_registry_name);
   const src = splitImageRef(task.source_image);
   const tgt = splitImageRef(task.target_image);
+  const srcSplit = splitRepoPathAndPrefix(src.path, srcRegObj);
+  const tgtSplit = splitRepoPathAndPrefix(tgt.path, tgtRegObj);
   form.value = {
     task_name: task.task_name || "",
     source_registry_name: task.source_registry_name || "",
-    source_image_path: stripRegistryPrefix(src.path, srcRegObj),
+    source_image_prefix: srcSplit.prefix,
+    source_image_path: srcSplit.imagePath,
     source_tag: src.tag,
     target_registry_name: task.target_registry_name || "",
-    target_image_path: stripRegistryPrefix(tgt.path, tgtRegObj),
+    target_image_prefix: tgtSplit.prefix,
+    target_image_path: tgtSplit.imagePath,
     target_tag: tgt.tag,
     schedule_cron: task.schedule_cron || "",
     schedule_enabled: !!task.schedule_enabled,
