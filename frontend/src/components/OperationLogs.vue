@@ -137,6 +137,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, onMounted, ref, watch } from "vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
@@ -246,16 +249,16 @@ async function clearLogs(days) {
   } else {
     confirmMessage = `确定要清理操作日志吗？将保留最近 ${days} 天的日志，其他日志将被删除。`;
   }
-  if (!confirm(confirmMessage)) return;
+  if (!(await showConfirm({ message: confirmMessage }))) return;
 
   try {
     const params = days ? { days } : {};
     const res = await axios.delete("/api/operation-logs", { params });
-    alert(res.data.message || "清理成功");
+    toastSuccess(res.data.message || "清理成功");
     currentPage.value = 1;
     await loadLogs();
   } catch (err) {
-    alert(err.response?.data?.detail || err.message || "清理失败");
+    toastApiError(err, "清理失败");
   }
 }
 

@@ -1,4 +1,6 @@
 import axios from "axios";
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
 import { ref, watch } from "vue";
 
 function anyServicePushEnabled(servicePushConfig) {
@@ -322,15 +324,15 @@ export function usePipelineMultiService({
   async function parseDockerfileForMultiService() {
     const pipeline = resolvePipeline();
     if (!pipeline) {
-      alert("无法获取流水线信息");
+      toastError("无法获取流水线信息");
       return;
     }
     if (!pipeline.git_url) {
-      alert("流水线未配置 Git 地址，无法识别 Dockerfile");
+      toastError("流水线未配置 Git 地址，无法识别 Dockerfile");
       return;
     }
     if (!pipeline.branch) {
-      alert("流水线未配置分支，无法识别 Dockerfile");
+      toastError("流水线未配置分支，无法识别 Dockerfile");
       return;
     }
     parsingDockerfileForMultiService.value = true;
@@ -343,13 +345,11 @@ export function usePipelineMultiService({
       });
       const servicesList = res.data.services || [];
       if (servicesList.length === 0) {
-        alert("未从 Dockerfile 中识别到服务");
+        toastInfo("未从 Dockerfile 中识别到服务");
         return;
       }
       if (multiServiceFormData.value.selected_services.length > 0) {
-        const confirmed = confirm(
-          `已识别到 ${servicesList.length} 个服务，是否覆盖现有服务列表？`
-        );
+        const confirmed = await showConfirm({ message: `已识别到 ${servicesList.length} 个服务，是否覆盖现有服务列表？` });
         if (!confirmed) return;
       }
       multiServiceFormData.value.selected_services = [];
@@ -370,11 +370,9 @@ export function usePipelineMultiService({
           multiServiceFormData.value.image_name = match[1];
         }
       }
-      alert(`成功识别 ${servicesList.length} 个服务`);
+      toastSuccess(`成功识别 ${servicesList.length} 个服务`);
     } catch (error) {
-      alert(
-        `识别失败: ${error.response?.data?.detail || "解析 Dockerfile 失败"}`
-      );
+      toastError(`识别失败: ${error.response?.data?.detail || "解析 Dockerfile 失败"}`);
     } finally {
       parsingDockerfileForMultiService.value = false;
     }
@@ -392,11 +390,11 @@ export function usePipelineMultiService({
       serviceNames.length === 0 &&
       multiServiceFormData.value.push_mode === "multi"
     ) {
-      alert("多服务模式下至少需要添加一个服务");
+      toastInfo("多服务模式下至少需要添加一个服务");
       return;
     }
     if (new Set(serviceNames).size !== serviceNames.length) {
-      alert("服务名称不能重复");
+      toastError("服务名称不能重复");
       return;
     }
 
@@ -439,7 +437,7 @@ export function usePipelineMultiService({
           return config?.enabled !== false;
         });
         if (enabledServices.length === 0) {
-          alert("多服务模式下至少需要启用一个服务");
+          toastInfo("多服务模式下至少需要启用一个服务");
           return;
         }
         const normalizedServicePushConfig = {};
@@ -473,10 +471,10 @@ export function usePipelineMultiService({
         };
       }
       await axios.put(`/api/pipelines/${pipelineId}`, payload);
-      alert("多服务配置已保存");
+      toastSuccess("多服务配置已保存");
       onSaved?.();
     } catch (error) {
-      alert(error.response?.data?.detail || "保存多服务配置失败");
+      toastApiError(error, "保存多服务配置失败");
     } finally {
       savingMultiServiceConfig.value = false;
     }

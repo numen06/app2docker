@@ -15,6 +15,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import { inject } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
@@ -28,13 +31,13 @@ const router = useRouter();
 async function deletePipeline() {
   const p = detail.pipeline.value;
   if (!p) return;
-  if (!confirm(`确定要删除流水线「${p.name}」吗？`)) return;
+  if (!(await showConfirm({ message: `确定要删除流水线「${p.name}」吗？`, danger: true }))) return;
   try {
     await axios.delete(`/api/pipelines/${p.pipeline_id}`);
     await goToPipelineList(router);
-    alert("流水线已删除");
+    toastSuccess("流水线已删除");
   } catch (error) {
-    alert(error.response?.data?.detail || "删除失败");
+    toastApiError(error, "删除失败");
   }
 }
 </script>

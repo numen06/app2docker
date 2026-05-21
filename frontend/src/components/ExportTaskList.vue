@@ -102,6 +102,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
@@ -186,20 +189,20 @@ async function downloadTask(task) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (err) {
-    alert(err.response?.data?.error || err.message || "下载失败");
+    toastApiError(err, "下载失败");
   } finally {
     downloading.value = null;
   }
 }
 
 async function deleteTask(task) {
-  if (!confirm(`确定要删除任务 "${task.image}:${task.tag}" 吗？`)) return;
+  if (!(await showConfirm({ message: `确定要删除任务 "${task.image}:${task.tag}" 吗？`, danger: true }))) return;
   deleting.value = task.task_id;
   try {
     await axios.delete(`/api/export-tasks/${task.task_id}`);
     await loadTasks();
   } catch (err) {
-    alert(err.response?.data?.error || err.message || "删除失败");
+    toastApiError(err, "删除失败");
   } finally {
     deleting.value = null;
   }

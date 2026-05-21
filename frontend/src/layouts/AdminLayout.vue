@@ -677,6 +677,7 @@
       />
 
       <ToastHost />
+      <ConfirmHost />
 
       <transition name="fade">
         <div
@@ -702,11 +703,14 @@
 </template>
 
 <script setup>
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import ToastHost from "@/components/ui/ToastHost.vue";
+import ConfirmHost from "@/components/ui/ConfirmHost.vue";
 import { useTaskCompletionWatcher } from "@/composables/useTaskCompletionWatcher";
 import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
@@ -1491,7 +1495,7 @@ function stopRunningTasksTimer() {
 }
 
 async function handleLogout() {
-  if (!confirm("确定要退出登录吗？")) return;
+  if (!(await showConfirm({ message: "确定要退出登录吗？", danger: true }))) return;
   await logout();
   authStore.clearSession();
   teamStore.reset();

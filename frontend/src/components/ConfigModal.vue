@@ -108,6 +108,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import axios from "axios";
 import { ref, watch } from "vue";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
@@ -171,7 +173,7 @@ async function loadConfig() {
     else buildMode.value = "tcp2375";
   } catch (error) {
     const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message;
-    alert(`加载配置失败: ${errorMsg}`);
+    toastError(`加载配置失败: ${errorMsg}`);
   }
 }
 
@@ -207,11 +209,11 @@ async function save() {
 
     await axios.post("/api/save-config", formData);
     await loadConfig();
-    alert("配置保存成功");
+    toastSuccess("配置保存成功");
     emit("update:modelValue", false);
   } catch (error) {
     const errorMsg = error.response?.data?.detail || error.response?.data?.error || "保存配置失败";
-    alert(errorMsg);
+    toastInfo(errorMsg);
   } finally {
     saving.value = false;
   }

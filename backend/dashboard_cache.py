@@ -39,19 +39,25 @@ class DashboardCacheManager:
         return elapsed < self._cache_duration
 
     def get_stats(
-        self, team_id: Optional[str] = None, force_refresh: bool = False
+        self,
+        team_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        force_refresh: bool = False,
     ) -> Dict:
         """
         获取仪表盘统计数据（带缓存）
 
         Args:
             team_id: 团队 ID；为空时统计全站
+            user_id: 当前用户 ID（团队维度下用于镜像仓库等权限过滤统计）
             force_refresh: 是否强制刷新缓存
 
         Returns:
             统计数据字典
         """
         cache_key = self._cache_key(team_id)
+        if team_id and user_id:
+            cache_key = f"{cache_key}:{user_id}"
 
         with self._lock:
             if not force_refresh and self._is_cache_valid(cache_key):
@@ -64,7 +70,9 @@ class DashboardCacheManager:
 
                 self._refreshing_keys.add(cache_key)
                 try:
-                    stats = self._calculate_stats(team_id=team_id)
+                    stats = self._calculate_stats(
+                        team_id=team_id, user_id=user_id
+                    )
                     self._caches[cache_key] = stats
                     self._cache_times[cache_key] = time.time()
                 finally:
@@ -88,7 +96,9 @@ class DashboardCacheManager:
             Task.deploy_config_id.in_(deploy_ids),
         )
 
-    def _calculate_stats(self, team_id: Optional[str] = None) -> Dict:
+    def _calculate_stats(
+        self, team_id: Optional[str] = None, user_id: Optional[str] = None
+    ) -> Dict:
         """计算仪表盘统计数据"""
         from backend.database import get_db_session
         from backend.models import (
@@ -200,10 +210,23 @@ class DashboardCacheManager:
             db.close()
 
         try:
-            from backend.config import get_all_registries
+            if team_id and user_id:
+                from backend.registry_manager import (
+                    ensure_team_registries_from_config,
+                    list_registries_for_user,
+                )
 
-            registries = get_all_registries()
-            stats["registries"] = len(registries)
+                ensure_team_registries_from_config(team_id, user_id)
+                stats["registries"] = len(
+                    list_registries_for_user(user_id, team_id)
+                )
+            else:
+                from backend.config import get_all_registries
+
+                registries = get_all_registries(
+                    team_id=team_id, user_id=user_id
+                )
+                stats["registries"] = len(registries)
         except Exception as e:
             print(f"⚠️ 获取仓库统计失败: {e}")
 

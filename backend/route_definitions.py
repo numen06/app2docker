@@ -1557,7 +1557,10 @@ async def get_registries(
 ):
     """获取团队镜像仓库列表（按成员权限过滤）"""
     try:
-        from backend.registry_manager import list_registries_for_user
+        from backend.registry_manager import (
+            ensure_team_registries_from_config,
+            list_registries_for_user,
+        )
 
         user_id = _resolve_user_id(http_request)
         from backend.database import get_db_session
@@ -1568,6 +1571,7 @@ async def get_registries(
         finally:
             db.close()
 
+        ensure_team_registries_from_config(scoped_team_id, user_id)
         registries = list_registries_for_user(
             user_id, scoped_team_id, query=query, limit=50
         )
@@ -3695,6 +3699,7 @@ async def get_dashboard_stats(
 ):
     """获取仪表盘统计数据（带缓存）"""
     try:
+        user_id = None
         if team_id:
             user_id = _resolve_user_id(request)
             from backend.database import get_db_session
@@ -3705,7 +3710,9 @@ async def get_dashboard_stats(
             finally:
                 db.close()
         return dashboard_cache.get_stats(
-            team_id=team_id, force_refresh=force_refresh
+            team_id=team_id,
+            user_id=user_id,
+            force_refresh=force_refresh,
         )
     except HTTPException:
         raise

@@ -195,6 +195,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import axios from "axios";
 import { onMounted, ref } from "vue";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
@@ -268,7 +270,7 @@ async function loadTeams() {
     }
   } catch (err) {
     console.error("加载团队管理数据失败:", err);
-    alert("加载团队管理数据失败: " + (err.response?.data?.detail || err.message));
+    toastError("加载团队管理数据失败: " + (err.response?.data?.detail || err.message));
     teams.value = [];
     totalTeams.value = 0;
     totalPages.value = 0;
@@ -337,7 +339,7 @@ async function saveTeam() {
         owner_user_id: form.value.owner_user_id,
         task_cleanup_days: days,
       });
-      alert("团队创建成功");
+      toastSuccess("团队创建成功");
       currentPage.value = 1;
     } else {
       await axios.put(`/api/admin/teams/${form.value.team_id}`, {
@@ -345,7 +347,7 @@ async function saveTeam() {
         description: form.value.description || "",
         task_cleanup_days: days,
       });
-      alert("团队更新成功");
+      toastSuccess("团队更新成功");
     }
     closeModal();
     await loadTeams();

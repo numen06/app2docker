@@ -1207,6 +1207,9 @@
 </template>
 
 <script>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import Button from "@/components/ui/button/Button.vue";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import axios from 'axios';
@@ -1432,7 +1435,7 @@ export default {
         }
       } catch (error) {
         console.error('加载Agent主机列表失败:', error)
-        alert('加载Agent主机列表失败: ' + (error.response?.data?.detail || error.message))
+        toastError('加载Agent主机列表失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.loading = false
         this.allHostsLoading = false
@@ -1549,7 +1552,7 @@ export default {
     },
     async loadEndpoints() {
       if (!this.hostForm.portainer_url) {
-        alert('请先填写 Portainer URL')
+        toastError('请先填写 Portainer URL')
         return
       }
       
@@ -1564,11 +1567,9 @@ export default {
           )
         } else {
           if (!this.hasManualPortainerCredentials) {
-            alert(
-              this.hostForm.portainer_auth_mode === 'password'
+            toastInfo(this.hostForm.portainer_auth_mode === 'password'
                 ? '请先填写 Portainer 用户名和密码'
-                : '请先填写 Portainer API Key'
-            )
+                : '请先填写 Portainer API Key')
             return
           }
           res = await axios.post(
@@ -1581,7 +1582,7 @@ export default {
         if (res.data.success) {
           this.availableEndpoints = res.data.endpoints || []
           if (this.availableEndpoints.length === 0) {
-            alert('未找到可用的 Endpoints')
+            toastError('未找到可用的 Endpoints')
           } else {
             // 如果只有一个 endpoint，自动选择
             if (this.availableEndpoints.length === 1) {
@@ -1589,7 +1590,7 @@ export default {
             }
           }
         } else {
-          alert('加载 Endpoints 失败：' + (res.data.message || '未知错误'))
+          toastError('加载 Endpoints 失败：' + (res.data.message || '未知错误'))
         }
       } catch (error) {
         console.error('加载 Endpoints 失败:', error)
@@ -1597,13 +1598,13 @@ export default {
           this.canUseSavedPortainerCredentials &&
           error.response?.status === 404
         ) {
-          alert('当前后端未加载编辑态 Endpoint 接口，请重启后端服务后重试；或临时填写认证信息再加载。')
+          toastInfo('当前后端未加载编辑态 Endpoint 接口，请重启后端服务后重试；或临时填写认证信息再加载。')
           return
         }
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-          alert('加载超时，请检查 Portainer URL 是否正确且可访问')
+          toastInfo('加载超时，请检查 Portainer URL 是否正确且可访问')
         } else {
-          alert('加载 Endpoints 失败: ' + (error.response?.data?.detail || error.message))
+          toastError('加载 Endpoints 失败: ' + (error.response?.data?.detail || error.message))
         }
       } finally {
         this.loadingEndpoints = false
@@ -1612,7 +1613,7 @@ export default {
     async testPortainerConnection() {
       if (!this.hostForm.portainer_url ||
           this.hostForm.portainer_endpoint_id === null || this.hostForm.portainer_endpoint_id === undefined) {
-        alert('请填写完整的 Portainer 配置信息')
+        toastError('请填写完整的 Portainer 配置信息')
         return
       }
       
@@ -1631,11 +1632,9 @@ export default {
           )
         } else {
           if (!this.hasManualPortainerCredentials) {
-            alert(
-              this.hostForm.portainer_auth_mode === 'password'
+            toastInfo(this.hostForm.portainer_auth_mode === 'password'
                 ? '请先填写 Portainer 用户名和密码'
-                : '请先填写 Portainer API Key'
-            )
+                : '请先填写 Portainer API Key')
             return
           }
           res = await axios.post(
@@ -1648,7 +1647,7 @@ export default {
         }
         
         if (res.data.success) {
-          alert('连接测试成功！')
+          toastSuccess('连接测试成功！')
         } else {
           let errorMsg = res.data.message || '未知错误'
           // 如果有可用的 endpoints，显示它们
@@ -1656,7 +1655,7 @@ export default {
             const endpointsList = res.data.available_endpoints.map(ep => `ID: ${ep.id} (${ep.name})`).join('\n')
             errorMsg += '\n\n可用的 Endpoints:\n' + endpointsList
           }
-          alert('连接测试失败：' + errorMsg)
+          toastError('连接测试失败：' + errorMsg)
         }
       } catch (error) {
         console.error('测试连接失败:', error)
@@ -1664,13 +1663,13 @@ export default {
           this.canUseSavedPortainerCredentials &&
           error.response?.status === 404
         ) {
-          alert('当前后端未加载编辑态测试接口，请重启后端服务后重试；或临时填写认证信息再测试。')
+          toastInfo('当前后端未加载编辑态测试接口，请重启后端服务后重试；或临时填写认证信息再测试。')
           return
         }
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-          alert('连接测试超时，请检查 Portainer URL 是否正确且可访问')
+          toastInfo('连接测试超时，请检查 Portainer URL 是否正确且可访问')
         } else {
-          alert('测试连接失败: ' + (error.response?.data?.detail || error.message))
+          toastError('测试连接失败: ' + (error.response?.data?.detail || error.message))
         }
       } finally {
         this.testingConnection = false
@@ -1680,19 +1679,19 @@ export default {
       try {
         const res = await axios.post(`/api/agent-hosts/${host.host_id}/refresh-status`)
         if (res.data.success) {
-          alert('状态刷新成功！')
+          toastSuccess('状态刷新成功！')
           this.loadHosts()
         } else {
-          alert('状态刷新失败：' + (res.data.message || '未知错误'))
+          toastError('状态刷新失败：' + (res.data.message || '未知错误'))
         }
       } catch (error) {
         console.error('刷新状态失败:', error)
-        alert('刷新状态失败: ' + (error.response?.data?.detail || error.message))
+        toastError('刷新状态失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     async saveHost() {
       if (!this.hostForm.name) {
-        alert('请填写主机名称')
+        toastError('请填写主机名称')
         return
       }
       
@@ -1707,7 +1706,7 @@ export default {
             (this.hostForm.portainer_auth_mode !== 'password' &&
               !this.hostForm.portainer_api_key))
         if (!this.hostForm.portainer_url || missingEndpoint || missingAuthOnCreate) {
-          alert('请填写完整的 Portainer 配置信息')
+          toastError('请填写完整的 Portainer 配置信息')
           return
         }
       }
@@ -1735,7 +1734,7 @@ export default {
         }
 
         if (res.data.success) {
-          alert(this.editingHost ? '主机更新成功' : '主机创建成功')
+          toastSuccess(this.editingHost ? '主机更新成功' : '主机创建成功')
           this.closeModal()
           this.loadHosts()
           
@@ -1756,25 +1755,25 @@ export default {
         }
       } catch (error) {
         console.error('保存Agent主机失败:', error)
-        alert('保存Agent主机失败: ' + (error.response?.data?.detail || error.message))
+        toastError('保存Agent主机失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.saving = false
       }
     },
     async deleteHost(host) {
-      if (!confirm(`确定要删除Agent主机 "${host.name}" 吗？`)) {
+      if (!(await showConfirm({ message: `确定要删除Agent主机 "${host.name}" 吗？`, danger: true }))) {
         return
       }
 
       try {
         const res = await axios.delete(`/api/agent-hosts/${host.host_id}`)
         if (res.data.success) {
-          alert('Agent主机已删除')
+          toastSuccess('Agent主机已删除')
           this.loadHosts()
         }
       } catch (error) {
         console.error('删除Agent主机失败:', error)
-        alert('删除Agent主机失败: ' + (error.response?.data?.detail || error.message))
+        toastError('删除Agent主机失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     viewHost(host) {
@@ -1845,7 +1844,7 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         }
       } catch (error) {
         console.error('加载部署命令失败:', error)
-        alert('加载部署命令失败: ' + (error.response?.data?.detail || error.message))
+        toastError('加载部署命令失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.loadingDeployCommand = false
       }
@@ -1854,9 +1853,9 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
       if (this.deployCommand) {
         const success = await doCopy(this.deployCommand)
         if (success) {
-          alert('部署命令已复制到剪贴板')
+          toastSuccess('部署命令已复制到剪贴板')
         } else {
-          alert('复制失败')
+          toastError('复制失败')
         }
       }
     },
@@ -1864,20 +1863,20 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
       if (this.deployComposeContent) {
         const success = await doCopy(this.deployComposeContent)
         if (success) {
-          alert('docker-compose.yml 内容已复制到剪贴板')
+          toastSuccess('docker-compose.yml 内容已复制到剪贴板')
         } else {
-          alert('复制失败')
+          toastError('复制失败')
         }
       }
     },
     async copyToClipboard(text, message) {
       if (!text) {
-        alert('暂无可复制内容')
+        toastInfo('暂无可复制内容')
         return false
       }
       const success = await doCopy(text)
       if (success && message) {
-        alert(message)
+        toastInfo(message)
       }
       return success
     },
@@ -1920,14 +1919,14 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         }
       } catch (error) {
         console.error('加载密钥列表失败:', error)
-        alert('加载密钥列表失败: ' + (error.response?.data?.detail || error.message))
+        toastError('加载密钥列表失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.loadingSecrets = false
       }
     },
     async createSecret() {
       if (!this.secretForm.name) {
-        if (!confirm('未填写密钥名称，是否继续生成？')) {
+        if (!(await showConfirm({ message: '未填写密钥名称，是否继续生成？' }))) {
           return
         }
       }
@@ -1938,14 +1937,14 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
           name: this.secretForm.name || ''
         })
         if (res.data.success) {
-          alert('密钥生成成功！\n密钥值: ' + res.data.secret.secret_key + '\n\n请妥善保管，此密钥将不再显示。')
+          toastSuccess('密钥生成成功！\n密钥值: ' + res.data.secret.secret_key + '\n\n请妥善保管，此密钥将不再显示。')
           this.showAddSecretModal = false
           this.secretForm.name = ''
           this.loadSecrets()
         }
       } catch (error) {
         console.error('生成密钥失败:', error)
-        alert('生成密钥失败: ' + (error.response?.data?.detail || error.message))
+        toastError('生成密钥失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.creatingSecret = false
       }
@@ -1971,15 +1970,15 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         })
         if (res.data && res.data.success && res.data.secret) {
           secret.name = res.data.secret.name || ''
-          alert('密钥名称已更新')
+          toastSuccess('密钥名称已更新')
         } else {
           // 后端未返回 success 字段时，尝试直接刷新列表
-          alert('密钥名称已更新')
+          toastSuccess('密钥名称已更新')
           this.loadSecrets()
         }
       } catch (error) {
         console.error('更新密钥名称失败:', error)
-        alert('更新密钥名称失败: ' + (error.response?.data?.detail || error.message))
+        toastError('更新密钥名称失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.editingSecretId = null
         this.editingSecretName = ''
@@ -1989,42 +1988,42 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
       try {
         const res = await axios.put(`/api/agent-secrets/${secret.secret_id}/enable`)
         if (res.data.success) {
-          alert('密钥已启用')
+          toastSuccess('密钥已启用')
           this.loadSecrets()
         }
       } catch (error) {
         console.error('启用密钥失败:', error)
-        alert('启用密钥失败: ' + (error.response?.data?.detail || error.message))
+        toastError('启用密钥失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     async disableSecret(secret) {
-      if (!confirm(`确定要禁用密钥 "${secret.name || secret.secret_key}" 吗？`)) {
+      if (!(await showConfirm({ message: `确定要禁用密钥 "${secret.name || secret.secret_key}" 吗？`, danger: true }))) {
         return
       }
       try {
         const res = await axios.put(`/api/agent-secrets/${secret.secret_id}/disable`)
         if (res.data.success) {
-          alert('密钥已禁用')
+          toastSuccess('密钥已禁用')
           this.loadSecrets()
         }
       } catch (error) {
         console.error('禁用密钥失败:', error)
-        alert('禁用密钥失败: ' + (error.response?.data?.detail || error.message))
+        toastError('禁用密钥失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     async deleteSecret(secret) {
-      if (!confirm(`确定要删除密钥 "${secret.name || secret.secret_key}" 吗？\n此操作不可恢复！`)) {
+      if (!(await showConfirm({ message: `确定要删除密钥 "${secret.name || secret.secret_key}" 吗？\n此操作不可恢复！`, danger: true }))) {
         return
       }
       try {
         const res = await axios.delete(`/api/agent-secrets/${secret.secret_id}`)
         if (res.data.success) {
-          alert('密钥已删除')
+          toastSuccess('密钥已删除')
           this.loadSecrets()
         }
       } catch (error) {
         console.error('删除密钥失败:', error)
-        alert('删除密钥失败: ' + (error.response?.data?.detail || error.message))
+        toastError('删除密钥失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     // 待加入主机方法
@@ -2037,7 +2036,7 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         }
       } catch (error) {
         console.error('加载待加入主机列表失败:', error)
-        alert('加载待加入主机列表失败: ' + (error.response?.data?.detail || error.message))
+        toastError('加载待加入主机列表失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.loadingPendingHosts = false
       }
@@ -2050,7 +2049,7 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
     },
     async confirmApprovePendingHost() {
       if (!this.approveForm.name) {
-        alert('请填写主机名称')
+        toastError('请填写主机名称')
         return
       }
 
@@ -2061,7 +2060,7 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
           description: this.approveForm.description || ''
         })
         if (res.data.success) {
-          alert('主机已批准加入系统')
+          toastSuccess('主机已批准加入系统')
           this.showApproveModal = false
           this.selectedPendingHost = null
           this.loadPendingHosts()
@@ -2069,24 +2068,24 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         }
       } catch (error) {
         console.error('批准待加入主机失败:', error)
-        alert('批准待加入主机失败: ' + (error.response?.data?.detail || error.message))
+        toastError('批准待加入主机失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.approving = false
       }
     },
     async rejectPendingHost(host) {
-      if (!confirm(`确定要拒绝待加入主机吗？\n唯一标识: ${host.agent_token}`)) {
+      if (!(await showConfirm({ message: `确定要拒绝待加入主机吗？\n唯一标识: ${host.agent_token}`, danger: true }))) {
         return
       }
       try {
         const res = await axios.delete(`/api/agent-hosts/pending/${host.agent_token}`)
         if (res.data.success) {
-          alert('待加入主机已拒绝')
+          toastSuccess('待加入主机已拒绝')
           this.loadPendingHosts()
         }
       } catch (error) {
         console.error('拒绝待加入主机失败:', error)
-        alert('拒绝待加入主机失败: ' + (error.response?.data?.detail || error.message))
+        toastError('拒绝待加入主机失败: ' + (error.response?.data?.detail || error.message))
       }
     },
     // 密钥部署命令方法
@@ -2202,7 +2201,7 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
         }
       } catch (error) {
         console.error('生成部署命令失败:', error)
-        alert('生成部署命令失败: ' + (error.response?.data?.detail || error.message))
+        toastError('生成部署命令失败: ' + (error.response?.data?.detail || error.message))
       } finally {
         this.loadingSecretDeployCommand = false
       }
@@ -2211,9 +2210,9 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
       if (this.secretDeployCommand) {
         const success = await doCopy(this.secretDeployCommand)
         if (success) {
-          alert('部署命令已复制到剪贴板')
+          toastSuccess('部署命令已复制到剪贴板')
         } else {
-          alert('复制失败')
+          toastError('复制失败')
         }
       }
     },
@@ -2221,9 +2220,9 @@ docker stack deploy -c docker-compose.yml app2docker-agent`
       if (this.secretDeployComposeContent) {
         const success = await doCopy(this.secretDeployComposeContent)
         if (success) {
-          alert('docker-compose.yml 内容已复制到剪贴板')
+          toastSuccess('docker-compose.yml 内容已复制到剪贴板')
         } else {
-          alert('复制失败')
+          toastError('复制失败')
         }
       }
     }

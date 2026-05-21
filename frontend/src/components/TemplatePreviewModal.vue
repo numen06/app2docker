@@ -136,6 +136,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import { ref, watch } from "vue";
 import axios from "axios";
 import { Codemirror } from "vue-codemirror";
@@ -195,7 +197,7 @@ watch(
         templateInfo.value = { params: [], services: [] };
       }
     } catch {
-      alert("加载模板内容失败");
+      toastError("加载模板内容失败");
       close();
     } finally {
       loading.value = false;

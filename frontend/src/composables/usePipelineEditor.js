@@ -1,4 +1,6 @@
 import { useTeamStore } from "@/stores/team";
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
 import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -374,8 +376,8 @@ function saveBuildConfigJson() {
 }
 
 // 重置构建配置JSON（恢复到原始值）
-function resetBuildConfigJson() {
-  if (confirm("确定要重置构建配置JSON吗？未保存的修改将丢失。")) {
+async function resetBuildConfigJson() {
+  if (await showConfirm({ message: "确定要重置构建配置JSON吗？未保存的修改将丢失。" })) {
     buildConfigJsonText.value = buildConfigJson.value;
     buildConfigJsonError.value = "";
   }
@@ -384,7 +386,7 @@ function resetBuildConfigJson() {
 // 应用构建配置JSON到formData（不保存到后端）
 function applyBuildConfigJson() {
   if (buildConfigJsonError.value) {
-    alert("请先修复JSON错误");
+    toastError("请先修复JSON错误");
     return;
   }
 
@@ -459,24 +461,24 @@ function applyBuildConfigJson() {
 
     // 不显示alert，静默应用，用户需要点击外部保存按钮才能真正保存
   } catch (e) {
-    alert(`应用失败: ${e.message}`);
+    toastError(`应用失败: ${e.message}`);
   }
 }
 
 // 从仓库加载Dockerfile内容
 async function loadDockerfileFromRepo() {
   if (!formData.value.source_id) {
-    alert("请先选择数据源");
+    toastError("请先选择数据源");
     return;
   }
 
   if (!formData.value.dockerfile_name) {
-    alert("请先选择或输入Dockerfile文件名");
+    toastError("请先选择或输入Dockerfile文件名");
     return;
   }
 
   if (!formData.value.branch) {
-    alert("请先选择分支");
+    toastError("请先选择分支");
     return;
   }
 
@@ -490,13 +492,13 @@ async function loadDockerfileFromRepo() {
 
     if (response.data && response.data.content) {
       dockerfileContentText.value = response.data.content;
-      alert("Dockerfile已从仓库加载");
+      toastInfo("Dockerfile已从仓库加载");
     } else {
-      alert("未找到Dockerfile内容");
+      toastError("未找到Dockerfile内容");
     }
   } catch (error) {
     console.error("加载Dockerfile失败:", error);
-    alert(error.response?.data?.detail || "加载Dockerfile失败");
+    toastApiError(error, "加载Dockerfile失败");
   } finally {
     loadingDockerfile.value = false;
   }
@@ -505,12 +507,12 @@ async function loadDockerfileFromRepo() {
 // 应用Dockerfile内容到formData
 function applyDockerfileContent() {
   if (!dockerfileContentText.value.trim()) {
-    alert("Dockerfile内容不能为空");
+    toastError("Dockerfile内容不能为空");
     return;
   }
 
   formData.value.dockerfile_content = dockerfileContentText.value;
-  alert("Dockerfile内容已应用");
+  toastInfo("Dockerfile内容已应用");
 }
 
 // 监听项目类型变化，如果当前选择的模板不再匹配新的项目类型，则清除模板选择
@@ -962,7 +964,7 @@ async function savePipeline() {
         !formData.value.webhook_allowed_branches ||
         formData.value.webhook_allowed_branches.length === 0
       ) {
-        alert("请至少选择一个允许触发的分支");
+        toastError("请至少选择一个允许触发的分支");
         saving.value = false;
         return false;
       }
@@ -982,7 +984,7 @@ async function savePipeline() {
     } else {
       // 使用模板时，确保选择了模板
       if (!formData.value.template) {
-        alert("请选择 Dockerfile 模板");
+        toastError("请选择 Dockerfile 模板");
         saving.value = false;
         return false;
       }
@@ -1207,14 +1209,14 @@ async function savePipeline() {
 
     // 验证：如果启用定时触发，必须填写cron表达式
     if (payload.trigger_schedule && !payload.cron_expression) {
-      alert("请填写 Cron 表达式");
+      toastError("请填写 Cron 表达式");
       saving.value = false;
       return;
     }
 
     // 验证：如果使用模板，必须选择了模板
     if (!payload.use_project_dockerfile && !payload.template) {
-      alert("使用模板时必须选择 Dockerfile 模板");
+      toastError("使用模板时必须选择 Dockerfile 模板");
       saving.value = false;
       return;
     }
@@ -1222,7 +1224,7 @@ async function savePipeline() {
     // 验证流水线名字不能重复
     const pipelineName = payload.name && payload.name.trim();
     if (!pipelineName) {
-      alert("请输入流水线名称");
+      toastError("请输入流水线名称");
       saving.value = false;
       return;
     }
@@ -1240,20 +1242,20 @@ async function savePipeline() {
         `/api/pipelines/${editingPipeline.value.pipeline_id}`,
         payload
       );
-      alert("流水线更新成功");
+      toastSuccess("流水线更新成功");
       if (onSaved) onSaved(editingPipeline.value.pipeline_id);
       return editingPipeline.value.pipeline_id;
     } else {
       // 创建
       const res = await axios.post("/api/pipelines", payload);
       const newId = res.data?.pipeline_id;
-      alert("流水线创建成功");
+      toastSuccess("流水线创建成功");
       if (onSaved) onSaved(newId);
       return newId || true;
     }
   } catch (error) {
     console.error("保存流水线失败:", error);
-    alert(error.response?.data?.detail || "保存流水线失败");
+    toastApiError(error, "保存流水线失败");
   } finally {
     saving.value = false;
   }
@@ -1267,7 +1269,7 @@ async function createPipelineMinimal() {
 
   const pipelineName = formData.value.name?.trim();
   if (!pipelineName) {
-    alert("请输入流水线名称");
+    toastError("请输入流水线名称");
     return null;
   }
 
@@ -1275,12 +1277,12 @@ async function createPipelineMinimal() {
     Boolean(formData.value.source_id) ||
     Boolean(formData.value.git_url?.trim());
   if (!hasGit) {
-    alert("请选择数据源或填写 Git 仓库地址");
+    toastError("请选择数据源或填写 Git 仓库地址");
     return null;
   }
 
   if (!formData.value.push_mode) {
-    alert("请选择单服务或多服务模式");
+    toastError("请选择单服务或多服务模式");
     return null;
   }
 
@@ -1332,7 +1334,7 @@ async function createPipelineMinimal() {
     return newId || null;
   } catch (error) {
     console.error("创建流水线失败:", error);
-    alert(error.response?.data?.detail || "创建流水线失败");
+    toastApiError(error, "创建流水线失败");
     return null;
   } finally {
     saving.value = false;
@@ -1444,7 +1446,7 @@ async function refreshBranches(forceRefresh = true) {
   const sourceId = formData.value.source_id;
   if (!sourceId) {
     if (!formData.value.git_url) {
-      alert("请先选择数据源或填写 Git 仓库地址");
+      toastError("请先选择数据源或填写 Git 仓库地址");
       return;
     }
     // 如果没有数据源但有 Git URL，使用 verify-git-repo API
@@ -1490,11 +1492,7 @@ async function refreshBranches(forceRefresh = true) {
       }
     } catch (error) {
       console.error("刷新分支列表失败:", error);
-      alert(
-        error.response?.data?.detail ||
-          error.message ||
-          "刷新分支列表失败，请稍后重试"
-      );
+      toastApiError(error, "刷新分支列表失败，请稍后重试");
     } finally {
       refreshingBranches.value = false;
     }
@@ -1553,11 +1551,7 @@ async function refreshBranches(forceRefresh = true) {
     }
   } catch (error) {
     console.error("刷新分支列表失败:", error);
-    alert(
-      error.response?.data?.detail ||
-        error.message ||
-        "刷新分支列表失败，请稍后重试"
-    );
+    toastApiError(error, "刷新分支列表失败，请稍后重试");
   } finally {
     refreshingBranches.value = false;
   }
@@ -2665,28 +2659,20 @@ async function copyBuildConfigJson() {
   const text = buildConfigJson.value;
   const success = await copyToClipboard(text);
   if (success) {
-    alert("构建配置JSON已复制到剪贴板");
+    toastSuccess("构建配置JSON已复制到剪贴板");
   } else {
-    alert("自动复制失败，请手动选择并复制文本");
+    toastError("自动复制失败，请手动选择并复制文本");
   }
 }
 
-function regenerateWebhookToken() {
-  if (
-    confirm(
-      "确定要重新生成 Webhook Token 吗？重新生成后需要更新 Git 平台的 Webhook URL。"
-    )
-  ) {
+async function regenerateWebhookToken() {
+  if (await showConfirm({ message: "确定要重新生成 Webhook Token 吗？重新生成后需要更新 Git 平台的 Webhook URL。" })) {
     formData.value.webhook_token = generateUUID();
   }
 }
 
-function regenerateWebhookSecret() {
-  if (
-    confirm(
-      "确定要重新生成 Webhook 密钥吗？重新生成后需要更新 Git 平台的 Webhook Secret。"
-    )
-  ) {
+async function regenerateWebhookSecret() {
+  if (await showConfirm({ message: "确定要重新生成 Webhook 密钥吗？重新生成后需要更新 Git 平台的 Webhook Secret。" })) {
     formData.value.webhook_secret = generateUUID();
   }
 }
@@ -2704,14 +2690,14 @@ function generateUUID() {
       const res = await axios.get(`/api/pipelines/${pipelineId}`);
       const pipeline = res.data?.pipeline ?? res.data;
       if (!pipeline || !pipeline.pipeline_id) {
-        alert("流水线不存在");
+        toastError("流水线不存在");
         return false;
       }
       applyPipelineToForm(pipeline);
       return true;
     } catch (error) {
       console.error("加载流水线失败:", error);
-      alert(error.response?.data?.detail || "加载流水线失败");
+      toastApiError(error, "加载流水线失败");
       return false;
     }
   }

@@ -85,6 +85,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import { ref, computed, watch, onUnmounted, nextTick } from "vue";
 import axios from "axios";
 import { copyToClipboard } from "../utils/clipboard.js";
@@ -171,7 +173,7 @@ function toggleAutoScroll() {
 
 async function copyLogs() {
   const success = await copyToClipboard(logs.value);
-  alert(success ? "日志已复制到剪贴板" : "复制失败，请手动选择文本复制");
+  success ? toastSuccess("日志已复制到剪贴板") : toastError("复制失败，请手动选择文本复制");
 }
 
 function startLogPolling(taskId) {

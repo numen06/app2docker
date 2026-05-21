@@ -63,6 +63,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import { ref, computed } from "vue";
 import axios from "axios";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
@@ -121,7 +123,7 @@ async function handleChangePassword() {
     if (res.data.success) {
       emit("success");
       emit("update:show", false);
-      alert("密码修改成功！");
+      toastSuccess("密码修改成功！");
       form.value = { oldPassword: "", newPassword: "", confirmPassword: "" };
     } else {
       error.value = res.data.error || "修改密码失败";

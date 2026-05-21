@@ -237,6 +237,8 @@
 </template>
 
 <script setup>
+import { showConfirm } from "@/composables/useConfirm";
+
 import { computed, ref, watch } from "vue";
 import axios from "axios";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
@@ -417,7 +419,7 @@ async function toggleAppKey(keyId) {
 }
 
 async function removeAppKey(keyId) {
-  if (!window.confirm("确定删除该 API 密钥吗？删除后不可恢复。")) return;
+  if (!(await showConfirm({ message: "确定删除该 API 密钥吗？删除后不可恢复。", danger: true }))) return;
   error.value = "";
   success.value = "";
   try {

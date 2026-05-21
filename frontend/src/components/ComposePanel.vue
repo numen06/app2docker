@@ -112,6 +112,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import { ref, computed } from "vue";
 import axios from "axios";
 import { Codemirror } from "vue-codemirror";
@@ -159,16 +161,16 @@ function toggleSelectAll() {
 
 async function parseCompose() {
   if (!composeText.value.trim()) {
-    alert("请上传文件或输入 docker-compose.yml 内容");
+    toastInfo("请上传文件或输入 docker-compose.yml 内容");
     return;
   }
   parsing.value = true;
   try {
     const res = await axios.post("/api/parse-compose", { content: composeText.value });
     images.value = (res.data.images || []).map((img) => ({ ...img, selected: false }));
-    alert(`解析成功，共 ${images.value.length} 个镜像`);
+    toastSuccess(`解析成功，共 ${images.value.length} 个镜像`);
   } catch (error) {
-    alert(error.response?.data?.error || "解析失败");
+    toastApiError(error, "解析失败");
   } finally {
     parsing.value = false;
   }
@@ -176,7 +178,7 @@ async function parseCompose() {
 
 async function downloadImage(img) {
   if (exporting.value) {
-    alert("正在提交任务，请稍候...");
+    toastInfo("正在提交任务，请稍候...");
     return;
   }
   exporting.value = true;
@@ -194,16 +196,9 @@ async function downloadImage(img) {
         tag: img.tag || "latest",
       });
     }
-    alert(
-      `导出任务已创建！\n镜像: ${img.image}${img.tag && img.tag !== "latest" ? ":" + img.tag : ""}\n任务ID: ${res.data.task_id}\n\n请到「导出任务」标签页查看进度和下载文件。`
-    );
+    toastSuccess(`导出任务已创建！\n镜像: ${img.image}${img.tag && img.tag !== "latest" ? ":" + img.tag : ""}\n任务ID: ${res.data.task_id}\n\n请到「导出任务」标签页查看进度和下载文件。`);
   } catch (error) {
-    alert(
-      error.response?.data?.detail ||
-        error.response?.data?.error ||
-        error.message ||
-        "创建导出任务失败"
-    );
+    toastApiError(error, "创建导出任务失败");
   } finally {
     exporting.value = false;
     currentExporting.value = null;
@@ -212,12 +207,12 @@ async function downloadImage(img) {
 
 async function downloadSelected() {
   if (exporting.value) {
-    alert("正在提交任务，请稍候...");
+    toastInfo("正在提交任务，请稍候...");
     return;
   }
   const selected = selectedImages.value;
   if (selected.length === 0) {
-    alert("请至少选择一个镜像");
+    toastError("请至少选择一个镜像");
     return;
   }
   exporting.value = true;
@@ -250,9 +245,9 @@ async function downloadSelected() {
       }
     }
     if (taskIds.length > 0) {
-      alert(`已创建 ${taskIds.length} 个导出任务！\n\n请到「导出任务」标签页查看进度和下载文件。`);
+      toastSuccess(`已创建 ${taskIds.length} 个导出任务！\n\n请到「导出任务」标签页查看进度和下载文件。`);
     } else {
-      alert("所有任务创建失败，请检查网络连接");
+      toastError("所有任务创建失败，请检查网络连接");
     }
   } finally {
     exporting.value = false;

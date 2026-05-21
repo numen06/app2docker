@@ -222,6 +222,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
@@ -276,7 +279,7 @@ async function loadRoles() {
     const res = await axios.get("/api/roles");
     roles.value = res.data.roles || [];
   } catch (err) {
-    alert("加载角色列表失败: " + (err.response?.data?.detail || err.message));
+    toastError("加载角色列表失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
@@ -323,13 +326,13 @@ async function saveRole() {
         description: form.value.description || null,
         permissions: form.value.permissions,
       });
-      alert("角色创建成功");
+      toastSuccess("角色创建成功");
     } else {
       await axios.put(`/api/roles/${form.value.role_id}`, {
         description: form.value.description || null,
         permissions: form.value.permissions,
       });
-      alert("角色更新成功");
+      toastSuccess("角色更新成功");
     }
     closeModal();
     await loadRoles();
@@ -339,13 +342,13 @@ async function saveRole() {
 }
 
 async function deleteRole(role) {
-  if (!confirm(`确定要删除角色 "${role.name}" 吗？此操作不可恢复！`)) return;
+  if (!(await showConfirm({ message: `确定要删除角色 "${role.name}" 吗？此操作不可恢复！`, danger: true }))) return;
   try {
     await axios.delete(`/api/roles/${role.role_id}`);
-    alert("角色删除成功");
+    toastSuccess("角色删除成功");
     await loadRoles();
   } catch (err) {
-    alert("删除失败: " + (err.response?.data?.detail || err.message));
+    toastError("删除失败: " + (err.response?.data?.detail || err.message));
   }
 }
 

@@ -81,6 +81,8 @@
 </template>
 
 <script setup>
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, ref, watch } from "vue";
 import { useTeamStore } from "@/stores/team";
@@ -197,7 +199,7 @@ async function setPermission() {
 
 async function removePermission(row) {
   if (!props.resourceId || !apiBase.value) return;
-  if (!confirm(`确定移除「${row.username}」对该资源的单独权限吗？`)) return;
+  if (!(await showConfirm({ message: `确定移除「${row.username}」对该资源的单独权限吗？` }))) return;
   removingId.value = row.user_id;
   permError.value = "";
   try {

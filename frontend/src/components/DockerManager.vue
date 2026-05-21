@@ -731,6 +731,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, onMounted, ref, watch } from "vue";
 
@@ -769,11 +772,11 @@ async function forceRefreshDockerInfo() {
       dockerInfo.value = res.data.info;
       infoLastSync.value =
         dockerInfo.value.cached_at || new Date().toISOString();
-      alert("Docker信息已强制刷新");
+      toastInfo("Docker信息已强制刷新");
     }
   } catch (error) {
     console.error("强制刷新 Docker 信息失败:", error);
-    alert("强制刷新失败: " + (error.response?.data?.detail || error.message));
+    toastError("强制刷新失败: " + (error.response?.data?.detail || error.message));
   } finally {
     loadingInfo.value = false;
   }
@@ -875,7 +878,7 @@ async function startContainer(c) {
     await axios.post(`/api/docker/containers/${c.id}/start`);
     loadContainers(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "启动容器失败");
+    toastApiError(e, "启动容器失败");
   }
 }
 
@@ -886,7 +889,7 @@ async function stopContainer(c, force = false) {
     });
     loadContainers(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "停止容器失败");
+    toastApiError(e, "停止容器失败");
   }
 }
 
@@ -895,29 +898,29 @@ async function restartContainer(c) {
     await axios.post(`/api/docker/containers/${c.id}/restart`);
     loadContainers(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "重启容器失败");
+    toastApiError(e, "重启容器失败");
   }
 }
 
 async function removeContainer(c) {
-  if (!confirm(`确定要删除容器 ${c.name} 吗？`)) return;
+  if (!(await showConfirm({ message: `确定要删除容器 ${c.name} 吗？`, danger: true }))) return;
   try {
     await axios.delete(`/api/docker/containers/${c.id}`);
     loadContainers(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "删除容器失败");
+    toastApiError(e, "删除容器失败");
   }
 }
 
 async function pruneContainers() {
-  if (!confirm("确定要清理所有已停止的容器吗？")) return;
+  if (!(await showConfirm({ message: "确定要清理所有已停止的容器吗？", danger: true }))) return;
   try {
     const res = await axios.post("/api/docker/containers/prune");
-    alert(`已清理 ${res.data.deleted || 0} 个容器`);
+    toastSuccess(`已清理 ${res.data.deleted || 0} 个容器`);
     loadContainers(true);
     refreshDockerInfo(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "清理容器失败");
+    toastApiError(e, "清理容器失败");
   }
 }
 
@@ -1011,25 +1014,25 @@ async function loadImages(force = false) {
 async function deleteImage(img) {
   const imgName =
     img.repository && img.tag ? `${img.repository}:${img.tag}` : img.id;
-  if (!confirm(`确定要删除镜像 ${imgName} 吗？`)) return;
+  if (!(await showConfirm({ message: `确定要删除镜像 ${imgName} 吗？`, danger: true }))) return;
   try {
     await axios.delete("/api/docker/images", { data: { image_id: img.id } });
     loadImages(true);
     refreshDockerInfo(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "删除镜像失败");
+    toastApiError(e, "删除镜像失败");
   }
 }
 
 async function pruneImages() {
-  if (!confirm("确定要清理所有未使用的镜像吗？这将释放磁盘空间。")) return;
+  if (!(await showConfirm({ message: "确定要清理所有未使用的镜像吗？这将释放磁盘空间。", danger: true }))) return;
   try {
     const res = await axios.post("/api/docker/images/prune");
-    alert(`已清理，释放空间: ${formatBytes(res.data.space_reclaimed || 0)}`);
+    toastSuccess(`已清理，释放空间: ${formatBytes(res.data.space_reclaimed || 0)}`);
     loadImages(true);
     refreshDockerInfo(true);
   } catch (e) {
-    alert(e.response?.data?.detail || "清理镜像失败");
+    toastApiError(e, "清理镜像失败");
   }
 }
 

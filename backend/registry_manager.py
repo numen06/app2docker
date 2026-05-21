@@ -2,6 +2,7 @@
 """团队级镜像仓库管理（数据库）"""
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -322,3 +323,79 @@ def db_has_registries() -> bool:
         return db.query(DockerRegistry).count() > 0
     finally:
         db.close()
+
+
+def _password_plain_from_config_entry(reg: Dict[str, Any]) -> str:
+    """从 config 条目解析明文密码（兼容加密 / base64 / 明文）"""
+    password = reg.get("password") or ""
+    if not password:
+        return ""
+    try:
+        return decrypt_password(password)
+    except (ValueError, Exception):
+        try:
+            decoded = base64.b64decode(password.encode("utf-8"))
+            return decoded.decode("utf-8")
+        except Exception:
+            return password
+
+
+def _config_registry_entries() -> List[Dict[str, Any]]:
+    from backend.config import load_config
+
+    config = load_config()
+    registries = config.get("docker", {}).get("registries", [])
+    if not isinstance(registries, list):
+        return []
+    return [r for r in registries if isinstance(r, dict)]
+
+
+def ensure_team_registries_from_config(
+    team_id: str,
+    created_by: str,
+) -> int:
+    """
+    当团队下 docker_registries 为空时，将 config 中的 registries 幂等写入数据库。
+    返回本次新写入条数。
+    """
+    if not team_id or not created_by:
+        return 0
+
+    db = get_db_session()
+    try:
+        existing = (
+            db.query(DockerRegistry)
+            .filter(DockerRegistry.team_id == team_id)
+            .count()
+        )
+        if existing > 0:
+            return 0
+    finally:
+        db.close()
+
+    entries = _config_registry_entries()
+    if not entries:
+        return 0
+
+    migrated = 0
+    for reg in entries:
+        name = (reg.get("name") or "Registry").strip()
+        if not name:
+            continue
+        try:
+            create_registry(
+                team_id=team_id,
+                created_by=created_by,
+                name=name,
+                registry=reg.get("registry") or "docker.io",
+                registry_prefix=reg.get("registry_prefix") or "",
+                username=reg.get("username") or "",
+                password=_password_plain_from_config_entry(reg),
+                active=bool(reg.get("active", False)),
+            )
+            migrated += 1
+        except Exception as e:
+            print(f"⚠️ 迁移镜像仓库到团队 {team_id} 失败 ({name}): {e}")
+    if migrated:
+        print(f"✅ 已从 config 为团队 {team_id} 迁移 {migrated} 条镜像仓库")
+    return migrated

@@ -807,6 +807,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import { StreamLanguage } from "@codemirror/language";
 import { javascript } from "@codemirror/legacy-modes/mode/javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -1271,7 +1274,7 @@ async function submitConcurrentSetting() {
   if (savingSystemSettings.value) return;
   const value = Number(concurrentInput.value);
   if (!Number.isInteger(value) || value < 1) {
-    alert("请输入大于等于 1 的整数");
+    toastError("请输入大于等于 1 的整数");
     return;
   }
   savingSystemSettings.value = true;
@@ -1283,7 +1286,7 @@ async function submitConcurrentSetting() {
   } catch (err) {
     const errorMsg =
       err.response?.data?.detail || err.message || "更新系统设置失败";
-    alert(errorMsg);
+    toastInfo(errorMsg);
   } finally {
     savingSystemSettings.value = false;
   }
@@ -1422,7 +1425,7 @@ async function viewTaskConfig(task) {
     console.error("获取任务配置失败:", err);
     const errorMsg =
       err.response?.data?.detail || err.message || "获取任务配置失败";
-    alert(`获取任务配置失败: ${errorMsg}`);
+    toastError(`获取任务配置失败: ${errorMsg}`);
   }
 }
 
@@ -1431,9 +1434,9 @@ async function copyTaskConfigJson() {
   const text = taskConfigJson.value;
   const success = await copyToClipboard(text);
   if (success) {
-    alert("JSON配置已复制到剪贴板");
+    toastSuccess("JSON配置已复制到剪贴板");
   } else {
-    alert("自动复制失败，请手动选择并复制文本（已自动选中）");
+    toastError("自动复制失败，请手动选择并复制文本（已自动选中）");
     nextTick(() => {
       const editor = document.querySelector(".cm-editor");
       if (editor) {
@@ -1499,7 +1502,7 @@ async function saveAsPipeline(task) {
     console.error("获取任务配置失败:", err);
     const errorMsg =
       err.response?.data?.detail || err.message || "获取任务配置失败";
-    alert(`获取任务配置失败: ${errorMsg}`);
+    toastError(`获取任务配置失败: ${errorMsg}`);
   }
 }
 
@@ -1509,44 +1512,33 @@ async function downloadTask(task) {
   downloading.value = task.task_id;
 
   try {
-    // 直接通过URL触发浏览器下载
-    const downloadUrl = `/api/export-tasks/${task.task_id}/download`;
+    const res = await axios.get(`/api/export-tasks/${task.task_id}/download`, {
+      responseType: "blob",
+    });
 
-    // 生成文件名
-    const image = task.image.replace(/\//g, "_");
+    const image = (task.image || "image").replace(/\//g, "_");
     const tag = task.tag || "latest";
     const isCompressed =
       task.compress &&
       ["gzip", "gz", "tgz", "1", "true", "yes"].includes(
-        task.compress.toLowerCase()
+        String(task.compress).toLowerCase()
       );
     const ext = isCompressed ? ".tar.gz" : ".tar";
     const filename = `${image}-${tag}${ext}`;
 
-    // 创建临时a标签，直接指向下载URL，让浏览器原生处理下载
+    const url = URL.createObjectURL(res.data);
     const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = filename; // 设置下载文件名
+    a.href = url;
+    a.download = filename;
     a.style.display = "none";
-
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-
-    // 下载完成后清除loading状态（延迟一下确保下载已开始）
-    setTimeout(() => {
-      downloading.value = null;
-    }, 500);
+    URL.revokeObjectURL(url);
   } catch (err) {
     console.error("下载失败:", err);
-    const errorMsg = err.message || "下载失败";
-    error.value = `下载失败: ${errorMsg}`;
-    // 3秒后自动清除错误提示
-    setTimeout(() => {
-      if (error.value && error.value.includes("下载失败")) {
-        error.value = null;
-      }
-    }, 3000);
+    toastApiError(err, "下载失败");
+  } finally {
     downloading.value = null;
   }
 }
@@ -1557,7 +1549,7 @@ async function stopTask(task) {
   // 确认对话框
   const taskName = task.image || task.task_type || "未知任务";
   const taskTag = task.tag || "latest";
-  if (!confirm(`确定要停止任务 "${taskName}:${taskTag}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要停止任务 "${taskName}:${taskTag}" 吗？`, danger: true }))) {
     return;
   }
 
@@ -1602,15 +1594,13 @@ async function deleteTask(task) {
 
   // 检查任务状态
   if (status === "running" || status === "pending") {
-    alert(
-      `无法删除任务：只有停止、完成或失败的任务才能删除（当前状态: ${
+    toastError(`无法删除任务：只有停止、完成或失败的任务才能删除（当前状态: ${
         status === "running" ? "进行中" : "等待中"
-      }）\n\n请先停止任务。`
-    );
+      }）\n\n请先停止任务。`);
     return;
   }
 
-  if (!confirm(`确定要删除任务 "${taskName}:${taskTag}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要删除任务 "${taskName}:${taskTag}" 吗？`, danger: true }))) {
     return;
   }
 
@@ -1648,11 +1638,7 @@ async function cleanupAll() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (
-    !confirm(
-      `确定要清理所有非运行中的任务吗？\n\n这将清理所有已完成、失败、已停止的任务，清理后的任务无法恢复，请谨慎操作！`
-    )
-  ) {
+  if (!(await showConfirm({ message: `确定要清理所有非运行中的任务吗？\n\n这将清理所有已完成、失败、已停止的任务，清理后的任务无法恢复，请谨慎操作！`, danger: true }))) {
     return;
   }
 
@@ -1662,11 +1648,11 @@ async function cleanupAll() {
   try {
     const res = await axios.post("/api/tasks/cleanup", {});
 
-    alert(`成功清理 ${res.data.removed_count} 个任务`);
+    toastSuccess(`成功清理 ${res.data.removed_count} 个任务`);
     await loadTasks();
   } catch (err) {
     console.error("清理全部任务失败:", err);
-    alert(err.response?.data?.detail || "清理失败");
+    toastApiError(err, "清理失败");
   } finally {
     cleaning.value = false;
   }
@@ -1677,11 +1663,7 @@ async function cleanupByStatus(status) {
   if (cleaning.value) return;
 
   const statusText = status === "completed" ? "已完成" : "失败";
-  if (
-    !confirm(
-      `确定要清理所有${statusText}的任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`
-    )
-  ) {
+  if (!(await showConfirm({ message: `确定要清理所有${statusText}的任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`, danger: true }))) {
     return;
   }
 
@@ -1693,11 +1675,11 @@ async function cleanupByStatus(status) {
       status: status,
     });
 
-    alert(`成功清理 ${res.data.removed_count} 个任务`);
+    toastSuccess(`成功清理 ${res.data.removed_count} 个任务`);
     await loadTasks();
   } catch (err) {
     console.error("清理任务失败:", err);
-    alert(err.response?.data?.detail || "清理失败");
+    toastApiError(err, "清理失败");
   } finally {
     cleaning.value = false;
   }
@@ -1709,11 +1691,7 @@ async function cleanupByDays(days) {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (
-    !confirm(
-      `确定要清理 ${days} 天前的所有任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`
-    )
-  ) {
+  if (!(await showConfirm({ message: `确定要清理 ${days} 天前的所有任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`, danger: true }))) {
     return;
   }
 
@@ -1725,11 +1703,11 @@ async function cleanupByDays(days) {
       days: days,
     });
 
-    alert(`成功清理 ${res.data.removed_count} 个任务`);
+    toastSuccess(`成功清理 ${res.data.removed_count} 个任务`);
     await loadTasks();
   } catch (err) {
     console.error("清理任务失败:", err);
-    alert(err.response?.data?.detail || "清理失败");
+    toastApiError(err, "清理失败");
   } finally {
     cleaning.value = false;
   }
@@ -1749,7 +1727,7 @@ async function cleanupByDaysPrompt() {
 
   const days = parseInt(daysInput, 10);
   if (isNaN(days) || days < 1) {
-    alert("请输入有效的天数（必须大于0）");
+    toastError("请输入有效的天数（必须大于0）");
     return;
   }
 
@@ -1760,11 +1738,7 @@ async function cleanupOrphanDirs() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (
-    !confirm(
-      "确定要清理所有异常目录吗？\n\n此操作将删除所有没有对应任务的构建上下文目录，无法恢复，请谨慎操作！"
-    )
-  ) {
+  if (!(await showConfirm({ message: "确定要清理所有异常目录吗？\n\n此操作将删除所有没有对应任务的构建上下文目录，无法恢复，请谨慎操作！", danger: true }))) {
     return;
   }
 
@@ -1793,17 +1767,17 @@ async function cleanupOrphanDirs() {
           message += `\n\n部分目录清理失败: ${res.data.errors.length} 个`;
         }
 
-        alert(message);
+        toastInfo(message);
 
         // 刷新统计信息
         await Promise.all([loadBuildDirStats(), loadExportDirStats()]);
       } else {
         const errorMsg = res.data.message || res.data.detail || "清理失败";
-        alert(typeof errorMsg === "string" ? errorMsg : String(errorMsg));
+        toastInfo(typeof errorMsg === "string" ? errorMsg : String(errorMsg));
       }
     } else {
       console.warn("响应数据为空");
-      alert("清理完成，但未收到响应数据");
+      toastInfo("清理完成，但未收到响应数据");
       await Promise.all([loadBuildDirStats(), loadExportDirStats()]);
     }
   } catch (err) {
@@ -1831,7 +1805,7 @@ async function cleanupOrphanDirs() {
       errorMsg = `清理失败: ${err.message}`;
     }
 
-    alert(errorMsg);
+    toastInfo(errorMsg);
   } finally {
     cleaning.value = false;
   }
@@ -1841,11 +1815,7 @@ async function cleanupBuildDir() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (
-    !confirm(
-      "确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！"
-    )
-  ) {
+  if (!(await showConfirm({ message: "确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！", danger: true }))) {
     return;
   }
 
@@ -1876,18 +1846,18 @@ async function cleanupBuildDir() {
           message += `\n\n部分目录清理失败: ${res.data.errors.length} 个`;
         }
 
-        alert(message);
+        toastInfo(message);
 
         // 刷新统计信息
         await Promise.all([loadBuildDirStats(), loadExportDirStats()]);
       } else {
         // 失败情况
         const errorMsg = res.data.message || res.data.detail || "清理失败";
-        alert(typeof errorMsg === "string" ? errorMsg : String(errorMsg));
+        toastInfo(typeof errorMsg === "string" ? errorMsg : String(errorMsg));
       }
     } else {
       console.warn("响应数据为空");
-      alert("清理完成，但未收到响应数据");
+      toastInfo("清理完成，但未收到响应数据");
       // 仍然刷新统计信息
       await loadBuildDirStats();
     }
@@ -1920,7 +1890,7 @@ async function cleanupBuildDir() {
       errorMsg = `清理失败: ${err.message}`;
     }
 
-    alert(errorMsg);
+    toastInfo(errorMsg);
   } finally {
     cleaning.value = false;
   }
@@ -1931,11 +1901,7 @@ async function cleanupExportDir() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (
-    !confirm(
-      "确定要清空所有下载文件吗？\n\n此操作将删除所有导出文件，无法恢复，请谨慎操作！"
-    )
-  ) {
+  if (!(await showConfirm({ message: "确定要清空所有下载文件吗？\n\n此操作将删除所有导出文件，无法恢复，请谨慎操作！", danger: true }))) {
     return;
   }
 
@@ -1952,10 +1918,10 @@ async function cleanupExportDir() {
       const message =
         res.data.message ||
         `成功清理了 ${removedCount} 个文件，释放空间 ${freedSpace} MB`;
-      alert(message);
+      toastInfo(message);
       await loadExportDirStats(); // 重新加载统计
     } else {
-      alert(res.data.message || res.data.detail || "清理失败");
+      toastError(res.data.message || res.data.detail || "清理失败");
     }
   } catch (err) {
     console.error("清理下载目录失败:", err);
@@ -1964,7 +1930,7 @@ async function cleanupExportDir() {
       err.response?.data?.message ||
       err.message ||
       "清理失败";
-    alert(errorMsg);
+    toastInfo(errorMsg);
   } finally {
     cleaning.value = false;
   }
@@ -1982,11 +1948,7 @@ async function cleanupExportDirDays() {
     return;
   }
 
-  if (
-    !confirm(
-      `确定要清理 ${days} 天前的下载文件吗？\n\n此操作不可恢复，请谨慎操作！`
-    )
-  ) {
+  if (!(await showConfirm({ message: `确定要清理 ${days} 天前的下载文件吗？\n\n此操作不可恢复，请谨慎操作！`, danger: true }))) {
     return;
   }
 
@@ -2004,10 +1966,10 @@ async function cleanupExportDirDays() {
       const message =
         res.data.message ||
         `成功清理了 ${removedCount} 个文件，释放空间 ${freedSpace} MB`;
-      alert(message);
+      toastInfo(message);
       await loadExportDirStats(); // 重新加载统计
     } else {
-      alert(res.data.message || res.data.detail || "清理失败");
+      toastError(res.data.message || res.data.detail || "清理失败");
     }
   } catch (err) {
     console.error("清理下载目录失败:", err);
@@ -2016,7 +1978,7 @@ async function cleanupExportDirDays() {
       err.response?.data?.message ||
       err.message ||
       "清理失败";
-    alert(errorMsg);
+    toastInfo(errorMsg);
   } finally {
     cleaning.value = false;
   }
@@ -2027,12 +1989,12 @@ async function savePipelineFromTask() {
   if (saving.value) return;
 
   if (!pipelineForm.value.name) {
-    alert("请输入流水线名称");
+    toastError("请输入流水线名称");
     return;
   }
 
   if (!pipelineForm.value.git_url) {
-    alert("Git 仓库地址不能为空");
+    toastError("Git 仓库地址不能为空");
     return;
   }
 
@@ -2078,7 +2040,7 @@ async function savePipelineFromTask() {
       },
     });
 
-    alert("流水线创建成功！");
+    toastSuccess("流水线创建成功！");
     showSaveAsPipelineModal.value = false;
     // 可以跳转到流水线页面或刷新
   } catch (err) {
@@ -2086,7 +2048,7 @@ async function savePipelineFromTask() {
     const errorMsg =
       err.response?.data?.detail || err.message || "保存流水线失败";
     error.value = `保存流水线失败: ${errorMsg}`;
-    alert(`保存流水线失败: ${errorMsg}`);
+    toastError(`保存流水线失败: ${errorMsg}`);
   } finally {
     saving.value = false;
   }
@@ -2099,7 +2061,7 @@ async function rebuildTask(task) {
   // 确认对话框
   const taskName = task.image || task.task_type || "未知任务";
   const taskTag = task.tag || "latest";
-  if (!confirm(`确定要重新构建任务 "${taskName}:${taskTag}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要重新构建任务 "${taskName}:${taskTag}" 吗？` }))) {
     return;
   }
 
@@ -2129,7 +2091,7 @@ async function rebuildTask(task) {
         image: task.image,
         tag: task.tag || "latest",
       });
-      alert(`任务重试成功！\n新任务 ID: ${res.data.new_task_id}`);
+      toastSuccess(`任务重试成功！\n新任务 ID: ${res.data.new_task_id}`);
       await loadTasks(); // 刷新任务列表
     } else {
       throw new Error("重试响应格式错误");
@@ -2142,7 +2104,7 @@ async function rebuildTask(task) {
       err.message ||
       "重新构建失败";
     error.value = `重新构建失败: ${errorMsg}`;
-    alert(`重新构建失败: ${errorMsg}`);
+    toastError(`重新构建失败: ${errorMsg}`);
     // 5秒后自动清除错误提示
     setTimeout(() => {
       if (error.value && error.value.includes("重新构建失败")) {
@@ -2160,14 +2122,14 @@ async function retryExportTask(task) {
 
   // 检查任务状态，只有失败或停止的任务才能重试
   if (task.status !== "failed" && task.status !== "stopped") {
-    alert(`无法重试：只有失败或停止的任务才能重试（当前状态: ${task.status}）`);
+    toastError(`无法重试：只有失败或停止的任务才能重试（当前状态: ${task.status}）`);
     return;
   }
 
   // 确认对话框
   const taskName = task.image || "未知任务";
   const taskTag = task.tag || "latest";
-  if (!confirm(`确定要重试导出任务 "${taskName}:${taskTag}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要重试导出任务 "${taskName}:${taskTag}" 吗？` }))) {
     return;
   }
 
@@ -2200,7 +2162,7 @@ async function retryExportTask(task) {
         image: task.image,
         tag: task.tag || "latest",
       });
-      alert(`重试导出任务已启动！\n任务 ID: ${task.task_id}`);
+      toastSuccess(`重试导出任务已启动！\n任务 ID: ${task.task_id}`);
       // 刷新任务列表
       await loadTasks();
     } else {
@@ -2214,7 +2176,7 @@ async function retryExportTask(task) {
       err.message ||
       "重试导出失败";
     // 显示错误提示
-    alert(`重试导出失败: ${errorMsg}`);
+    toastError(`重试导出失败: ${errorMsg}`);
     error.value = `重试导出失败: ${errorMsg}`;
     // 5秒后自动清除错误提示
     setTimeout(() => {
@@ -2237,15 +2199,13 @@ async function retryDeployTask(task) {
     task.status !== "stopped" &&
     task.status !== "completed"
   ) {
-    alert(
-      `无法重试：只有失败、停止或已完成的任务才能重试（当前状态: ${task.status}）`
-    );
+    toastSuccess(`无法重试：只有失败、停止或已完成的任务才能重试（当前状态: ${task.status}）`);
     return;
   }
 
   // 确认对话框
   const taskName = task.image || task.task_id.substring(0, 8);
-  if (!confirm(`确定要重试部署任务 "${taskName}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要重试部署任务 "${taskName}" 吗？` }))) {
     return;
   }
 
@@ -2259,7 +2219,7 @@ async function retryDeployTask(task) {
         task_type: "deploy",
         image: task.image,
       });
-      alert("部署任务已重新启动");
+      toastInfo("部署任务已重新启动");
       await loadTasks();
     } else {
       throw new Error(res.data.message || "重试失败");
@@ -2268,7 +2228,7 @@ async function retryDeployTask(task) {
     console.error("重试部署任务失败:", err);
     const errorMsg = err.response?.data?.detail || err.message || "重试失败";
     error.value = `重试部署任务失败: ${errorMsg}`;
-    alert(`重试部署任务失败: ${errorMsg}`);
+    toastError(`重试部署任务失败: ${errorMsg}`);
     // 5秒后自动清除错误提示
     setTimeout(() => {
       if (error.value && error.value.includes("重试部署任务失败")) {
@@ -2297,7 +2257,7 @@ async function viewDeployConfig(task) {
     console.error("获取部署配置失败:", err);
     const errorMsg =
       err.response?.data?.detail || err.message || "获取配置失败";
-    alert(`获取部署配置失败: ${errorMsg}`);
+    toastError(`获取部署配置失败: ${errorMsg}`);
   }
 }
 

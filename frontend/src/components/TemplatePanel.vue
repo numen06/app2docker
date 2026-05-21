@@ -283,6 +283,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { onMounted, ref } from "vue";
 import TemplateEditorModal from "./TemplateEditorModal.vue";
@@ -368,7 +371,7 @@ async function loadTemplates() {
     totalPages.value = res.data.total_pages || 0;
   } catch (error) {
     console.error("加载模板失败:", error);
-    alert("加载模板列表失败");
+    toastError("加载模板列表失败");
     templates.value = [];
     totalTemplates.value = 0;
     totalPages.value = 0;
@@ -418,7 +421,7 @@ async function cloneTemplate(tpl) {
     showEditor.value = true;
   } catch (error) {
     console.error("克隆模板失败:", error);
-    alert(error.response?.data?.detail || "克隆模板失败");
+    toastApiError(error, "克隆模板失败");
   }
 }
 
@@ -462,17 +465,17 @@ async function deleteTemplate(tpl) {
       ? `此为内置模板，删除后仍可通过系统恢复。\n确认删除用户覆盖的 ${tpl.name} 吗？`
       : `确认删除模板 ${tpl.name} 吗？该操作不可恢复。`;
 
-  if (!confirm(msg)) return;
+  if (!(await showConfirm({ message: msg }))) return;
 
   try {
     await axios.delete("/api/templates", {
       data: { name: tpl.name },
     });
 
-    alert("模板已删除");
+    toastSuccess("模板已删除");
     await loadTemplates();
   } catch (error) {
-    alert(error.response?.data?.error || "删除失败");
+    toastApiError(error, "删除失败");
   }
 }
 

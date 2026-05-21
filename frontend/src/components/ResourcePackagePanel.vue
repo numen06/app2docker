@@ -203,6 +203,9 @@
 </template>
 
 <script>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { Codemirror } from "vue-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -326,7 +329,7 @@ export default {
         }
       } catch (error) {
         console.error("加载资源包列表失败:", error);
-        alert("加载资源包列表失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载资源包列表失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.loading = false;
       }
@@ -336,7 +339,7 @@ export default {
     },
     async uploadPackage() {
       if (!this.selectedFile) {
-        alert("请选择文件");
+        toastError("请选择文件");
         return;
       }
 
@@ -352,7 +355,7 @@ export default {
         });
 
         if (res.data.success) {
-          alert("资源包上传成功");
+          toastSuccess("资源包上传成功");
           this.showUploadModal = false;
           this.selectedFile = null;
           this.uploadForm = { description: "", extract: true };
@@ -363,25 +366,25 @@ export default {
         }
       } catch (error) {
         console.error("上传资源包失败:", error);
-        alert("上传资源包失败: " + (error.response?.data?.detail || error.message));
+        toastError("上传资源包失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.uploading = false;
       }
     },
     async deletePackage(pkg) {
-      if (!confirm(`确定要删除资源包 "${pkg.name}" 吗？`)) {
+      if (!(await showConfirm({ message: `确定要删除资源包 "${pkg.name}" 吗？`, danger: true }))) {
         return;
       }
 
       try {
         const res = await axios.delete(`/api/resource-packages/${pkg.package_id}`);
         if (res.data.success) {
-          alert("资源包已删除");
+          toastSuccess("资源包已删除");
           this.loadPackages();
         }
       } catch (error) {
         console.error("删除资源包失败:", error);
-        alert("删除资源包失败: " + (error.response?.data?.detail || error.message));
+        toastError("删除资源包失败: " + (error.response?.data?.detail || error.message));
       }
     },
     formatBytes(bytes) {
@@ -449,7 +452,7 @@ export default {
         }
       } catch (error) {
         console.error("加载资源包内容失败:", error);
-        alert("加载资源包内容失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载资源包内容失败: " + (error.response?.data?.detail || error.message));
         this.showEditModal = false;
       } finally {
         this.loadingContent = false;
@@ -466,7 +469,7 @@ export default {
         );
 
         if (res.data.success) {
-          alert("文件已保存");
+          toastSuccess("文件已保存");
           this.showEditModal = false;
           this.editingPackage = null;
           this.editContent = "";
@@ -474,7 +477,7 @@ export default {
         }
       } catch (error) {
         console.error("保存资源包内容失败:", error);
-        alert("保存资源包内容失败: " + (error.response?.data?.detail || error.message));
+        toastError("保存资源包内容失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.saving = false;
       }

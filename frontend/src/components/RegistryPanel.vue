@@ -204,8 +204,11 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useTeamStore } from "@/stores/team";
 import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPermissionDialog.vue";
 
@@ -253,7 +256,7 @@ async function loadRegistries() {
     registries.value = res.data.registries || [];
   } catch (error) {
     console.error("加载镜像仓库配置失败:", error);
-    alert("加载镜像仓库配置失败");
+    toastError("加载镜像仓库配置失败");
   } finally {
     loadingRegistries.value = false;
   }
@@ -304,7 +307,7 @@ function closeRegistryModal() {
 
 async function saveRegistry() {
   if (!registryForm.value.name || !registryForm.value.registry) {
-    alert("请填写仓库名称和 Registry 地址");
+    toastError("请填写仓库名称和 Registry 地址");
     return;
   }
 
@@ -336,7 +339,7 @@ async function saveRegistry() {
     closeRegistryModal();
   } catch (error) {
     console.error("保存镜像仓库失败:", error);
-    alert(error.response?.data?.detail || "保存镜像仓库失败");
+    toastApiError(error, "保存镜像仓库失败");
   } finally {
     savingRegistries.value = false;
   }
@@ -344,14 +347,14 @@ async function saveRegistry() {
 
 async function testCurrentRegistryLogin() {
   if (!registryForm.value.registry) {
-    alert("请先填写 Registry 地址");
+    toastError("请先填写 Registry 地址");
     return;
   }
   const username = (registryForm.value.username || "").trim();
   const password = registryForm.value.password;
   const hasPassword = Boolean(password && password !== "******");
   if ((username && !hasPassword) || (!username && hasPassword)) {
-    alert("用户名和密码需同时填写，或均留空（公开仓库）");
+    toastInfo("用户名和密码需同时填写，或均留空（公开仓库）");
     return;
   }
   const withAuth = Boolean(username && hasPassword);
@@ -390,23 +393,23 @@ async function testCurrentRegistryLogin() {
 
 async function removeRegistry(registry) {
   if (!registry?.registry_id) return;
-  if (!confirm(`确定删除镜像仓库「${registry.name}」吗？`)) return;
+  if (!(await showConfirm({ message: `确定删除镜像仓库「${registry.name}」吗？`, danger: true }))) return;
   try {
     await axios.delete(`/api/registries/${registry.registry_id}`);
     await loadRegistries();
   } catch (error) {
-    alert(error.response?.data?.detail || "删除失败");
+    toastApiError(error, "删除失败");
   }
 }
 
 async function testRegistryLogin(index) {
   const registry = registries.value[index];
   if (!registry.registry) {
-    alert("请先填写 Registry 地址");
+    toastError("请先填写 Registry 地址");
     return;
   }
   if (registry.username && !registry.has_password) {
-    alert("已填写用户名但未配置密码，请补全或清空用户名");
+    toastError("已填写用户名但未配置密码，请补全或清空用户名");
     return;
   }
 
@@ -437,7 +440,25 @@ async function testRegistryLogin(index) {
   }
 }
 
+function onTeamContextChanged() {
+  loadRegistries();
+}
+
+watch(
+  () => teamStore.activeTeamId,
+  (next, prev) => {
+    if (next && next !== prev) {
+      loadRegistries();
+    }
+  }
+);
+
 onMounted(() => {
   loadRegistries();
+  window.addEventListener("team-context-changed", onTeamContextChanged);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("team-context-changed", onTeamContextChanged);
 });
 </script>

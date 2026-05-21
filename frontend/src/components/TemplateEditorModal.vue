@@ -82,6 +82,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import { StreamLanguage } from "@codemirror/language";
 import { shell } from "@codemirror/legacy-modes/mode/shell";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -148,7 +151,7 @@ watch(
         };
         originalName.value = res.data.name;
       } catch {
-        alert("加载模板内容失败");
+        toastError("加载模板内容失败");
         close();
       }
     }
@@ -179,19 +182,19 @@ function handleFileUpload(e) {
 
 async function save() {
   if (!form.value.name.trim()) {
-    alert("模板名称不能为空");
+    toastError("模板名称不能为空");
     return;
   }
   if (!form.value.content.trim()) {
-    alert("模板内容不能为空");
+    toastError("模板内容不能为空");
     return;
   }
   if (!form.value.projectType.trim()) {
-    alert("项目类型不能为空");
+    toastError("项目类型不能为空");
     return;
   }
   if (!/^[a-z0-9_-]+$/.test(form.value.projectType)) {
-    alert("项目类型只能包含小写字母、数字、下划线和连字符");
+    toastInfo("项目类型只能包含小写字母、数字、下划线和连字符");
     return;
   }
   if (projectTypeChanged.value) {
@@ -199,7 +202,7 @@ async function save() {
       `您正在将模板的项目类型从 "${props.template.project_type}" 修改为 "${form.value.projectType}"。\n\n` +
       `模板将从 data/templates/${props.template.project_type}/ 移动到 data/templates/${form.value.projectType}/\n\n` +
       `确认要继续吗？`;
-    if (!confirm(confirmMsg)) return;
+    if (!(await showConfirm({ message: confirmMsg }))) return;
   }
 
   saving.value = true;
@@ -215,13 +218,11 @@ async function save() {
     }
     const method = props.isNew ? "post" : "put";
     const res = await axios[method]("/api/templates", payload);
-    alert(
-      projectTypeChanged.value ? "模板已保存并移动到新的项目类型目录" : res.data.message || "模板保存成功"
-    );
+    toastInfo(projectTypeChanged.value ? "模板已保存并移动到新的项目类型目录" : res.data.message || "模板保存成功");
     emit("saved");
     close();
   } catch (error) {
-    alert(error.response?.data?.detail || error.response?.data?.error || error.message || "保存失败");
+    toastApiError(error, "保存失败");
   } finally {
     saving.value = false;
   }

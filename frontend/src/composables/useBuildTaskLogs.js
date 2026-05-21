@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
 
 /**
  * 构建任务日志查看状态（UI 由 TaskLogModal / BuildTaskLogModal 承载）
@@ -34,7 +35,7 @@ export function useBuildTaskLogs({ onTaskFinished } = {}) {
 
   function viewTaskLogs(taskId, task) {
     if (!taskId) {
-      alert("任务ID不存在，无法查看日志");
+      toastError("任务ID不存在，无法查看日志");
       return;
     }
     if (viewingLogs.value === taskId) return;
@@ -51,7 +52,7 @@ export function useBuildTaskLogs({ onTaskFinished } = {}) {
   /** 与任务管理页 viewLogs(task) 签名一致 */
   function viewLogs(task) {
     if (!task?.task_id) {
-      alert("任务ID不存在，无法查看日志");
+      toastError("任务ID不存在，无法查看日志");
       return;
     }
     viewTaskLogs(task.task_id, task);

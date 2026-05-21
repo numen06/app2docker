@@ -434,6 +434,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
@@ -785,9 +787,9 @@ async function copyJson() {
   const text = configJson.value
   const success = await copyToClipboard(text)
   if (success) {
-    alert('JSON已复制到剪贴板')
+    toastSuccess('JSON已复制到剪贴板')
   } else {
-    alert('自动复制失败，请手动选择并复制文本（已自动选中）')
+    toastError('自动复制失败，请手动选择并复制文本（已自动选中）')
     nextTick(() => {
       const editor = document.querySelector('.cm-editor')
       if (editor) {
@@ -808,7 +810,7 @@ function saveConfig() {
     emit('save', config)
   } catch (error) {
     console.error('保存配置失败:', error)
-    alert('保存失败：配置格式错误')
+    toastError('保存失败：配置格式错误')
   } finally {
     saving.value = false
   }

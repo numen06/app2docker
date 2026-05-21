@@ -106,6 +106,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import { computed, inject, onMounted, ref, watch } from "vue";
 import axios from "axios";
 import Button from "@/components/ui/button/Button.vue";
@@ -151,7 +153,7 @@ async function loadHistory(page = null) {
     historyTasks.value = res.data?.tasks || (Array.isArray(res.data) ? res.data : []);
     historyPagination.value.total = res.data?.total ?? historyTasks.value.length;
   } catch (e) {
-    alert(e.response?.data?.detail || "加载历史失败");
+    toastApiError(e, "加载历史失败");
     historyTasks.value = [];
   } finally {
     historyLoading.value = false;

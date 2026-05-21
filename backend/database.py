@@ -1495,37 +1495,48 @@ def migrate_add_extended_resource_permissions():
 
 
 def migrate_registries_from_config_to_db():
-    """将 config.json 中的 registries 迁移到 docker_registries（仅当表为空时）"""
+    """将 config 中的 registries 按团队补全到 docker_registries（团队维度幂等）"""
     try:
-        from backend.config import load_config
+        from backend.registry_manager import (
+            _config_registry_entries,
+            ensure_team_registries_from_config,
+        )
         from backend.database import get_db_session
-        from backend.models import DockerRegistry, Team
+        from backend.models import Team, TeamMember
+
+        if not _config_registry_entries():
+            return
 
         db = get_db_session()
         try:
-            if db.query(DockerRegistry).count() > 0:
+            teams = db.query(Team).order_by(Team.created_at.asc()).all()
+            if not teams:
+                print("⚠️ 镜像仓库 config 迁移跳过：尚无团队")
                 return
-            config = load_config()
-            registries = config.get("docker", {}).get("registries", [])
-            if not registries:
-                return
-            team = db.query(Team).order_by(Team.created_at.asc()).first()
-            team_id = team.team_id if team else None
-            for reg in registries:
-                db.add(
-                    DockerRegistry(
-                        registry_id=str(uuid.uuid4()),
-                        team_id=team_id,
-                        name=reg.get("name") or "Registry",
-                        registry=reg.get("registry") or "docker.io",
-                        registry_prefix=reg.get("registry_prefix") or "",
-                        username=reg.get("username") or "",
-                        password=reg.get("password") or "",
-                        active=bool(reg.get("active", False)),
+
+            total = 0
+            for team in teams:
+                if not team.team_id:
+                    continue
+                created_by = team.created_by or None
+                if not created_by:
+                    member = (
+                        db.query(TeamMember.user_id)
+                        .filter(TeamMember.team_id == team.team_id)
+                        .order_by(TeamMember.joined_at.asc())
+                        .first()
                     )
+                    created_by = member[0] if member else None
+                if not created_by:
+                    print(
+                        f"⚠️ 镜像仓库 config 迁移跳过团队 {team.team_id}：无可用创建者"
+                    )
+                    continue
+                total += ensure_team_registries_from_config(
+                    team.team_id, created_by
                 )
-            db.commit()
-            print(f"✅ 已从 config 迁移 {len(registries)} 条镜像仓库记录")
+            if total:
+                print(f"✅ 启动迁移：共为团队写入 {total} 条镜像仓库")
         finally:
             db.close()
     except Exception as e:

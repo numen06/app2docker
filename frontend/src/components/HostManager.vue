@@ -205,6 +205,9 @@
 </template>
 
 <script>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -292,7 +295,7 @@ export default {
           this.checkDockerForAllHosts();
         }
       } catch (error) {
-        alert("加载主机列表失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载主机列表失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.loading = false;
       }
@@ -360,15 +363,15 @@ export default {
     },
     async testConnectionFromForm() {
       if (!this.hostForm.host || !this.hostForm.username) {
-        alert("请先填写主机地址和用户名");
+        toastError("请先填写主机地址和用户名");
         return;
       }
       if (this.authType === "password" && !this.hostForm.password) {
-        alert("请填写 SSH 密码");
+        toastError("请填写 SSH 密码");
         return;
       }
       if (this.authType === "key" && !this.hostForm.private_key) {
-        alert("请填写 SSH 私钥");
+        toastError("请填写 SSH 私钥");
         return;
       }
       this.testingConnectionForm = true;
@@ -400,33 +403,31 @@ export default {
       try {
         const res = await axios.post(`/api/hosts/${host.host_id}/test-ssh`);
         if (res.data.success) {
-          alert(
-            `连接成功！\n${res.data.message}${res.data.docker_available ? "\nDocker: " + res.data.docker_version : "\nDocker 不可用"}`
-          );
+          toastSuccess(`连接成功！\n${res.data.message}${res.data.docker_available ? "\nDocker: " + res.data.docker_version : "\nDocker 不可用"}`);
           if (res.data.docker_available && res.data.docker_version) {
             await axios.put(`/api/hosts/${host.host_id}`, { docker_version: res.data.docker_version });
           }
           this.loadHosts();
         } else {
-          alert(`连接失败：${res.data.message}`);
+          toastError(`连接失败：${res.data.message}`);
         }
       } catch (error) {
-        alert("测试连接失败: " + (error.response?.data?.detail || error.message));
+        toastError("测试连接失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.testingConnection = null;
       }
     },
     async saveHost() {
       if (!this.hostForm.name || !this.hostForm.host || !this.hostForm.username) {
-        alert("请填写必填字段");
+        toastError("请填写必填字段");
         return;
       }
       if (this.authType === "password" && !this.hostForm.password && !this.editingHost) {
-        alert("请填写 SSH 密码");
+        toastError("请填写 SSH 密码");
         return;
       }
       if (this.authType === "key" && !this.hostForm.private_key && !this.editingHost) {
-        alert("请填写 SSH 私钥");
+        toastError("请填写 SSH 私钥");
         return;
       }
       this.saving = true;
@@ -466,26 +467,26 @@ export default {
           ? await axios.put(`/api/hosts/${this.editingHost.host_id}`, hostData)
           : await axios.post("/api/hosts", hostData);
         if (res.data.success) {
-          alert(this.editingHost ? "主机更新成功" : "主机添加成功");
+          toastSuccess(this.editingHost ? "主机更新成功" : "主机添加成功");
           this.closeModal();
           this.loadHosts();
         }
       } catch (error) {
-        alert("保存主机失败: " + (error.response?.data?.detail || error.message));
+        toastError("保存主机失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.saving = false;
       }
     },
     async deleteHost(host) {
-      if (!confirm(`确定要删除主机 "${host.name}" 吗？`)) return;
+      if (!(await showConfirm({ message: `确定要删除主机 "${host.name}" 吗？`, danger: true }))) return;
       try {
         const res = await axios.delete(`/api/hosts/${host.host_id}`);
         if (res.data.success) {
-          alert("主机已删除");
+          toastSuccess("主机已删除");
           this.loadHosts();
         }
       } catch (error) {
-        alert("删除主机失败: " + (error.response?.data?.detail || error.message));
+        toastError("删除主机失败: " + (error.response?.data?.detail || error.message));
       }
     },
     formatTime(timeStr) {

@@ -24,6 +24,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import { computed, inject } from "vue";
 import Button from "@/components/ui/button/Button.vue";
 import { PIPELINE_DETAIL_KEY } from "@/composables/pipelineDetailContext";
@@ -49,10 +51,10 @@ const webhookUrl = computed(() => {
 async function copyWebhookUrl() {
   const url = webhookUrl.value;
   if (!url || url.startsWith("请先")) {
-    alert(url || "无可复制的 URL");
+    toastInfo(url || "无可复制的 URL");
     return;
   }
   const ok = await copyToClipboard(url);
-  alert(ok ? "Webhook URL 已复制" : "复制失败");
+  ok ? toastSuccess("Webhook URL 已复制") : toastError("复制失败");
 }
 </script>

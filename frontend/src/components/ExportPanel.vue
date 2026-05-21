@@ -94,6 +94,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import ComposePanel from "@/components/ComposePanel.vue";
@@ -189,11 +191,11 @@ function parseImageNameAndTag(inputValue) {
 
 async function handleExport() {
   if (!form.value.image) {
-    alert("请输入镜像名称");
+    toastError("请输入镜像名称");
     return;
   }
   if (exporting.value) {
-    alert("正在提交任务，请稍候...");
+    toastInfo("正在提交任务，请稍候...");
     return;
   }
   exporting.value = true;
@@ -213,14 +215,9 @@ async function handleExport() {
         tag: payload.tag,
       });
     }
-    alert(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到「任务管理」标签页查看进度和下载文件。`);
+    toastSuccess(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到「任务管理」标签页查看进度和下载文件。`);
   } catch (error) {
-    alert(
-      error.response?.data?.detail ||
-        error.response?.data?.error ||
-        error.message ||
-        "创建导出任务失败"
-    );
+    toastApiError(error, "创建导出任务失败");
   } finally {
     exporting.value = false;
   }

@@ -2248,6 +2248,9 @@
 </template>
 
 <script>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import yaml from "js-yaml";
 import { copyToClipboard } from "../utils/clipboard.js";
@@ -2901,16 +2904,14 @@ export default {
         });
       } catch (error) {
         console.error("加载部署任务失败:", error);
-        alert(
-          "加载部署任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("加载部署任务失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.loading = false;
       }
     },
     async createTask() {
       if (!this.taskConfigContent.trim()) {
-        alert("请输入配置内容");
+        toastError("请输入配置内容");
         return;
       }
 
@@ -2920,7 +2921,7 @@ export default {
         const appName = config?.app?.name;
         if (appName) {
           if (this.isAppNameDuplicate(appName.trim(), null)) {
-            alert(`应用名称 "${appName}" 已存在，请使用其他名称`);
+            toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
             return;
           }
         }
@@ -2936,7 +2937,7 @@ export default {
           registry: this.taskRegistry || null,
           tag: this.taskTag || null,
         });
-        alert("创建成功");
+        toastSuccess("创建成功");
         this.showCreateModal = false;
         this.taskConfigContent = "";
         this.taskRegistry = "";
@@ -2944,9 +2945,7 @@ export default {
         this.loadTasks();
       } catch (error) {
         console.error("创建部署任务失败:", error);
-        alert(
-          "创建部署任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("创建部署任务失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.creating = false;
       }
@@ -2967,26 +2966,21 @@ export default {
               "Content-Type": "multipart/form-data",
             },
           });
-          alert("导入成功");
+          toastSuccess("导入成功");
           this.showImportModal = false;
           this.loadTasks();
         } catch (error) {
           console.error("导入部署任务失败:", error);
-          alert(
-            "导入部署任务失败: " +
-              (error.response?.data?.detail || error.message)
-          );
+          toastError("导入部署任务失败: " +
+              (error.response?.data?.detail || error.message));
         }
       };
       reader.readAsText(file);
     },
     async executeTask(task) {
-      if (
-        !confirm(
-          '确定要触发此部署配置吗？\n\n触发后将创建新的部署任务，可在"任务管理"页面查看执行情况。'
-        )
-      )
+      if (!(await showConfirm({ message: '确定要触发此部署配置吗？\n\n触发后将创建新的部署任务，可在"任务管理"页面查看执行情况。' }))) {
         return;
+      }
 
       try {
         // 注意：task.task_id 实际是 config_id（配置ID），用于执行配置
@@ -3000,21 +2994,17 @@ export default {
             image: task.name || task.config?.name,
           });
         }
-        alert(
-          `部署配置已触发！\n\n新任务ID: ${newTaskId.substring(
+        toastInfo(`部署配置已触发！\n\n新任务ID: ${newTaskId.substring(
             0,
             8
-          )}\n可在"任务管理"页面查看执行情况。`
-        );
+          )}\n可在"任务管理"页面查看执行情况。`);
         this.loadTasks();
         if (this.showDetailModal) {
           this.viewTask(task);
         }
       } catch (error) {
         console.error("触发部署配置失败:", error);
-        alert(
-          "触发部署配置失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("触发部署配置失败: " + (error.response?.data?.detail || error.message));
       }
     },
     viewExecutions(task) {
@@ -3024,12 +3014,12 @@ export default {
       window.dispatchEvent(new CustomEvent("navigate", { detail: { tab: "tasks" } }));
     },
     async deleteTask(task) {
-      if (!confirm("确定要删除此部署配置吗？")) return;
+      if (!(await showConfirm({ message: "确定要删除此部署配置吗？", danger: true }))) return;
 
       try {
         // 注意：task.task_id 实际是 config_id（配置ID），用于删除配置
         await axios.delete(`/api/deploy-tasks/${task.task_id}`);
-        alert("删除成功");
+        toastSuccess("删除成功");
         this.loadTasks();
         if (
           this.showDetailModal &&
@@ -3039,9 +3029,7 @@ export default {
         }
       } catch (error) {
         console.error("删除部署任务失败:", error);
-        alert(
-          "删除部署任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("删除部署任务失败: " + (error.response?.data?.detail || error.message));
       }
     },
     async exportTask(task) {
@@ -3063,9 +3051,7 @@ export default {
         window.URL.revokeObjectURL(url);
       } catch (error) {
         console.error("导出部署任务失败:", error);
-        alert(
-          "导出部署任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("导出部署任务失败: " + (error.response?.data?.detail || error.message));
       }
     },
     async viewTask(task) {
@@ -3092,9 +3078,7 @@ export default {
         await this.loadTaskLogs(task.task_id);
       } catch (error) {
         console.error("获取任务详情失败:", error);
-        alert(
-          "获取任务详情失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("获取任务详情失败: " + (error.response?.data?.detail || error.message));
       }
     },
     async loadTaskLogs(taskId) {
@@ -3223,19 +3207,19 @@ export default {
         this.createTypeLock === "portainer" &&
         this.simpleForm.deployChannel !== "portainer"
       ) {
-        alert("当前为 Portainer 新建流程，不能切换到 SSH/Agent 类型");
+        toastError("当前为 Portainer 新建流程，不能切换到 SSH/Agent 类型");
         return;
       }
       if (
         this.createTypeLock === "standard" &&
         this.simpleForm.deployChannel === "portainer"
       ) {
-        alert("当前为 SSH/Agent 新建流程，不能切换到 Portainer 类型");
+        toastError("当前为 SSH/Agent 新建流程，不能切换到 Portainer 类型");
         return;
       }
       // 验证必填字段
       if (!this.simpleForm.appName.trim()) {
-        alert("请输入应用名称");
+        toastError("请输入应用名称");
         return;
       }
 
@@ -3246,39 +3230,39 @@ export default {
         return taskAppName && taskAppName === appName;
       });
       if (existingTask) {
-        alert(`应用名称 "${appName}" 已存在，请使用其他名称`);
+        toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
         return;
       }
       if (this.simpleForm.selectedHosts.length === 0) {
-        alert("请至少选择一个目标主机");
+        toastError("请至少选择一个目标主机");
         return;
       }
       if (
         this.simpleForm.deployChannel === "portainer" &&
         this.simpleForm.selectedHosts.length !== 1
       ) {
-        alert("Portainer 发布必须选择一个目标主机");
+        toastError("Portainer 发布必须选择一个目标主机");
         return;
       }
       if (
         this.simpleForm.deployChannel === "portainer" &&
         this.simpleForm.deployMode === "multi_step"
       ) {
-        alert("Portainer 发布暂不支持多步骤模式");
+        toastError("Portainer 发布暂不支持多步骤模式");
         return;
       }
       if (
         this.simpleForm.deployChannel === "portainer" &&
         this.simpleForm.deployMode !== "docker_compose"
       ) {
-        alert("Portainer 发布仅支持 Docker Compose/Stack");
+        toastInfo("Portainer 发布仅支持 Docker Compose/Stack");
         return;
       }
       if (
         this.simpleForm.deployMode === "docker_run" &&
         !this.simpleForm.runCommand.trim()
       ) {
-        alert("请输入 Docker Run 命令");
+        toastError("请输入 Docker Run 命令");
         return;
       }
       if (this.simpleForm.deployMode === "docker_compose") {
@@ -3287,7 +3271,7 @@ export default {
           this.simpleForm.stackStrategy === "update_existing" &&
           !this.simpleForm.selectedStackId
         ) {
-          alert("请选择要更新的 Stack");
+          toastError("请选择要更新的 Stack");
           return;
         }
         if (
@@ -3295,7 +3279,7 @@ export default {
           this.simpleForm.stackStrategy === "create_new" &&
           !this.simpleForm.newStackName?.trim()
         ) {
-          alert("请输入新 Stack 名称");
+          toastError("请输入新 Stack 名称");
           return;
         }
         if (!this.simpleForm.composeCommand.trim()) {
@@ -3307,7 +3291,7 @@ export default {
           }
         }
         if (!this.simpleForm.composeContent.trim()) {
-          alert("请输入 docker-compose.yml 内容");
+          toastError("请输入 docker-compose.yml 内容");
           return;
         }
       }
@@ -3415,15 +3399,13 @@ export default {
           registry: null,
           tag: null,
         });
-        alert("创建成功");
+        toastSuccess("创建成功");
         this.closeSimpleCreateModal();
         this.resetSimpleForm();
         this.loadTasks();
       } catch (error) {
         console.error("创建部署任务失败:", error);
-        alert(
-          "创建部署任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("创建部署任务失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.creating = false;
       }
@@ -3477,7 +3459,7 @@ export default {
           this.simpleForm.composeContent = compose;
         }
       } catch (error) {
-        alert("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
       }
     },
     async loadAvailableStacksForEdit() {
@@ -3510,7 +3492,7 @@ export default {
           this.editForm.composeContent = compose;
         }
       } catch (error) {
-        alert("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
       }
     },
     addStep() {
@@ -3540,8 +3522,8 @@ export default {
         command: "",
       });
     },
-    removeEditStep(index) {
-      if (confirm(`确定要删除步骤 ${index + 1} 吗？`)) {
+    async removeEditStep(index) {
+      if (await showConfirm({ message: `确定要删除步骤 ${index + 1} 吗？`, danger: true })) {
         this.editForm.steps.splice(index, 1);
       }
     },
@@ -3668,9 +3650,7 @@ export default {
         }
       } catch (error) {
         console.error("获取任务详情失败:", error);
-        alert(
-          "获取任务详情失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("获取任务详情失败: " + (error.response?.data?.detail || error.message));
       }
     },
     parseYamlToForm(configContent, config) {
@@ -3811,14 +3791,14 @@ export default {
         this.editTypeLock === "portainer" &&
         this.editForm.deployChannel !== "portainer"
       ) {
-        alert("Portainer 任务不允许切换为 SSH/Agent 类型");
+        toastError("Portainer 任务不允许切换为 SSH/Agent 类型");
         return;
       }
       if (
         this.editTypeLock === "standard" &&
         this.editForm.deployChannel === "portainer"
       ) {
-        alert("SSH/Agent 任务不允许切换为 Portainer 类型");
+        toastError("SSH/Agent 任务不允许切换为 Portainer 类型");
         return;
       }
       let yamlContent = "";
@@ -3828,40 +3808,40 @@ export default {
       if (this.editMode === "form") {
         // 表单模式：验证并转换为YAML
         if (!this.editForm.appName.trim()) {
-          alert("请输入应用名称");
+          toastError("请输入应用名称");
           return;
         }
 
         // 检查应用名称是否已存在（排除当前任务）
         const appName = this.editForm.appName.trim();
         if (this.isAppNameDuplicate(appName, this.editingTask?.task_id)) {
-          alert(`应用名称 "${appName}" 已存在，请使用其他名称`);
+          toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
           return;
         }
 
         if (this.editForm.selectedHosts.length === 0) {
-          alert("请至少选择一个目标主机");
+          toastError("请至少选择一个目标主机");
           return;
         }
         if (
           this.editForm.deployChannel === "portainer" &&
           this.editForm.selectedHosts.length !== 1
         ) {
-          alert("Portainer 发布必须选择一个目标主机");
+          toastError("Portainer 发布必须选择一个目标主机");
           return;
         }
         if (
           this.editForm.deployChannel === "portainer" &&
           this.editForm.deployMode !== "docker_compose"
         ) {
-          alert("Portainer 发布仅支持 Docker Compose/Stack");
+          toastInfo("Portainer 发布仅支持 Docker Compose/Stack");
           return;
         }
         if (
           this.editForm.deployMode === "docker_run" &&
           !this.editForm.runCommand.trim()
         ) {
-          alert("请输入 Docker Run 命令");
+          toastError("请输入 Docker Run 命令");
           return;
         }
         if (this.editForm.deployMode === "docker_compose") {
@@ -3870,7 +3850,7 @@ export default {
             this.editForm.stackStrategy === "update_existing" &&
             !this.editForm.selectedStackId
           ) {
-            alert("请选择要更新的 Stack");
+            toastError("请选择要更新的 Stack");
             return;
           }
           if (
@@ -3878,7 +3858,7 @@ export default {
             this.editForm.stackStrategy === "create_new" &&
             !this.editForm.newStackName?.trim()
           ) {
-            alert("请输入新 Stack 名称");
+            toastError("请输入新 Stack 名称");
             return;
           }
           if (!this.editForm.composeCommand.trim()) {
@@ -3890,23 +3870,23 @@ export default {
             }
           }
           if (!this.editForm.composeContent.trim()) {
-            alert("请输入 docker-compose.yml 内容");
+            toastError("请输入 docker-compose.yml 内容");
             return;
           }
         }
         if (this.editForm.deployMode === "multi_step") {
           if (this.editForm.steps.length === 0) {
-            alert("请至少添加一个部署步骤");
+            toastError("请至少添加一个部署步骤");
             return;
           }
           for (let i = 0; i < this.editForm.steps.length; i++) {
             const step = this.editForm.steps[i];
             if (!step.name || !step.name.trim()) {
-              alert(`步骤 ${i + 1} 的名称不能为空`);
+              toastError(`步骤 ${i + 1} 的名称不能为空`);
               return;
             }
             if (!step.command || !step.command.trim()) {
-              alert(`步骤 ${i + 1} 的命令不能为空`);
+              toastError(`步骤 ${i + 1} 的命令不能为空`);
               return;
             }
           }
@@ -3920,7 +3900,7 @@ export default {
           !this.editingTask.config_content ||
           !this.editingTask.config_content.trim()
         ) {
-          alert("YAML 配置内容不能为空");
+          toastError("YAML 配置内容不能为空");
           return;
         }
         yamlContent = this.editingTask.config_content;
@@ -3933,7 +3913,7 @@ export default {
             if (
               this.isAppNameDuplicate(appName.trim(), this.editingTask?.task_id)
             ) {
-              alert(`应用名称 "${appName}" 已存在，请使用其他名称`);
+              toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
               return;
             }
           }
@@ -3943,7 +3923,7 @@ export default {
         }
       }
 
-      if (!confirm("确定要保存修改吗？")) {
+      if (!(await showConfirm({ message: "确定要保存修改吗？" }))) {
         return;
       }
 
@@ -4003,15 +3983,13 @@ export default {
               : null,
         });
 
-        alert("保存成功");
+        toastSuccess("保存成功");
         this.closeEditModal();
         this.editingTask = null;
         this.loadTasks();
       } catch (error) {
         console.error("保存任务失败:", error);
-        alert(
-          "保存任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("保存任务失败: " + (error.response?.data?.detail || error.message));
       } finally {
         this.creating = false;
       }
@@ -4121,11 +4099,9 @@ export default {
       }
 
       // 显示确认对话框
-      const confirmed = window.confirm(
-        `确定要克隆部署任务 "${appName}" 吗？\n\n` +
+      const confirmed = await showConfirm({ message: `确定要克隆部署任务 "${appName}" 吗？\n\n` +
           `克隆后将创建一个新的任务，使用相同的配置。\n\n` +
-          `点击"确定"继续，点击"取消"放弃。`
-      );
+          `点击"确定"继续，点击"取消"放弃。` });
 
       if (!confirmed) {
         return;
@@ -4176,9 +4152,7 @@ export default {
             (taskData.status && taskData.status.tag) || taskConfig.tag || null,
         });
 
-        alert(
-          "任务克隆成功！\n\n已创建新的部署任务，您可以对其进行编辑和执行。"
-        );
+        toastSuccess("任务克隆成功！\n\n已创建新的部署任务，您可以对其进行编辑和执行。");
         this.loadTasks();
 
         // 如果详情模态框打开，刷新显示
@@ -4190,9 +4164,7 @@ export default {
         }
       } catch (error) {
         console.error("复制任务失败:", error);
-        alert(
-          "克隆任务失败: " + (error.response?.data?.detail || error.message)
-        );
+        toastError("克隆任务失败: " + (error.response?.data?.detail || error.message));
       }
     },
     async refreshTask(task) {
@@ -4265,21 +4237,13 @@ export default {
         }
       );
     },
-    regenerateEditWebhookToken() {
-      if (
-        confirm(
-          "确定要重新生成 Webhook Token 吗？重新生成后需要更新外部系统的 Webhook URL。"
-        )
-      ) {
+    async regenerateEditWebhookToken() {
+      if (await showConfirm({ message: "确定要重新生成 Webhook Token 吗？重新生成后需要更新外部系统的 Webhook URL。" })) {
         this.editForm.webhook_token = this.generateUUID();
       }
     },
-    regenerateEditWebhookSecret() {
-      if (
-        confirm(
-          "确定要重新生成 Webhook Secret 吗？重新生成后需要更新外部系统的 Webhook Secret。"
-        )
-      ) {
+    async regenerateEditWebhookSecret() {
+      if (await showConfirm({ message: "确定要重新生成 Webhook Secret 吗？重新生成后需要更新外部系统的 Webhook Secret。" })) {
         this.editForm.webhook_secret = this.generateUUID();
       }
     },
@@ -4308,7 +4272,7 @@ export default {
     showWebhookUrl(task) {
       const url = this.getWebhookUrl(task);
       if (!url) {
-        alert('Webhook URL 未配置，请在编辑配置的"Webhook设置"tab中配置。');
+        toastError('Webhook URL 未配置，请在编辑配置的"Webhook设置"tab中配置。');
         return;
       }
       this.webhookUrl = url;
@@ -4318,9 +4282,9 @@ export default {
       if (this.$refs.webhookUrlInput) {
         const success = await copyToClipboard(this.$refs.webhookUrlInput.value);
         if (success) {
-          alert("Webhook URL 已复制到剪贴板");
+          toastSuccess("Webhook URL 已复制到剪贴板");
         } else {
-          alert("复制失败，请手动选择文本复制");
+          toastError("复制失败，请手动选择文本复制");
         }
       }
     },

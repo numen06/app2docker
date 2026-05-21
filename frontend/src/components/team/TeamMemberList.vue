@@ -117,6 +117,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { ref, watch } from "vue";
 import { useTeamStore } from "@/stores/team";
@@ -188,18 +191,18 @@ async function onRoleChange(m, ev) {
   } catch (e) {
     m.role = prev;
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "更新角色失败");
+    toastError(typeof detail === "string" ? detail : "更新角色失败");
   }
 }
 
 async function removeMember(m) {
-  if (!confirm(`确定要将「${m.username}」移出团队吗？`)) return;
+  if (!(await showConfirm({ message: `确定要将「${m.username}」移出团队吗？`, danger: true }))) return;
   try {
     await axios.delete(`/api/teams/${props.teamId}/members/${m.user_id}`);
     await load();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "移除失败");
+    toastError(typeof detail === "string" ? detail : "移除失败");
   }
 }
 

@@ -228,6 +228,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import { useTeamStore } from "@/stores/team";
@@ -286,7 +288,7 @@ async function loadDashboard() {
     systemInfo.value = dockerInfoRes?.data || null;
   } catch (error) {
     console.error("加载仪表盘数据失败:", error);
-    alert("加载仪表盘数据失败: " + (error.response?.data?.detail || error.message));
+    toastError("加载仪表盘数据失败: " + (error.response?.data?.detail || error.message));
     stats.value = defaultStats();
   } finally {
     loading.value = false;

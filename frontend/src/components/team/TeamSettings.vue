@@ -196,6 +196,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -289,11 +292,7 @@ async function transferOwnership() {
   const target = transferCandidates.value.find((m) => m.user_id === targetId);
   if (!target) return;
   const label = target.username || target.email || "该成员";
-  if (
-    !confirm(
-      `确定将团队所有权转移给「${label}」吗？\n\n转移后对方将成为所有者，您将变为管理员，且无法再删除团队。`
-    )
-  ) {
+  if (!(await showConfirm({ message: `确定将团队所有权转移给「${label}」吗？\n\n转移后对方将成为所有者，您将变为管理员，且无法再删除团队。`, danger: true }))) {
     return;
   }
   transferring.value = true;
@@ -307,7 +306,7 @@ async function transferOwnership() {
     await memberListRef.value?.load?.();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "转移所有权失败");
+    toastError(typeof detail === "string" ? detail : "转移所有权失败");
   } finally {
     transferring.value = false;
   }
@@ -358,7 +357,7 @@ async function saveTeamName() {
     await teamStore.fetchMyTeams();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "保存失败");
+    toastError(typeof detail === "string" ? detail : "保存失败");
   } finally {
     savingName.value = false;
   }
@@ -369,7 +368,7 @@ async function saveTaskCleanupDays() {
   if (!id || !teamStore.canManageTeam) return;
   const days = parseInt(taskCleanupDays.value, 10);
   if (isNaN(days) || days < 1 || days > 365) {
-    alert("请输入 1–365 之间的有效天数");
+    toastError("请输入 1–365 之间的有效天数");
     return;
   }
   savingCleanupDays.value = true;
@@ -378,7 +377,7 @@ async function saveTaskCleanupDays() {
     taskCleanupDays.value = days;
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    alert(typeof detail === "string" ? detail : "保存失败");
+    toastError(typeof detail === "string" ? detail : "保存失败");
   } finally {
     savingCleanupDays.value = false;
   }

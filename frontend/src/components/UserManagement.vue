@@ -371,6 +371,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import { getUsername } from "../utils/auth";
@@ -465,7 +468,7 @@ async function loadUsers() {
     }
   } catch (err) {
     console.error("加载用户列表失败:", err);
-    alert("加载用户列表失败: " + (err.response?.data?.detail || err.message));
+    toastError("加载用户列表失败: " + (err.response?.data?.detail || err.message));
     users.value = [];
     totalUsers.value = 0;
     totalPages.value = 0;
@@ -495,7 +498,7 @@ function editUser(user) {
 
 function changePassword(user) {
   if (user.username === "admin") {
-    alert("不能修改超级管理员的密码");
+    toastError("不能修改超级管理员的密码");
     return;
   }
 
@@ -519,7 +522,7 @@ async function saveUser() {
         email: form.value.email || null,
         roles: form.value.roles,
       });
-      alert("用户创建成功");
+      toastSuccess("用户创建成功");
       currentPage.value = 1;
     } else {
       await axios.put(`/api/users/${form.value.user_id}`, {
@@ -527,7 +530,7 @@ async function saveUser() {
         enabled: form.value.enabled,
         roles: form.value.roles,
       });
-      alert("用户更新成功");
+      toastSuccess("用户更新成功");
     }
 
     closeModal();
@@ -545,7 +548,7 @@ async function savePassword() {
     await axios.put(`/api/users/${passwordForm.value.user_id}/password`, {
       new_password: passwordForm.value.newPassword,
     });
-    alert("密码修改成功");
+    toastSuccess("密码修改成功");
     showPasswordModal.value = false;
   } catch (err) {
     console.error("修改密码失败:", err);
@@ -555,11 +558,11 @@ async function savePassword() {
 
 async function toggleEnable(user) {
   if (user.username === "admin") {
-    alert("不能修改超级管理员的状态");
+    toastError("不能修改超级管理员的状态");
     return;
   }
 
-  if (!confirm(`确定要${user.enabled ? "禁用" : "启用"}用户 ${user.username} 吗？`)) {
+  if (!(await showConfirm({ message: `确定要${user.enabled ? "禁用" : "启用"}用户 ${user.username} 吗？`, danger: true }))) {
     return;
   }
 
@@ -568,26 +571,26 @@ async function toggleEnable(user) {
     await axios.put(`/api/users/${user.user_id}/enable`, {
       enabled: newEnabled,
     });
-    alert(`用户已${newEnabled ? "启用" : "禁用"}`);
+    toastInfo(`用户已${newEnabled ? "启用" : "禁用"}`);
     await loadUsers();
   } catch (err) {
     console.error("操作失败:", err);
-    alert("操作失败: " + (err.response?.data?.detail || err.message));
+    toastError("操作失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
 async function deleteUser(user) {
-  if (!confirm(`确定要删除用户 ${user.username} 吗？此操作不可恢复！`)) {
+  if (!(await showConfirm({ message: `确定要删除用户 ${user.username} 吗？此操作不可恢复！`, danger: true }))) {
     return;
   }
 
   try {
     await axios.delete(`/api/users/${user.user_id}`);
-    alert("用户删除成功");
+    toastSuccess("用户删除成功");
     await loadUsers();
   } catch (err) {
     console.error("删除用户失败:", err);
-    alert("删除失败: " + (err.response?.data?.detail || err.message));
+    toastError("删除失败: " + (err.response?.data?.detail || err.message));
   }
 }
 
@@ -698,7 +701,7 @@ async function toggleAdminAppKey(keyId) {
 }
 
 async function removeAdminAppKey(keyId) {
-  if (!confirm("确定删除该 API 密钥吗？此操作不可恢复。")) return;
+  if (!(await showConfirm({ message: "确定删除该 API 密钥吗？此操作不可恢复。", danger: true }))) return;
   const uid = appKeysTargetUser.value?.user_id;
   if (!uid) return;
   adminAppKeysError.value = "";

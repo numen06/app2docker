@@ -1696,6 +1696,8 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+
 import Button from "@/components/ui/button/Button.vue";
 import { registerTask } from "@/composables/useTaskCompletionWatcher";
 import { showToast } from "@/composables/useToast";
@@ -2106,11 +2108,7 @@ async function refreshBranches(forceRefresh = true) {
     }
   } catch (error) {
     console.error("刷新分支列表失败:", error);
-    alert(
-      error.response?.data?.detail ||
-        error.message ||
-        "刷新分支列表失败，请稍后重试"
-    );
+    toastApiError(error, "刷新分支列表失败，请稍后重试");
   } finally {
     refreshingBranches.value = false;
   }
@@ -2419,9 +2417,9 @@ async function copyBuildConfigJson() {
   const text = buildConfigJson.value
   const success = await copyToClipboard(text)
   if (success) {
-    alert('构建配置JSON已复制到剪贴板')
+    toastSuccess('构建配置JSON已复制到剪贴板')
   } else {
-    alert('自动复制失败，请手动选择并复制文本（已自动选中）')
+    toastError('自动复制失败，请手动选择并复制文本（已自动选中）')
     nextTick(() => {
       const editor = document.querySelector('.cm-editor')
       if (editor) {
@@ -3016,7 +3014,7 @@ function getRegistryNameFromPrefix(prefix) {
 // 批量设置镜像前缀
 function batchSetImagePrefix() {
   if (!batchImagePrefix.value.trim()) {
-    alert("请输入镜像前缀或选择仓库");
+    toastError("请输入镜像前缀或选择仓库");
     return;
   }
   const newPrefix = batchImagePrefix.value.trim();
@@ -3051,7 +3049,7 @@ function onBatchPrefixChange() {
 // 批量设置标签
 function batchSetTag() {
   if (!batchTag.value.trim()) {
-    alert("请输入标签");
+    toastError("请输入标签");
     return;
   }
   // 更新全局配置

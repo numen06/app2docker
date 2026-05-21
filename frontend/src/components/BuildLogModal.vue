@@ -99,6 +99,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
 import BaseDialog from "@/components/ui/dialog/BaseDialog.vue";
@@ -146,14 +149,16 @@ function highlightSearch(text) {
   return text.replace(regex, "<mark>$1</mark>");
 }
 
-function clearLog() {
-  if (confirm("确定要清空所有日志吗？")) logs.value = [];
+async function clearLog() {
+  if (await showConfirm({ message: "确定要清空所有日志吗？", danger: true })) logs.value = [];
 }
 
 async function copyLog() {
   const text = logs.value.map((log) => log.text.trim()).filter((line) => line.length > 0).join("\n");
   const success = await copyToClipboard(text);
-  alert(success ? `日志已复制到剪贴板 (${logs.value.length} 行)` : "复制失败，请手动选择文本复制");
+  success
+    ? toastSuccess(`日志已复制到剪贴板 (${logs.value.length} 行)`)
+    : toastError("复制失败，请手动选择文本复制");
 }
 
 function downloadLog() {

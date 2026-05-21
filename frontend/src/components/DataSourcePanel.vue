@@ -558,6 +558,9 @@
 </template>
 
 <script setup>
+import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { showConfirm } from "@/composables/useConfirm";
+
 import { StreamLanguage } from '@codemirror/language'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -684,7 +687,7 @@ async function loadSources() {
     sources.value = res.data.sources || []
   } catch (error) {
     console.error('加载数据源列表失败:', error)
-    alert('加载数据源列表失败')
+    toastError('加载数据源列表失败')
   } finally {
     loading.value = false
   }
@@ -726,7 +729,7 @@ function editSource(source) {
 
 async function verifyAndSave() {
   if (!formData.value.git_url) {
-    alert('请输入 Git 仓库地址')
+    toastError('请输入 Git 仓库地址')
     return
   }
   
@@ -761,12 +764,12 @@ async function verifyAndSave() {
         formData.value.name = urlParts[urlParts.length - 1] || '未命名数据源'
       }
     } else {
-      alert('验证失败：' + (res.data.detail || '未知错误'))
+      toastError('验证失败：' + (res.data.detail || '未知错误'))
       isVerified.value = false
     }
   } catch (error) {
     console.error('验证仓库失败:', error)
-    alert(error.response?.data?.detail || '验证仓库失败')
+    toastApiError(error, '验证仓库失败')
     isVerified.value = false
   } finally {
     verifying.value = false
@@ -775,7 +778,7 @@ async function verifyAndSave() {
 
 async function saveSource() {
   if (!formData.value.name || !formData.value.git_url) {
-    alert('请填写必填字段')
+    toastError('请填写必填字段')
     return
   }
   
@@ -791,7 +794,7 @@ async function saveSource() {
   if (needsVerification) {
     // 需要验证，检查是否已验证
     if (!isVerified.value || formData.value.branches.length === 0) {
-      alert('请先验证 Git 仓库后再保存')
+      toastError('请先验证 Git 仓库后再保存')
       return
     }
   }
@@ -813,7 +816,7 @@ async function saveSource() {
         username: formData.value.username || null,
         password: password
       })
-      alert('数据源更新成功')
+      toastSuccess('数据源更新成功')
     } else {
       // 创建新数据源（包含验证时扫描到的 Dockerfile）
       await axios.post('/api/git-sources', {
@@ -827,13 +830,13 @@ async function saveSource() {
         password: password || null,
         dockerfiles: formData.value.dockerfiles || null
       })
-      alert('数据源创建成功')
+      toastSuccess('数据源创建成功')
     }
     closeModal()
     loadSources()
   } catch (error) {
     console.error('保存数据源失败:', error)
-    alert(error.response?.data?.detail || '保存数据源失败')
+    toastApiError(error, '保存数据源失败')
   }
 }
 
@@ -843,7 +846,7 @@ function closeModal() {
 }
 
 async function refreshSource(source) {
-  if (!confirm(`确定要刷新数据源 "${source.name}" 的分支和标签吗？`)) {
+  if (!(await showConfirm({ message: `确定要刷新数据源 "${source.name}" 的分支和标签吗？` }))) {
     return
   }
   
@@ -859,31 +862,31 @@ async function refreshSource(source) {
     
     if (res.data.success) {
       // 后端已经自动更新了数据源的缓存，这里只需要刷新列表即可
-      alert('数据源刷新成功')
+      toastSuccess('数据源刷新成功')
       loadSources()
     } else {
-      alert('刷新失败：' + (res.data.detail || '未知错误'))
+      toastError('刷新失败：' + (res.data.detail || '未知错误'))
     }
   } catch (error) {
     console.error('刷新数据源失败:', error)
-    alert(error.response?.data?.detail || '刷新数据源失败')
+    toastApiError(error, '刷新数据源失败')
   } finally {
     refreshing.value = null
   }
 }
 
 async function deleteSource(source) {
-  if (!confirm(`确定要删除数据源 "${source.name}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要删除数据源 "${source.name}" 吗？`, danger: true }))) {
     return
   }
   
   try {
     await axios.delete(`/api/git-sources/${source.source_id}`)
-    alert('数据源已删除')
+    toastSuccess('数据源已删除')
     loadSources()
   } catch (error) {
     console.error('删除数据源失败:', error)
-    alert(error.response?.data?.detail || '删除数据源失败')
+    toastApiError(error, '删除数据源失败')
   }
 }
 
@@ -980,7 +983,7 @@ async function loadDockerfiles(sourceId, preserveChanges = false) {
     })
   } catch (error) {
     console.error('加载 Dockerfile 列表失败:', error)
-    alert('加载 Dockerfile 列表失败')
+    toastError('加载 Dockerfile 列表失败')
     dockerfileList.value = []
   } finally {
     loadingDockerfiles.value = false
@@ -1023,7 +1026,7 @@ function closeDockerfileEditor() {
 
 async function saveDockerfile() {
   if (!dockerfileForm.value.path || !dockerfileForm.value.content) {
-    alert('请填写 Dockerfile 路径和内容')
+    toastError('请填写 Dockerfile 路径和内容')
     return
   }
 
@@ -1056,18 +1059,18 @@ async function saveDockerfile() {
       dockerfileList.value.push(newItem)
     }
     
-    alert('Dockerfile 保存成功')
+    toastSuccess('Dockerfile 保存成功')
     closeDockerfileEditor()
     // 刷新数据源列表以更新 Dockerfile 数量
     loadSources()
   } catch (error) {
     console.error('保存 Dockerfile 失败:', error)
-    alert(error.response?.data?.detail || '保存 Dockerfile 失败')
+    toastApiError(error, '保存 Dockerfile 失败')
   }
 }
 
 async function deleteDockerfile(path) {
-  if (!confirm(`确定要删除 Dockerfile "${path}" 吗？`)) {
+  if (!(await showConfirm({ message: `确定要删除 Dockerfile "${path}" 吗？`, danger: true }))) {
     return
   }
 
@@ -1075,13 +1078,13 @@ async function deleteDockerfile(path) {
     await axios.delete(
       `/api/git-sources/${currentSource.value.source_id}/dockerfiles/${encodeURIComponent(path)}`
     )
-    alert('Dockerfile 已删除')
+    toastSuccess('Dockerfile 已删除')
     await loadDockerfiles(currentSource.value.source_id, true) // 保留更改状态
     // 刷新数据源列表以更新 Dockerfile 数量
     loadSources()
   } catch (error) {
     console.error('删除 Dockerfile 失败:', error)
-    alert(error.response?.data?.detail || '删除 Dockerfile 失败')
+    toastApiError(error, '删除 Dockerfile 失败')
   }
 }
 
@@ -1093,7 +1096,7 @@ async function scanDockerfiles() {
   const branch = selectedBranch.value || currentSource.value.default_branch || 'main'
   const branchText = branch ? `分支 "${branch}"` : '默认分支'
   
-  if (!confirm(`确定要扫描数据源 "${currentSource.value.name}" 的 Dockerfile 吗？\n\n这将从 Git 仓库的 ${branchText} 扫描所有 Dockerfile。`)) {
+  if (!(await showConfirm({ message: `确定要扫描数据源 "${currentSource.value.name}" 的 Dockerfile 吗？\n\n这将从 Git 仓库的 ${branchText} 扫描所有 Dockerfile。` }))) {
     return
   }
   
@@ -1144,11 +1147,11 @@ async function scanDockerfiles() {
       // 刷新数据源列表以更新 Dockerfile 数量
       loadSources()
     } else {
-      alert('扫描失败：' + (res.data.detail || '未知错误'))
+      toastError('扫描失败：' + (res.data.detail || '未知错误'))
     }
   } catch (error) {
     console.error('扫描 Dockerfile 失败:', error)
-    alert(error.response?.data?.detail || '扫描 Dockerfile 失败')
+    toastApiError(error, '扫描 Dockerfile 失败')
   } finally {
     scanningDockerfiles.value = false
   }
@@ -1218,7 +1221,7 @@ function closeCommitModal() {
 
 async function commitDockerfile() {
   if (!commitForm.value.branch) {
-    alert('请选择目标分支')
+    toastError('请选择目标分支')
     return
   }
   
@@ -1238,14 +1241,14 @@ async function commitDockerfile() {
     
     if (res.data.success) {
       if (res.data.no_changes) {
-        alert('没有更改需要提交')
+        toastInfo('没有更改需要提交')
         // 如果没有更改，重置差异状态
         const dockerfileItem = dockerfileList.value.find(item => item.path === committingDockerfilePath.value)
         if (dockerfileItem) {
           dockerfileItem.hasChanges = false
         }
       } else {
-        alert(`✅ ${res.data.message}`)
+        toastInfo(`✅ ${res.data.message}`)
         // 提交成功后，更新原始内容并重置差异状态
         const dockerfileItem = dockerfileList.value.find(item => item.path === committingDockerfilePath.value)
         if (dockerfileItem) {
@@ -1255,11 +1258,11 @@ async function commitDockerfile() {
       }
       closeCommitModal()
     } else {
-      alert('提交失败：' + (res.data.detail || '未知错误'))
+      toastError('提交失败：' + (res.data.detail || '未知错误'))
     }
   } catch (error) {
     console.error('提交 Dockerfile 失败:', error)
-    alert(error.response?.data?.detail || '提交 Dockerfile 失败')
+    toastApiError(error, '提交 Dockerfile 失败')
   } finally {
     committing.value = false
   }
