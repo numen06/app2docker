@@ -111,6 +111,16 @@
               variant="outline"
               class="min-h-11"
               :disabled="task.status === 'running'"
+              title="复制任务"
+              @click="openCopyDialog(task)"
+            >
+              <i class="fas fa-copy"></i>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="min-h-11"
+              :disabled="task.status === 'running'"
               @click="openEditDialog(task)"
             >
               <i class="fas fa-edit"></i>
@@ -212,6 +222,15 @@
                   size="sm"
                   variant="outline"
                   :disabled="task.status === 'running'"
+                  title="复制任务"
+                  @click="openCopyDialog(task)"
+                >
+                  <i class="fas fa-copy"></i>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  :disabled="task.status === 'running'"
                   @click="openEditDialog(task)"
                 >
                   <i class="fas fa-edit"></i>
@@ -241,7 +260,7 @@
 
     <FormDialog
       v-model="showDialog"
-      :title="editingTaskId ? '编辑迁移任务' : '新建镜像迁移'"
+      :title="dialogTitle"
       icon="fa-right-left"
       size="lg"
     >
@@ -482,6 +501,7 @@ const loading = ref(false);
 const saving = ref(false);
 const showDialog = ref(false);
 const editingTaskId = ref(null);
+const isCopyDialog = ref(false);
 const executingId = ref(null);
 const testingSource = ref(false);
 const sourceTestResult = ref(null);
@@ -511,6 +531,12 @@ function findRegistry(name) {
 
 const sourceReg = computed(() => findRegistry(form.value.source_registry_name));
 const targetReg = computed(() => findRegistry(form.value.target_registry_name));
+
+const dialogTitle = computed(() => {
+  if (editingTaskId.value) return "编辑迁移任务";
+  if (isCopyDialog.value) return "复制迁移任务";
+  return "新建镜像迁移";
+});
 
 const sourcePathPlaceholder = computed(() => "myapp/demo");
 const targetPathPlaceholder = computed(() => "myapp/demo");
@@ -867,29 +893,22 @@ function pickDefaultRegistries() {
   onSourceRegistryChange();
 }
 
-function openCreateDialog() {
-  if (!registries.value.length) {
-    toastError("请先在「镜像仓库」中配置至少一个仓库");
-    return;
-  }
-  editingTaskId.value = null;
-  form.value = emptyForm();
-  cronPresetKey.value = "custom";
-  sourceTestResult.value = null;
-  pickDefaultRegistries();
-  showDialog.value = true;
+function copyTaskName(name) {
+  const base = (name || "迁移任务").trim() || "迁移任务";
+  if (/\(副本\)\s*$/.test(base)) return base;
+  return `${base} (副本)`;
 }
 
-function openEditDialog(task) {
-  editingTaskId.value = task.task_id;
+function buildFormFromTask(task, { forCopy = false } = {}) {
   const srcRegObj = findRegistry(task.source_registry_name);
   const tgtRegObj = findRegistry(task.target_registry_name);
   const src = splitImageRef(task.source_image);
   const tgt = splitImageRef(task.target_image);
   const srcSplit = splitRepoPathAndPrefix(src.path, srcRegObj);
   const tgtSplit = splitRepoPathAndPrefix(tgt.path, tgtRegObj);
-  form.value = {
-    task_name: task.task_name || "",
+  const rawName = task.task_name || "";
+  return {
+    task_name: forCopy ? copyTaskName(rawName) : rawName,
     source_registry_name: task.source_registry_name || "",
     source_image_prefix: srcSplit.prefix,
     source_image_path: srcSplit.imagePath,
@@ -902,6 +921,39 @@ function openEditDialog(task) {
     schedule_enabled: !!task.schedule_enabled,
     execute_now: false,
   };
+}
+
+function openCreateDialog() {
+  if (!registries.value.length) {
+    toastError("请先在「镜像仓库」中配置至少一个仓库");
+    return;
+  }
+  editingTaskId.value = null;
+  isCopyDialog.value = false;
+  form.value = emptyForm();
+  cronPresetKey.value = "custom";
+  sourceTestResult.value = null;
+  pickDefaultRegistries();
+  showDialog.value = true;
+}
+
+function openEditDialog(task) {
+  editingTaskId.value = task.task_id;
+  isCopyDialog.value = false;
+  form.value = buildFormFromTask(task);
+  cronPresetKey.value = matchCronPresetKey(form.value.schedule_cron);
+  sourceTestResult.value = null;
+  showDialog.value = true;
+}
+
+function openCopyDialog(task) {
+  if (!registries.value.length) {
+    toastError("请先在「镜像仓库」中配置至少一个仓库");
+    return;
+  }
+  editingTaskId.value = null;
+  isCopyDialog.value = true;
+  form.value = buildFormFromTask(task, { forCopy: true });
   cronPresetKey.value = matchCronPresetKey(form.value.schedule_cron);
   sourceTestResult.value = null;
   showDialog.value = true;
@@ -945,11 +997,18 @@ async function saveTask() {
     } else {
       payload.execute_now = form.value.execute_now;
       await axios.post("/api/migration-tasks", payload);
-      toastSuccess(
-        form.value.execute_now ? "迁移任务已创建并开始执行" : "迁移任务已创建",
-      );
+      if (isCopyDialog.value) {
+        toastSuccess(
+          form.value.execute_now ? "已复制并开始执行" : "已复制迁移任务",
+        );
+      } else {
+        toastSuccess(
+          form.value.execute_now ? "迁移任务已创建并开始执行" : "迁移任务已创建",
+        );
+      }
     }
     showDialog.value = false;
+    isCopyDialog.value = false;
     await loadTasks();
   } catch (e) {
     toastApiError(e, "保存失败");
