@@ -4283,7 +4283,7 @@ logs/
 def _process_global_queued_tasks():
     """处理全局等待队列：在并发槽位可用时，启动最早的 pending 任务。"""
     from backend.database import get_db_session
-    from backend.models import ExportTask, Task
+    from backend.models import ExportTask, MigrationTask, Task
 
     queue_manager = GlobalTaskQueueManager()
 
@@ -4306,22 +4306,37 @@ def _process_global_queued_tasks():
                 .order_by(ExportTask.created_at.asc())
                 .first()
             )
+            next_migration = (
+                db.query(MigrationTask)
+                .filter(MigrationTask.status == "pending")
+                .order_by(MigrationTask.updated_at.asc())
+                .first()
+            )
 
-            if next_task and next_export:
-                task_time = next_task.created_at or datetime.max
-                export_time = next_export.created_at or datetime.max
-                if task_time <= export_time:
-                    candidate_kind = "task"
-                    candidate_id = next_task.task_id
-                else:
-                    candidate_kind = "export"
-                    candidate_id = next_export.task_id
-            elif next_task:
-                candidate_kind = "task"
-                candidate_id = next_task.task_id
-            elif next_export:
-                candidate_kind = "export"
-                candidate_id = next_export.task_id
+            candidates = []
+            if next_task:
+                candidates.append(
+                    ("task", next_task.task_id, next_task.created_at or datetime.max)
+                )
+            if next_export:
+                candidates.append(
+                    (
+                        "export",
+                        next_export.task_id,
+                        next_export.created_at or datetime.max,
+                    )
+                )
+            if next_migration:
+                candidates.append(
+                    (
+                        "migration",
+                        next_migration.task_id,
+                        next_migration.updated_at or datetime.max,
+                    )
+                )
+            if candidates:
+                candidates.sort(key=lambda x: x[2])
+                candidate_kind, candidate_id, _ = candidates[0]
         finally:
             db.close()
 
@@ -4332,8 +4347,12 @@ def _process_global_queued_tasks():
             nonlocal started
             if candidate_kind == "task":
                 started = BuildTaskManager().start_pending_task(candidate_id)
-            else:
+            elif candidate_kind == "export":
                 started = ExportTaskManager().start_pending_task(candidate_id)
+            else:
+                from backend.migration_manager import MigrationTaskManager
+
+                started = MigrationTaskManager().start_pending_task(candidate_id)
 
         can_start = queue_manager.start_if_slot_available(_starter)
         if not can_start:

@@ -163,6 +163,22 @@ def require_export_task_in_team(
     return task
 
 
+def require_migration_task_in_team(
+    db: Session, user_id: str, task_id: str, team_id: str
+):
+    from backend.models import MigrationTask
+
+    resolve_team_scope(db, user_id, team_id)
+    task = db.query(MigrationTask).filter(MigrationTask.task_id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if getattr(task, "team_id", None) and task.team_id != team_id:
+        raise HTTPException(status_code=403, detail="无权访问该团队的镜像迁移任务")
+    if task.team_id is None:
+        raise HTTPException(status_code=403, detail="无权访问该团队的镜像迁移任务")
+    return task
+
+
 def require_host_in_team(db: Session, user_id: str, host_id: str, team_id: str) -> Host:
     resolve_team_scope(db, user_id, team_id)
     host = db.query(Host).filter(Host.host_id == host_id).first()

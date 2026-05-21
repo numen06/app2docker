@@ -7,6 +7,7 @@
 MENU_DASHBOARD = "menu.dashboard"
 MENU_BUILD = "menu.build"
 MENU_EXPORT = "menu.export"
+MENU_MIGRATION = "menu.migration"
 MENU_TASKS = "menu.tasks"
 MENU_PIPELINE = "menu.pipeline"
 MENU_DATASOURCE = "menu.datasource"
@@ -23,6 +24,7 @@ ALL_MENU_PERMISSIONS = [
     MENU_DASHBOARD,
     MENU_BUILD,
     MENU_EXPORT,
+    MENU_MIGRATION,
     MENU_TASKS,
     MENU_PIPELINE,
     MENU_DATASOURCE,
@@ -40,6 +42,7 @@ PERMISSION_NAMES = {
     MENU_DASHBOARD: "仪表盘",
     MENU_BUILD: "镜像构建",
     MENU_EXPORT: "导出镜像",
+    MENU_MIGRATION: "镜像迁移",
     MENU_TASKS: "任务管理",
     MENU_PIPELINE: "流水线",
     MENU_DATASOURCE: "数据源",

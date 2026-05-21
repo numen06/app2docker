@@ -311,6 +311,12 @@ async function saveRegistry() {
     return;
   }
 
+  const teamId = teamStore.activeTeamIdForApi || teamStore.ensureActiveTeam();
+  if (!teamId) {
+    toastError("请先在顶部选择当前团队");
+    return;
+  }
+
   savingRegistries.value = true;
   try {
     const passwordUnchanged = registryForm.value.password === "******";
@@ -332,7 +338,7 @@ async function saveRegistry() {
     } else {
       await axios.post("/api/registries", {
         ...payload,
-        team_id: teamStore.activeTeamId,
+        team_id: teamId,
       });
     }
     await loadRegistries();
@@ -372,7 +378,10 @@ async function testCurrentRegistryLogin() {
     if (withAuth) {
       payload.password = registryForm.value.password;
     }
-    const res = await axios.post("/api/registries/test", payload);
+    const teamId = teamStore.activeTeamIdForApi || teamStore.ensureActiveTeam();
+    const res = await axios.post("/api/registries/test", payload, {
+      params: teamId ? { team_id: teamId } : {},
+    });
     registryTestResult.value["current"] = {
       success: res.data.success,
       message: res.data.message,
@@ -417,12 +426,17 @@ async function testRegistryLogin(index) {
   registryTestResult.value[index] = null;
 
   try {
-    const res = await axios.post("/api/registries/test", {
-      name: registry.name || "",
-      registry_id: registry.registry_id || "",
-      registry: registry.registry,
-      username: registry.username || "",
-    });
+    const teamId = teamStore.activeTeamIdForApi || teamStore.ensureActiveTeam();
+    const res = await axios.post(
+      "/api/registries/test",
+      {
+        name: registry.name || "",
+        registry_id: registry.registry_id || "",
+        registry: registry.registry,
+        username: registry.username || "",
+      },
+      { params: teamId ? { team_id: teamId } : {} },
+    );
     registryTestResult.value[index] = {
       success: res.data.success,
       message: res.data.message,

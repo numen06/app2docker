@@ -176,6 +176,9 @@ def _run_init_db_migrations():
     # 迁移：默认团队（去重 + 确保存在 + 一次性历史 team_id 回填）
     migrate_backfill_default_team()
 
+    # 迁移：镜像迁移任务表与菜单权限
+    migrate_add_migration_tasks_table()
+
     print(f"✅ 数据库初始化完成: {DB_FILE}")
 
 
@@ -650,6 +653,7 @@ def migrate_add_user_system():
                 {"code": "menu.dashboard", "name": "仪表盘", "category": "menu"},
                 {"code": "menu.build", "name": "镜像构建", "category": "menu"},
                 {"code": "menu.export", "name": "导出镜像", "category": "menu"},
+                {"code": "menu.migration", "name": "镜像迁移", "category": "menu"},
                 {"code": "menu.tasks", "name": "任务管理", "category": "menu"},
                 {"code": "menu.pipeline", "name": "流水线", "category": "menu"},
                 {"code": "menu.datasource", "name": "数据源", "category": "menu"},
@@ -2098,6 +2102,78 @@ def migrate_dedupe_default_teams():
         print(f"⚠️ 默认团队去重失败: {e}")
     finally:
         conn.close()
+
+
+def migrate_add_migration_tasks_table():
+    """迁移：镜像迁移任务表及 menu.migration 权限（已有库升级）。"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        from backend.models import Base, MigrationTask, Permission, Role, RolePermission
+
+        Base.metadata.create_all(bind=engine, tables=[MigrationTask.__table__])
+
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(migration_tasks)")
+            cols = {row[1] for row in cursor.fetchall()}
+            if "source_registry_name" not in cols:
+                cursor.execute(
+                    "ALTER TABLE migration_tasks ADD COLUMN source_registry_name VARCHAR(255) DEFAULT ''"
+                )
+            if "target_registry_name" not in cols:
+                cursor.execute(
+                    "ALTER TABLE migration_tasks ADD COLUMN target_registry_name VARCHAR(255) DEFAULT ''"
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ 创建 migration_tasks 表失败: {e}")
+        return
+
+    db = SessionLocal()
+    try:
+        perm = db.query(Permission).filter(Permission.code == "menu.migration").first()
+        if not perm:
+            perm = Permission(
+                permission_id=str(uuid.uuid4()),
+                code="menu.migration",
+                name="镜像迁移",
+                category="menu",
+            )
+            db.add(perm)
+            db.commit()
+            print("✅ 创建权限: menu.migration")
+        else:
+            db.commit()
+
+        for role_name in ("admin", "user"):
+            role = db.query(Role).filter(Role.name == role_name).first()
+            if not role:
+                continue
+            existing = (
+                db.query(RolePermission)
+                .filter(
+                    RolePermission.role_id == role.role_id,
+                    RolePermission.permission_id == perm.permission_id,
+                )
+                .first()
+            )
+            if not existing:
+                db.add(
+                    RolePermission(
+                        role_id=role.role_id, permission_id=perm.permission_id
+                    )
+                )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ 镜像迁移权限迁移失败: {e}")
+    finally:
+        db.close()
 
 
 def close_db():

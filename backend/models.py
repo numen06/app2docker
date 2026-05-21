@@ -401,6 +401,45 @@ class ExportTask(Base):
     )
 
 
+class MigrationTask(Base):
+    """镜像迁移任务表（跨仓库 pull + push）"""
+
+    __tablename__ = "migration_tasks"
+
+    task_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    task_name = Column(String(255), nullable=False, default="")
+    source_registry = Column(String(255), default="")
+    source_registry_name = Column(String(255), default="")
+    source_username = Column(String(255), default="")
+    source_password = Column(Text, default="")
+    source_image = Column(String(512), nullable=False, default="")
+    target_registry = Column(String(255), default="")
+    target_registry_name = Column(String(255), default="")
+    target_username = Column(String(255), default="")
+    target_password = Column(Text, default="")
+    target_image = Column(String(512), nullable=False, default="")
+    status = Column(
+        String(50), default="idle"
+    )  # idle, pending, running, completed, failed, stopped
+    schedule_cron = Column(String(128), default="")
+    schedule_enabled = Column(Boolean, default=False)
+    next_run_time = Column(DateTime, nullable=True)
+    run_count = Column(Integer, default=0)
+    last_run_at = Column(DateTime, nullable=True)
+    last_run_status = Column(String(50), default="")
+    error = Column(Text, default="")
+    team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_migration_task_status", "status"),
+        Index("idx_migration_task_team", "team_id"),
+        Index("idx_migration_task_schedule", "schedule_enabled"),
+    )
+
+
 class PipelineTaskHistory(Base):
     """流水线任务历史表"""
 

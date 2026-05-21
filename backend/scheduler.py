@@ -51,7 +51,8 @@ class PipelineScheduler:
         while self.running:
             try:
                 self._check_pipelines()
-                
+                self._check_migration_schedules()
+
                 current_time = time.time()
                 
                 # 定期检查Agent主机离线状态
@@ -214,6 +215,15 @@ class PipelineScheduler:
             import traceback
             traceback.print_exc()
     
+    def _check_migration_schedules(self):
+        """检查并执行到期的镜像迁移定时任务"""
+        try:
+            from backend.migration_manager import MigrationTaskManager
+
+            MigrationTaskManager().check_scheduled_migrations()
+        except Exception as e:
+            print(f"❌ 镜像迁移定时检查失败: {e}")
+
     def _check_agent_hosts(self):
         """检查并更新离线Agent主机"""
         try:

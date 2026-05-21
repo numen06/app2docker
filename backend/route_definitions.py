@@ -84,12 +84,14 @@ from backend.team_permissions import get_user_id_by_username, require_team_membe
 from backend.team_scope import (
     get_effective_team_id_for_task,
     require_export_task_in_team,
+    require_migration_task_in_team,
     require_host_in_team,
     require_resource_package_in_team,
     require_task_in_team,
     resolve_team_scope,
     resolve_team_scope_for_existing_resource,
     resolve_team_scope_from_request,
+    resolve_team_scope_from_request_with_fallback,
     task_belongs_to_team,
 )
 import jwt
@@ -237,6 +239,48 @@ class RegistryUpdateRequest(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     active: Optional[bool] = None
+
+
+class MigrationTaskCreateRequest(BaseModel):
+    task_name: str = ""
+    source_registry: str = ""
+    source_registry_name: str = ""
+    source_username: str = ""
+    source_password: str = ""
+    source_image: str
+    target_registry: str = ""
+    target_registry_name: str = ""
+    target_username: str = ""
+    target_password: str = ""
+    target_image: str
+    schedule_cron: str = ""
+    schedule_enabled: bool = False
+    execute_now: bool = False
+
+
+class MigrationTaskUpdateRequest(BaseModel):
+    task_name: Optional[str] = None
+    source_registry: Optional[str] = None
+    source_registry_name: Optional[str] = None
+    source_username: Optional[str] = None
+    source_password: Optional[str] = None
+    source_image: Optional[str] = None
+    target_registry: Optional[str] = None
+    target_registry_name: Optional[str] = None
+    target_username: Optional[str] = None
+    target_password: Optional[str] = None
+    target_image: Optional[str] = None
+    schedule_cron: Optional[str] = None
+    schedule_enabled: Optional[bool] = None
+
+
+class MigrationToggleScheduleRequest(BaseModel):
+    enabled: Optional[bool] = None
+
+
+class MigrationTestSourceImageRequest(BaseModel):
+    source_registry_name: str
+    source_image: str
 
 
 @router.get("/public/version")
@@ -1584,12 +1628,13 @@ async def get_registries(
 
 @router.post("/registries")
 async def create_registry_entry(
-    request: RegistryCreateRequest, http_request: Request
+    request: RegistryCreateRequest,
+    http_request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
 ):
     """创建镜像仓库"""
     try:
         from backend.registry_manager import create_registry
-        from backend.team_permissions import require_team_member
 
         username = require_auth(http_request)
         user_id = _resolve_user_id(http_request)
@@ -1597,10 +1642,10 @@ async def create_registry_entry(
 
         db = get_db_session()
         try:
-            scoped_team_id = resolve_team_scope(
-                db, user_id, request.team_id
+            effective_team_id = team_id or request.team_id
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, effective_team_id
             )
-            require_team_member(db, scoped_team_id, user_id)
         finally:
             db.close()
 
@@ -1708,6 +1753,67 @@ def _registry_v2_url(registry_host: str) -> str:
     return f"{base}/v2/"
 
 
+def _test_registry_auth_http(
+    registry_host: str, username: str, password: str
+) -> dict:
+    """通过 Registry HTTP API v2 验证账号密码（不依赖本地 Docker）。"""
+    import base64
+    import urllib.error
+    import urllib.request
+
+    url = _registry_v2_url(registry_host)
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode(
+        "ascii"
+    )
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Authorization", f"Basic {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if 200 <= resp.status < 300:
+                return {
+                    "success": True,
+                    "message": f"认证成功！Registry: {registry_host or 'docker.io'}",
+                    "details": f"HTTP {resp.status} {url}",
+                }
+            return {
+                "success": False,
+                "message": f"仓库响应异常: HTTP {resp.status}",
+                "details": url,
+            }
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return {
+                "success": False,
+                "message": "认证失败，请检查用户名和密码",
+                "details": f"HTTP 401 {url}",
+                "suggestions": [
+                    "确认账号密码与仓库后台一致",
+                    "若使用访问令牌，请将令牌填入密码字段",
+                ],
+            }
+        if e.code in (200, 204):
+            return {
+                "success": True,
+                "message": f"认证成功！Registry: {registry_host or 'docker.io'}",
+                "details": f"HTTP {e.code}",
+            }
+        return {
+            "success": False,
+            "message": f"仓库探测失败: HTTP {e.code}",
+            "details": str(e),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"无法连接仓库: {e}",
+            "details": url,
+            "suggestions": [
+                "请检查 Registry 地址是否正确",
+                "确认本机网络可访问该仓库",
+            ],
+        }
+
+
 def _test_registry_connectivity(registry_host: str) -> dict:
     """探测 Registry 是否可达（无需认证）"""
     import urllib.error
@@ -1757,7 +1863,11 @@ def _test_registry_connectivity(registry_host: str) -> dict:
 
 
 @router.post("/registries/test")
-async def test_registry_login(request: TestRegistryRequest, http_request: Request):
+async def test_registry_login(
+    request: TestRegistryRequest,
+    http_request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
     """测试 Registry：有账号密码时验证登录；无认证时探测仓库是否可达。
 
     注意：
@@ -1769,7 +1879,7 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
     """
     try:
         # 验证系统 token（需要系统认证才能使用此功能）
-        require_auth(http_request)
+        username = require_auth(http_request)
 
         registry_host = request.registry
         registry_username = (request.username or "").strip()
@@ -1783,13 +1893,12 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
                 resolve_registry,
             )
 
-            user_id = _resolve_user_id(http_request)
             from backend.database import get_db_session
 
             db = get_db_session()
             try:
-                scoped_team_id = resolve_team_scope_from_request(
-                    db, require_auth(http_request), None
+                scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                    db, username, team_id
                 )
             finally:
                 db.close()
@@ -1817,56 +1926,43 @@ async def test_registry_login(request: TestRegistryRequest, http_request: Reques
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
 
-        # 有认证：通过 Docker 客户端登录验证
+        # 有认证：优先 Docker login；无客户端时改用 Registry HTTP API
         from backend.handlers import docker_builder
 
-        if not docker_builder or not docker_builder.is_available():
-            return JSONResponse(
-                {"success": False, "message": "Docker 不可用，请检查 Docker 连接"},
-                status_code=400,
-            )
-
         password = test_password
+        use_docker_login = (
+            docker_builder
+            and docker_builder.is_available()
+            and hasattr(docker_builder, "client")
+            and docker_builder.client
+        )
 
-        # 构建auth_config
-        auth_config = {
-            "username": registry_username,
-            "password": password,
-        }
-
-        # 设置serveraddress
-        if registry_host and registry_host != "docker.io":
-            auth_config["serveraddress"] = registry_host
-        else:
-            auth_config["serveraddress"] = "https://index.docker.io/v1/"
+        if not use_docker_login:
+            result = _test_registry_auth_http(
+                registry_host, registry_username, password
+            )
+            status_code = 200 if result.get("success") else 400
+            return JSONResponse(result, status_code=status_code)
 
         try:
-            # 尝试登录
-            if hasattr(docker_builder, "client") and docker_builder.client:
-                login_registry = (
-                    registry_host
-                    if registry_host and registry_host != "docker.io"
-                    else None
-                )
-                login_result = docker_builder.client.login(
-                    username=registry_username,
-                    password=password,
-                    registry=login_registry,
-                )
+            login_registry = (
+                registry_host
+                if registry_host and registry_host != "docker.io"
+                else None
+            )
+            login_result = docker_builder.client.login(
+                username=registry_username,
+                password=password,
+                registry=login_registry,
+            )
 
-                # 登录成功
-                return JSONResponse(
-                    {
-                        "success": True,
-                        "message": f"登录成功！Registry: {registry_host or 'docker.io'}",
-                        "details": str(login_result) if login_result else "认证通过",
-                    }
-                )
-            else:
-                return JSONResponse(
-                    {"success": False, "message": "Docker 客户端不可用"},
-                    status_code=400,
-                )
+            return JSONResponse(
+                {
+                    "success": True,
+                    "message": f"登录成功！Registry: {registry_host or 'docker.io'}",
+                    "details": str(login_result) if login_result else "认证通过",
+                }
+            )
         except Exception as login_error:
             error_msg = str(login_error)
 
@@ -4609,6 +4705,339 @@ async def delete_export_task(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除任务失败: {str(e)}")
+
+
+# === 镜像迁移 ===
+@router.get("/migration-tasks")
+async def list_migration_tasks(
+    request: Request,
+    team_id: Optional[str] = Query(None, description="按团队过滤"),
+    status: Optional[str] = Query(None, description="状态过滤"),
+):
+    """列出镜像迁移任务"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+        finally:
+            db.close()
+        manager = MigrationTaskManager()
+        tasks = manager.list_tasks(team_id=scoped_team_id, status=status)
+        return JSONResponse({"tasks": tasks})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取迁移任务列表失败: {str(e)}")
+
+
+@router.get("/migration-tasks/{task_id}")
+async def get_migration_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None),
+):
+    """获取镜像迁移任务详情"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        db = get_db_session()
+        try:
+            user_id = _resolve_user_id(request)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_migration_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
+        task = MigrationTaskManager().get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        return JSONResponse({"task": task})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取任务详情失败: {str(e)}")
+
+
+@router.post("/migration-tasks/test-source-image")
+async def test_migration_source_image(
+    request: Request,
+    body: MigrationTestSourceImageRequest,
+    team_id: Optional[str] = Query(None),
+):
+    """检测源镜像在远程仓库是否存在（非仓库连通性测试）"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import test_source_image_availability
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, team_id
+            )
+            user_id = get_user_id_by_username(db, username)
+        finally:
+            db.close()
+
+        result = test_source_image_availability(
+            body.source_image,
+            body.source_registry_name,
+            scoped_team_id,
+            user_id,
+        )
+        return JSONResponse(result, status_code=200)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"检测源镜像失败: {str(e)}")
+
+
+@router.post("/migration-tasks")
+async def create_migration_task(
+    request: Request,
+    body: MigrationTaskCreateRequest,
+    team_id: Optional[str] = Query(None),
+):
+    """创建镜像迁移任务"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, team_id or body.team_id
+            )
+            user_id = get_user_id_by_username(db, username)
+        finally:
+            db.close()
+
+        manager = MigrationTaskManager()
+        task_id = manager.create_task(
+            task_name=body.task_name,
+            source_image=body.source_image,
+            target_image=body.target_image,
+            source_registry=body.source_registry,
+            source_registry_name=body.source_registry_name,
+            source_username=body.source_username,
+            source_password=body.source_password,
+            target_registry=body.target_registry,
+            target_registry_name=body.target_registry_name,
+            target_username=body.target_username,
+            target_password=body.target_password,
+            schedule_cron=body.schedule_cron,
+            schedule_enabled=body.schedule_enabled,
+            team_id=scoped_team_id,
+            created_by=user_id,
+            execute_now=body.execute_now,
+        )
+        OperationLogger.log(
+            username,
+            "create_migration_task",
+            {"task_id": task_id, "source_image": body.source_image},
+        )
+        return JSONResponse(
+            {"success": True, "task_id": task_id, "task": manager.get_task(task_id)}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建迁移任务失败: {str(e)}")
+
+
+@router.put("/migration-tasks/{task_id}")
+async def update_migration_task(
+    task_id: str,
+    request: Request,
+    body: MigrationTaskUpdateRequest,
+    team_id: Optional[str] = Query(None),
+):
+    """更新镜像迁移任务配置"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_migration_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
+
+        payload = body.model_dump(exclude_unset=True)
+        if not MigrationTaskManager().update_task(task_id, **payload):
+            raise HTTPException(status_code=404, detail="任务不存在")
+        OperationLogger.log(username, "update_migration_task", {"task_id": task_id})
+        return JSONResponse(
+            {
+                "success": True,
+                "task": MigrationTaskManager().get_task(task_id),
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新迁移任务失败: {str(e)}")
+
+
+@router.delete("/migration-tasks/{task_id}")
+async def delete_migration_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None),
+):
+    """删除镜像迁移任务"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_migration_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
+
+        task = MigrationTaskManager().get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        if task.get("status") == "running":
+            raise HTTPException(status_code=400, detail="任务运行中，无法删除")
+
+        if not MigrationTaskManager().delete_task(task_id):
+            raise HTTPException(status_code=400, detail="无法删除任务")
+
+        OperationLogger.log(username, "delete_migration_task", {"task_id": task_id})
+        return JSONResponse({"success": True, "message": "任务已删除"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除迁移任务失败: {str(e)}")
+
+
+@router.post("/migration-tasks/{task_id}/execute")
+async def execute_migration_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None),
+):
+    """手动触发镜像迁移"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_migration_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
+
+        if not MigrationTaskManager().execute_task(task_id, trigger_source="manual"):
+            raise HTTPException(
+                status_code=400,
+                detail="任务不存在或正在执行中",
+            )
+        OperationLogger.log(username, "execute_migration_task", {"task_id": task_id})
+        return JSONResponse(
+            {
+                "success": True,
+                "message": "迁移任务已启动",
+                "task": MigrationTaskManager().get_task(task_id),
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动迁移任务失败: {str(e)}")
+
+
+@router.post("/migration-tasks/{task_id}/stop")
+async def stop_migration_task(
+    task_id: str,
+    request: Request,
+    team_id: Optional[str] = Query(None),
+):
+    """停止镜像迁移任务"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_migration_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
+
+        if not MigrationTaskManager().stop_task(task_id):
+            raise HTTPException(
+                status_code=400,
+                detail="任务不存在或无法停止",
+            )
+        OperationLogger.log(username, "stop_migration_task", {"task_id": task_id})
+        return JSONResponse({"success": True, "message": "任务已停止"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"停止迁移任务失败: {str(e)}")
+
+
+@router.post("/migration-tasks/{task_id}/toggle-schedule")
+async def toggle_migration_schedule(
+    task_id: str,
+    request: Request,
+    body: MigrationToggleScheduleRequest = Body(default=MigrationToggleScheduleRequest()),
+    team_id: Optional[str] = Query(None),
+):
+    """启用/禁用镜像迁移定时"""
+    try:
+        from backend.database import get_db_session
+        from backend.migration_manager import MigrationTaskManager
+
+        username = require_auth(request)
+        db = get_db_session()
+        try:
+            user_id = get_user_id_by_username(db, username)
+            scoped_team_id = resolve_team_scope(db, user_id, team_id)
+            require_migration_task_in_team(db, user_id, task_id, scoped_team_id)
+        finally:
+            db.close()
+
+        if not MigrationTaskManager().toggle_schedule(task_id, enabled=body.enabled):
+            raise HTTPException(status_code=404, detail="任务不存在")
+        task = MigrationTaskManager().get_task(task_id)
+        OperationLogger.log(
+            username,
+            "toggle_migration_schedule",
+            {"task_id": task_id, "schedule_enabled": task.get("schedule_enabled")},
+        )
+        return JSONResponse({"success": True, "task": task})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"切换定时失败: {str(e)}")
 
 
 # === Compose 相关 ===

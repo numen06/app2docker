@@ -473,6 +473,9 @@
             <ExportPanel
               v-if="activeTab === 'export' && hasPermission('menu.export')"
             />
+            <ImageMigrationPanel
+              v-if="activeTab === 'image-migration' && hasPermission('menu.migration')"
+            />
             <TemplatePanel
               v-if="activeTab === 'template' && hasPermission('menu.template')"
             />
@@ -725,6 +728,7 @@ import DataSourcePanel from "@/components/DataSourcePanel.vue";
 import DeployTaskManager from "@/components/DeployTaskManager.vue";
 import DockerManager from "@/components/DockerManager.vue";
 import ExportPanel from "@/components/ExportPanel.vue";
+import ImageMigrationPanel from "@/components/ImageMigrationPanel.vue";
 import OperationLogs from "@/components/OperationLogs.vue";
 import PipelinePanel from "@/components/PipelinePanel.vue";
 import PipelineConfigPage from "@/pages/PipelineConfigPage.vue";
@@ -761,6 +765,12 @@ const SIDEBAR_GROUPS = [
         perm: "menu.export",
         label: "导出镜像",
         icon: "fa-file-export",
+      },
+      {
+        id: "image-migration",
+        perm: "menu.migration",
+        label: "镜像迁移",
+        icon: "fa-right-left",
       },
       {
         id: "tasks",
@@ -861,6 +871,7 @@ const PAGE_TITLES = {
   dashboard: "仪表盘",
   "step-build": "镜像构建",
   export: "导出镜像",
+  "image-migration": "镜像迁移",
   tasks: "任务管理",
   pipeline: "流水线",
   datasource: "数据源",
