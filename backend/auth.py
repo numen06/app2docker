@@ -124,7 +124,7 @@ def clear_auth_cookie(response: Response) -> None:
 
 
 def extract_jwt_token_from_request(request: Request) -> str:
-    """优先 Cookie，再 Authorization Bearer。"""
+    """优先 Cookie，再 Authorization Bearer，最后 Query access_token（供浏览器直链下载）。"""
     raw = request.cookies.get(AUTH_COOKIE_NAME)
     if raw and str(raw).strip():
         return str(raw).strip()
@@ -139,7 +139,14 @@ def extract_jwt_token_from_request(request: Request) -> str:
     auth_header_lower = auth_header.lower()
     if auth_header_lower.startswith("bearer "):
         return auth_header[7:].strip()
-    return auth_header.strip()
+    bare = auth_header.strip()
+    if bare:
+        return bare
+
+    q = request.query_params.get("access_token")
+    if q and str(q).strip():
+        return str(q).strip()
+    return ""
 
 
 def verify_auth_from_request(request: Request) -> dict:

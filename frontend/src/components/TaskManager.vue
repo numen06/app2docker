@@ -816,6 +816,10 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import axios from "axios";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { copyToClipboard } from "../utils/clipboard.js";
+import {
+  exportImageArchiveFilename,
+  triggerBrowserDownload,
+} from "@/utils/download.js";
 import { Codemirror } from "vue-codemirror";
 import BuildTaskLogModal from "@/components/BuildTaskLogModal.vue";
 import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
@@ -1506,41 +1510,24 @@ async function saveAsPipeline(task) {
   }
 }
 
-async function downloadTask(task) {
+function downloadTask(task) {
   if (downloading.value) return;
 
   downloading.value = task.task_id;
-
   try {
-    const res = await axios.get(`/api/export-tasks/${task.task_id}/download`, {
-      responseType: "blob",
-    });
-
-    const image = (task.image || "image").replace(/\//g, "_");
-    const tag = task.tag || "latest";
-    const isCompressed =
-      task.compress &&
-      ["gzip", "gz", "tgz", "1", "true", "yes"].includes(
-        String(task.compress).toLowerCase()
-      );
-    const ext = isCompressed ? ".tar.gz" : ".tar";
-    const filename = `${image}-${tag}${ext}`;
-
-    const url = URL.createObjectURL(res.data);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerBrowserDownload(
+      `/api/export-tasks/${task.task_id}/download`,
+      exportImageArchiveFilename(task)
+    );
   } catch (err) {
     console.error("下载失败:", err);
     toastApiError(err, "下载失败");
-  } finally {
     downloading.value = null;
+    return;
   }
+  setTimeout(() => {
+    downloading.value = null;
+  }, 500);
 }
 
 async function stopTask(task) {

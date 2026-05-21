@@ -107,6 +107,10 @@ import { showConfirm } from "@/composables/useConfirm";
 
 import axios from "axios";
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import {
+  exportImageArchiveFilename,
+  triggerBrowserDownload,
+} from "@/utils/download.js";
 import PageToolbar from "@/components/ui/PageToolbar.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
@@ -173,26 +177,22 @@ async function loadTasks() {
   }
 }
 
-async function downloadTask(task) {
+function downloadTask(task) {
   if (downloading.value) return;
   downloading.value = task.task_id;
   try {
-    const res = await axios.get(`/api/export-tasks/${task.task_id}/download`, { responseType: "blob" });
-    const url = URL.createObjectURL(res.data);
-    const a = document.createElement("a");
-    a.href = url;
-    const image = task.image.replace(/\//g, "_");
-    const ext = task.compress === "gzip" ? ".tar.gz" : ".tar";
-    a.download = `${image}-${task.tag}${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerBrowserDownload(
+      `/api/export-tasks/${task.task_id}/download`,
+      exportImageArchiveFilename(task)
+    );
   } catch (err) {
     toastApiError(err, "下载失败");
-  } finally {
     downloading.value = null;
+    return;
   }
+  setTimeout(() => {
+    downloading.value = null;
+  }, 500);
 }
 
 async function deleteTask(task) {
