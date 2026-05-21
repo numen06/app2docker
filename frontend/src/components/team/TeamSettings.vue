@@ -188,7 +188,6 @@
         v-model="inviteOpen"
         :team-id="teamStore.activeTeamId"
         :allow-admin-invite="teamStore.canAssignTeamAdmin"
-        :allow-owner-invite="teamStore.isTeamOwner"
         @invited="onInvited"
       />
     </template>

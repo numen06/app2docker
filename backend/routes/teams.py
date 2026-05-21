@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -107,6 +107,17 @@ class InviteCreatedOut(BaseModel):
     expires_at: datetime
 
 
+class InvitePreviewOut(BaseModel):
+    team_id: str
+    team_name: str
+    invite_role: str
+    expires_at: datetime | None = None
+    already_member: bool = False
+    current_role: str | None = None
+    status: str
+    can_renew_as_admin: bool = False
+
+
 class MenuPermissionsOut(BaseModel):
     team_id: str
     role: str
@@ -138,6 +149,75 @@ def _team_to_out(t: Team) -> TeamOut:
     )
 
 
+def _invitation_to_out(inv: TeamInvitation) -> InviteCreatedOut:
+    return InviteCreatedOut(
+        invitation_id=inv.invitation_id,
+        token=inv.token,
+        email=inv.email or None,
+        role=inv.role,
+        expires_at=inv.expires_at,
+    )
+
+
+def _assert_invite_role_allowed(invite_role: str, actor: TeamMember) -> None:
+    if invite_role == "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="不能通过邀请设置所有者，请使用转移所有权",
+        )
+    if invite_role == "admin" and actor.role != "owner":
+        raise HTTPException(status_code=403, detail="仅所有者可邀请管理员")
+
+
+def _can_renew_as_admin(db: Session, team_id: str, user_id: str) -> bool:
+    member = get_team_member(db, team_id, user_id)
+    return member is not None and member.role in ("owner", "admin")
+
+
+def _find_pending_invitation(
+    db: Session, team_id: str, invite_role: str
+) -> TeamInvitation | None:
+    return (
+        db.query(TeamInvitation)
+        .filter(
+            TeamInvitation.team_id == team_id,
+            TeamInvitation.role == invite_role,
+            TeamInvitation.accepted_at.is_(None),
+        )
+        .order_by(TeamInvitation.expires_at.desc())
+        .first()
+    )
+
+
+def _is_invitation_valid(inv: TeamInvitation) -> bool:
+    if not inv.expires_at:
+        return False
+    return inv.expires_at >= datetime.now()
+
+
+def _issue_team_invitation(
+    db: Session,
+    team_id: str,
+    invite_role: str,
+    invited_by: str,
+    email: str | None = None,
+) -> TeamInvitation:
+    invite_email = (email or "").strip() if email else ""
+    inv = TeamInvitation(
+        invitation_id=str(uuid.uuid4()),
+        team_id=team_id,
+        email=invite_email,
+        role=invite_role,
+        token=secrets.token_urlsafe(32),
+        invited_by=invited_by,
+        expires_at=datetime.now() + timedelta(days=7),
+    )
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return inv
+
+
 @router.get("/me", response_model=List[TeamMembershipOut])
 def list_my_teams(request: Request, db: Session = Depends(get_db)):
     username = require_auth(request)
@@ -152,6 +232,56 @@ def list_my_teams(request: Request, db: Session = Depends(get_db)):
         TeamMembershipOut(team=_team_to_out(team), role=member.role)
         for member, team in rows
     ]
+
+
+@router.get("/invitations/{token}", response_model=InvitePreviewOut)
+def preview_invitation(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    inv = (
+        db.query(TeamInvitation)
+        .filter(TeamInvitation.token == token)
+        .first()
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="邀请不存在或已失效")
+    team = db.query(Team).filter(Team.team_id == inv.team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="团队不存在")
+    existing = get_team_member(db, inv.team_id, user_id)
+    invite_role = _normalize_role(inv.role)
+    can_renew = _can_renew_as_admin(db, inv.team_id, user_id)
+    if existing:
+        return InvitePreviewOut(
+            team_id=team.team_id,
+            team_name=team.name,
+            invite_role=invite_role,
+            expires_at=inv.expires_at,
+            already_member=True,
+            current_role=existing.role,
+            status="valid",
+            can_renew_as_admin=can_renew,
+        )
+    if inv.accepted_at is not None:
+        status = "used"
+    elif not _is_invitation_valid(inv):
+        status = "expired"
+    else:
+        status = "valid"
+    return InvitePreviewOut(
+        team_id=team.team_id,
+        team_name=team.name,
+        invite_role=invite_role,
+        expires_at=inv.expires_at,
+        already_member=False,
+        current_role=None,
+        status=status,
+        can_renew_as_admin=can_renew,
+    )
 
 
 @router.post(
@@ -325,6 +455,28 @@ def delete_team(
     return None
 
 
+@router.get("/{team_id}/invite/current", response_model=InviteCreatedOut)
+def get_current_team_invite(
+    team_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    role: str = Query("member", description="邀请加入后的角色"),
+):
+    username = require_auth(request)
+    user_id = get_user_id_by_username(db, username)
+    actor = require_team_admin(db, team_id, user_id)
+    invite_role = _normalize_role(role)
+    _assert_invite_role_allowed(invite_role, actor)
+    team = db.query(Team).filter(Team.team_id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="团队不存在")
+    pending = _find_pending_invitation(db, team_id, invite_role)
+    if pending and _is_invitation_valid(pending):
+        return _invitation_to_out(pending)
+    inv = _issue_team_invitation(db, team_id, invite_role, user_id, None)
+    return _invitation_to_out(inv)
+
+
 @router.post("/{team_id}/invite", response_model=InviteCreatedOut)
 def invite_member(
     team_id: str,
@@ -336,34 +488,14 @@ def invite_member(
     user_id = get_user_id_by_username(db, username)
     actor = require_team_admin(db, team_id, user_id)
     invite_role = _normalize_role(body.role)
-    if invite_role == "owner" and actor.role != "owner":
-        raise HTTPException(status_code=403, detail="仅所有者可邀请所有者角色")
-    if invite_role == "admin" and actor.role != "owner":
-        raise HTTPException(status_code=403, detail="仅所有者可邀请管理员")
+    _assert_invite_role_allowed(invite_role, actor)
     team = db.query(Team).filter(Team.team_id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
-    token = secrets.token_urlsafe(32)
-    invite_email = (body.email or "").strip() if body.email else ""
-    inv = TeamInvitation(
-        invitation_id=str(uuid.uuid4()),
-        team_id=team_id,
-        email=invite_email,
-        role=invite_role,
-        token=token,
-        invited_by=user_id,
-        expires_at=datetime.now() + timedelta(days=7),
+    inv = _issue_team_invitation(
+        db, team_id, invite_role, user_id, body.email
     )
-    db.add(inv)
-    db.commit()
-    db.refresh(inv)
-    return InviteCreatedOut(
-        invitation_id=inv.invitation_id,
-        token=inv.token,
-        email=inv.email or None,
-        role=inv.role,
-        expires_at=inv.expires_at,
-    )
+    return _invitation_to_out(inv)
 
 
 @router.get("/{team_id}/members", response_model=List[TeamMemberOut])

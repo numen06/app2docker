@@ -179,106 +179,102 @@
 
     <TemplatePreviewModal v-model="showPreview" :template="currentTemplate" />
 
-    <BaseDialog v-model="showParseModal">
+    <FormDialog
+      v-model="showParseModal"
+      title="模板解析信息"
+      icon="fa-search"
+      size="lg"
+      @update:model-value="onParseModalUpdate"
+    >
       <div
-        class="template-parse-dialog relative z-10 mx-auto flex max-h-[90vh] w-full max-w-[min(calc(100vw-1.5rem),48rem)] shrink-0 flex-col overflow-hidden rounded-lg shadow-xl"
-        @click.stop
+        v-if="parseTemplateData?.name"
+        class="-mt-2 mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-600"
       >
-        <div class="flex shrink-0 items-center justify-between border-b border-sky-600 bg-sky-600 px-4 py-3 text-white">
-          <h3 class="template-parse-dialog__title flex flex-wrap items-center gap-2 text-lg font-semibold">
-            <i class="fas fa-search"></i>
-            模板解析信息
-            <span v-if="parseTemplateData" class="font-normal opacity-90">{{ parseTemplateData.name }}</span>
-          </h3>
-          <button
-            type="button"
-            class="rounded-md p-2 text-white hover:bg-white/20"
-            @click="closeParseModal"
-          >
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <div v-if="parsing" class="flex items-center justify-center gap-2 py-8 text-slate-500">
-            <i class="fas fa-spinner fa-spin"></i>
-            正在解析模板…
-          </div>
-          <AlertBanner v-else-if="parseError" :message="parseError" variant="danger" />
-          <div v-else-if="parseInfo" class="space-y-6">
-            <section>
-              <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <i class="fas fa-sliders-h text-blue-600"></i>
-                模板参数
-                <Badge variant="info">{{ parseInfo.params?.length || 0 }} 个</Badge>
-              </h4>
-              <Table v-if="parseInfo.params?.length" class="border border-slate-200">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="w-48">参数名称</TableHead>
-                    <TableHead>描述</TableHead>
-                    <TableHead class="w-28">默认值</TableHead>
-                    <TableHead class="w-20">必填</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-for="param in parseInfo.params" :key="param.name">
-                    <TableCell><code class="text-xs">{{ param.name }}</code></TableCell>
-                    <TableCell class="text-slate-600">{{ param.description || "—" }}</TableCell>
-                    <TableCell>
-                      <Badge v-if="param.default" variant="default">{{ param.default }}</Badge>
-                      <span v-else class="text-slate-400">—</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge :variant="param.required ? 'danger' : 'success'">
-                        {{ param.required ? "是" : "否" }}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <p v-else class="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
-                该模板没有可配置参数
-              </p>
-            </section>
-            <section>
-              <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <i class="fas fa-server text-sky-600"></i>
-                服务阶段（多阶段构建）
-                <Badge variant="info">{{ parseInfo.services?.length || 0 }} 个</Badge>
-              </h4>
-              <Table v-if="parseInfo.services?.length" class="border border-slate-200">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>服务名称</TableHead>
-                    <TableHead class="w-28">端口</TableHead>
-                    <TableHead class="w-28">用户</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-for="service in parseInfo.services" :key="service.name">
-                    <TableCell><code class="text-xs">{{ service.name }}</code></TableCell>
-                    <TableCell>
-                      <Badge v-if="service.port" variant="default">{{ service.port }}</Badge>
-                      <span v-else class="text-slate-400">—</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge v-if="service.user" variant="default">{{ service.user }}</Badge>
-                      <span v-else class="text-slate-400">—</span>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <p v-else class="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
-                该模板不是多阶段构建，或没有服务阶段
-              </p>
-            </section>
-          </div>
-        </div>
-        <div class="flex shrink-0 justify-end border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <Button variant="outline" @click="closeParseModal">关闭</Button>
-        </div>
+        <span>{{ parseTemplateData.name }}</span>
+        <Badge v-if="parseTemplateData.type === 'builtin'" variant="warning">
+          <i class="fas fa-lock"></i> 内置
+        </Badge>
       </div>
-    </BaseDialog>
+
+      <div v-if="parsing" class="flex items-center justify-center gap-2 py-8 text-slate-500">
+        <i class="fas fa-spinner fa-spin"></i>
+        正在解析模板…
+      </div>
+      <AlertBanner v-else-if="parseError" :message="parseError" variant="danger" />
+      <div v-else-if="parseInfo" class="space-y-6">
+        <section>
+          <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <i class="fas fa-sliders-h text-blue-600"></i>
+            模板参数
+            <Badge variant="default">{{ parseInfo.params?.length || 0 }} 个</Badge>
+          </h4>
+          <Table v-if="parseInfo.params?.length" min-width-class="min-w-0">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[28%]">参数名称</TableHead>
+                <TableHead>描述</TableHead>
+                <TableHead class="w-[18%]">默认值</TableHead>
+                <TableHead class="w-[12%]">必填</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="param in parseInfo.params" :key="param.name">
+                <TableCell><code class="text-xs text-blue-600">{{ param.name }}</code></TableCell>
+                <TableCell class="text-slate-600">{{ param.description || "—" }}</TableCell>
+                <TableCell>
+                  <Badge v-if="param.default" variant="default">{{ param.default }}</Badge>
+                  <span v-else class="text-slate-400">—</span>
+                </TableCell>
+                <TableCell>
+                  <Badge :variant="param.required ? 'danger' : 'success'">
+                    {{ param.required ? "是" : "否" }}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <p v-else class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            该模板没有可配置参数
+          </p>
+        </section>
+        <section>
+          <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <i class="fas fa-server text-blue-600"></i>
+            服务阶段（多阶段构建）
+            <Badge variant="info">{{ parseInfo.services?.length || 0 }} 个</Badge>
+          </h4>
+          <Table v-if="parseInfo.services?.length" min-width-class="min-w-0">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[40%]">服务名称</TableHead>
+                <TableHead class="w-[30%]">端口</TableHead>
+                <TableHead class="w-[30%]">用户</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="service in parseInfo.services" :key="service.name">
+                <TableCell><code class="text-xs text-blue-600">{{ service.name }}</code></TableCell>
+                <TableCell>
+                  <Badge v-if="service.port" variant="default">{{ service.port }}</Badge>
+                  <span v-else class="text-slate-400">—</span>
+                </TableCell>
+                <TableCell>
+                  <Badge v-if="service.user" variant="info">{{ service.user }}</Badge>
+                  <span v-else class="text-slate-400">—</span>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <p v-else class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            该模板不是多阶段构建，或没有服务阶段
+          </p>
+        </section>
+      </div>
+
+      <template #footer>
+        <Button type="button" variant="secondary" @click="closeParseModal">关闭</Button>
+      </template>
+    </FormDialog>
   </div>
 </template>
 
@@ -294,7 +290,7 @@ import PageToolbar from "@/components/ui/PageToolbar.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
 import EmptyState from "@/components/ui/EmptyState.vue";
 import AlertBanner from "@/components/ui/AlertBanner.vue";
-import BaseDialog from "@/components/ui/dialog/BaseDialog.vue";
+import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import Button from "@/components/ui/button/Button.vue";
 import { Badge } from "@/components/ui/badge";
 import Table from "@/components/ui/table/Table.vue";
@@ -459,6 +455,15 @@ function closeParseModal() {
   parseTemplateData.value = null;
 }
 
+function onParseModalUpdate(open) {
+  showParseModal.value = open;
+  if (!open) {
+    parseInfo.value = null;
+    parseError.value = "";
+    parseTemplateData.value = null;
+  }
+}
+
 async function deleteTemplate(tpl) {
   const msg =
     tpl.type === "builtin"
@@ -531,18 +536,4 @@ onMounted(() => {
   }
 }
 
-@media (max-width: 767px) {
-  .template-parse-dialog {
-    max-width: 100%;
-  }
-
-  .template-parse-dialog__title {
-    font-size: 0.9375rem;
-    line-height: 1.35;
-  }
-
-  .template-parse-dialog :deep(table) {
-    font-size: 0.8125rem;
-  }
-}
 </style>
