@@ -135,6 +135,12 @@
   pointer-events: none;
 }
 
+.btn-check:checked + label {
+  border-color: rgb(37 99 235);
+  background-color: rgb(239 246 255);
+  color: rgb(29 78 216);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

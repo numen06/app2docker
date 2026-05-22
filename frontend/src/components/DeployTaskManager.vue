@@ -273,7 +273,7 @@
                     />
                     <label
                       v-if="canUseCreateChannel('agent')"
-                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="channel-agent"
                     >
                       Agent 发布
@@ -288,7 +288,7 @@
                     />
                     <label
                       v-if="canUseCreateChannel('ssh')"
-                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="channel-ssh"
                     >
                       SSH 发布
@@ -303,7 +303,7 @@
                     />
                     <label
                       v-if="canUseCreateChannel('portainer')"
-                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="channel-portainer"
                     >
                       Portainer 发布
@@ -322,7 +322,7 @@
                       value="docker_run"
                       checked
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-run">
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="deploy-run">
                       <i class="fas fa-terminal mr-1"></i> Docker Run
                     </label>
 
@@ -333,7 +333,7 @@
                       v-model="simpleForm.deployMode"
                       value="docker_compose"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-compose">
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="deploy-compose">
                       <i class="fas fa-layer-group mr-1"></i> Docker Compose
                     </label>
 
@@ -344,7 +344,7 @@
                       v-model="simpleForm.deployMode"
                       value="multi_step"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-multi-step">
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="deploy-multi-step">
                       <i class="fas fa-list-ol mr-1"></i> 多步骤
                     </label>
                   </div>
@@ -380,7 +380,7 @@
                       value="docker-compose"
                       :disabled="!isComposeModeSupported('docker-compose')"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       :class="{
                         disabled: !isComposeModeSupported('docker-compose'),
                       }"
@@ -402,7 +402,7 @@
                       value="docker-stack"
                       :disabled="!isComposeModeSupported('docker-stack')"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       :class="{
                         disabled: !isComposeModeSupported('docker-stack'),
                       }"
@@ -444,7 +444,7 @@
                         v-model="simpleForm.stackStrategy"
                         value="create_new"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="stack-create">
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="stack-create">
                         创建新 Stack
                       </label>
                       <input
@@ -454,7 +454,7 @@
                         v-model="simpleForm.stackStrategy"
                         value="update_existing"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="stack-update">
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="stack-update">
                         更新已有 Stack
                       </label>
                     </div>
@@ -520,7 +520,7 @@
                       v-model="simpleForm.redeployStrategy"
                       value="remove_and_redeploy"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="redeploy-strategy-remove"
                     >
                       <i class="fas fa-trash-alt mr-1"></i> 删除后重新部署
@@ -533,7 +533,7 @@
                       v-model="simpleForm.redeployStrategy"
                       value="update_existing"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="redeploy-strategy-update"
                     >
                       <i class="fas fa-sync-alt mr-1"></i> 直接更新
@@ -727,7 +727,7 @@
                       v-model="hostFilter"
                       value="all"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-all"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="filter-all"
                       >全部</label>
 
                     <input
@@ -737,7 +737,7 @@
                       v-model="hostFilter"
                       value="agent"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-agent">
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="filter-agent">
                       <i class="fas fa-network-wired mr-1"></i> Agent
                     </label>
                   </template>
@@ -750,7 +750,7 @@
                     value="portainer"
                     :disabled="simpleForm.deployChannel !== 'portainer'"
                   />
-                  <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                  <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="filter-portainer"
                     :class="{ disabled: simpleForm.deployChannel !== 'portainer' }"
                   >
@@ -765,7 +765,7 @@
                       v-model="hostFilter"
                       value="ssh"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-ssh">
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="filter-ssh">
                       <i class="fas fa-terminal mr-1"></i> SSH
                     </label>
                   </template>
@@ -1313,7 +1313,7 @@
                       />
                       <label
                         v-if="canUseEditChannel('agent')"
-                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-channel-agent"
                       >
                         Agent 发布
@@ -1328,7 +1328,7 @@
                       />
                       <label
                         v-if="canUseEditChannel('ssh')"
-                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-channel-ssh"
                       >
                         SSH 发布
@@ -1343,7 +1343,7 @@
                       />
                       <label
                         v-if="canUseEditChannel('portainer')"
-                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-channel-portainer"
                       >
                         Portainer 发布
@@ -1362,7 +1362,7 @@
                         v-model="editForm.deployMode"
                         value="docker_run"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-deploy-run"
                       >
                         <i class="fas fa-terminal mr-1"></i> Docker Run
@@ -1375,7 +1375,7 @@
                         v-model="editForm.deployMode"
                         value="docker_compose"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-deploy-compose"
                       >
                         <i class="fas fa-layer-group mr-1"></i> Docker Compose
@@ -1388,7 +1388,7 @@
                         v-model="editForm.deployMode"
                         value="multi_step"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-deploy-multi-step"
                       >
                         <i class="fas fa-list-ol mr-1"></i> 多步骤
@@ -1428,7 +1428,7 @@
                           !isEditComposeModeSupported('docker-compose')
                         "
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         :class="{
                           disabled:
                             !isEditComposeModeSupported('docker-compose'),
@@ -1451,7 +1451,7 @@
                         value="docker-stack"
                         :disabled="!isEditComposeModeSupported('docker-stack')"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         :class="{
                           disabled: !isEditComposeModeSupported('docker-stack'),
                         }"
@@ -1490,7 +1490,7 @@
                           v-model="editForm.stackStrategy"
                           value="create_new"
                         />
-                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="edit-stack-create">
+                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="edit-stack-create">
                           创建新 Stack
                         </label>
                         <input
@@ -1500,7 +1500,7 @@
                           v-model="editForm.stackStrategy"
                           value="update_existing"
                         />
-                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="edit-stack-update">
+                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="edit-stack-update">
                           更新已有 Stack
                         </label>
                       </div>
@@ -1556,7 +1556,7 @@
                         v-model="editForm.redeployStrategy"
                         value="remove_and_redeploy"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-redeploy-strategy-remove"
                       >
                         <i class="fas fa-trash-alt mr-1"></i> 删除后重新部署
@@ -1569,7 +1569,7 @@
                         v-model="editForm.redeployStrategy"
                         value="update_existing"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-redeploy-strategy-update"
                       >
                         <i class="fas fa-sync-alt mr-1"></i> 直接更新
@@ -1785,7 +1785,7 @@
                       v-model="editHostFilter"
                       value="all"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-all"
                       >全部</label>
 
@@ -1796,7 +1796,7 @@
                       v-model="editHostFilter"
                       value="agent"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-agent"
                     >
                       <i class="fas fa-network-wired mr-1"></i> Agent
@@ -1809,7 +1809,7 @@
                       v-model="editHostFilter"
                       value="portainer"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-portainer"
                     >
                       <i class="fas fa-server mr-1"></i> Portainer
@@ -1822,7 +1822,7 @@
                       v-model="editHostFilter"
                       value="ssh"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-ssh"
                     >
                       <i class="fas fa-terminal mr-1"></i> SSH
@@ -1862,16 +1862,16 @@
                 >
                   <!-- Agent 主机 -->
                   <div
-                    v-if="editFilteredHostsByType.agent.length > 0"
+                    v-if="editChannelFilteredHostsByType.agent.length > 0"
                     class="mb-3"
                   >
                     <div class="fw-bold text-blue-600 mb-2">
                       <i class="fas fa-network-wired mr-1"></i> Agent 主机 ({{
-                        editFilteredHostsByType.agent.length
+                        editChannelFilteredHostsByType.agent.length
                       }})
                     </div>
                     <div
-                      v-for="host in editFilteredHostsByType.agent"
+                      v-for="host in editChannelFilteredHostsByType.agent"
                       :key="host.host_id"
                       class="form-check ml-3"
                     >
@@ -1879,7 +1879,7 @@
                         class="form-check-input"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="host.host_id"
+                        :value="String(host.host_id)"
                         v-model="editForm.selectedHosts"
                       />
                       <label
@@ -1901,16 +1901,16 @@
 
                   <!-- Portainer 主机 -->
                   <div
-                    v-if="editFilteredHostsByType.portainer.length > 0"
+                    v-if="editChannelFilteredHostsByType.portainer.length > 0"
                     class="mb-3"
                   >
                     <div class="fw-bold text-info mb-2">
                       <i class="fas fa-server mr-1"></i> Portainer 主机 ({{
-                        editFilteredHostsByType.portainer.length
+                        editChannelFilteredHostsByType.portainer.length
                       }})
                     </div>
                     <div
-                      v-for="host in editFilteredHostsByType.portainer"
+                      v-for="host in editChannelFilteredHostsByType.portainer"
                       :key="host.host_id"
                       class="form-check ml-3"
                     >
@@ -1918,7 +1918,7 @@
                         class="form-check-input"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="host.host_id"
+                        :value="String(host.host_id)"
                         v-model="editForm.selectedHosts"
                       />
                       <label
@@ -1940,16 +1940,16 @@
 
                   <!-- SSH 主机 -->
                   <div
-                    v-if="editFilteredHostsByType.ssh.length > 0"
+                    v-if="editChannelFilteredHostsByType.ssh.length > 0"
                     class="mb-3"
                   >
                     <div class="fw-bold text-amber-600 mb-2">
                       <i class="fas fa-terminal mr-1"></i> SSH 主机 ({{
-                        editFilteredHostsByType.ssh.length
+                        editChannelFilteredHostsByType.ssh.length
                       }})
                     </div>
                     <div
-                      v-for="host in editFilteredHostsByType.ssh"
+                      v-for="host in editChannelFilteredHostsByType.ssh"
                       :key="host.host_id"
                       class="form-check ml-3"
                     >
@@ -1957,7 +1957,7 @@
                         class="form-check-input"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="host.host_id"
+                        :value="String(host.host_id)"
                         v-model="editForm.selectedHosts"
                       />
                       <label
@@ -2062,7 +2062,7 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-use-push"
                     style="white-space: normal; padding: 0.5rem"
                   >
@@ -2080,7 +2080,7 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-filter-match"
                     style="white-space: normal; padding: 0.5rem"
                   >
@@ -2098,7 +2098,7 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-use-configured"
                     style="white-space: normal; padding: 0.5rem"
                   >
@@ -2116,7 +2116,7 @@
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-select-branches"
                     style="white-space: normal; padding: 0.5rem"
                   >
@@ -2544,6 +2544,19 @@ export default {
         );
       }
 
+      // 已选主机始终展示，避免被「仅在线」等筛选项隐藏后无法取消勾选
+      const visibleIds = new Set(hosts.map((h) => String(h.host_id)));
+      const allHosts = [...(this.agentHosts || []), ...(this.sshHosts || [])];
+      for (const hostId of this.editForm.selectedHosts || []) {
+        const id = String(hostId);
+        if (visibleIds.has(id)) continue;
+        const host = allHosts.find((h) => String(h.host_id) === id);
+        if (host) {
+          hosts.push(host);
+          visibleIds.add(id);
+        }
+      }
+
       return hosts;
     },
     // 编辑表单按类型分组的主机
@@ -2569,13 +2582,46 @@ export default {
     editChannelFilteredHostsByType() {
       const all = this.editFilteredHostsByType;
       const channel = this.editForm.deployChannel;
+      const selectedSet = new Set(
+        (this.editForm.selectedHosts || []).map((id) => String(id))
+      );
+      const allHosts = [...(this.agentHosts || []), ...(this.sshHosts || [])];
+
+      const pinSelected = (list, matchFn) => {
+        const inList = new Set(list.map((h) => String(h.host_id)));
+        const pinned = [];
+        for (const id of selectedSet) {
+          if (inList.has(id)) continue;
+          const host = allHosts.find(
+            (h) => String(h.host_id) === id && matchFn(h)
+          );
+          if (host) pinned.push(host);
+        }
+        return pinned.length ? [...pinned, ...list] : list;
+      };
+
       if (channel === "portainer") {
-        return { agent: [], portainer: all.portainer, ssh: [] };
+        return {
+          agent: [],
+          portainer: pinSelected(
+            all.portainer,
+            (h) => h.host_type === "portainer"
+          ),
+          ssh: [],
+        };
       }
       if (channel === "ssh") {
-        return { agent: [], portainer: [], ssh: all.ssh };
+        return {
+          agent: [],
+          portainer: [],
+          ssh: pinSelected(all.ssh, (h) => !h.host_type),
+        };
       }
-      return { agent: all.agent, portainer: [], ssh: [] };
+      return {
+        agent: pinSelected(all.agent, (h) => h.host_type === "agent"),
+        portainer: pinSelected(all.portainer, (h) => h.host_type === "portainer"),
+        ssh: pinSelected(all.ssh, (h) => !h.host_type),
+      };
     },
   },
   watch: {
@@ -2698,7 +2744,7 @@ export default {
       handler(newHostId) {
         if (this.editForm.deployChannel !== "portainer") return;
         if (newHostId) {
-          this.editForm.selectedHosts = [newHostId];
+          this.editForm.selectedHosts = [String(newHostId)];
           this.loadAvailableStacksForEdit();
         } else {
           this.editForm.selectedHosts = [];
@@ -2811,7 +2857,9 @@ export default {
         const hostById = allHosts.find(
           (h) => String(h.host_id) === String(target.host_id)
         );
-        if (hostById?.host_id) return hostById.host_id;
+        if (hostById?.host_id != null && hostById.host_id !== "") {
+          return String(hostById.host_id);
+        }
       }
 
       // 2) 按 host_name/name/历史 name-deploy 匹配
@@ -2837,7 +2885,8 @@ export default {
         const hostName = this.normalizeCompareValue(h.name);
         return normalizedCandidates.includes(hostName);
       });
-      return host?.host_id || null;
+      const id = host?.host_id;
+      return id != null && id !== "" ? String(id) : null;
     },
     canUseCreateChannel(channel) {
       if (this.createTypeLock === "portainer") return channel === "portainer";
@@ -2856,6 +2905,8 @@ export default {
     closeEditModal() {
       this.showEditModal = false;
       this.editTypeLock = null;
+      this.editFilterOnlineOnly = true;
+      this.editHostSearchKeyword = "";
     },
     resolveDeployChannel(task) {
       const deployChannel = task?.config?.deploy?.channel;
@@ -3775,14 +3826,16 @@ export default {
       const selectedHostIds = [];
       for (const target of targets) {
         const hostId = this.findHostIdFromTarget(target);
-        if (hostId) selectedHostIds.push(hostId);
+        if (hostId) selectedHostIds.push(String(hostId));
       }
-      this.editForm.selectedHosts = selectedHostIds;
+      this.editForm.selectedHosts = [...new Set(selectedHostIds)];
       if (
         this.editForm.deployChannel === "portainer" &&
         this.editForm.selectedHosts.length > 0
       ) {
-        this.editForm.portainerTargetHost = this.editForm.selectedHosts[0];
+        this.editForm.portainerTargetHost = String(
+          this.editForm.selectedHosts[0]
+        );
         this.loadAvailableStacksForEdit();
       }
     },
