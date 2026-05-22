@@ -17,6 +17,23 @@ from backend.resource_permissions import (
     user_can_access_resource,
 )
 
+DEMO_PUBLIC_REGISTRY_NAME = "Docker Hub"
+DEMO_PUBLIC_REGISTRY_HOST = "m.daocloud.io"
+DEMO_PUBLIC_REGISTRY_PREFIX = "m.daocloud.io/docker.io/library"
+
+
+def _normalize_registry_host(value: str) -> str:
+    v = (value or "").strip().lower()
+    if v.startswith("https://"):
+        v = v[8:]
+    elif v.startswith("http://"):
+        v = v[7:]
+    return v.rstrip("/")
+
+
+def _normalize_registry_prefix(value: str) -> str:
+    return (value or "").strip().lower().rstrip("/")
+
 
 def _decrypt_stored_password(password: str) -> str:
     if not password:
@@ -225,6 +242,67 @@ def create_registry(
         raise
     finally:
         db.close()
+
+
+def ensure_demo_public_registry(
+    team_id: str,
+    created_by: str,
+) -> Dict[str, Any]:
+    """
+    幂等创建 DaoCloud 演示公共仓库（Docker Hub / m.daocloud.io）。
+    返回 {"created": bool, "registry": dict, "message": str}
+    """
+    if not team_id or not created_by:
+        raise ValueError("team_id 与 created_by 不能为空")
+
+    demo_name = DEMO_PUBLIC_REGISTRY_NAME.strip().lower()
+    demo_host = _normalize_registry_host(DEMO_PUBLIC_REGISTRY_HOST)
+    demo_prefix = _normalize_registry_prefix(DEMO_PUBLIC_REGISTRY_PREFIX)
+
+    db = get_db_session()
+    try:
+        rows = (
+            db.query(DockerRegistry)
+            .filter(DockerRegistry.team_id == team_id)
+            .all()
+        )
+        for row in rows:
+            if (row.name or "").strip().lower() == demo_name:
+                return {
+                    "created": False,
+                    "registry": _registry_to_safe_dict(row),
+                    "message": f"{DEMO_PUBLIC_REGISTRY_NAME} 演示仓库已存在，未重复创建",
+                }
+            if _normalize_registry_host(row.registry or "") == demo_host:
+                return {
+                    "created": False,
+                    "registry": _registry_to_safe_dict(row),
+                    "message": f"{DEMO_PUBLIC_REGISTRY_NAME} 演示仓库已存在，未重复创建",
+                }
+            if _normalize_registry_prefix(row.registry_prefix or "") == demo_prefix:
+                return {
+                    "created": False,
+                    "registry": _registry_to_safe_dict(row),
+                    "message": f"{DEMO_PUBLIC_REGISTRY_NAME} 演示仓库已存在，未重复创建",
+                }
+    finally:
+        db.close()
+
+    reg = create_registry(
+        team_id=team_id,
+        created_by=created_by,
+        name=DEMO_PUBLIC_REGISTRY_NAME,
+        registry=DEMO_PUBLIC_REGISTRY_HOST,
+        registry_prefix=DEMO_PUBLIC_REGISTRY_PREFIX,
+        username="",
+        password="",
+        active=False,
+    )
+    return {
+        "created": True,
+        "registry": reg,
+        "message": f"已创建演示公共仓库 {DEMO_PUBLIC_REGISTRY_NAME}",
+    }
 
 
 def update_registry(

@@ -6,7 +6,18 @@
           <i class="fas fa-sync-alt" :class="{ 'fa-spin': loadingRegistries }"></i>
           刷新
         </Button>
-        <Button size="sm" @click="showCreateRegistryModal">
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-full sm:w-auto"
+          title="添加 Docker Hub 演示源（DaoCloud 加速，无需账号）"
+          :disabled="loadingRegistries || creatingDemoRegistry"
+          @click="createDemoPublicRegistry"
+        >
+          <i class="fas fa-cloud"></i>
+          新建公共仓库
+        </Button>
+        <Button size="sm" class="w-full sm:w-auto" @click="showCreateRegistryModal">
           <i class="fas fa-plus"></i>
           新建仓库
         </Button>
@@ -235,6 +246,7 @@ import CardContent from "@/components/ui/card/CardContent.vue";
 
 const registries = ref([]);
 const loadingRegistries = ref(false);
+const creatingDemoRegistry = ref(false);
 const savingRegistries = ref(false);
 const testingRegistry = ref(null);
 const registryTestResult = ref({});
@@ -259,6 +271,33 @@ async function loadRegistries() {
     toastError("加载镜像仓库配置失败");
   } finally {
     loadingRegistries.value = false;
+  }
+}
+
+async function createDemoPublicRegistry() {
+  const teamId = teamStore.activeTeamIdForApi || teamStore.ensureActiveTeam();
+  if (!teamId) {
+    toastError("请先在顶部选择当前团队");
+    return;
+  }
+
+  creatingDemoRegistry.value = true;
+  try {
+    const res = await axios.post("/api/registries/demo-public", null, {
+      params: { team_id: teamId },
+    });
+    await loadRegistries();
+    const msg = res.data?.message || "";
+    if (res.data?.created) {
+      toastSuccess(msg || "已创建演示公共仓库");
+    } else {
+      toastInfo(msg || "演示仓库已存在，未重复创建");
+    }
+  } catch (error) {
+    console.error("创建演示公共仓库失败:", error);
+    toastApiError(error, "创建演示公共仓库失败");
+  } finally {
+    creatingDemoRegistry.value = false;
   }
 }
 

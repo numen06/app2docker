@@ -1669,6 +1669,45 @@ async def create_registry_entry(
         raise HTTPException(status_code=500, detail=f"创建仓库失败: {str(e)}")
 
 
+@router.post("/registries/demo-public")
+async def create_demo_public_registry(
+    http_request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
+    """幂等创建 DaoCloud 演示公共仓库（Docker Hub / m.daocloud.io）"""
+    try:
+        from backend.registry_manager import ensure_demo_public_registry
+
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, team_id
+            )
+        finally:
+            db.close()
+
+        result = ensure_demo_public_registry(scoped_team_id, user_id)
+        OperationLogger.log(
+            username,
+            "registry_demo_create",
+            {
+                "registry_id": result["registry"].get("registry_id"),
+                "created": result["created"],
+            },
+        )
+        return JSONResponse(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"创建演示公共仓库失败: {str(e)}"
+        )
+
+
 @router.put("/registries/{registry_id}")
 async def update_registry_entry(
     registry_id: str,
