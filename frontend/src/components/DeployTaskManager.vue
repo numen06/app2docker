@@ -698,8 +698,37 @@
             </div>
 
             <!-- 目标主机选择 -->
-            <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3">
+            <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3 min-w-0">
               <Label>选择目标主机 <span class="text-red-500">*</span></Label>
+              <div
+                v-if="selectedHostEntries('simple').length > 0"
+                class="mb-2 flex flex-wrap items-center gap-2"
+              >
+                <span
+                  v-for="entry in selectedHostEntries('simple')"
+                  :key="entry.id"
+                  class="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-sm text-blue-800"
+                >
+                  <span class="break-all">{{ entry.name }}</span>
+                  <button
+                    type="button"
+                    class="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded text-blue-600 hover:bg-blue-100"
+                    :aria-label="`移除 ${entry.name}`"
+                    @click="removeSelectedHost('simple', entry.id)"
+                  >
+                    <i class="fas fa-times"></i>
+                  </button>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="w-full sm:w-auto"
+                  @click="clearSelectedHosts('simple')"
+                >
+                  清空
+                </Button>
+              </div>
               <div v-if="false" class="mb-2">
                 <Label class="text-xs">Portainer 目标主机</Label>
                 <NativeSelect
@@ -818,8 +847,8 @@
                       class="form-check-input"
                       type="checkbox"
                       :id="`host-${host.host_id}`"
-                      :value="host.host_id"
-                      v-model="simpleForm.selectedHosts"
+                      :checked="isHostSelected('simple', host.host_id)"
+                      @change="onHostToggle('simple', host.host_id, $event)"
                     />
                     <label
                       class="form-check-label"
@@ -857,8 +886,8 @@
                       class="form-check-input"
                       type="checkbox"
                       :id="`host-${host.host_id}`"
-                      :value="host.host_id"
-                      v-model="simpleForm.selectedHosts"
+                      :checked="isHostSelected('simple', host.host_id)"
+                      @change="onHostToggle('simple', host.host_id, $event)"
                     />
                     <label
                       class="form-check-label"
@@ -893,8 +922,8 @@
                       class="form-check-input"
                       type="checkbox"
                       :id="`host-${host.host_id}`"
-                      :value="host.host_id"
-                      v-model="simpleForm.selectedHosts"
+                      :checked="isHostSelected('simple', host.host_id)"
+                      @change="onHostToggle('simple', host.host_id, $event)"
                     />
                     <label
                       class="form-check-label"
@@ -924,20 +953,12 @@
                 </div>
               </div>
 
-              <!-- 已选择的主机统计 -->
-              <div v-if="simpleForm.selectedHosts.length > 0" class="mt-2">
-                <small class="text-slate-500">
-                  已选择
-                  <strong>{{ simpleForm.selectedHosts.length }}</strong> 个主机
-                  <Button
-                    type="button"
-                    variant="ghost" size="sm"
-                    @click="simpleForm.selectedHosts = []"
-                  >
-                    清空
-                  </Button>
-                </small>
-              </div>
+              <p
+                v-if="selectedHostEntries('simple').length > 0"
+                class="mt-2 text-slate-500 text-sm"
+              >
+                已选择 <strong>{{ selectedHostEntries('simple').length }}</strong> 个主机（可在上方标签移除）
+              </p>
             </div>
       <template #footer>
         <Button
@@ -1757,8 +1778,40 @@
               </div>
 
               <!-- 目标主机选择 -->
-              <div class="mb-3">
+              <div class="mb-3 min-w-0">
                 <Label>选择目标主机 <span class="text-red-500">*</span></Label>
+                <div
+                  v-if="
+                    editForm.deployChannel !== 'portainer' &&
+                    selectedHostEntries('edit').length > 0
+                  "
+                  class="mb-2 flex flex-wrap items-center gap-2"
+                >
+                  <span
+                    v-for="entry in selectedHostEntries('edit')"
+                    :key="entry.id"
+                    class="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-sm text-blue-800"
+                  >
+                    <span class="break-all">{{ entry.name }}</span>
+                    <button
+                      type="button"
+                      class="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded text-blue-600 hover:bg-blue-100"
+                      :aria-label="`移除 ${entry.name}`"
+                      @click="removeSelectedHost('edit', entry.id)"
+                    >
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="w-full sm:w-auto"
+                    @click="clearSelectedHosts('edit')"
+                  >
+                    清空
+                  </Button>
+                </div>
                 <div v-if="editForm.deployChannel === 'portainer'" class="mb-2">
                   <Label class="text-xs">Portainer 目标主机</Label>
                   <NativeSelect
@@ -1879,8 +1932,8 @@
                         class="form-check-input"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="String(host.host_id)"
-                        v-model="editForm.selectedHosts"
+                        :checked="isHostSelected('edit', host.host_id)"
+                        @change="onHostToggle('edit', host.host_id, $event)"
                       />
                       <label
                         class="form-check-label"
@@ -1918,8 +1971,8 @@
                         class="form-check-input"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="String(host.host_id)"
-                        v-model="editForm.selectedHosts"
+                        :checked="isHostSelected('edit', host.host_id)"
+                        @change="onHostToggle('edit', host.host_id, $event)"
                       />
                       <label
                         class="form-check-label"
@@ -1957,8 +2010,8 @@
                         class="form-check-input"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="String(host.host_id)"
-                        v-model="editForm.selectedHosts"
+                        :checked="isHostSelected('edit', host.host_id)"
+                        @change="onHostToggle('edit', host.host_id, $event)"
                       />
                       <label
                         class="form-check-label"
@@ -1988,20 +2041,15 @@
                   </div>
                 </div>
 
-                <!-- 已选择的主机统计 -->
-                <div v-if="editForm.selectedHosts.length > 0" class="mt-2">
-                  <small class="text-slate-500">
-                    已选择
-                    <strong>{{ editForm.selectedHosts.length }}</strong> 个主机
-                    <Button
-                      type="button"
-                      variant="ghost" size="sm"
-                      @click="editForm.selectedHosts = []"
-                    >
-                      清空
-                    </Button>
-                  </small>
-                </div>
+                <p
+                  v-if="
+                    editForm.deployChannel !== 'portainer' &&
+                    selectedHostEntries('edit').length > 0
+                  "
+                  class="mt-2 text-slate-500 text-sm"
+                >
+                  已选择 <strong>{{ selectedHostEntries('edit').length }}</strong> 个主机（可在上方标签移除）
+                </p>
               </div>
             </div>
 
@@ -2315,6 +2363,8 @@ export default {
       editHostFilter: "all",
       editFilterOnlineOnly: true,
       editHostSearchKeyword: "",
+      /** 解析/回填表单时屏蔽 deployChannel 等 watch 清空已选主机 */
+      formHydrating: false,
       showWebhookModal: false, // Webhook URL 模态框显示状态
       webhookUrl: "", // Webhook URL
       editForm: {
@@ -2626,8 +2676,10 @@ export default {
   },
   watch: {
     "simpleForm.deployChannel": {
-      handler(newChannel) {
-        this.simpleForm.selectedHosts = [];
+      handler(newChannel, oldChannel) {
+        if (this.formHydrating) return;
+        if (oldChannel != null && newChannel === oldChannel) return;
+        this.clearSelectedHosts("simple");
         this.simpleForm.portainerTargetHost = null;
         if (newChannel === "portainer") {
           this.hostFilter = "portainer";
@@ -2647,10 +2699,10 @@ export default {
       handler(newHostId) {
         if (this.simpleForm.deployChannel !== "portainer") return;
         if (newHostId) {
-          this.simpleForm.selectedHosts = [newHostId];
+          this.setSelectedHosts("simple", [newHostId]);
           this.loadAvailableStacks();
         } else {
-          this.simpleForm.selectedHosts = [];
+          this.setSelectedHosts("simple", []);
           this.simpleForm.selectedStackId = null;
         }
       },
@@ -2678,37 +2730,6 @@ export default {
         }
       },
     },
-    // 监听简单表单的主机选择变化，自动调整 Compose 模式
-    "simpleForm.selectedHosts": {
-      handler(newHosts) {
-        if (this.simpleForm.deployChannel === "portainer") {
-          this.loadAvailableStacks();
-        }
-        if (
-          this.simpleForm.deployMode === "docker_compose" &&
-          this.simpleForm.deployChannel !== "portainer" &&
-          newHosts.length > 0
-        ) {
-          // 如果当前选择的模式不支持，自动切换到支持的模式
-          if (
-            this.simpleForm.composeMode === "docker-compose" &&
-            !this.isComposeModeSupported("docker-compose")
-          ) {
-            if (this.isComposeModeSupported("docker-stack")) {
-              this.simpleForm.composeMode = "docker-stack";
-            }
-          } else if (
-            this.simpleForm.composeMode === "docker-stack" &&
-            !this.isComposeModeSupported("docker-stack")
-          ) {
-            if (this.isComposeModeSupported("docker-compose")) {
-              this.simpleForm.composeMode = "docker-compose";
-            }
-          }
-        }
-      },
-      deep: true,
-    },
     // 监听 simpleForm.composeMode 变化，自动设置默认命令
     "simpleForm.composeMode": {
       handler(newMode, oldMode) {
@@ -2726,8 +2747,10 @@ export default {
     },
     // 监听编辑表单的主机选择变化，自动调整 Compose 模式
     "editForm.deployChannel": {
-      handler(newChannel) {
-        this.editForm.selectedHosts = [];
+      handler(newChannel, oldChannel) {
+        if (this.formHydrating) return;
+        if (oldChannel != null && newChannel === oldChannel) return;
+        this.clearSelectedHosts("edit");
         this.editForm.portainerTargetHost = null;
         if (newChannel === "portainer") {
           this.editHostFilter = "portainer";
@@ -2744,10 +2767,10 @@ export default {
       handler(newHostId) {
         if (this.editForm.deployChannel !== "portainer") return;
         if (newHostId) {
-          this.editForm.selectedHosts = [String(newHostId)];
+          this.setSelectedHosts("edit", [newHostId]);
           this.loadAvailableStacksForEdit();
         } else {
-          this.editForm.selectedHosts = [];
+          this.setSelectedHosts("edit", []);
           this.editForm.selectedStackId = null;
         }
       },
@@ -2774,36 +2797,6 @@ export default {
           this.editForm.newStackName = "";
         }
       },
-    },
-    "editForm.selectedHosts": {
-      handler(newHosts) {
-        if (this.editForm.deployChannel === "portainer") {
-          this.loadAvailableStacksForEdit();
-        }
-        if (
-          this.editForm.deployMode === "docker_compose" &&
-          this.editForm.deployChannel !== "portainer" &&
-          newHosts.length > 0
-        ) {
-          // 如果当前选择的模式不支持，自动切换到支持的模式
-          if (
-            this.editForm.composeMode === "docker-compose" &&
-            !this.isEditComposeModeSupported("docker-compose")
-          ) {
-            if (this.isEditComposeModeSupported("docker-stack")) {
-              this.editForm.composeMode = "docker-stack";
-            }
-          } else if (
-            this.editForm.composeMode === "docker-stack" &&
-            !this.isEditComposeModeSupported("docker-stack")
-          ) {
-            if (this.isEditComposeModeSupported("docker-compose")) {
-              this.editForm.composeMode = "docker-compose";
-            }
-          }
-        }
-      },
-      deep: true,
     },
     // 监听 editForm.composeMode 变化，自动设置默认命令
     "editForm.composeMode": {
@@ -2888,6 +2881,112 @@ export default {
       const id = host?.host_id;
       return id != null && id !== "" ? String(id) : null;
     },
+    normalizeHostId(hostId) {
+      return hostId == null || hostId === "" ? "" : String(hostId);
+    },
+    getHostForm(formKind) {
+      return formKind === "edit" ? this.editForm : this.simpleForm;
+    },
+    selectedHostEntries(formKind) {
+      const form = this.getHostForm(formKind);
+      const allHosts = [...(this.agentHosts || []), ...(this.sshHosts || [])];
+      return (form.selectedHosts || [])
+        .map((id) => this.normalizeHostId(id))
+        .filter(Boolean)
+        .map((id) => {
+          const host = allHosts.find((h) => this.normalizeHostId(h.host_id) === id);
+          return {
+            id,
+            name: host?.name || `主机 ${id.slice(0, 8)}…`,
+          };
+        });
+    },
+    isHostSelected(formKind, hostId) {
+      const id = this.normalizeHostId(hostId);
+      return this.getHostForm(formKind).selectedHosts.includes(id);
+    },
+    setSelectedHosts(formKind, hostIds) {
+      const form = this.getHostForm(formKind);
+      form.selectedHosts = [
+        ...new Set((hostIds || []).map((x) => this.normalizeHostId(x)).filter(Boolean)),
+      ];
+    },
+    clearSelectedHosts(formKind) {
+      this.setSelectedHosts(formKind, []);
+      this.syncComposeModeFromHosts(formKind);
+      if (formKind === "edit" && this.editForm.deployChannel === "portainer") {
+        this.loadAvailableStacksForEdit();
+      } else if (
+        formKind === "simple" &&
+        this.simpleForm.deployChannel === "portainer"
+      ) {
+        this.loadAvailableStacks();
+      }
+    },
+    removeSelectedHost(formKind, hostId) {
+      const id = this.normalizeHostId(hostId);
+      const form = this.getHostForm(formKind);
+      form.selectedHosts = form.selectedHosts.filter((x) => x !== id);
+      this.syncComposeModeFromHosts(formKind);
+      if (formKind === "edit" && this.editForm.deployChannel === "portainer") {
+        this.loadAvailableStacksForEdit();
+      } else if (
+        formKind === "simple" &&
+        this.simpleForm.deployChannel === "portainer"
+      ) {
+        this.loadAvailableStacks();
+      }
+    },
+    onHostToggle(formKind, hostId, event) {
+      const checked = event.target.checked;
+      const id = this.normalizeHostId(hostId);
+      const form = this.getHostForm(formKind);
+      let next = [...form.selectedHosts];
+      if (checked) {
+        if (!next.includes(id)) next.push(id);
+      } else {
+        next = next.filter((x) => x !== id);
+      }
+      form.selectedHosts = next;
+      this.syncComposeModeFromHosts(formKind);
+      if (formKind === "edit" && this.editForm.deployChannel === "portainer") {
+        this.loadAvailableStacksForEdit();
+      } else if (
+        formKind === "simple" &&
+        this.simpleForm.deployChannel === "portainer"
+      ) {
+        this.loadAvailableStacks();
+      }
+    },
+    syncComposeModeFromHosts(formKind) {
+      const form = this.getHostForm(formKind);
+      const isSupported =
+        formKind === "edit"
+          ? (mode) => this.isEditComposeModeSupported(mode)
+          : (mode) => this.isComposeModeSupported(mode);
+      if (
+        form.deployMode !== "docker_compose" ||
+        form.deployChannel === "portainer" ||
+        form.selectedHosts.length === 0
+      ) {
+        return;
+      }
+      if (
+        form.composeMode === "docker-compose" &&
+        !isSupported("docker-compose")
+      ) {
+        if (isSupported("docker-stack")) {
+          form.composeMode = "docker-stack";
+        }
+      } else if (
+        form.composeMode === "docker-stack" &&
+        !isSupported("docker-stack")
+      ) {
+        if (isSupported("docker-compose")) {
+          form.composeMode = "docker-compose";
+        }
+      }
+    },
     canUseCreateChannel(channel) {
       if (this.createTypeLock === "portainer") return channel === "portainer";
       if (this.createTypeLock === "standard") return channel !== "portainer";
@@ -2905,6 +3004,7 @@ export default {
     closeEditModal() {
       this.showEditModal = false;
       this.editTypeLock = null;
+      this.formHydrating = false;
       this.editFilterOnlineOnly = true;
       this.editHostSearchKeyword = "";
     },
@@ -3161,7 +3261,9 @@ export default {
       // 检查所有选中的主机是否都支持该模式
       const allHosts = [...this.agentHosts, ...this.sshHosts];
       return this.simpleForm.selectedHosts.every((hostId) => {
-        const host = allHosts.find((h) => h.host_id === hostId);
+        const host = allHosts.find(
+          (h) => this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
+        );
         if (!host) return false;
 
         const dockerInfo = host.docker_info || {};
@@ -3187,7 +3289,9 @@ export default {
       // 检查所有选中的主机是否都支持该模式
       const allHosts = [...this.agentHosts, ...this.sshHosts];
       return this.editForm.selectedHosts.every((hostId) => {
-        const host = allHosts.find((h) => h.host_id === hostId);
+        const host = allHosts.find(
+          (h) => this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
+        );
         if (!host) return false;
 
         const dockerInfo = host.docker_info || {};
@@ -3353,7 +3457,8 @@ export default {
       for (const hostId of this.simpleForm.selectedHosts) {
         // 在所有主机列表中查找（包括 Agent、Portainer 和 SSH）
         const host = [...this.agentHosts, ...this.sshHosts].find(
-          (h) => h.host_id === hostId
+          (h) =>
+            this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
         );
         if (!host) continue;
 
@@ -3705,6 +3810,8 @@ export default {
       }
     },
     parseYamlToForm(configContent, config) {
+      this.formHydrating = true;
+      try {
       // 重置表单
       this.editForm = {
         appName: "",
@@ -3737,6 +3844,7 @@ export default {
           return;
         }
       }
+      if (!config) return;
 
       // 解析应用名称
       if (config.app && config.app.name) {
@@ -3828,15 +3936,19 @@ export default {
         const hostId = this.findHostIdFromTarget(target);
         if (hostId) selectedHostIds.push(String(hostId));
       }
-      this.editForm.selectedHosts = [...new Set(selectedHostIds)];
+      this.setSelectedHosts("edit", selectedHostIds);
+      this.syncComposeModeFromHosts("edit");
       if (
         this.editForm.deployChannel === "portainer" &&
         this.editForm.selectedHosts.length > 0
       ) {
-        this.editForm.portainerTargetHost = String(
-          this.editForm.selectedHosts[0]
-        );
+        this.editForm.portainerTargetHost = this.editForm.selectedHosts[0];
         this.loadAvailableStacksForEdit();
+      }
+      } finally {
+        this.$nextTick(() => {
+          this.formHydrating = false;
+        });
       }
     },
     async saveEditTask() {
@@ -4052,7 +4164,8 @@ export default {
       const targets = [];
       for (const hostId of form.selectedHosts) {
         const host = [...this.agentHosts, ...this.sshHosts].find(
-          (h) => h.host_id === hostId
+          (h) =>
+            this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
         );
         if (!host) continue;
 
