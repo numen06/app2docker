@@ -25,7 +25,7 @@
             把应用一键打成镜像，交付更简单
           </h1>
           <p class="max-w-xl text-pretty text-base text-slate-600 sm:text-lg">
-            从代码到镜像、从构建到部署，App2Docker 为团队提供统一的镜像交付工作台。支持流水线编排、模板复用、多环境导出与主机联动部署。
+            从代码到镜像、从构建到部署，App2Docker 为团队提供统一的镜像交付工作台。支持流水线编排与复制、模板复用、跨仓库镜像迁移、多环境导出与主机联动部署。
           </p>
           <div class="flex flex-wrap gap-2">
             <span
@@ -54,7 +54,7 @@
           </p>
         </div>
 
-        <div class="grid gap-8 md:grid-cols-3">
+        <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <article
             v-for="feature in features"
             :key="feature.title"
@@ -115,9 +115,9 @@
           <div>
             <h3 class="text-sm font-semibold text-slate-900">产品能力</h3>
             <ul class="mt-3 space-y-2 text-sm text-slate-600">
-              <li>流水线与多阶段构建</li>
+              <li>流水线、复制与多阶段构建</li>
               <li>模板与数据源管理</li>
-              <li>镜像导出与仓库推送</li>
+              <li>镜像导出、仓库推送与跨仓迁移</li>
               <li>主机部署与任务追踪</li>
             </ul>
           </div>
@@ -143,27 +143,34 @@ import ProductMockup from "@/components/landing/ProductMockup.vue";
 
 const year = new Date().getFullYear();
 
-const heroTags = ["流水线构建", "模板复用", "团队权限", "镜像导出", "主机部署"];
+const heroTags = ["流水线构建", "镜像迁移", "模板复用", "团队权限", "主机部署"];
 
 const features = [
   {
     icon: "fa-gears",
     title: "流水线与构建",
-    desc: "多阶段 Dockerfile、构建参数与缓存策略可视化配置，构建日志实时查看。",
+    desc: "多阶段 Dockerfile、Webhook/Cron 触发；支持复制流水线快速复用配置，构建日志实时查看。",
     mockup: "pipeline",
     mockupLabel: "流水线 · 构建任务",
   },
   {
+    icon: "fa-right-left",
+    title: "镜像迁移",
+    desc: "在源/目标仓库间同步镜像，支持路径、标签与定时任务，适合多环境、多区域仓库对齐。",
+    mockup: "pipeline",
+    mockupLabel: "镜像迁移 · 任务列表",
+  },
+  {
     icon: "fa-users",
     title: "团队协作",
-    desc: "团队、成员与邀请统一管理，多人共用模板与流水线，降低重复配置成本。",
+    desc: "团队、成员与邀请链接统一管理，角色与菜单权限可控，多人共用模板与流水线。",
     mockup: "team",
     mockupLabel: "团队 · 成员管理",
   },
   {
     icon: "fa-rocket",
     title: "部署联动",
-    desc: "关联主机与部署任务，从镜像构建到环境上线形成闭环，状态一目了然。",
+    desc: "关联 Agent/SSH/Portainer 主机与部署任务，从镜像构建到环境上线形成闭环。",
     mockup: "deploy",
     mockupLabel: "部署 · 任务列表",
   },
@@ -182,8 +189,8 @@ const advantages = [
   },
   {
     icon: "fa-cloud-arrow-up",
-    title: "一键导出",
-    desc: "镜像 tar 导出或推送到私有仓库。",
+    title: "导出与迁移",
+    desc: "镜像 tar 导出、仓库推送，或跨仓库定时/手动迁移同步。",
   },
   {
     icon: "fa-shield-halved",

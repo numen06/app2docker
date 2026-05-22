@@ -1,12 +1,12 @@
 <template>
-  <div>
+  <div class="min-w-0">
     <div
-      class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+      class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
     >
-      <p class="text-xs text-slate-500 lg:max-w-md">
+      <p class="shrink-0 text-xs text-slate-500 sm:max-w-md">
         系统自动保留最近 90 天，过期日志每小时自动清理
       </p>
-      <div class="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+      <div class="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
         <Input
           v-model="filterUsername"
           type="text"
@@ -89,33 +89,33 @@
         </div>
       </div>
 
-      <div class="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
+      <div class="hidden md:block min-w-0">
         <Table min-width-class="min-w-[44rem]">
           <TableHeader>
             <TableRow>
-              <TableHead class="w-[180px]">时间</TableHead>
-              <TableHead class="w-[120px]">用户名</TableHead>
-              <TableHead class="w-[160px]">操作</TableHead>
-              <TableHead>详情</TableHead>
+              <TableHead class="whitespace-nowrap">时间</TableHead>
+              <TableHead class="whitespace-nowrap">用户名</TableHead>
+              <TableHead class="whitespace-nowrap">操作</TableHead>
+              <TableHead class="min-w-[12rem]">详情</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-for="(log, index) in logs" :key="logKey(log, index)">
-              <TableCell class="text-sm text-slate-600 whitespace-nowrap">{{
+              <TableCell class="whitespace-nowrap text-sm text-slate-600">{{
                 formatTime(log.timestamp)
               }}</TableCell>
-              <TableCell>
+              <TableCell class="whitespace-nowrap">
                 <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{{
                   log.username
                 }}</code>
               </TableCell>
-              <TableCell>
+              <TableCell class="whitespace-nowrap">
                 <Badge variant="info">{{ getOperationLogLabel(log.operation) }}</Badge>
               </TableCell>
-              <TableCell class="text-sm text-slate-500">
+              <TableCell class="min-w-0 text-sm text-slate-500">
                 <pre
                   v-if="log.details && Object.keys(log.details).length > 0"
-                  class="max-h-24 max-w-xl overflow-auto rounded bg-slate-50 px-1.5 py-0.5 font-mono text-xs whitespace-pre-wrap"
+                  class="max-h-24 overflow-auto break-words rounded bg-slate-50 px-1.5 py-0.5 font-mono text-xs whitespace-pre-wrap"
                   :title="formatDetails(log.details)"
                 >{{ formatDetails(log.details) }}</pre>
                 <span v-else>—</span>
