@@ -5,7 +5,9 @@ Portainer API 客户端
 """
 import requests
 import logging
-from typing import Dict, Any, Optional, List
+import time
+import json
+from typing import Dict, Any, Optional, List, Tuple
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -396,8 +398,148 @@ class PortainerClient:
                 return stack
         return None
 
+    def remove_stack(
+        self,
+        *,
+        stack_id: Optional[int] = None,
+        stack_name: Optional[str] = None,
+        wait: bool = True,
+        timeout: int = 60,
+        interval: float = 2.0,
+    ) -> Dict[str, Any]:
+        """Delete a Portainer stack by id or name, then wait for removal."""
+        if stack_id is None and not stack_name:
+            raise ValueError("remove_stack requires stack_id or stack_name")
+
+        stack: Optional[Dict[str, Any]] = None
+        resolved_id = stack_id
+        resolved_name = stack_name
+
+        if resolved_id is not None:
+            try:
+                stack = self.get_stack(int(resolved_id))
+                resolved_name = resolved_name or stack.get("Name")
+            except Exception as exc:
+                if not stack_name:
+                    raise
+                logger.warning(
+                    "Failed to read stack by id=%s, falling back to name=%s: %s",
+                    resolved_id,
+                    stack_name,
+                    exc,
+                )
+
+        if stack is None and stack_name:
+            stack = self.get_stack_by_name(stack_name)
+            if stack:
+                resolved_id = stack.get("Id")
+                resolved_name = stack.get("Name") or stack_name
+
+        if resolved_id is None:
+            return {
+                "success": True,
+                "message": f"Stack not found: {stack_name}",
+                "stack_id": None,
+                "stack_name": stack_name,
+                "deleted": False,
+            }
+
+        self._request(
+            "DELETE",
+            f"/stacks/{int(resolved_id)}",
+            params={"endpointId": self.endpoint_id},
+            timeout=30,
+        )
+
+        if wait:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                try:
+                    if resolved_name:
+                        still_exists = self.get_stack_by_name(str(resolved_name))
+                    else:
+                        still_exists = self.get_stack(int(resolved_id))
+                except Exception:
+                    still_exists = None
+                if not still_exists:
+                    break
+                time.sleep(interval)
+            else:
+                raise TimeoutError(
+                    f"Timed out waiting for Stack deletion: {resolved_name or resolved_id}"
+                )
+
+        return {
+            "success": True,
+            "message": f"Stack deleted: {resolved_name or resolved_id}",
+            "stack_id": int(resolved_id),
+            "stack_name": resolved_name,
+            "deleted": True,
+        }
+
+    @staticmethod
+    def _image_uses_mutable_tag(image: Any) -> bool:
+        if not isinstance(image, str) or not image.strip():
+            return False
+        ref = image.strip()
+        if "@sha256:" in ref:
+            return False
+        return True
+
+    @classmethod
+    def inject_deploy_revision(
+        cls, compose_content: str, revision: Optional[str]
+    ) -> Tuple[str, bool, int]:
+        """Add a deploy label to services using non-digest image references."""
+        if not revision:
+            return compose_content, False, 0
+        try:
+            compose = yaml.safe_load(compose_content) or {}
+        except Exception as exc:
+            logger.warning("Failed to parse compose content for revision injection: %s", exc)
+            return compose_content, False, 0
+
+        services = compose.get("services") if isinstance(compose, dict) else None
+        if not isinstance(services, dict):
+            return compose_content, False, 0
+
+        injected = False
+        service_count = 0
+        label_key = "app2docker.deploy.revision"
+        label_value = str(revision)
+        for service in services.values():
+            if not isinstance(service, dict):
+                continue
+            if not cls._image_uses_mutable_tag(service.get("image")):
+                continue
+            deploy = service.setdefault("deploy", {})
+            if not isinstance(deploy, dict):
+                deploy = {}
+                service["deploy"] = deploy
+            labels = deploy.get("labels")
+            if labels is None:
+                deploy["labels"] = {label_key: label_value}
+            elif isinstance(labels, dict):
+                labels[label_key] = label_value
+            elif isinstance(labels, list):
+                prefix = f"{label_key}="
+                labels[:] = [item for item in labels if not str(item).startswith(prefix)]
+                labels.append(f"{prefix}{label_value}")
+            else:
+                deploy["labels"] = {label_key: label_value}
+            injected = True
+            service_count += 1
+
+        if not injected:
+            return compose_content, False, 0
+        return yaml.safe_dump(compose, allow_unicode=True, sort_keys=False), True, service_count
+
     def update_stack(
-        self, stack_id: int, compose_content: str, env: Optional[List[str]] = None
+        self,
+        stack_id: int,
+        compose_content: str,
+        env: Optional[List[str]] = None,
+        stack_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         # 读取更新前的 Stack 文件，便于判断“调用成功但内容未变化”的情况
         before_content = ""
@@ -439,7 +581,9 @@ class PortainerClient:
             "success": True,
             "message": message,
             "stack_id": stack_id,
+            "stack_name": stack_name,
             "compose_changed": changed,
+            "pull_image": True,
         }
 
     def deploy_container_as_stack(
@@ -475,6 +619,7 @@ class PortainerClient:
         compose_content: str,
         command: str = "up -d",
         env: Optional[List[str]] = None,
+        revision: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         部署 Docker Compose Stack
@@ -488,10 +633,25 @@ class PortainerClient:
             部署结果
         """
         try:
+            compose_content, revision_injected, revision_service_count = (
+                self.inject_deploy_revision(compose_content, revision)
+            )
             existing_stack = self.get_stack_by_name(name)
             if existing_stack:
                 stack_id = existing_stack["Id"]
-                return self.update_stack(stack_id, compose_content, env=env)
+                result = self.update_stack(
+                    stack_id,
+                    compose_content,
+                    env=env,
+                    stack_name=existing_stack.get("Name") or name,
+                )
+                result.update(
+                    {
+                        "revision_injected": revision_injected,
+                        "revision_service_count": revision_service_count,
+                    }
+                )
+                return result
             else:
                 payload = {
                     "Name": name,
@@ -540,7 +700,12 @@ class PortainerClient:
                 return {
                     "success": True,
                     "message": "Stack 部署成功",
-                    "stack_id": create_response.get("Id")
+                    "stack_id": create_response.get("Id"),
+                    "stack_name": name,
+                    "compose_changed": True,
+                    "pull_image": None,
+                    "revision_injected": revision_injected,
+                    "revision_service_count": revision_service_count,
                 }
         
         except Exception as e:
@@ -550,6 +715,75 @@ class PortainerClient:
                 "message": f"部署失败: {str(e)}"
             }
     
+    def get_stack_services(self, stack_name: str) -> List[Dict[str, Any]]:
+        filters = {"label": [f"com.docker.stack.namespace={stack_name}"]}
+        return self._request(
+            "GET",
+            f"/endpoints/{self.endpoint_id}/docker/services",
+            params={"filters": json.dumps(filters)},
+        )
+
+    def verify_stack_services(
+        self,
+        stack_name: str,
+        expected_revision: Optional[str] = None,
+        min_revision_services: int = 0,
+    ) -> Dict[str, Any]:
+        try:
+            services = self.get_stack_services(stack_name)
+        except Exception as exc:
+            logger.warning("Failed to verify Stack services for %s: %s", stack_name, exc)
+            return {
+                "success": False,
+                "checked": False,
+                "message": f"Unable to verify Stack services: {exc}",
+            }
+
+        if not services:
+            return {
+                "success": False,
+                "checked": True,
+                "message": f"No services found for Stack: {stack_name}",
+                "service_count": 0,
+            }
+
+        images: List[str] = []
+        mismatched_revision_services: List[str] = []
+        matching_revision_services = 0
+        for service in services:
+            spec = service.get("Spec") or {}
+            task_template = spec.get("TaskTemplate") or {}
+            container_spec = task_template.get("ContainerSpec") or {}
+            image = container_spec.get("Image")
+            if image:
+                images.append(image)
+            if expected_revision:
+                labels = spec.get("Labels") or {}
+                revision = labels.get("app2docker.deploy.revision")
+                if revision == expected_revision:
+                    matching_revision_services += 1
+                elif revision is not None:
+                    mismatched_revision_services.append(
+                        spec.get("Name") or service.get("ID") or "unknown"
+                    )
+
+        missing_revision_count = max(0, min_revision_services - matching_revision_services)
+        success = not mismatched_revision_services and missing_revision_count == 0
+        return {
+            "success": success,
+            "checked": True,
+            "message": (
+                f"Verified {len(services)} service(s) for Stack: {stack_name}"
+                if success
+                else "Some Stack services did not receive the expected deploy revision"
+            ),
+            "service_count": len(services),
+            "images": images,
+            "matching_revision_services": matching_revision_services,
+            "missing_revision_count": missing_revision_count,
+            "mismatched_revision_services": mismatched_revision_services,
+        }
+
     def stop_container(self, container_name: str) -> Dict[str, Any]:
         """
         停止容器
