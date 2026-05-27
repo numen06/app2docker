@@ -2,7 +2,7 @@ import axios from "axios";
 import { showToast } from "@/composables/useToast";
 import { useTeamStore } from "@/stores/team";
 
-const STORAGE_KEY = "app2docker-pending-tasks";
+const STORAGE_KEY ="app2docker-pending-tasks";
 const MAX_STORED = 20;
 const POLL_MS = 3000;
 const GRACE_MS = 8000;
@@ -16,23 +16,23 @@ let intervalId = null;
 let onTaskCreatedHandler = null;
 
 const TYPE_LABELS = {
-  build: "构建",
-  export: "导出",
-  deploy: "部署",
-  pipeline: "流水线",
+  build:"构建",
+  export:"导出",
+  deploy:"部署",
+  pipeline:"流水线",
 };
 
 function taskLabel(meta, task) {
-  const type = meta?.task_type || task?.task_type || "build";
-  const prefix = TYPE_LABELS[type] || "任务";
+  const type = meta?.task_type || task?.task_type ||"build";
+  const prefix = TYPE_LABELS[type] ||"任务";
   const image = meta?.image || task?.image || task?.image_name;
-  const tag = meta?.tag ?? task?.tag ?? "latest";
+  const tag = meta?.tag ?? task?.tag ??"latest";
   const pipelineName = meta?.pipeline_name;
-  let name = "";
+  let name ="";
   if (pipelineName) {
     name = pipelineName;
   } else if (image) {
-    name = tag && tag !== "latest" ? `${image}:${tag}` : image;
+    name = tag && tag !=="latest" ? `${image}:${tag}` : image;
   } else if (task?.task_id) {
     name = task.task_id.substring(0, 8);
   }
@@ -129,22 +129,22 @@ async function fetchTaskStatus(taskId) {
 function notifyTerminal(taskId, task, meta) {
   if (notifiedIds.has(taskId)) return;
   const status = task?.status;
-  if (status !== "completed" && status !== "failed") return;
+  if (status !=="completed" && status !=="failed") return;
 
   notifiedIds.add(taskId);
   const { prefix, name } = taskLabel(meta, task);
-  const suffix = name ? ` · ${name}` : "";
+  const suffix = name ? ` · ${name}` :"";
 
-  if (status === "completed") {
+  if (status ==="completed") {
     showToast({
       message: `${prefix}任务已完成${suffix}`,
-      variant: "success",
+      variant:"success",
     });
   } else {
-    const err = (task?.error || "").slice(0, 80);
+    const err = (task?.error ||"").slice(0, 80);
     showToast({
-      message: `${prefix}任务失败${suffix}${err ? `\n${err}` : ""}`,
-      variant: "error",
+      message: `${prefix}任务失败${suffix}${err ? `\n${err}` :""}`,
+      variant:"error",
       duration: 8000,
     });
   }
@@ -196,7 +196,7 @@ async function pollOnce() {
       const task = await fetchTaskStatus(taskId);
       if (!task) continue;
 
-      if (["running", "pending"].includes(task.status)) {
+      if (["running","pending"].includes(task.status)) {
         continue;
       }
 
@@ -214,7 +214,7 @@ export function useTaskCompletionWatcher() {
     const taskId = detail.task_id;
     if (!taskId) return;
     registerTask(taskId, {
-      task_type: detail.task_type || "pipeline",
+      task_type: detail.task_type ||"pipeline",
       image: detail.image,
       tag: detail.tag,
       pipeline_name: detail.pipeline_name,

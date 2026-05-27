@@ -7,7 +7,7 @@
         :class="inputMode === 'file' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
         @click="inputMode = 'file'"
       >
-        <i class="fas fa-file-upload mr-1"></i> 上传文件
+        <AppIcon  name="file-upload" class="mr-1" /> 上传文件
       </button>
       <button
         type="button"
@@ -15,7 +15,7 @@
         :class="inputMode === 'text' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
         @click="inputMode = 'text'"
       >
-        <i class="fas fa-edit mr-1"></i> 文本输入
+        <AppIcon  name="edit" class="mr-1" /> 文本输入
       </button>
     </div>
 
@@ -41,8 +41,8 @@
     </div>
 
     <Button type="button" class="mb-4 w-full" :disabled="parsing" @click="parseCompose">
-      <i class="fas fa-search"></i>
-      {{ parsing ? "解析中..." : "解析镜像" }}
+      <AppIcon  name="search" />
+      {{ parsing ?"解析中..." :"解析镜像" }}
     </Button>
 
     <div v-if="images.length > 0" class="mt-3">
@@ -58,9 +58,9 @@
             <option value="gzip">tar.gz</option>
           </NativeSelect>
           <Button variant="outline" size="sm" :disabled="selectedImages.length === 0 || exporting" @click="downloadSelected">
-            <i class="fas fa-download"></i>
-            {{ exporting ? "导出中..." : "下载" }}
-            <i v-if="exporting" class="fas fa-spinner fa-spin"></i>
+            <AppIcon  name="download" />
+            {{ exporting ?"导出中..." :"下载" }}
+            <AppIcon v-if="exporting"  name="spinner" spin />
           </Button>
         </div>
       </div>
@@ -81,10 +81,10 @@
                 <input v-model="img.selected" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
               </TableCell>
               <TableCell>{{ img.service }}</TableCell>
-              <TableCell>{{ img.image }}{{ img.tag && img.tag !== "latest" ? ":" + img.tag : "" }}</TableCell>
+              <TableCell>{{ img.image }}{{ img.tag && img.tag !=="latest" ?":" + img.tag :"" }}</TableCell>
               <TableCell class="text-end">
                 <Button variant="outline" size="sm" :disabled="exporting" @click="downloadImage(img)">
-                  <i class="fas fa-download"></i>
+                  <AppIcon  name="download" />
                 </Button>
               </TableCell>
             </TableRow>
@@ -95,15 +95,15 @@
 
     <div v-if="exporting" class="export-status-banner mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
       <div class="flex items-start gap-2">
-        <i class="fas fa-spinner fa-spin mt-0.5"></i>
+        <AppIcon  name="spinner" class="mt-0.5" spin />
         <div>
           <strong>正在创建导出任务...</strong>
           <div v-if="currentExporting" class="mt-1 text-xs">
-            当前: <code>{{ currentExporting.image }}{{ currentExporting.tag && currentExporting.tag !== "latest" ? ":" + currentExporting.tag : "" }}</code>
+            当前: <code>{{ currentExporting.image }}{{ currentExporting.tag && currentExporting.tag !=="latest" ?":" + currentExporting.tag :"" }}</code>
             <span v-if="exportProgress.total > 1"> ({{ exportProgress.current }}/{{ exportProgress.total }})</span>
           </div>
           <p class="mt-1 text-xs text-slate-600">
-            <i class="fas fa-info-circle"></i> 任务创建后，请到「导出任务」标签页查看进度和下载文件
+            <AppIcon  name="info-circle" /> 任务创建后，请到「导出任务」标签页查看进度和下载文件
           </p>
         </div>
       </div>
@@ -170,7 +170,7 @@ async function parseCompose() {
     images.value = (res.data.images || []).map((img) => ({ ...img, selected: false }));
     toastSuccess(`解析成功，共 ${images.value.length} 个镜像`);
   } catch (error) {
-    toastApiError(error, "解析失败");
+    toastApiError(error,"解析失败");
   } finally {
     parsing.value = false;
   }
@@ -186,19 +186,19 @@ async function downloadImage(img) {
   try {
     const res = await axios.post("/api/export-image", {
       image: img.image,
-      tag: img.tag || "latest",
+      tag: img.tag ||"latest",
       compress: compress.value,
     });
     if (res.data?.task_id) {
       registerTask(res.data.task_id, {
-        task_type: "export",
+        task_type:"export",
         image: img.image,
-        tag: img.tag || "latest",
+        tag: img.tag ||"latest",
       });
     }
-    toastSuccess(`导出任务已创建！\n镜像: ${img.image}${img.tag && img.tag !== "latest" ? ":" + img.tag : ""}\n任务ID: ${res.data.task_id}\n\n请到「导出任务」标签页查看进度和下载文件。`);
+    toastSuccess(`导出任务已创建！\n镜像: ${img.image}${img.tag && img.tag !=="latest" ?":" + img.tag :""}\n任务ID: ${res.data.task_id}\n\n请到「导出任务」标签页查看进度和下载文件。`);
   } catch (error) {
-    toastApiError(error, "创建导出任务失败");
+    toastApiError(error,"创建导出任务失败");
   } finally {
     exporting.value = false;
     currentExporting.value = null;
@@ -218,7 +218,7 @@ async function downloadSelected() {
   exporting.value = true;
   exportProgress.value = { current: 0, total: selected.length };
   setTimeout(() => {
-    document.querySelector(".export-status-banner")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    document.querySelector(".export-status-banner")?.scrollIntoView({ behavior:"smooth", block:"nearest" });
   }, 100);
   try {
     const taskIds = [];
@@ -229,14 +229,14 @@ async function downloadSelected() {
       try {
         const res = await axios.post("/api/export-image", {
           image: img.image,
-          tag: img.tag || "latest",
+          tag: img.tag ||"latest",
           compress: compress.value,
         });
         if (res.data?.task_id) {
           registerTask(res.data.task_id, {
-            task_type: "export",
+            task_type:"export",
             image: img.image,
-            tag: img.tag || "latest",
+            tag: img.tag ||"latest",
           });
           taskIds.push(res.data.task_id);
         }

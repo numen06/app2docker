@@ -12,7 +12,7 @@ import AgentHostManager from "./AgentHostManager.vue";
 import HostManager from "./HostManager.vue";
 
 export default {
-  name: "UnifiedHostManager",
+  name:"UnifiedHostManager",
   components: {
     HostManager,
     AgentHostManager,
@@ -53,20 +53,20 @@ export default {
     // Agent主机状态相关方法
     const getAgentStatusBadgeClass = (status) => {
       const statusMap = {
-        'online': 'bg-success',
-        'offline': 'bg-secondary',
-        'connecting': 'bg-warning'
+        'online': 'bg-green-600 text-white',
+        'offline': 'bg-slate-500 text-white',
+        'connecting': 'bg-amber-400 text-slate-900'
       };
-      return statusMap[status] || 'bg-secondary';
+      return statusMap[status] || 'bg-slate-500 text-white';
     };
 
     const getAgentStatusIcon = (status) => {
       const iconMap = {
-        'online': 'fas fa-circle',
-        'offline': 'fas fa-circle',
-        'connecting': 'fas fa-spinner fa-spin'
+        'online': 'circle',
+        'offline': 'circle',
+        'connecting': 'spinner  animate-spin'
       };
-      return iconMap[status] || 'fas fa-circle';
+      return iconMap[status] || 'circle';
     };
 
     const getAgentStatusText = (status) => {

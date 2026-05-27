@@ -7,7 +7,7 @@
     >
       <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
         <h3 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
-          <i v-if="icon" :class="['fas', icon, iconClass]"></i>
+          <AppIcon v-if="icon" :name="icon" :class="iconClass" />
           {{ title }}
         </h3>
         <button
@@ -16,7 +16,7 @@
           aria-label="关闭"
           @click="$emit('update:modelValue', false)"
         >
-          <i class="fas fa-times"></i>
+          <AppIcon name="times" class="h-4 w-4" />
         </button>
       </div>
       <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -39,19 +39,18 @@ import BaseDialog from "@/components/ui/dialog/BaseDialog.vue";
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   title: { type: String, required: true },
-  icon: { type: String, default: "" },
-  iconClass: { type: String, default: "text-blue-600" },
-  size: { type: String, default: "md" },
+  icon: { type: String, default:"" },
+  iconClass: { type: String, default:"text-blue-600" },
+  size: { type: String, default:"md" },
 });
 
 defineEmits(["update:modelValue"]);
 
 const widths = {
-  sm: "max-w-md",
-  md: "max-w-lg",
-  lg: "max-w-2xl",
-  xl: "max-w-4xl",
-  "2xl": "max-w-[min(96vw,1400px)]",
+  sm:"max-w-md",
+  md:"max-w-lg",
+  lg:"max-w-2xl",
+  xl:"max-w-4xl","2xl":"max-w-[min(96vw,1400px)]",
 };
 const widthClass = computed(() => widths[props.size] || widths.md);
 </script>

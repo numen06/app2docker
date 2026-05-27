@@ -24,7 +24,7 @@ export function usePipelineEditor({ onSaved } = {}) {
 
 /** 分隔列表时仅使用半角逗号：输入中的全角逗号自动转为半角 */
 function normalizeAsciiCommaSeparators(s) {
-  return String(s ?? "").replace(/\uFF0C/g, ",");
+  return String(s ??"").replace(/\uFF0C/g,",");
 }
 
 function onPostBuildWebhookBranchesInput(webhook, e) {
@@ -86,32 +86,32 @@ const jsonEditorExtensions = [StreamLanguage.define(javascript), oneDark];
 const dockerfileEditorExtensions = [StreamLanguage.define(javascript), oneDark];
 
 const formData = ref({
-  name: "",
-  description: "",
-  git_url: "",
-  branch: "",
-  sub_path: "",
-  project_type: "jar",
-  template: "",
-  image_name: "",
-  tag: "latest",
+  name:"",
+  description:"",
+  git_url:"",
+  branch:"",
+  sub_path:"",
+  project_type:"jar",
+  template:"",
+  image_name:"",
+  tag:"latest",
   push: false,
-  webhook_token: "", // Webhook Token（用于 URL）
-  webhook_secret: "", // Webhook 密钥
-  webhook_branch_strategy: "use_push", // Webhook分支策略
+  webhook_token:"", // Webhook Token（用于 URL）
+  webhook_secret:"", // Webhook 密钥
+  webhook_branch_strategy:"use_push", // Webhook分支策略
   webhook_allowed_branches: [], // 允许触发的分支列表（用于选择分支触发策略）
   branch_tag_mapping: [], // 分支标签映射
   post_build_webhooks: [], // 构建完成后触发的webhook列表
   enabled: true,
   trigger_schedule: false, // 是否启用定时触发
-  cron_expression: "", // Cron 表达式
-  dockerfile_name: "Dockerfile", // Dockerfile文件名，默认Dockerfile
+  cron_expression:"", // Cron 表达式
+  dockerfile_name:"Dockerfile", // Dockerfile文件名，默认Dockerfile
   use_project_dockerfile: true, // 是否使用项目中的 Dockerfile
-  dockerfile_content: "", // Dockerfile内容（用于直接编辑）
-  source_id: "", // 数据源ID
+  dockerfile_content:"", // Dockerfile内容（用于直接编辑）
+  source_id:"", // 数据源ID
   // 多服务配置
-  push_mode: "multi", // 推送模式：'single' 或 'multi'
-  selected_service: "", // 单服务模式选中的服务
+  push_mode:"multi", // 推送模式：'single' 或 'multi'
+  selected_service:"", // 单服务模式选中的服务
   selected_services: [], // 多服务模式选中的服务列表
   service_push_config: {}, // 服务推送配置 {服务名: {imageName, tag, push}}
   service_template_params: {}, // 服务模板参数
@@ -140,8 +140,8 @@ async function onSourceSelected() {
   const sourceId = formData.value.source_id;
   if (!sourceId) {
     // 如果清空数据源选择，重置分支
-    formData.value.source_id = "";
-    formData.value.branch = "";
+    formData.value.source_id ="";
+    formData.value.branch ="";
     repoVerified.value = false;
     branchesAndTags.value = { branches: [], tags: [], default_branch: null };
     availableDockerfiles.value = [];
@@ -165,7 +165,7 @@ async function onSourceSelected() {
         !cached.branches.includes(formData.value.branch)
       ) {
         formData.value.branch =
-          cached.default_branch || cached.branches[0] || "";
+          cached.default_branch || cached.branches[0] ||"";
       }
 
       // 如果使用项目 Dockerfile，自动扫描 Dockerfile
@@ -191,7 +191,7 @@ async function onSourceSelected() {
         !source.branches.includes(formData.value.branch)
       ) {
         formData.value.branch =
-          source.default_branch || source.branches[0] || "";
+          source.default_branch || source.branches[0] ||"";
       }
 
       // 如果使用项目 Dockerfile，自动扫描 Dockerfile
@@ -241,7 +241,7 @@ watch(
           !cached.branches.includes(formData.value.branch)
         ) {
           formData.value.branch =
-            cached.default_branch || cached.branches[0] || "";
+            cached.default_branch || cached.branches[0] ||"";
         }
 
         // 如果使用项目 Dockerfile 且有分支，自动扫描 Dockerfile
@@ -295,18 +295,18 @@ watch(
       // 确保是真正的变化（不是初始化）
       // #region agent log (disabled - causes connection errors)
       // fetch(
-      //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+      //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
       //   {
-      //     method: "POST",
-      //     headers: { "Content-Type": "application/json" },
+      //     method:"POST",
+      //     headers: {"Content-Type":"application/json" },
       //     body: JSON.stringify({
-      //       location: "PipelinePanel.vue:1834",
-      //       message: "Dockerfile name changed, reloading services",
+      //       location:"PipelinePanel.vue:1834",
+      //       message:"Dockerfile name changed, reloading services",
       //       data: { old: oldName, newValue: newName },
       //       timestamp: Date.now(),
-      //       sessionId: "debug-session",
-      //       runId: "run1",
-      //       hypothesisId: "D",
+      //       sessionId:"debug-session",
+      //       runId:"run1",
+      //       hypothesisId:"D",
       //     }),
       //   }
       // ).catch(() => {});
@@ -323,7 +323,7 @@ watch(showBuildConfigJsonModal, (isVisible) => {
     // 使用 nextTick 确保在模态框完全显示后再更新
     nextTick(() => {
       buildConfigJsonText.value = buildConfigJson.value;
-      buildConfigJsonError.value = "";
+      buildConfigJsonError.value ="";
     });
   }
 });
@@ -331,10 +331,10 @@ watch(showBuildConfigJsonModal, (isVisible) => {
 // 监听activeTab变化，当切换到build Tab时（新建或编辑模式），更新JSON内容
 // 当切换到service Tab时，自动加载服务列表（如果还没有加载）
 watch(activeTab, (newTab) => {
-  if (newTab === "build") {
+  if (newTab ==="build") {
     nextTick(() => {
       buildConfigJsonText.value = buildConfigJson.value;
-      buildConfigJsonError.value = "";
+      buildConfigJsonError.value ="";
     });
   }
   // 编辑模式下不自动加载服务列表，需要用户手动点击加载按钮
@@ -344,19 +344,19 @@ watch(activeTab, (newTab) => {
 
 // 监听JSON文本变化，实时验证（新建和编辑模式下）
 watch(buildConfigJsonText, (newText) => {
-  if (activeTab.value !== "build") return;
+  if (activeTab.value !=="build") return;
 
-  buildConfigJsonError.value = "";
+  buildConfigJsonError.value ="";
   if (!newText || !newText.trim()) {
-    buildConfigJsonError.value = "JSON不能为空";
+    buildConfigJsonError.value ="JSON不能为空";
     return;
   }
 
   try {
     const parsed = JSON.parse(newText);
     // 基本验证：确保是对象
-    if (typeof parsed !== "object" || Array.isArray(parsed)) {
-      buildConfigJsonError.value = "JSON必须是对象格式";
+    if (typeof parsed !=="object" || Array.isArray(parsed)) {
+      buildConfigJsonError.value ="JSON必须是对象格式";
       return;
     }
   } catch (e) {
@@ -367,7 +367,7 @@ watch(buildConfigJsonText, (newText) => {
 // 关闭构建配置JSON模态框
 function closeBuildConfigJsonModal() {
   showBuildConfigJsonModal.value = false;
-  buildConfigJsonError.value = "";
+  buildConfigJsonError.value ="";
 }
 
 function saveBuildConfigJson() {
@@ -377,9 +377,9 @@ function saveBuildConfigJson() {
 
 // 重置构建配置JSON（恢复到原始值）
 async function resetBuildConfigJson() {
-  if (await showConfirm({ message: "确定要重置构建配置JSON吗？未保存的修改将丢失。" })) {
+  if (await showConfirm({ message:"确定要重置构建配置JSON吗？未保存的修改将丢失。" })) {
     buildConfigJsonText.value = buildConfigJson.value;
-    buildConfigJsonError.value = "";
+    buildConfigJsonError.value ="";
   }
 }
 
@@ -431,7 +431,7 @@ function applyBuildConfigJson() {
       formData.value.service_template_params =
         config.service_template_params || {};
     if (config.push_mode !== undefined)
-      formData.value.push_mode = config.push_mode || "multi";
+      formData.value.push_mode = config.push_mode ||"multi";
     if (config.resource_package_configs !== undefined) {
       // 直接使用resource_package_configs配置（包含package_id和target_path）
       formData.value.resource_package_configs =
@@ -442,13 +442,13 @@ function applyBuildConfigJson() {
         config.resource_package_ids || []
       ).map((pkgId) => ({
         package_id: pkgId,
-        target_path: "", // 旧格式没有target_path，留空
+        target_path:"", // 旧格式没有target_path，留空
       }));
     }
 
     // 如果push_mode是single，设置selected_service
     if (
-      config.push_mode === "single" &&
+      config.push_mode ==="single" &&
       config.selected_services &&
       config.selected_services.length > 0
     ) {
@@ -457,7 +457,7 @@ function applyBuildConfigJson() {
 
     // 更新JSON文本以反映formData的变化
     buildConfigJsonText.value = buildConfigJson.value;
-    buildConfigJsonError.value = "";
+    buildConfigJsonError.value ="";
 
     // 不显示alert，静默应用，用户需要点击外部保存按钮才能真正保存
   } catch (e) {
@@ -498,7 +498,7 @@ async function loadDockerfileFromRepo() {
     }
   } catch (error) {
     console.error("加载Dockerfile失败:", error);
-    toastApiError(error, "加载Dockerfile失败");
+    toastApiError(error,"加载Dockerfile失败");
   } finally {
     loadingDockerfile.value = false;
   }
@@ -526,7 +526,7 @@ watch(
       );
       if (!currentTemplate || currentTemplate.project_type !== newType) {
         // 模板不匹配新的项目类型，清除模板选择并重新加载服务（项目类型变化不是切换 Dockerfile）
-        formData.value.template = "";
+        formData.value.template ="";
         if (
           formData.value.use_project_dockerfile &&
           formData.value.git_url &&
@@ -578,8 +578,8 @@ async function loadDeployTasks() {
 
 function getDeployWebhookUrl(token) {
   const baseUrl = window.location.origin
-    .replace(":3000", ":8000")
-    .replace(":5173", ":8000");
+    .replace(":3000",":8000")
+    .replace(":5173",":8000");
   return `${baseUrl}/api/webhook/deploy/${token}`;
 }
 
@@ -598,37 +598,37 @@ function onDeployTaskSelected(webhook, configId) {
     }).catch(() => {});
   }
   webhook.url = getDeployWebhookUrl(token);
-  webhook.method = "POST";
+  webhook.method ="POST";
 }
 
 function initCreateForm() {
-  activeTab.value = "basic";
+  activeTab.value ="basic";
   editingPipeline.value = null;
   formData.value = {
-    name: "",
-    description: "",
-    git_url: "",
-    branch: "",
-    sub_path: "",
-    project_type: "jar",
-    template: "",
-    image_name: "",
-    tag: "latest",
+    name:"",
+    description:"",
+    git_url:"",
+    branch:"",
+    sub_path:"",
+    project_type:"jar",
+    template:"",
+    image_name:"",
+    tag:"latest",
     push: false,
-    webhook_secret: "",
-    webhook_branch_strategy: "use_push",
+    webhook_secret:"",
+    webhook_branch_strategy:"use_push",
     webhook_allowed_branches: [],
     branch_tag_mapping: [],
     post_build_webhooks: [],
     enabled: true,
     trigger_schedule: false,
-    cron_expression: "",
-    dockerfile_name: "Dockerfile",
-    dockerfile_content: "", // Dockerfile内容
-    source_id: "",
+    cron_expression:"",
+    dockerfile_name:"Dockerfile",
+    dockerfile_content:"", // Dockerfile内容
+    source_id:"",
     use_project_dockerfile: true,
-    push_mode: "multi",
-    selected_service: "",
+    push_mode:"multi",
+    selected_service:"",
     selected_services: [],
     service_push_config: {},
     service_template_params: {},
@@ -636,16 +636,16 @@ function initCreateForm() {
   };
   services.value = [];
   loadingServices.value = false;
-  servicesError.value = "";
+  servicesError.value ="";
   // 初始化Dockerfile编辑器内容
-  dockerfileContentText.value = "";
+  dockerfileContentText.value ="";
   wizardForceSingleMode.value = false;
   wizardServiceAnalysisDone.value = false;
 // 初始化JSON编辑器内容（新建模式）
   nextTick(() => {
-    if (activeTab.value === "build") {
+    if (activeTab.value ==="build") {
       buildConfigJsonText.value = buildConfigJson.value;
-      buildConfigJsonError.value = "";
+      buildConfigJsonError.value ="";
     }
   });
 }
@@ -653,11 +653,11 @@ function initCreateForm() {
 function applyPipelineToForm(pipeline) {
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:1918",
-  //     message: "editPipeline started",
+  //     location:"PipelinePanel.vue:1918",
+  //     message:"editPipeline started",
   //     data: {
   //       pipeline_id: pipeline.id,
   //       pipeline_name: pipeline.name,
@@ -667,15 +667,15 @@ function applyPipelineToForm(pipeline) {
   //       project_type: pipeline.project_type,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "B",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"B",
   //   }),
   // }).catch(() => {});
   // #endregion
 
   // 先重置Tab，确保显示基本信息Tab，而不是自动跳转到build Tab
-  activeTab.value = "basic";
+  activeTab.value ="basic";
   // 然后设置编辑模式
   editingPipeline.value = pipeline;
 
@@ -685,8 +685,8 @@ function applyPipelineToForm(pipeline) {
   );
 
   // 保存原始配置，避免被扫描覆盖
-  const savedDockerfileName = pipeline.dockerfile_name || "Dockerfile";
-  const savedTemplate = pipeline.template || "";
+  const savedDockerfileName = pipeline.dockerfile_name ||"Dockerfile";
+  const savedTemplate = pipeline.template ||"";
   // 优先使用后端返回的 use_project_dockerfile，如果没有则根据 template 推断
   const savedUseProjectDockerfile =
     pipeline.use_project_dockerfile !== undefined
@@ -699,20 +699,20 @@ function applyPipelineToForm(pipeline) {
 
   formData.value = {
     name: pipeline.name,
-    description: pipeline.description || "",
+    description: pipeline.description ||"",
     git_url: pipeline.git_url,
-    branch: pipeline.branch || "",
-    sub_path: pipeline.sub_path || "",
-    project_type: pipeline.project_type || "jar",
+    branch: pipeline.branch ||"",
+    sub_path: pipeline.sub_path ||"",
+    project_type: pipeline.project_type ||"jar",
     template: savedTemplate,
-    image_name: pipeline.image_name || "",
-    tag: pipeline.tag || "latest",
+    image_name: pipeline.image_name ||"",
+    tag: pipeline.tag ||"latest",
     push:
-      pipeline.push_mode === "multi"
+      pipeline.push_mode ==="multi"
         ? anyServicePushEnabled(normalizedPipelineSpc) || !!pipeline.push
         : pipeline.push || false,
-    webhook_token: pipeline.webhook_token || "",
-    webhook_secret: pipeline.webhook_secret || "",
+    webhook_token: pipeline.webhook_token ||"",
+    webhook_secret: pipeline.webhook_secret ||"",
     webhook_branch_strategy: getWebhookBranchStrategy(pipeline),
     webhook_allowed_branches: pipeline.webhook_allowed_branches
       ? [...pipeline.webhook_allowed_branches]
@@ -732,28 +732,28 @@ function applyPipelineToForm(pipeline) {
       }
       // 将headers对象转换为headers_json字符串
       return pipeline.post_build_webhooks.map((webhook) => ({
-        url: webhook.url || "",
-        method: webhook.method || "POST",
+        url: webhook.url ||"",
+        method: webhook.method ||"POST",
         headers: webhook.headers || {},
         headers_json: JSON.stringify(webhook.headers || {}, null, 2),
-        body_template: webhook.body_template || "{}",
+        body_template: webhook.body_template ||"{}",
         enabled: webhook.enabled !== false,
-        branch_strategy: webhook.branch_strategy || "all",
+        branch_strategy: webhook.branch_strategy ||"all",
         branches: webhook.branches || [],
       }));
     })(),
     enabled: pipeline.enabled !== false,
     trigger_schedule: !!pipeline.cron_expression, // 如果有cron表达式则启用
-    cron_expression: pipeline.cron_expression || "",
+    cron_expression: pipeline.cron_expression ||"",
     dockerfile_name: savedDockerfileName,
     use_project_dockerfile: savedUseProjectDockerfile,
-    dockerfile_content: pipeline.dockerfile_content || "", // Dockerfile内容
-    source_id: pipeline.source_id || (source ? source.source_id : ""),
-    push_mode: pipeline.push_mode || "multi",
+    dockerfile_content: pipeline.dockerfile_content ||"", // Dockerfile内容
+    source_id: pipeline.source_id || (source ? source.source_id :""),
+    push_mode: pipeline.push_mode ||"multi",
     selected_service:
       pipeline.selected_services && pipeline.selected_services.length === 1
         ? pipeline.selected_services[0]
-        : "",
+        :"",
     selected_services: pipeline.selected_services || [],
     service_push_config: normalizedPipelineSpc,
     service_template_params: pipeline.service_template_params || {},
@@ -762,11 +762,11 @@ function applyPipelineToForm(pipeline) {
 
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:1956",
-  //     message: "formData initialized",
+  //     location:"PipelinePanel.vue:1956",
+  //     message:"formData initialized",
   //     data: {
   //       dockerfile_name: formData.value.dockerfile_name,
   //       template: formData.value.template,
@@ -774,9 +774,9 @@ function applyPipelineToForm(pipeline) {
   //       branch: formData.value.branch,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "B",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"B",
   //   }),
   // }).catch(() => {});
   // #endregion
@@ -798,8 +798,7 @@ function applyPipelineToForm(pipeline) {
       formData.value.branch =
         source.default_branch ||
         source.branches[0] ||
-        formData.value.branch ||
-        "";
+        formData.value.branch ||"";
     }
 
     // 编辑模式下：不自动扫描 Dockerfile 和加载服务列表
@@ -811,22 +810,22 @@ function applyPipelineToForm(pipeline) {
   // 服务管理功能已移除
 
   // 初始化Dockerfile编辑器内容
-  dockerfileContentText.value = formData.value.dockerfile_content || "";
+  dockerfileContentText.value = formData.value.dockerfile_content ||"";
 // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:1980",
-  //     message: "editPipeline completed",
+  //     location:"PipelinePanel.vue:1980",
+  //     message:"editPipeline completed",
   //     data: {
   //       final_dockerfile_name: formData.value.dockerfile_name,
   //       final_template: formData.value.template,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "B",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"B",
   //   }),
   // }).catch(() => {});
   // #endregion
@@ -837,7 +836,7 @@ function addBranchTagMapping() {
   if (!formData.value.branch_tag_mapping) {
     formData.value.branch_tag_mapping = [];
   }
-  formData.value.branch_tag_mapping.push({ branch: "", tag: "" });
+  formData.value.branch_tag_mapping.push({ branch:"", tag:"" });
 }
 
 // 删除分支标签映射
@@ -846,14 +845,14 @@ function addPostBuildWebhook() {
     formData.value.post_build_webhooks = [];
   }
   formData.value.post_build_webhooks.push({
-    url: "",
-    method: "POST",
+    url:"",
+    method:"POST",
     headers: {},
-    headers_json: "{}",
+    headers_json:"{}",
     body_template:
-      '{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}',
+      '{"task_id":"{task_id}","image":"{image}","tag":"{tag}","status":"{status}"}',
     enabled: true,
-    branch_strategy: "all",
+    branch_strategy:"all",
     branches: [],
   });
 }
@@ -900,18 +899,18 @@ function getWebhookBranchStrategy(pipeline) {
     Array.isArray(pipeline.webhook_allowed_branches) &&
     pipeline.webhook_allowed_branches.length > 0
   ) {
-    return "select_branches";
+    return"select_branches";
   }
 
   const webhook_branch_filter = pipeline.webhook_branch_filter || false;
   const webhook_use_push_branch = pipeline.webhook_use_push_branch !== false; // 默认为true
 
   if (webhook_branch_filter) {
-    return "filter_match";
+    return"filter_match";
   } else if (webhook_use_push_branch) {
-    return "use_push";
+    return"use_push";
   } else {
-    return "use_configured";
+    return"use_configured";
   }
 }
 
@@ -952,13 +951,13 @@ async function savePipeline() {
     let webhook_branch_filter = false;
     let webhook_use_push_branch = true;
 
-    if (formData.value.webhook_branch_strategy === "filter_match") {
+    if (formData.value.webhook_branch_strategy ==="filter_match") {
       webhook_branch_filter = true;
       webhook_use_push_branch = true;
-    } else if (formData.value.webhook_branch_strategy === "use_push") {
+    } else if (formData.value.webhook_branch_strategy ==="use_push") {
       webhook_branch_filter = false;
       webhook_use_push_branch = true;
-    } else if (formData.value.webhook_branch_strategy === "select_branches") {
+    } else if (formData.value.webhook_branch_strategy ==="select_branches") {
       // 选择分支触发策略：验证是否选择了分支
       if (
         !formData.value.webhook_allowed_branches ||
@@ -980,7 +979,7 @@ async function savePipeline() {
     // 如果使用项目 Dockerfile，则清空 template
     // 如果使用模板，则确保 use_project_dockerfile 为 false
     if (formData.value.use_project_dockerfile) {
-      formData.value.template = "";
+      formData.value.template ="";
     } else {
       // 使用模板时，确保选择了模板
       if (!formData.value.template) {
@@ -998,8 +997,8 @@ async function savePipeline() {
       // 如果使用项目 Dockerfile，template 应该为空字符串
       // 如果使用模板，template 必须有值（不能为空）
       template: formData.value.use_project_dockerfile
-        ? ""
-        : formData.value.template || "",
+        ?""
+        : formData.value.template ||"",
       // 将分支策略转换为旧格式（向后兼容）
       webhook_branch_filter: webhook_branch_filter,
       webhook_use_push_branch: webhook_use_push_branch,
@@ -1016,7 +1015,7 @@ async function savePipeline() {
       // 编辑模式下，如果formData中没有多阶段配置，从原始流水线数据中保留
       selected_services: (() => {
         const fromForm =
-          formData.value.push_mode === "single" &&
+          formData.value.push_mode ==="single" &&
           formData.value.selected_service
             ? [formData.value.selected_service]
             : formData.value.selected_services &&
@@ -1044,7 +1043,7 @@ async function savePipeline() {
       service_push_config: (() => {
         // 只处理已选择的服务
         const selectedServices =
-          formData.value.push_mode === "single" &&
+          formData.value.push_mode ==="single" &&
           formData.value.selected_service
             ? [formData.value.selected_service]
             : formData.value.selected_services || [];
@@ -1085,21 +1084,21 @@ async function savePipeline() {
 
         selectedServices.forEach((serviceName) => {
           const value = config[serviceName];
-          if (typeof value === "boolean") {
+          if (typeof value ==="boolean") {
             // 旧格式：只有push字段
             normalized[serviceName] = {
               push: value,
               imageName: getServiceDefaultImageName(serviceName),
-              tag: formData.value.tag || "latest",
+              tag: formData.value.tag ||"latest",
             };
-          } else if (value && typeof value === "object") {
+          } else if (value && typeof value ==="object") {
             // 获取最终镜像名（自定义或默认）
             const customImageName = value.imageName && value.imageName.trim();
             const finalImageName =
               customImageName || getServiceDefaultImageName(serviceName);
             // 获取最终标签（自定义或全局）
             const finalTag =
-              (value.tag && value.tag.trim()) || formData.value.tag || "latest";
+              (value.tag && value.tag.trim()) || formData.value.tag ||"latest";
 
             normalized[serviceName] = {
               push: value.push !== undefined ? value.push : false,
@@ -1111,7 +1110,7 @@ async function savePipeline() {
             normalized[serviceName] = {
               push: false,
               imageName: getServiceDefaultImageName(serviceName),
-              tag: formData.value.tag || "latest",
+              tag: formData.value.tag ||"latest",
             };
           }
         });
@@ -1144,8 +1143,7 @@ async function savePipeline() {
       // 确保push_mode被保留（编辑模式下，如果formData中没有，从原始流水线数据中保留）
       push_mode:
         formData.value.push_mode ||
-        (editingPipeline.value && editingPipeline.value.push_mode) ||
-        "multi",
+        (editingPipeline.value && editingPipeline.value.push_mode) ||"multi",
       resource_package_configs:
         formData.value.resource_package_configs &&
         formData.value.resource_package_configs.length > 0
@@ -1162,7 +1160,7 @@ async function savePipeline() {
           : null,
       // 选择分支触发：只在策略为select_branches时传递
       webhook_allowed_branches:
-        formData.value.webhook_branch_strategy === "select_branches"
+        formData.value.webhook_branch_strategy ==="select_branches"
           ? formData.value.webhook_allowed_branches || []
           : null,
       // 构建后webhook配置
@@ -1177,10 +1175,10 @@ async function savePipeline() {
         return formData.value.post_build_webhooks.map((webhook) => {
           const processed = {
             url: webhook.url,
-            method: webhook.method || "POST",
-            body_template: webhook.body_template || "{}",
+            method: webhook.method ||"POST",
+            body_template: webhook.body_template ||"{}",
             enabled: webhook.enabled !== false,
-            branch_strategy: webhook.branch_strategy || "all",
+            branch_strategy: webhook.branch_strategy ||"all",
             branches: webhook.branches || [],
           };
           // 解析headers_json为对象
@@ -1199,7 +1197,7 @@ async function savePipeline() {
       })(),
     };
     // 多阶段模式：顶层 push 与分服务推送开关同步（否则仅保存 service_push_config 时 DB 仍为 false）
-    if (payload.push_mode === "multi" && payload.service_push_config) {
+    if (payload.push_mode ==="multi" && payload.service_push_config) {
       payload.push = anyServicePushEnabled(payload.service_push_config);
     }
     // 移除webhook_branch_strategy，因为后端不需要这个字段
@@ -1255,7 +1253,7 @@ async function savePipeline() {
     }
   } catch (error) {
     console.error("保存流水线失败:", error);
-    toastApiError(error, "保存流水线失败");
+    toastApiError(error,"保存流水线失败");
   } finally {
     saving.value = false;
   }
@@ -1290,17 +1288,17 @@ async function createPipelineMinimal() {
   try {
     const payload = {
       name: pipelineName,
-      description: formData.value.description || "",
+      description: formData.value.description ||"",
       git_url: formData.value.git_url?.trim() || null,
       branch: formData.value.branch || null,
       source_id: formData.value.source_id || null,
-      project_type: formData.value.project_type || "jar",
+      project_type: formData.value.project_type ||"jar",
       sub_path: formData.value.sub_path || null,
       push_mode: formData.value.push_mode,
       use_project_dockerfile: true,
-      dockerfile_name: formData.value.dockerfile_name || "Dockerfile",
-      template: "",
-      tag: "latest",
+      dockerfile_name: formData.value.dockerfile_name ||"Dockerfile",
+      template:"",
+      tag:"latest",
       push: false,
       enabled: true,
       webhook_branch_filter: false,
@@ -1308,12 +1306,12 @@ async function createPipelineMinimal() {
       cron_expression: null,
       branch_tag_mapping: null,
       selected_services:
-        formData.value.push_mode === "multi" &&
+        formData.value.push_mode ==="multi" &&
         formData.value.selected_services?.length > 0
           ? formData.value.selected_services
           : null,
       service_push_config:
-        formData.value.push_mode === "multi" &&
+        formData.value.push_mode ==="multi" &&
         formData.value.service_push_config &&
         Object.keys(formData.value.service_push_config).length > 0
           ? formData.value.service_push_config
@@ -1334,7 +1332,7 @@ async function createPipelineMinimal() {
     return newId || null;
   } catch (error) {
     console.error("创建流水线失败:", error);
-    toastApiError(error, "创建流水线失败");
+    toastApiError(error,"创建流水线失败");
     return null;
   } finally {
     saving.value = false;
@@ -1345,12 +1343,12 @@ function resetFormState() {
   editingPipeline.value = null;
   services.value = [];
   loadingServices.value = false;
-  servicesError.value = "";
+  servicesError.value ="";
   branchesAndTags.value = { branches: [], tags: [], default_branch: null };
   availableDockerfiles.value = [];
   refreshingBranches.value = false;
   scanningDockerfiles.value = false;
-  dockerfilesError.value = "";
+  dockerfilesError.value ="";
   repoVerified.value = false;
   wizardForceSingleMode.value = false;
   wizardServiceAnalysisDone.value = false;
@@ -1364,12 +1362,12 @@ function applyPushModeFromDockerfileAnalysis(forceSingle = false) {
     services.value.length === 0;
 
   if (useSingle) {
-    formData.value.push_mode = "single";
+    formData.value.push_mode ="single";
     formData.value.selected_services = [];
-    formData.value.selected_service = "";
+    formData.value.selected_service ="";
   } else {
-    formData.value.push_mode = "multi";
-    formData.value.selected_service = "";
+    formData.value.push_mode ="multi";
+    formData.value.selected_service ="";
     formData.value.selected_services = services.value.map((s) => s.name);
     initializeServiceConfigs();
   }
@@ -1387,13 +1385,13 @@ function switchWizardToMultiAppMode() {
 
 /** 向导内用户手动切换推送模式（可覆盖 Dockerfile 自动识别结果） */
 function setWizardPushMode(mode) {
-  if (mode === "single") {
+  if (mode ==="single") {
     switchWizardToSingleAppMode();
     return;
   }
   wizardForceSingleMode.value = false;
-  formData.value.push_mode = "multi";
-  formData.value.selected_service = "";
+  formData.value.push_mode ="multi";
+  formData.value.selected_service ="";
   if (services.value.length > 0) {
     formData.value.selected_services = services.value.map((s) => s.name);
     initializeServiceConfigs();
@@ -1407,10 +1405,10 @@ function setWizardPushMode(mode) {
 async function analyzeDockerfileForWizard() {
   wizardServiceAnalysisDone.value = false;
   wizardForceSingleMode.value = false;
-  servicesError.value = "";
+  servicesError.value ="";
 
   if (!formData.value.git_url?.trim() && !formData.value.source_id) {
-    servicesError.value = "请先选择数据源或填写 Git 仓库地址";
+    servicesError.value ="请先选择数据源或填写 Git 仓库地址";
     return false;
   }
 
@@ -1487,12 +1485,12 @@ async function refreshBranches(forceRefresh = true) {
           !branchesAndTags.value.branches.includes(currentBranch) &&
           !branchesAndTags.value.tags.includes(currentBranch)
         ) {
-          formData.value.branch = branchesAndTags.value.default_branch || "";
+          formData.value.branch = branchesAndTags.value.default_branch ||"";
         }
       }
     } catch (error) {
       console.error("刷新分支列表失败:", error);
-      toastApiError(error, "刷新分支列表失败，请稍后重试");
+      toastApiError(error,"刷新分支列表失败，请稍后重试");
     } finally {
       refreshingBranches.value = false;
     }
@@ -1541,7 +1539,7 @@ async function refreshBranches(forceRefresh = true) {
         !branchesAndTags.value.branches.includes(currentBranch) &&
         !branchesAndTags.value.tags.includes(currentBranch)
       ) {
-        formData.value.branch = branchesAndTags.value.default_branch || "";
+        formData.value.branch = branchesAndTags.value.default_branch ||"";
       }
 
       // 如果使用项目 Dockerfile，重新扫描 Dockerfile
@@ -1551,7 +1549,7 @@ async function refreshBranches(forceRefresh = true) {
     }
   } catch (error) {
     console.error("刷新分支列表失败:", error);
-    toastApiError(error, "刷新分支列表失败，请稍后重试");
+    toastApiError(error,"刷新分支列表失败，请稍后重试");
   } finally {
     refreshingBranches.value = false;
   }
@@ -1564,11 +1562,11 @@ async function scanDockerfiles(
 ) {
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:2316",
-  //     message: "scanDockerfiles started",
+  //     location:"PipelinePanel.vue:2316",
+  //     message:"scanDockerfiles started",
   //     data: {
   //       source_id: formData.value.source_id,
   //       git_url: formData.value.git_url,
@@ -1578,15 +1576,15 @@ async function scanDockerfiles(
   //       editing: !!editingPipeline.value,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "A",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"A",
   //   }),
   // }).catch(() => {});
   // #endregion
   const sourceId = formData.value.source_id;
   if (!sourceId && !formData.value.git_url) {
-    dockerfilesError.value = "请先选择数据源或填写 Git 仓库地址";
+    dockerfilesError.value ="请先选择数据源或填写 Git 仓库地址";
     return;
   }
 
@@ -1598,7 +1596,7 @@ async function scanDockerfiles(
   const previousDockerfiles = [...availableDockerfiles.value];
 
   scanningDockerfiles.value = true;
-  dockerfilesError.value = "";
+  dockerfilesError.value ="";
   // 注意：不要立即清空 availableDockerfiles，这样下拉框可以继续显示已保存的值
   // 只有在扫描成功后才更新列表
 
@@ -1613,15 +1611,15 @@ async function scanDockerfiles(
     }
 
     if (!gitUrl) {
-      dockerfilesError.value = "无法获取 Git 仓库地址";
+      dockerfilesError.value ="无法获取 Git 仓库地址";
       return;
     }
 
     const branch =
-      formData.value.branch || branchesAndTags.value.default_branch || "main";
+      formData.value.branch || branchesAndTags.value.default_branch ||"main";
 
     if (!branch) {
-      dockerfilesError.value = "请先选择分支";
+      dockerfilesError.value ="请先选择分支";
       return;
     }
 
@@ -1647,16 +1645,16 @@ async function scanDockerfiles(
       const dockerfileList = dockerfilePaths.map((path) => {
         const parts = path.split("/");
         return {
-          path: path, // 完整路径，如 "frontend/Dockerfile"
-          name: parts[parts.length - 1], // 文件名，如 "Dockerfile"
+          path: path, // 完整路径，如"frontend/Dockerfile"
+          name: parts[parts.length - 1], // 文件名，如"Dockerfile"
         };
       });
 
       // 按路径排序
       dockerfileList.sort((a, b) => {
         // 根目录的 Dockerfile 优先
-        if (a.path === "Dockerfile") return -1;
-        if (b.path === "Dockerfile") return 1;
+        if (a.path ==="Dockerfile") return -1;
+        if (b.path ==="Dockerfile") return 1;
         return a.path.localeCompare(b.path);
       });
 
@@ -1674,11 +1672,11 @@ async function scanDockerfiles(
 
     // #region agent log (disabled - causes connection errors)
     // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
+    //   method:"POST",
+    //   headers: {"Content-Type":"application/json" },
     //   body: JSON.stringify({
-    //     location: "PipelinePanel.vue:2402",
-    //     message: "Dockerfiles scanned",
+    //     location:"PipelinePanel.vue:2402",
+    //     message:"Dockerfiles scanned",
     //     data: {
     //       count: availableDockerfiles.value.length,
     //       saved_dockerfile_name: savedDockerfileName,
@@ -1687,9 +1685,9 @@ async function scanDockerfiles(
     //       keep_current_selection: keepCurrentSelection,
     //     },
     //     timestamp: Date.now(),
-    //     sessionId: "debug-session",
-    //     runId: "run1",
-    //     hypothesisId: "A",
+    //     sessionId:"debug-session",
+    //     runId:"run1",
+    //     hypothesisId:"A",
     //   }),
     // }).catch(() => {});
     // #endregion
@@ -1704,23 +1702,23 @@ async function scanDockerfiles(
       );
       // #region agent log (disabled - causes connection errors)
       // fetch(
-      //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+      //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
       //   {
-      //     method: "POST",
-      //     headers: { "Content-Type": "application/json" },
+      //     method:"POST",
+      //     headers: {"Content-Type":"application/json" },
       //     body: JSON.stringify({
-      //       location: "PipelinePanel.vue:2412",
+      //       location:"PipelinePanel.vue:2412",
       //       message:
-      //         "Dockerfile name preserved (editing mode or has saved selection)",
+      //"Dockerfile name preserved (editing mode or has saved selection)",
       //       data: {
       //         dockerfile_name: savedDockerfileName,
       //         in_list: currentInList,
       //         is_editing: isEditing,
       //       },
       //       timestamp: Date.now(),
-      //       sessionId: "debug-session",
-      //       runId: "run1",
-      //       hypothesisId: "A",
+      //       sessionId:"debug-session",
+      //       runId:"run1",
+      //       hypothesisId:"A",
       //     }),
       //   }
       // ).catch(() => {});
@@ -1729,34 +1727,34 @@ async function scanDockerfiles(
       // 新建模式且没有保存的选择：自动选择第一个
       if (
         !savedDockerfileName ||
-        savedDockerfileName === "" ||
-        savedDockerfileName === "Dockerfile"
+        savedDockerfileName ==="" ||
+        savedDockerfileName ==="Dockerfile"
       ) {
         // 当前没有选择或只有默认值，自动选择第一个（优先选择根目录的 Dockerfile）
         const rootDockerfile = availableDockerfiles.value.find(
-          (df) => df.path === "Dockerfile"
+          (df) => df.path ==="Dockerfile"
         );
         formData.value.dockerfile_name = rootDockerfile
-          ? "Dockerfile"
+          ?"Dockerfile"
           : availableDockerfiles.value[0].path;
         // #region agent log (disabled - causes connection errors)
         // fetch(
-        //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+        //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
         //   {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
+        //     method:"POST",
+        //     headers: {"Content-Type":"application/json" },
         //     body: JSON.stringify({
-        //       location: "PipelinePanel.vue:2420",
+        //       location:"PipelinePanel.vue:2420",
         //       message:
-        //         "Dockerfile name auto-selected (new mode, no previous selection)",
+        //"Dockerfile name auto-selected (new mode, no previous selection)",
         //       data: {
         //         new: formData.value.dockerfile_name,
         //         old: savedDockerfileName,
         //       },
         //       timestamp: Date.now(),
-        //       sessionId: "debug-session",
-        //       runId: "run1",
-        //       hypothesisId: "A",
+        //       sessionId:"debug-session",
+        //       runId:"run1",
+        //       hypothesisId:"A",
         //     }),
         //   }
         // ).catch(() => {});
@@ -1770,31 +1768,31 @@ async function scanDockerfiles(
           formData.value.dockerfile_name = savedDockerfileName;
         } else {
           const rootDockerfile = availableDockerfiles.value.find(
-            (df) => df.path === "Dockerfile"
+            (df) => df.path ==="Dockerfile"
           );
           formData.value.dockerfile_name = rootDockerfile
-            ? "Dockerfile"
+            ?"Dockerfile"
             : availableDockerfiles.value[0].path;
         }
         // #region agent log (disabled - causes connection errors)
         // fetch(
-        //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+        //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
         //   {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
+        //     method:"POST",
+        //     headers: {"Content-Type":"application/json" },
         //     body: JSON.stringify({
-        //       location: "PipelinePanel.vue:2430",
+        //       location:"PipelinePanel.vue:2430",
         //       message:
-        //         "Dockerfile name handled (new mode with previous selection)",
+        //"Dockerfile name handled (new mode with previous selection)",
         //       data: {
         //         saved: savedDockerfileName,
         //         final: formData.value.dockerfile_name,
         //         in_list: currentInList,
         //       },
         //       timestamp: Date.now(),
-        //       sessionId: "debug-session",
-        //       runId: "run1",
-        //       hypothesisId: "A",
+        //       sessionId:"debug-session",
+        //       runId:"run1",
+        //       hypothesisId:"A",
         //     }),
         //   }
         // ).catch(() => {});
@@ -1808,31 +1806,31 @@ async function scanDockerfiles(
     } else {
       // 没有扫描到 Dockerfile，如果当前选择不为空，保持原选择，否则设为默认值
       if (!savedDockerfileName) {
-        formData.value.dockerfile_name = "Dockerfile";
+        formData.value.dockerfile_name ="Dockerfile";
       }
     }
   } catch (error) {
     console.error("扫描 Dockerfile 失败:", error);
     dockerfilesError.value =
-      error.response?.data?.detail || "扫描 Dockerfile 失败";
+      error.response?.data?.detail ||"扫描 Dockerfile 失败";
     // 扫描失败时不清空列表，保持之前的列表（如果有），这样已保存的值还能显示
     // availableDockerfiles.value 保持原值
     // #region agent log (disabled - causes connection errors)
     // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
+    //   method:"POST",
+    //   headers: {"Content-Type":"application/json" },
     //   body: JSON.stringify({
-    //     location: "PipelinePanel.vue:2404",
-    //     message: "scanDockerfiles error",
+    //     location:"PipelinePanel.vue:2404",
+    //     message:"scanDockerfiles error",
     //     data: {
     //       error: error.message,
     //       response: error.response?.data,
     //       preserved_list_count: availableDockerfiles.value.length,
     //     },
     //     timestamp: Date.now(),
-    //     sessionId: "debug-session",
-    //     runId: "run1",
-    //     hypothesisId: "A",
+    //     sessionId:"debug-session",
+    //     runId:"run1",
+    //     hypothesisId:"A",
     //   }),
     // }).catch(() => {});
     // #endregion
@@ -1840,16 +1838,16 @@ async function scanDockerfiles(
     scanningDockerfiles.value = false;
     // #region agent log (disabled - causes connection errors)
     // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
+    //   method:"POST",
+    //   headers: {"Content-Type":"application/json" },
     //   body: JSON.stringify({
-    //     location: "PipelinePanel.vue:2320",
-    //     message: "scanDockerfiles completed",
+    //     location:"PipelinePanel.vue:2320",
+    //     message:"scanDockerfiles completed",
     //     data: { final_dockerfile_name: formData.value.dockerfile_name },
     //     timestamp: Date.now(),
-    //     sessionId: "debug-session",
-    //     runId: "run1",
-    //     hypothesisId: "A",
+    //     sessionId:"debug-session",
+    //     runId:"run1",
+    //     hypothesisId:"A",
     //   }),
     // }).catch(() => {});
     // #endregion
@@ -1878,7 +1876,7 @@ async function loadServices(isDockerfileChanged = false) {
   // 生成唯一标识，用于去重
   const currentKey = `${formData.value.git_url}_${formData.value.branch}_${
     formData.value.dockerfile_name
-  }_${formData.value.source_id || ""}`;
+  }_${formData.value.source_id ||""}`;
 
   // 如果正在加载相同的服务配置，直接返回
   if (loadingServices.value && loadingServicesKey.value === currentKey) {
@@ -1915,7 +1913,7 @@ async function loadServices(isDockerfileChanged = false) {
         await loadServicesInternal(isDockerfileChanged, currentKey);
         // 加载完成后验证已保存的服务是否还存在（只验证一次）
         if (
-          formData.value.push_mode === "multi" &&
+          formData.value.push_mode ==="multi" &&
           formData.value.selected_services
         ) {
           const validServices = formData.value.selected_services.filter(
@@ -1934,7 +1932,7 @@ async function loadServices(isDockerfileChanged = false) {
             );
           }
         } else if (
-          formData.value.push_mode === "single" &&
+          formData.value.push_mode ==="single" &&
           formData.value.selected_service
         ) {
           if (
@@ -1942,7 +1940,7 @@ async function loadServices(isDockerfileChanged = false) {
               (s) => s.name === formData.value.selected_service
             )
           ) {
-            formData.value.selected_service = "";
+            formData.value.selected_service ="";
           }
         }
       } catch (error) {
@@ -1972,7 +1970,7 @@ async function loadServices(isDockerfileChanged = false) {
 // 内部加载服务列表函数
 async function loadServicesInternal(
   isDockerfileChanged = false,
-  currentKey = ""
+  currentKey =""
 ) {
   if (!formData.value.git_url) {
     services.value = [];
@@ -1984,7 +1982,7 @@ async function loadServicesInternal(
     currentKey ||
     `${formData.value.git_url}_${formData.value.branch}_${
       formData.value.dockerfile_name
-    }_${formData.value.source_id || ""}`;
+    }_${formData.value.source_id ||""}`;
 
   // 如果正在加载相同的服务配置，直接返回
   if (loadingServices.value && loadingServicesKey.value === key) {
@@ -1997,14 +1995,14 @@ async function loadServicesInternal(
 
   loadingServices.value = true;
   loadingServicesKey.value = key;
-  servicesError.value = "";
+  servicesError.value ="";
 
   try {
     if (formData.value.use_project_dockerfile) {
       // 使用项目 Dockerfile
       const gitUrl = formData.value.git_url;
       const branch = formData.value.branch || null;
-      const dockerfileName = formData.value.dockerfile_name || "Dockerfile";
+      const dockerfileName = formData.value.dockerfile_name ||"Dockerfile";
       const sourceId = formData.value.source_id || null;
 
       // 使用缓存机制获取服务分析结果
@@ -2019,7 +2017,7 @@ async function loadServicesInternal(
           return await axios.post("/api/parse-dockerfile-services", payload);
         },
         gitUrl,
-        branch || "main",
+        branch ||"main",
         dockerfileName,
         sourceId,
         false // 不强制刷新，使用缓存
@@ -2067,12 +2065,12 @@ async function loadServicesInternal(
     }
   } catch (error) {
     console.error("加载服务列表失败:", error);
-    servicesError.value = error.response?.data?.detail || "加载服务列表失败";
+    servicesError.value = error.response?.data?.detail ||"加载服务列表失败";
     services.value = [];
     return Promise.reject(error);
   } finally {
     loadingServices.value = false;
-    loadingServicesKey.value = ""; // 清除加载标识
+    loadingServicesKey.value =""; // 清除加载标识
   }
 
   return Promise.resolve();
@@ -2086,25 +2084,25 @@ function initializeServiceConfigs() {
   formData.value.selected_services.forEach((serviceName) => {
     if (
       formData.value.service_push_config[serviceName] === undefined ||
-      typeof formData.value.service_push_config[serviceName] === "boolean"
+      typeof formData.value.service_push_config[serviceName] ==="boolean"
     ) {
       // 如果是布尔值（旧格式），转换为对象格式
       const oldValue = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
-        push: typeof oldValue === "boolean" ? oldValue : false,
-        imageName: "",
-        tag: "",
+        push: typeof oldValue ==="boolean" ? oldValue : false,
+        imageName:"",
+        tag:"",
       };
     } else if (
       formData.value.service_push_config[serviceName] &&
-      typeof formData.value.service_push_config[serviceName] === "object"
+      typeof formData.value.service_push_config[serviceName] ==="object"
     ) {
       // 确保对象格式包含所有字段
       const config = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
         push: config.push !== undefined ? config.push : false,
-        imageName: config.imageName !== undefined ? config.imageName : "",
-        tag: config.tag !== undefined ? config.tag : "",
+        imageName: config.imageName !== undefined ? config.imageName :"",
+        tag: config.tag !== undefined ? config.tag :"",
       };
     }
   });
@@ -2112,11 +2110,11 @@ function initializeServiceConfigs() {
 
 // 推送模式变化
 function onPushModeChange() {
-  if (formData.value.push_mode === "single") {
+  if (formData.value.push_mode ==="single") {
     formData.value.selected_services = [];
-    formData.value.selected_service = "";
+    formData.value.selected_service ="";
   } else {
-    formData.value.selected_service = "";
+    formData.value.selected_service ="";
     if (
       services.value.length > 0 &&
       (!formData.value.selected_services ||
@@ -2141,24 +2139,24 @@ function toggleService(serviceName) {
     formData.value.selected_services.push(serviceName);
     if (
       formData.value.service_push_config[serviceName] === undefined ||
-      typeof formData.value.service_push_config[serviceName] === "boolean"
+      typeof formData.value.service_push_config[serviceName] ==="boolean"
     ) {
       const oldValue = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
-        push: typeof oldValue === "boolean" ? oldValue : false,
-        imageName: "",
-        tag: "",
+        push: typeof oldValue ==="boolean" ? oldValue : false,
+        imageName:"",
+        tag:"",
       };
     } else if (
       formData.value.service_push_config[serviceName] &&
-      typeof formData.value.service_push_config[serviceName] === "object"
+      typeof formData.value.service_push_config[serviceName] ==="object"
     ) {
       // 确保包含所有字段
       const config = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
         push: config.push !== undefined ? config.push : false,
-        imageName: config.imageName !== undefined ? config.imageName : "",
-        tag: config.tag !== undefined ? config.tag : "",
+        imageName: config.imageName !== undefined ? config.imageName :"",
+        tag: config.tag !== undefined ? config.tag :"",
       };
     }
   }
@@ -2176,24 +2174,24 @@ function onServiceSelectionChange() {
   formData.value.selected_services.forEach((serviceName) => {
     if (
       formData.value.service_push_config[serviceName] === undefined ||
-      typeof formData.value.service_push_config[serviceName] === "boolean"
+      typeof formData.value.service_push_config[serviceName] ==="boolean"
     ) {
       const oldValue = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
-        push: typeof oldValue === "boolean" ? oldValue : false,
-        imageName: "",
-        tag: "",
+        push: typeof oldValue ==="boolean" ? oldValue : false,
+        imageName:"",
+        tag:"",
       };
     } else if (
       formData.value.service_push_config[serviceName] &&
-      typeof formData.value.service_push_config[serviceName] === "object"
+      typeof formData.value.service_push_config[serviceName] ==="object"
     ) {
       // 确保包含所有字段
       const config = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
         push: config.push !== undefined ? config.push : false,
-        imageName: config.imageName !== undefined ? config.imageName : "",
-        tag: config.tag !== undefined ? config.tag : "",
+        imageName: config.imageName !== undefined ? config.imageName :"",
+        tag: config.tag !== undefined ? config.tag :"",
       };
     }
   });
@@ -2230,24 +2228,24 @@ function getServiceConfig(serviceName) {
   // 如果是布尔值（旧格式），转换为对象格式
   if (
     formData.value.service_push_config[serviceName] === undefined ||
-    typeof formData.value.service_push_config[serviceName] === "boolean"
+    typeof formData.value.service_push_config[serviceName] ==="boolean"
   ) {
     const oldValue = formData.value.service_push_config[serviceName];
     formData.value.service_push_config[serviceName] = {
-      push: typeof oldValue === "boolean" ? oldValue : false,
-      imageName: "",
-      tag: "",
+      push: typeof oldValue ==="boolean" ? oldValue : false,
+      imageName:"",
+      tag:"",
     };
   } else if (
     formData.value.service_push_config[serviceName] &&
-    typeof formData.value.service_push_config[serviceName] === "object"
+    typeof formData.value.service_push_config[serviceName] ==="object"
   ) {
     // 确保包含所有字段
     const config = formData.value.service_push_config[serviceName];
     formData.value.service_push_config[serviceName] = {
       push: config.push !== undefined ? config.push : false,
-      imageName: config.imageName !== undefined ? config.imageName : "",
-      tag: config.tag !== undefined ? config.tag : "",
+      imageName: config.imageName !== undefined ? config.imageName :"",
+      tag: config.tag !== undefined ? config.tag :"",
     };
   }
   return formData.value.service_push_config[serviceName];
@@ -2256,17 +2254,17 @@ function getServiceConfig(serviceName) {
 // 获取服务的默认镜像名称（基于全局镜像名称前缀 + 服务名）
 function getServiceDefaultImageName(serviceName) {
   if (!serviceName) {
-    return formData.value.image_name || "myapp/demo";
+    return formData.value.image_name ||"myapp/demo";
   }
 
-  let prefix = formData.value.image_name || "myapp/demo";
+  let prefix = formData.value.image_name ||"myapp/demo";
 
   // 去除前缀末尾的斜杠，避免出现双斜杠
-  prefix = prefix.replace(/\/+$/, "");
+  prefix = prefix.replace(/\/+$/,"");
 
   // 如果前缀已经以服务名结尾，直接返回前缀（避免重复拼接）
   // 检查格式：prefix/serviceName 或 prefix//serviceName 等
-  const normalizedPrefix = prefix.replace(/\/+$/, "");
+  const normalizedPrefix = prefix.replace(/\/+$/,"");
   if (
     normalizedPrefix.endsWith(`/${serviceName}`) ||
     normalizedPrefix === serviceName
@@ -2288,37 +2286,37 @@ function onServiceImageNameBlur(serviceName) {
   const config = getServiceConfig(serviceName);
   // 如果用户清空了自定义镜像名，确保使用默认值
   if (!config.imageName || !config.imageName.trim()) {
-    config.imageName = "";
+    config.imageName ="";
   }
 }
 
 // 恢复默认镜像名
 function resetServiceImageName(serviceName) {
   const config = getServiceConfig(serviceName);
-  config.imageName = "";
+  config.imageName ="";
 }
 
 // 规范化服务推送配置（将旧格式的布尔值转换为新格式的对象，保留 push、imageName 和 tag 字段）
 function normalizeServicePushConfig(config) {
-  if (!config || typeof config !== "object") {
+  if (!config || typeof config !=="object") {
     return {};
   }
   const normalized = {};
   Object.keys(config).forEach((serviceName) => {
     const value = config[serviceName];
     // 如果是布尔值（旧格式），转换为对象格式
-    if (typeof value === "boolean") {
+    if (typeof value ==="boolean") {
       normalized[serviceName] = {
         push: value,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
-    } else if (value && typeof value === "object") {
+    } else if (value && typeof value ==="object") {
       // 已经是对象格式，保留所有字段
       normalized[serviceName] = {
         push: value.push !== undefined ? value.push : false,
-        imageName: value.imageName !== undefined ? value.imageName : "",
-        tag: value.tag !== undefined ? value.tag : "",
+        imageName: value.imageName !== undefined ? value.imageName :"",
+        tag: value.tag !== undefined ? value.tag :"",
       };
     }
   });
@@ -2327,11 +2325,11 @@ function normalizeServicePushConfig(config) {
 
 /** 多阶段模式下任一分服务是否开启推送（用于同步顶层 pipeline.push） */
 function anyServicePushEnabled(servicePushConfig) {
-  if (!servicePushConfig || typeof servicePushConfig !== "object") {
+  if (!servicePushConfig || typeof servicePushConfig !=="object") {
     return false;
   }
   return Object.values(servicePushConfig).some(
-    (cfg) => cfg && typeof cfg === "object" && cfg.push === true
+    (cfg) => cfg && typeof cfg ==="object" && cfg.push === true
   );
 }
 
@@ -2345,7 +2343,7 @@ async function loadResourcePackages() {
     // 如果某个已保存的资源包配置没有 target_path 或为空，使用资源包名称作为默认值（与分步构建一致）
     if (editingPipeline.value && formData.value.resource_package_configs) {
       formData.value.resource_package_configs.forEach((config) => {
-        if (!config.target_path || config.target_path.trim() === "") {
+        if (!config.target_path || config.target_path.trim() ==="") {
           const pkg = resourcePackages.value.find(
             (p) => p.package_id === config.package_id
           );
@@ -2353,7 +2351,7 @@ async function loadResourcePackages() {
             // 如果路径为空，使用资源包名称（与分步构建一致）
             config.target_path = pkg.name;
           } else {
-            config.target_path = "resources";
+            config.target_path ="resources";
           }
         }
       });
@@ -2391,7 +2389,7 @@ function toggleResourcePackage(pkg) {
     formData.value.resource_package_configs.splice(index, 1);
   } else {
     // 选择：添加配置，使用默认路径（资源包名称，与分步构建一致）
-    const defaultPath = pkg.name || "resources";
+    const defaultPath = pkg.name ||"resources";
     formData.value.resource_package_configs.push({
       package_id: pkg.package_id,
       target_path: defaultPath, // 默认使用资源包名称作为路径，与分步构建一致
@@ -2412,7 +2410,7 @@ function getResourcePackageConfig(packageId) {
     // 这里返回一个临时对象，但不添加到列表中（由 toggleResourcePackage 处理）
     return {
       package_id: packageId,
-      target_path: pkg ? pkg.name || "resources" : "resources", // 默认使用资源包名称作为路径
+      target_path: pkg ? pkg.name ||"resources" :"resources", // 默认使用资源包名称作为路径
     };
   }
   return config;
@@ -2424,12 +2422,12 @@ function updateResourcePackagePath(packageId, targetPath) {
     (p) => p.package_id === packageId
   );
   if (config) {
-    config.target_path = targetPath || "";
+    config.target_path = targetPath ||"";
   } else {
     // 如果配置不存在，创建新配置
     formData.value.resource_package_configs.push({
       package_id: packageId,
-      target_path: targetPath || "",
+      target_path: targetPath ||"",
     });
   }
 }
@@ -2438,11 +2436,11 @@ function updateResourcePackagePath(packageId, targetPath) {
 async function onDockerfileSourceChange() {
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:2744",
-  //     message: "Dockerfile source changed",
+  //     location:"PipelinePanel.vue:2744",
+  //     message:"Dockerfile source changed",
   //     data: {
   //       use_project_dockerfile: formData.value.use_project_dockerfile,
   //       template: formData.value.template,
@@ -2451,15 +2449,15 @@ async function onDockerfileSourceChange() {
   //       branch: formData.value.branch,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "D",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"D",
   //   }),
   // }).catch(() => {});
   // #endregion
   if (formData.value.use_project_dockerfile) {
     // 使用项目 Dockerfile 时，清空模板
-    formData.value.template = "";
+    formData.value.template ="";
     // 如果有数据源、分支和 Dockerfile，尝试加载 Dockerfile 内容
     if (
       formData.value.source_id &&
@@ -2470,11 +2468,11 @@ async function onDockerfileSourceChange() {
         await loadDockerfileFromRepo();
       } catch (error) {
         // 如果加载失败，清空编辑器
-        dockerfileContentText.value = "";
+        dockerfileContentText.value ="";
       }
     } else {
       // 如果没有完整信息，清空编辑器
-      dockerfileContentText.value = "";
+      dockerfileContentText.value ="";
     }
     // 如果有分支和 Dockerfile，重新加载服务（服务列表依赖于 Dockerfile）
     if (
@@ -2490,8 +2488,8 @@ async function onDockerfileSourceChange() {
     }
   } else {
     // 使用模板时，清空 Dockerfile 名称和内容
-    formData.value.dockerfile_name = "Dockerfile";
-    dockerfileContentText.value = "";
+    formData.value.dockerfile_name ="Dockerfile";
+    dockerfileContentText.value ="";
     // 如果选择了模板，加载模板内容并重新加载服务（切换到模板是用户主动切换）
     if (formData.value.template) {
       await onTemplateChange();
@@ -2518,7 +2516,7 @@ async function onTemplateChange() {
     } catch (error) {
       console.error("加载模板内容失败:", error);
       // 如果加载失败，清空编辑器
-      dockerfileContentText.value = "";
+      dockerfileContentText.value ="";
     }
     // 编辑模式下不自动加载，需要用户手动点击加载按钮
     // 新建模式下可以自动加载（通过判断 editingPipeline）
@@ -2527,7 +2525,7 @@ async function onTemplateChange() {
     }
   } else {
     // 清空模板时，清空 Dockerfile 内容
-    dockerfileContentText.value = "";
+    dockerfileContentText.value ="";
     // 清空模板时，如果使用项目 Dockerfile 且有分支，重新加载服务（切换到项目 Dockerfile 是用户主动切换）
     // 编辑模式下不自动加载，需要用户手动点击加载按钮
     if (
@@ -2559,7 +2557,7 @@ const buildConfigJson = computed(() => {
     formData.value.selected_services &&
     formData.value.selected_services.length > 0
   ) {
-    if (formData.value.push_mode === "multi") {
+    if (formData.value.push_mode ==="multi") {
       // 多服务模式：处理所有启用的服务
       formData.value.selected_services.forEach((serviceName) => {
         const config = getServiceConfig(serviceName);
@@ -2567,7 +2565,7 @@ const buildConfigJson = computed(() => {
         const finalImageName =
           customImageName || getServiceDefaultImageName(serviceName);
         const finalTag =
-          (config.tag && config.tag.trim()) || formData.value.tag || "latest";
+          (config.tag && config.tag.trim()) || formData.value.tag ||"latest";
 
         servicePushConfig[serviceName] = {
           push: config.push || false,
@@ -2575,7 +2573,7 @@ const buildConfigJson = computed(() => {
           tag: finalTag,
         };
       });
-    } else if (formData.value.push_mode === "single") {
+    } else if (formData.value.push_mode ==="single") {
       // 单服务模式：只处理第一个服务
       const firstService = formData.value.selected_services[0];
       if (firstService) {
@@ -2583,25 +2581,25 @@ const buildConfigJson = computed(() => {
         // 单服务模式使用全局镜像名和标签
         servicePushConfig[firstService] = {
           push: config.push || false,
-          imageName: formData.value.image_name || "",
-          tag: formData.value.tag || "latest",
+          imageName: formData.value.image_name ||"",
+          tag: formData.value.tag ||"latest",
         };
       }
     }
   }
 
   const config = {
-    git_url: formData.value.git_url || "",
-    image_name: formData.value.image_name || "",
-    tag: formData.value.tag || "latest",
+    git_url: formData.value.git_url ||"",
+    image_name: formData.value.image_name ||"",
+    tag: formData.value.tag ||"latest",
     branch: formData.value.branch || null,
-    project_type: formData.value.project_type || "jar",
-    template: formData.value.template || "",
+    project_type: formData.value.project_type ||"jar",
+    template: formData.value.template ||"",
     template_params: formData.value.template_params || {},
     should_push: formData.value.push || false,
     sub_path: formData.value.sub_path || null,
     use_project_dockerfile: formData.value.use_project_dockerfile !== false,
-    dockerfile_name: formData.value.dockerfile_name || "Dockerfile",
+    dockerfile_name: formData.value.dockerfile_name ||"Dockerfile",
     dockerfile_content: formData.value.dockerfile_content || null,
     source_id: formData.value.source_id || null,
     selected_services: formData.value.selected_services || [],
@@ -2610,17 +2608,13 @@ const buildConfigJson = computed(() => {
         ? servicePushConfig
         : formData.value.service_push_config || {},
     service_template_params: formData.value.service_template_params || {},
-    push_mode: formData.value.push_mode || "multi",
+    push_mode: formData.value.push_mode ||"multi",
     resource_package_configs: formData.value.resource_package_configs || [],
   };
 
   // 移除null值和空值（保留false和0）
   // 注意：多阶段相关配置（push_mode、selected_services、service_push_config、service_template_params）需要保留
-  const multiStageKeys = [
-    "push_mode",
-    "selected_services",
-    "service_push_config",
-    "service_template_params",
+  const multiStageKeys = ["push_mode","selected_services","service_push_config","service_template_params",
   ];
   Object.keys(config).forEach((key) => {
     // 多阶段相关配置始终保留
@@ -2630,9 +2624,9 @@ const buildConfigJson = computed(() => {
 
     if (
       config[key] === null ||
-      config[key] === "" ||
+      config[key] ==="" ||
       (Array.isArray(config[key]) && config[key].length === 0) ||
-      (typeof config[key] === "object" &&
+      (typeof config[key] ==="object" &&
         !Array.isArray(config[key]) &&
         Object.keys(config[key]).length === 0)
     ) {
@@ -2645,8 +2639,8 @@ const buildConfigJson = computed(() => {
 
 
 function formatGitUrl(url) {
-  if (!url) return "";
-  return url.replace(/^https?:\/\//, "").replace(/\.git$/, "");
+  if (!url) return"";
+  return url.replace(/^https?:\/\//,"").replace(/\.git$/,"");
 }
 
 
@@ -2666,21 +2660,21 @@ async function copyBuildConfigJson() {
 }
 
 async function regenerateWebhookToken() {
-  if (await showConfirm({ message: "确定要重新生成 Webhook Token 吗？重新生成后需要更新 Git 平台的 Webhook URL。" })) {
+  if (await showConfirm({ message:"确定要重新生成 Webhook Token 吗？重新生成后需要更新 Git 平台的 Webhook URL。" })) {
     formData.value.webhook_token = generateUUID();
   }
 }
 
 async function regenerateWebhookSecret() {
-  if (await showConfirm({ message: "确定要重新生成 Webhook 密钥吗？重新生成后需要更新 Git 平台的 Webhook Secret。" })) {
+  if (await showConfirm({ message:"确定要重新生成 Webhook 密钥吗？重新生成后需要更新 Git 平台的 Webhook Secret。" })) {
     formData.value.webhook_secret = generateUUID();
   }
 }
 
 function generateUUID() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+  return"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    const v = c ==="x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 }
@@ -2697,7 +2691,7 @@ function generateUUID() {
       return true;
     } catch (error) {
       console.error("加载流水线失败:", error);
-      toastApiError(error, "加载流水线失败");
+      toastApiError(error,"加载流水线失败");
       return false;
     }
   }

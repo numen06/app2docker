@@ -9,10 +9,10 @@
         readonly
       />
       <Button variant="outline" size="sm" @click="copyWebhookUrl">
-        <i class="fas fa-copy"></i> 复制
+        <AppIcon  name="copy" /> 复制
       </Button>
     </div>
-    <div class="alert alert-info small mb-0">
+    <div class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900 mb-0">
       <strong>使用说明：</strong><br />
       1. 在 Git 平台仓库设置中添加 Webhook<br />
       2. 将上述 URL 粘贴到 Payload URL<br />
@@ -35,16 +35,16 @@ const detail = inject(PIPELINE_DETAIL_KEY);
 
 const webhookUrl = computed(() => {
   const p = detail.pipeline.value;
-  if (!p) return "";
+  if (!p) return"";
   const token = p.webhook_token;
-  if (!token) return "请先设置 Webhook Token（在「编辑配置」→ Webhook 设置中配置）";
+  if (!token) return"请先设置 Webhook Token（在「编辑配置」→ Webhook 设置中配置）";
   return `${window.location.origin}/api/webhook/${token}`;
 });
 
 async function copyWebhookUrl() {
   const url = webhookUrl.value;
   if (!url || url.startsWith("请先")) {
-    toastInfo(url || "无可复制的 URL");
+    toastInfo(url ||"无可复制的 URL");
     return;
   }
   const ok = await copyToClipboard(url);

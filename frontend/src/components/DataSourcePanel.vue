@@ -1,7 +1,7 @@
 <template>
   <div class="data-source-panel">
 
-    <PageToolbar title="Git 数据源管理" icon="fa-database">
+    <PageToolbar title="Git 数据源管理" icon="database">
       <template #actions>
         <Button
           variant="outline"
@@ -10,33 +10,33 @@
           title="刷新列表"
           @click="loadSources"
         >
-          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+          <AppIcon name="sync-alt" />
           刷新
         </Button>
         <Button size="sm" @click="showCreateModal">
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           新建数据源
         </Button>
       </template>
     </PageToolbar>
     <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
     <EmptyState
       v-else-if="sources.length === 0"
       message="暂无数据源"
-      icon="fa-inbox"
+      icon="inbox"
     >
       <p class="mt-2 text-xs text-slate-400">在镜像构建或流水线中验证 Git 仓库时可保存为数据源</p>
     </EmptyState>
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div v-for="source in sources" :key="source.source_id">
-        <div class="card h-full shadow-sm">
-          <div class="card-header bg-white">
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm h-full">
+          <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 bg-white">
             <div class="mb-2">
-              <h5 class="card-title mb-0">
+              <h5 class="text-base font-semibold text-slate-900 mb-0">
                 <strong>{{ source.name }}</strong>
               </h5>
               <p class="text-slate-500 mb-0 mt-1" v-if="source.description" style="font-size: 0.9rem;">
@@ -52,7 +52,7 @@
                 :disabled="refreshing === source.source_id"
                 title="刷新分支和标签"
               >
-                <i class="fas fa-sync-alt" :class="{ 'fa-spin': refreshing === source.source_id }"></i>
+                <AppIcon name="sync-alt" />
               </Button>
               <Button
                 variant="outline"
@@ -61,7 +61,7 @@
                 @click="editSource(source)"
                 title="编辑"
               >
-                <i class="fas fa-edit"></i>
+                <AppIcon  name="edit" />
               </Button>
               <Button
                 variant="outline"
@@ -70,7 +70,7 @@
                 title="成员授权"
                 @click="openResourcePermission(source)"
               >
-                <i class="fas fa-user-shield"></i>
+                <AppIcon  name="user-shield" />
               </Button>
               <Button
                 variant="destructive"
@@ -79,15 +79,15 @@
                 @click="deleteSource(source)"
                 title="删除"
               >
-                <i class="fas fa-trash"></i>
+                <AppIcon  name="trash" />
               </Button>
             </div>
           </div>
           
-          <div class="card-body">
+          <div class="p-4">
             <div class="mb-3">
               <div class="flex items-center mb-1">
-                <i class="fas fa-code-branch text-slate-500 mr-2" style="width: 18px;"></i>
+                <AppIcon  style="width: 18px;" name="code-branch" class="text-slate-500 mr-2" />
                 <small class="font-mono truncate" :title="source.git_url" style="font-size: 0.9rem;">
                   {{ formatGitUrl(source.git_url) }}
                 </small>
@@ -96,19 +96,19 @@
             
             <div class="mb-3">
               <div class="flex items-center mb-1">
-                <i class="fas fa-code-branch text-slate-500 mr-2" style="width: 18px;"></i>
+                <AppIcon  style="width: 18px;" name="code-branch" class="text-slate-500 mr-2" />
                 <small class="text-slate-500">分支：{{ source.branches?.length || 0 }} 个</small>
               </div>
               <div class="flex items-center mb-1">
-                <i class="fas fa-tag text-slate-500 mr-2" style="width: 18px;"></i>
+                <AppIcon  style="width: 18px;" name="tag" class="text-slate-500 mr-2" />
                 <small class="text-slate-500">标签：{{ source.tags?.length || 0 }} 个</small>
               </div>
               <div v-if="source.default_branch" class="flex items-center mb-1">
-                <i class="fas fa-check-circle text-green-600 mr-2" style="width: 18px;"></i>
+                <AppIcon  style="width: 18px;" name="check-circle" class="text-green-600 mr-2" />
                 <small class="text-slate-500">默认分支：{{ source.default_branch }}</small>
               </div>
               <div class="flex items-center">
-                <i class="fab fa-docker text-sky-600 mr-2" style="width: 18px;"></i>
+                <AppIcon  style="width: 18px;" name="docker" class="text-sky-600 mr-2" />
                 <small class="text-slate-500">
                   Dockerfile：{{ (source.dockerfiles && Object.keys(source.dockerfiles).length) || 0 }} 个
                 </small>
@@ -121,12 +121,12 @@
                 @click="manageDockerfiles(source)"
                 title="管理 Dockerfile"
               >
-                <i class="fab fa-docker"></i> 管理 Dockerfile
+                <AppIcon  name="docker" /> 管理 Dockerfile
               </Button>
             </div>
             
             <div class="border-t border-slate-200 pt-2 mt-2">
-              <div class="text-slate-500 small">
+              <div class="text-slate-500 text-sm">
                 <div>创建时间：{{ formatDateTime(source.created_at) }}</div>
                 <div v-if="source.updated_at !== source.created_at">
                   更新时间：{{ formatDateTime(source.updated_at) }}
@@ -139,15 +139,15 @@
     </div>
 
     <!-- 创建/编辑数据源模态框 -->
-    <div v-if="showModal" class="data-source-modal fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeModal"
+    <div v-if="showModal" class="data-source-dialog fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeModal"
       >
       <div class="relative z-10 mx-auto w-full max-w-3xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
               {{ editingSource ? '编辑数据源' : '新建数据源' }}
             </h5>
-            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeModal"><i class="fas fa-times"></i></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeModal"><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <form @submit.prevent="saveSource">
@@ -172,7 +172,7 @@
               </div>
               <div class="mb-3">
                 <label class="block text-sm font-medium text-slate-700">Git 仓库地址 <span class="text-red-500">*</span></label>
-                <div class="data-source-input-group input-group input-group-sm">
+                <div class="data-source-field-group flex w-full text-sm">
                   <input 
                     v-model="formData.git_url" 
                     type="text" 
@@ -187,8 +187,8 @@
                     @click="verifyAndSave"
                     :disabled="!formData.git_url || verifying"
                   >
-                    <span v-if="verifying" class="fas fa-spinner fa-spin inline-block"></span>
-                    <i v-else class="fas fa-search mr-1"></i>
+                    <AppIcon v-if="verifying"  name="spinner" class="inline-block" spin />
+                    <AppIcon v-else  name="search" class="mr-1" />
                     {{ verifying ? '验证中...' : (editingSource && !isVerified ? '重新验证' : '验证仓库') }}
                   </Button>
                 </div>
@@ -196,21 +196,21 @@
                   <span v-if="editingSource">编辑模式下修改 Git 地址或认证信息需要重新验证</span>
                   <span v-else>新建数据源必须先验证 Git 仓库才能保存</span>
                 </small>
-                <div v-if="isVerified" class="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800 alert-sm mt-2 mb-0">
-                  <i class="fas fa-check-circle"></i> 仓库已验证，可以保存
+                <div v-if="isVerified" class="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800 px-2 py-1 text-xs mt-2 mb-0">
+                  <AppIcon  name="check-circle" /> 仓库已验证，可以保存
                 </div>
               </div>
               <div class="mb-3">
-                <div class="card border-info">
-                  <div class="card-header bg-info bg-opacity-10 py-2">
+                <div class="rounded-lg border border-slate-200 bg-white shadow-sm border-sky-300">
+                  <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 bg-sky-500 text-white bg-opacity-10 py-2">
                     <small class="text-slate-500">
-                      <i class="fas fa-lock"></i> 认证信息（可选）
+                      <AppIcon  name="lock" /> 认证信息（可选）
                     </small>
                   </div>
-                  <div class="card-body p-3">
-                    <div class="row g-2">
-                      <div class="col-md-6">
-                        <label class="form-label small">Git 用户名</label>
+                  <div class="p-4 p-3">
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-12 gap-2">
+                      <div class="md:col-span-6">
+                        <label class="block text-sm font-medium text-slate-700">Git 用户名</label>
                         <input 
                           v-model="formData.username" 
                           type="text" 
@@ -218,8 +218,8 @@
                           placeholder="username 或 token"
                         >
                       </div>
-                      <div class="col-md-6">
-                        <label class="form-label small">Git 密码/Token</label>
+                      <div class="md:col-span-6">
+                        <label class="block text-sm font-medium text-slate-700">Git 密码/Token</label>
                         <input 
                           v-model="formData.password" 
                           type="password" 
@@ -228,8 +228,8 @@
                         >
                       </div>
                     </div>
-                    <div class="form-text small mt-2">
-                      <i class="fas fa-info-circle"></i> 
+                    <div class="text-xs text-slate-500 text-sm mt-2">
+                      <AppIcon  name="info-circle" /> 
                       私有仓库需要认证信息。可以使用用户名密码或 Personal Access Token
                     </div>
                   </div>
@@ -249,7 +249,7 @@
                   <Badge v-for="tag in formData.tags.slice(0, 20)" :key="tag" variant="info" class="mr-1 mb-1">
                     {{ tag }}
                   </Badge>
-                  <span v-if="formData.tags.length > 20" class="text-slate-500 small">
+                  <span v-if="formData.tags.length > 20" class="text-slate-500 text-sm">
                     ... 还有 {{ formData.tags.length - 20 }} 个标签
                   </span>
                 </div>
@@ -279,7 +279,7 @@
               </div>
             </form>
           </div>
-          <div class="data-source-modal-footer flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
+          <div class="data-source-dialog-footer flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" size="sm" class="w-full sm:w-auto" @click="closeModal">取消</Button>
             <Button 
               type="button" 
@@ -289,29 +289,29 @@
               :disabled="!formData.git_url || verifying || (!editingSource && !isVerified)"
               :title="!editingSource && !isVerified ? '请先验证 Git 仓库' : ''"
             >
-              <i class="fas fa-save"></i> 保存
+              <AppIcon  name="save" /> 保存
             </Button>
           </div>
         </div>
       </div>
     </div>
 <!-- Dockerfile 管理模态框 -->
-    <div v-if="showDockerfileModal && currentSource" class="data-source-modal fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeDockerfileModal"
+    <div v-if="showDockerfileModal && currentSource" class="data-source-dialog fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeDockerfileModal"
       >
       <div class="relative z-10 mx-auto w-full max-w-5xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fab fa-docker"></i> Dockerfile 管理 - {{ currentSource.name }}
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="docker" /> Dockerfile 管理 - {{ currentSource.name }}
             </h5>
-            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeDockerfileModal"><i class="fas fa-times"></i></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeDockerfileModal"><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <!-- 操作栏 -->
-            <div class="data-source-dockerfile-toolbar row g-3 mb-4">
-              <div class="col-md-5">
-                <label class="form-label fw-semibold">
-                  <i class="fas fa-code-branch text-slate-500 mr-1"></i> 分支选择
+            <div class="data-source-dockerfile-toolbar grid grid-cols-1 gap-3 md:grid-cols-12 mb-4">
+              <div class="md:col-span-5">
+                <label class="block text-sm font-medium text-slate-700 fw-semibold">
+                  <AppIcon  name="code-branch" class="text-slate-500 mr-1" /> 分支选择
                 </label>
                 <select 
                   v-model="selectedBranch" 
@@ -324,27 +324,27 @@
                   </option>
                 </select>
                 <small class="text-slate-500 block mt-1">
-                  <i class="fas fa-info-circle"></i> 选择分支以查看该分支的 Dockerfile
+                  <AppIcon  name="info-circle" /> 选择分支以查看该分支的 Dockerfile
                 </small>
               </div>
-              <div class="col-md-4 flex items-end">
-                <div class="text-slate-500 small">
-                  <i class="fab fa-docker text-sky-600 mr-1"></i>
+              <div class="md:col-span-4 flex items-end">
+                <div class="text-slate-500 text-sm">
+                  <AppIcon  name="docker" class="text-sky-600 mr-1" />
                   <strong>{{ dockerfileList.length }}</strong> 个 Dockerfile
                 </div>
               </div>
-              <div class="col-md-3 flex items-end gap-2">
+              <div class="md:col-span-3 flex items-end gap-2">
                 <Button 
                   variant="outline" size="sm" class="flex-1" 
                   @click="scanDockerfiles"
                   :disabled="scanningDockerfiles"
                   title="扫描 Dockerfile"
                 >
-                  <i class="fas fa-search" :class="{ 'fa-spin': scanningDockerfiles }"></i>
+                  <AppIcon name="search" />
                   <span class="hidden sm:inline ml-1">扫描</span>
                 </Button>
                 <Button size="sm" class="flex-1" @click="showCreateDockerfile">
-                  <i class="fas fa-plus"></i>
+                  <AppIcon  name="plus" />
                   <span class="hidden sm:inline ml-1">新建</span>
                 </Button>
               </div>
@@ -352,44 +352,44 @@
 
             <!-- Dockerfile 列表 -->
             <div v-if="loadingDockerfiles" class="text-center py-12">
-              <i class="fas fa-spinner fa-spin"></i>
+              <AppIcon  name="spinner" spin />
               <p class="text-slate-500 mt-2 mb-0">加载中...</p>
             </div>
             <div v-else-if="dockerfileList.length === 0" class="text-center py-12 text-slate-500">
-              <i class="fab fa-docker fa-4x mb-3 opacity-50"></i>
+              <AppIcon  name="docker" class="mb-3 opacity-50" />
               <p class="mb-2 fw-semibold">暂无 Dockerfile</p>
-              <p class="small mb-0">验证 Git 仓库时会自动扫描 Dockerfile，您也可以手动添加</p>
+              <p class="text-sm mb-0">验证 Git 仓库时会自动扫描 Dockerfile，您也可以手动添加</p>
             </div>
             <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <div v-for="item in dockerfileList" :key="item.path" class="col-12">
-                <div class="card border shadow-sm">
-                  <div class="card-body p-3">
+              <div v-for="item in dockerfileList" :key="item.path" class="col-span-full">
+                <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <div class="p-4 p-3">
                     <div class="data-source-dockerfile-item flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start">
                       <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2 mb-2">
-                          <i class="fab fa-docker text-sky-600 mr-2 fs-5"></i>
+                          <AppIcon  name="docker" class="text-sky-600 mr-2 fs-5" />
                           <h6 class="mb-0 fw-semibold font-mono break-all text-sm">{{ item.path }}</h6>
                           <Badge v-if="item.hasChanges || item.originalContent === ''" 
                                 variant="warning" class="ml-2 text-slate-900" 
                                 title="有未提交的更改">
-                            <i class="fas fa-exclamation-circle"></i> 未提交
+                            <AppIcon  name="exclamation-circle" /> 未提交
                           </Badge>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2 text-slate-500 small sm:gap-3">
+                        <div class="flex flex-wrap items-center gap-2 text-slate-500 text-sm sm:gap-3">
                           <span>
-                            <i class="fas fa-file-lines mr-1"></i>
+                            <AppIcon  name="file-lines" class="mr-1" />
                             {{ item.lineCount }} 行
                           </span>
                           <span v-if="item.originalContent === ''" class="text-green-600">
-                            <i class="fas fa-plus-circle mr-1"></i>
+                            <AppIcon  name="plus-circle" class="mr-1" />
                             新建文件
                           </span>
                           <span v-else-if="item.hasChanges" class="text-amber-600">
-                            <i class="fas fa-edit mr-1"></i>
+                            <AppIcon  name="edit" class="mr-1" />
                             已修改
                           </span>
                           <span v-else class="text-green-600">
-                            <i class="fas fa-check-circle mr-1"></i>
+                            <AppIcon  name="check-circle" class="mr-1" />
                             已同步
                           </span>
                         </div>
@@ -401,7 +401,7 @@
                           @click="editDockerfile(item.path, item.content)" 
                           title="编辑 Dockerfile"
                         >
-                          <i class="fas fa-edit"></i>
+                          <AppIcon  name="edit" />
                           <span class="hidden md:inline ml-1">编辑</span>
                         </Button>
                         <Button 
@@ -411,7 +411,7 @@
                           @click="openCommitModal(item.path)"
                           title="提交到 Git 仓库"
                         >
-                          <i class="fas fa-code-branch"></i>
+                          <AppIcon  name="code-branch" />
                           <span class="hidden md:inline ml-1">提交</span>
                         </Button>
                         <Button 
@@ -420,7 +420,7 @@
                           @click="deleteDockerfile(item.path)" 
                           title="删除 Dockerfile"
                         >
-                          <i class="fas fa-trash"></i>
+                          <AppIcon  name="trash" />
                           <span class="hidden md:inline ml-1">删除</span>
                         </Button>
                       </div>
@@ -434,15 +434,15 @@
       </div>
     </div>
 <!-- Dockerfile 编辑器模态框 -->
-    <div v-if="showDockerfileEditor && currentSource" class="data-source-modal fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeDockerfileEditor"
+    <div v-if="showDockerfileEditor && currentSource" class="data-source-dialog fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeDockerfileEditor"
       >
       <div class="relative z-10 mx-auto w-full max-w-5xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fab fa-docker"></i> {{ editingDockerfilePath ? '编辑' : '新建' }} Dockerfile
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="docker" /> {{ editingDockerfilePath ? '编辑' : '新建' }} Dockerfile
             </h5>
-            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeDockerfileEditor"><i class="fas fa-times"></i></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeDockerfileEditor"><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 70vh; overflow-y: auto;">
             <div class="mb-3">
@@ -470,25 +470,25 @@
               />
             </div>
           </div>
-          <div class="data-source-modal-footer flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
+          <div class="data-source-dialog-footer flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" size="sm" class="w-full sm:w-auto" @click="closeDockerfileEditor">取消</Button>
             <Button type="button" size="sm" class="w-full sm:w-auto" @click="saveDockerfile">
-              <i class="fas fa-save"></i> 保存
+              <AppIcon  name="save" /> 保存
             </Button>
           </div>
         </div>
       </div>
     </div>
 <!-- 提交 Dockerfile 模态框 -->
-    <div v-if="showCommitModal && currentSource" class="data-source-modal fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeCommitModal"
+    <div v-if="showCommitModal && currentSource" class="data-source-dialog fixed inset-0 z-[2000] flex items-end justify-center overflow-y-auto bg-black/50 p-2 sm:items-center sm:p-4" @click.self="closeCommitModal"
       >
       <div class="relative z-10 mx-auto w-full max-w-lg">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-code-branch"></i> 提交 Dockerfile 到 Git 仓库
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="code-branch" /> 提交 Dockerfile 到 Git 仓库
             </h5>
-            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeCommitModal"><i class="fas fa-times"></i></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="closeCommitModal"><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="mb-3">
@@ -524,12 +524,12 @@
               >
               <small class="text-slate-500">如果不填写，将使用默认提交信息</small>
             </div>
-            <div class="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 alert-sm mb-0">
-              <i class="fas fa-info-circle"></i> 
+            <div class="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 px-2 py-1 text-xs mb-0">
+              <AppIcon  name="info-circle" /> 
               <strong>提示：</strong>提交前会自动同步远程仓库，确保与远程保持一致。如有冲突，将使用本地版本。
             </div>
           </div>
-          <div class="data-source-modal-footer flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
+          <div class="data-source-dialog-footer flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" size="sm" class="w-full sm:w-auto" @click="closeCommitModal">取消</Button>
             <Button 
               type="button" 
@@ -538,8 +538,8 @@
               @click="commitDockerfile"
               :disabled="!commitForm.branch || committing"
             >
-              <span v-if="committing" class="fas fa-spinner fa-spin inline-block"></span>
-              <i v-else class="fas fa-code-branch mr-1"></i>
+              <AppIcon v-if="committing"  name="spinner" class="inline-block" spin />
+              <AppIcon v-else  name="code-branch" class="mr-1" />
               {{ committing ? '提交中...' : '提交' }}
             </Button>
           </div>
@@ -846,7 +846,7 @@ function closeModal() {
 }
 
 async function refreshSource(source) {
-  if (!(await showConfirm({ message: `确定要刷新数据源 "${source.name}" 的分支和标签吗？` }))) {
+  if (!(await showConfirm({ message: `确定要刷新数据源"${source.name}" 的分支和标签吗？` }))) {
     return
   }
   
@@ -876,7 +876,7 @@ async function refreshSource(source) {
 }
 
 async function deleteSource(source) {
-  if (!(await showConfirm({ message: `确定要删除数据源 "${source.name}" 吗？`, danger: true }))) {
+  if (!(await showConfirm({ message: `确定要删除数据源"${source.name}" 吗？`, danger: true }))) {
     return
   }
   
@@ -1070,7 +1070,7 @@ async function saveDockerfile() {
 }
 
 async function deleteDockerfile(path) {
-  if (!(await showConfirm({ message: `确定要删除 Dockerfile "${path}" 吗？`, danger: true }))) {
+  if (!(await showConfirm({ message: `确定要删除 Dockerfile"${path}" 吗？`, danger: true }))) {
     return
   }
 
@@ -1094,9 +1094,9 @@ async function scanDockerfiles() {
   }
   
   const branch = selectedBranch.value || currentSource.value.default_branch || 'main'
-  const branchText = branch ? `分支 "${branch}"` : '默认分支'
+  const branchText = branch ? `分支"${branch}"` : '默认分支'
   
-  if (!(await showConfirm({ message: `确定要扫描数据源 "${currentSource.value.name}" 的 Dockerfile 吗？\n\n这将从 Git 仓库的 ${branchText} 扫描所有 Dockerfile。` }))) {
+  if (!(await showConfirm({ message: `确定要扫描数据源"${currentSource.value.name}" 的 Dockerfile 吗？\n\n这将从 Git 仓库的 ${branchText} 扫描所有 Dockerfile。` }))) {
     return
   }
   
@@ -1270,69 +1270,53 @@ async function commitDockerfile() {
 </script>
 
 <style scoped>
-.data-source-panel :deep(.card) {
+.data-source-panel :deep(.rounded-lg) {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.data-source-panel :deep(.card:hover) {
+.data-source-panel :deep(.rounded-lg:hover) {
   transform: translateY(-2px);
   box-shadow: 0 0.5rem 1rem rgb(15 23 42 / 0.08);
 }
 
 @media (max-width: 767px) {
-  .data-source-panel :deep(.card:hover) {
+  .data-source-panel :deep(.rounded-lg:hover) {
     transform: none;
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.05);
-  }
-
-  .data-source-panel :deep(.card-header),
-  .data-source-panel :deep(.card-body) {
-    padding: 0.75rem;
-  }
-
-  .data-source-panel .row > [class*="col-md-"] {
-    flex: 0 0 100%;
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .data-source-dockerfile-toolbar > [class*="col-md-"] {
-    margin-bottom: 0;
   }
 
   .data-source-dockerfile-toolbar .flex.items-end {
     width: 100%;
   }
 
-  .data-source-input-group {
+  .data-source-field-group {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .data-source-input-group > input {
+  .data-source-field-group > input {
     width: 100%;
     border-radius: 0.375rem !important;
   }
 
-  .data-source-input-group > .btn,
-  .data-source-input-group > button {
+  .data-source-field-group > button {
     width: 100%;
     margin-top: 0.375rem;
     border-radius: 0.375rem !important;
   }
 
-  .data-source-modal .modal-title {
+  .data-source-dialog h3 {
     font-size: 0.9375rem;
     line-height: 1.35;
     word-break: break-word;
     padding-right: 0.5rem;
   }
 
-  .data-source-modal > .relative {
+  .data-source-dialog > .relative {
     max-width: 100%;
   }
 
-  .data-source-modal-footer > * {
+  .data-source-dialog-footer > * {
     justify-content: center;
   }
 }

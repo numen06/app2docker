@@ -2,13 +2,13 @@
   <div class="pipeline-settings-tab max-w-lg">
     <div class="rounded-lg border border-red-200 bg-red-50/50 p-4">
       <h6 class="mb-2 text-red-700">
-        <i class="fas fa-exclamation-triangle mr-1"></i> 危险操作
+        <AppIcon  name="exclamation-triangle" class="mr-1" /> 危险操作
       </h6>
       <p class="mb-3 text-sm text-slate-600">
         删除后将无法恢复，相关构建历史可能一并清理。
       </p>
       <Button variant="destructive" size="sm" @click="deletePipeline">
-        <i class="fas fa-trash mr-1"></i> 删除流水线
+        <AppIcon  name="trash" class="mr-1" /> 删除流水线
       </Button>
     </div>
   </div>
@@ -37,7 +37,7 @@ async function deletePipeline() {
     await goToPipelineList(router);
     toastSuccess("流水线已删除");
   } catch (error) {
-    toastApiError(error, "删除失败");
+    toastApiError(error,"删除失败");
   }
 }
 </script>

@@ -26,7 +26,7 @@
             <Input id="team-name" v-model="teamName" :disabled="!teamStore.canManageTeam" />
           </div>
           <Button type="button" :disabled="!teamStore.canManageTeam || savingName" @click="saveTeamName">
-            {{ savingName ? "保存中…" : "保存" }}
+            {{ savingName ?"保存中…" :"保存" }}
           </Button>
         </div>
         <p v-if="!teamStore.canManageTeam" class="mt-2 text-xs text-slate-500">
@@ -56,7 +56,7 @@
             :disabled="!teamStore.canManageTeam || savingCleanupDays"
             @click="saveTaskCleanupDays"
           >
-            {{ savingCleanupDays ? "保存中…" : "保存" }}
+            {{ savingCleanupDays ?"保存中…" :"保存" }}
           </Button>
         </div>
         <p v-if="!teamStore.canManageTeam" class="mt-2 text-xs text-slate-500">
@@ -96,7 +96,7 @@
                 :key="m.user_id"
                 :value="m.user_id"
               >
-                {{ m.username }}{{ m.email ? ` (${m.email})` : "" }}
+                {{ m.username }}{{ m.email ? ` (${m.email})` :"" }}
               </option>
             </NativeSelect>
           </div>
@@ -106,7 +106,7 @@
             :disabled="!transferTargetId || membersLoading || transferring"
             @click="transferOwnership"
           >
-            {{ transferring ? "转移中…" : "转移所有权" }}
+            {{ transferring ?"转移中…" :"转移所有权" }}
           </Button>
         </div>
       </div>
@@ -135,7 +135,7 @@
       <FormDialog
         v-model="showDissolveModal"
         title="解散团队"
-        icon="fa-user-slash"
+        icon="user-slash"
         icon-class="text-red-600"
         size="md"
         @update:model-value="(v) => !v && closeDissolveModal()"
@@ -172,7 +172,7 @@
             :disabled="dissolving || isProtectedActiveTeam"
             @click="confirmDissolve"
           >
-            {{ dissolving ? "解散中…" : "确认解散" }}
+            {{ dissolving ?"解散中…" :"确认解散" }}
           </Button>
         </template>
       </FormDialog>
@@ -212,8 +212,8 @@ import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import InviteMemberDialog from "@/components/team/InviteMemberDialog.vue";
 import TeamMemberList from "@/components/team/TeamMemberList.vue";
 
-const DEFAULT_TEAM_NAME = "默认团队";
-const DEFAULT_TEAM_SLUG = "default";
+const DEFAULT_TEAM_NAME ="默认团队";
+const DEFAULT_TEAM_SLUG ="default";
 
 const teamStore = useTeamStore();
 const authStore = useAuthStore();
@@ -243,8 +243,8 @@ const isProtectedActiveTeam = computed(() => {
 });
 
 function formatApiDetail(detail) {
-  if (!detail) return "";
-  if (typeof detail === "string") return detail;
+  if (!detail) return"";
+  if (typeof detail ==="string") return detail;
   if (Array.isArray(detail)) {
     return detail.map((item) => item?.msg || item?.message || String(item)).join("；");
   }
@@ -252,16 +252,16 @@ function formatApiDetail(detail) {
 }
 
 const transferCandidates = computed(() => {
-  const me = (authStore.username || "").trim();
+  const me = (authStore.username ||"").trim();
   return teamMembers.value.filter(
-    (m) => m.role !== "owner" && m.username !== me
+    (m) => m.role !=="owner" && m.username !== me
   );
 });
 
 async function loadMembersForTransfer(teamId) {
   if (!teamId || !isOwner.value) {
     teamMembers.value = [];
-    transferTargetId.value = "";
+    transferTargetId.value ="";
     return;
   }
   membersLoading.value = true;
@@ -274,11 +274,11 @@ async function loadMembersForTransfer(teamId) {
       transferTargetId.value &&
       !transferCandidates.value.some((m) => m.user_id === transferTargetId.value)
     ) {
-      transferTargetId.value = "";
+      transferTargetId.value ="";
     }
   } catch {
     teamMembers.value = [];
-    transferTargetId.value = "";
+    transferTargetId.value ="";
   } finally {
     membersLoading.value = false;
   }
@@ -290,22 +290,22 @@ async function transferOwnership() {
   if (!teamId || !targetId) return;
   const target = transferCandidates.value.find((m) => m.user_id === targetId);
   if (!target) return;
-  const label = target.username || target.email || "该成员";
+  const label = target.username || target.email ||"该成员";
   if (!(await showConfirm({ message: `确定将团队所有权转移给「${label}」吗？\n\n转移后对方将成为所有者，您将变为管理员，且无法再删除团队。`, danger: true }))) {
     return;
   }
   transferring.value = true;
   try {
     await axios.patch(`/api/teams/${teamId}/members/${targetId}`, {
-      role: "owner",
+      role:"owner",
     });
-    transferTargetId.value = "";
+    transferTargetId.value ="";
     await teamStore.fetchMyTeams();
     await loadMembersForTransfer(teamId);
     await memberListRef.value?.load?.();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    toastError(typeof detail === "string" ? detail : "转移所有权失败");
+    toastError(typeof detail ==="string" ? detail :"转移所有权失败");
   } finally {
     transferring.value = false;
   }
@@ -314,7 +314,7 @@ async function transferOwnership() {
 watch(
   () => teamStore.activeTeam,
   (t) => {
-    teamName.value = t?.name || "";
+    teamName.value = t?.name ||"";
   },
   { immediate: true }
 );
@@ -343,7 +343,7 @@ watch(isOwner, (owner) => {
     loadMembersForTransfer(teamStore.activeTeamId);
   } else {
     teamMembers.value = [];
-    transferTargetId.value = "";
+    transferTargetId.value ="";
   }
 });
 
@@ -356,7 +356,7 @@ async function saveTeamName() {
     await teamStore.fetchMyTeams();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    toastError(typeof detail === "string" ? detail : "保存失败");
+    toastError(typeof detail ==="string" ? detail :"保存失败");
   } finally {
     savingName.value = false;
   }
@@ -376,7 +376,7 @@ async function saveTaskCleanupDays() {
     taskCleanupDays.value = days;
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    toastError(typeof detail === "string" ? detail : "保存失败");
+    toastError(typeof detail ==="string" ? detail :"保存失败");
   } finally {
     savingCleanupDays.value = false;
   }
@@ -392,45 +392,45 @@ async function onInvited() {
 
 function openDissolveModal() {
   if (!teamStore.activeTeamId || !teamStore.isTeamOwner) return;
-  dissolveConfirmName.value = "";
-  dissolveError.value = "";
+  dissolveConfirmName.value ="";
+  dissolveError.value ="";
   if (isProtectedActiveTeam.value) {
-    dissolveError.value = "不能解散系统保留的默认团队";
+    dissolveError.value ="不能解散系统保留的默认团队";
   }
   showDissolveModal.value = true;
 }
 
 function closeDissolveModal() {
   showDissolveModal.value = false;
-  dissolveConfirmName.value = "";
+  dissolveConfirmName.value ="";
   if (!dissolving.value) {
-    dissolveError.value = "";
+    dissolveError.value ="";
   }
 }
 
 async function confirmDissolve() {
   const id = teamStore.activeTeamId;
-  const name = (teamStore.activeTeam?.name || "").trim();
+  const name = (teamStore.activeTeam?.name ||"").trim();
   if (!id || !teamStore.isTeamOwner) return;
   if (isProtectedActiveTeam.value) {
-    dissolveError.value = "不能解散系统保留的默认团队";
+    dissolveError.value ="不能解散系统保留的默认团队";
     return;
   }
   const typed = dissolveConfirmName.value.trim();
   if (!typed) {
-    dissolveError.value = "请输入团队名称";
+    dissolveError.value ="请输入团队名称";
     return;
   }
   if (typed !== name) {
-    dissolveError.value = "团队名称不匹配，请重新输入";
+    dissolveError.value ="团队名称不匹配，请重新输入";
     return;
   }
   dissolving.value = true;
-  dissolveError.value = "";
+  dissolveError.value ="";
   try {
     await axios.delete(`/api/teams/${id}`);
     closeDissolveModal();
-    dissolveError.value = "";
+    dissolveError.value ="";
     await teamStore.fetchMyTeams();
     const nextId = teamStore.memberships[0]?.team?.team_id;
     if (nextId) {
@@ -442,7 +442,7 @@ async function confirmDissolve() {
     }
   } catch (e) {
     console.error("解散团队失败:", e);
-    dissolveError.value = formatApiDetail(e?.response?.data?.detail) || "解散团队失败";
+    dissolveError.value = formatApiDetail(e?.response?.data?.detail) ||"解散团队失败";
   } finally {
     dissolving.value = false;
   }

@@ -15,7 +15,7 @@
         aria-label="第一页"
         @click="$emit('update:page', 1)"
       >
-        <i class="fas fa-angle-double-left"></i>
+        <AppIcon name="angle-double-left" class="h-4 w-4" />
       </Button>
       <Button
         variant="outline"
@@ -24,10 +24,10 @@
         aria-label="上一页"
         @click="$emit('update:page', page - 1)"
       >
-        <i class="fas fa-angle-left"></i>
+        <AppIcon name="angle-left" class="h-4 w-4" />
       </Button>
       <template v-for="p in visiblePages" :key="'p-' + p">
-        <span v-if="p === '...'" class="px-2 text-sm text-slate-400">…</span>
+        <span v-if="p === '...'" class="px-2 text-sm text-slate-400">...</span>
         <Button
           v-else
           :variant="p === page ? 'default' : 'outline'"
@@ -45,7 +45,7 @@
         aria-label="下一页"
         @click="$emit('update:page', page + 1)"
       >
-        <i class="fas fa-angle-right"></i>
+        <AppIcon name="angle-right" class="h-4 w-4" />
       </Button>
       <Button
         variant="outline"
@@ -54,7 +54,7 @@
         aria-label="最后一页"
         @click="$emit('update:page', totalPages)"
       >
-        <i class="fas fa-angle-double-right"></i>
+        <AppIcon name="angle-double-right" class="h-4 w-4" />
       </Button>
     </nav>
   </div>
@@ -96,6 +96,6 @@ const visiblePages = computed(() => {
     pages.push(total);
   }
 
-  return pages.filter((p, i, arr) => p !== "..." || arr.indexOf(p) === i);
+  return pages.filter((p, i, arr) => p !=="..." || arr.indexOf(p) === i);
 });
 </script>

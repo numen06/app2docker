@@ -1,6 +1,6 @@
 <template>
   <div class="export-task-list">
-    <PageToolbar title="导出任务清单" icon="fa-list-check">
+    <PageToolbar title="导出任务清单" icon="list-check">
       <template #actions>
         <NativeSelect v-model="statusFilter" class="h-9 w-auto">
           <option value="">全部状态</option>
@@ -10,16 +10,16 @@
           <option value="failed">失败</option>
         </NativeSelect>
         <Button variant="outline" size="sm" @click="loadTasks">
-          <i class="fas fa-sync-alt"></i> 刷新
+          <AppIcon  name="sync-alt" /> 刷新
         </Button>
       </template>
     </PageToolbar>
 
     <div v-if="loading" class="py-8 text-center text-slate-500">
-      <i class="fas fa-spinner fa-spin text-xl"></i>
+      <AppIcon  name="spinner" class="text-xl" spin />
     </div>
 
-    <EmptyState v-else-if="filteredTasks.length === 0" message="暂无导出任务" icon="fa-inbox" />
+    <EmptyState v-else-if="filteredTasks.length === 0" message="暂无导出任务" icon="inbox" />
 
     <div v-else class="overflow-x-auto rounded-lg border border-slate-200">
       <Table>
@@ -43,15 +43,15 @@
               <Badge v-else variant="default">TAR</Badge>
             </TableCell>
             <TableCell>
-              <Badge v-if="task.status === 'pending'"><i class="fas fa-clock mr-1"></i>等待中</Badge>
+              <Badge v-if="task.status === 'pending'"><AppIcon  name="clock" class="mr-1" />等待中</Badge>
               <Badge v-else-if="task.status === 'running'" variant="info">
-                <i class="fas fa-spinner fa-spin mr-1"></i>进行中
+                <AppIcon  name="spinner" class="mr-1" spin />进行中
               </Badge>
               <Badge v-else-if="task.status === 'completed'" variant="success">
-                <i class="fas fa-check-circle mr-1"></i>已完成
+                <AppIcon  name="check-circle" class="mr-1" />已完成
               </Badge>
               <Badge v-else-if="task.status === 'failed'" variant="danger">
-                <i class="fas fa-times-circle mr-1"></i>失败
+                <AppIcon  name="times-circle" class="mr-1" />失败
               </Badge>
             </TableCell>
             <TableCell class="text-sm text-slate-500">{{ formatTime(task.created_at) }}</TableCell>
@@ -67,8 +67,8 @@
                   :disabled="downloading === task.task_id"
                   @click="downloadTask(task)"
                 >
-                  <i class="fas fa-download"></i>
-                  <i v-if="downloading === task.task_id" class="fas fa-spinner fa-spin"></i>
+                  <AppIcon  name="download" />
+                  <AppIcon v-if="downloading === task.task_id"  name="spinner" spin />
                 </Button>
                 <Button
                   variant="destructive"
@@ -76,7 +76,7 @@
                   :disabled="deleting === task.task_id"
                   @click="deleteTask(task)"
                 >
-                  <i class="fas fa-trash"></i>
+                  <AppIcon  name="trash" />
                 </Button>
               </div>
             </TableCell>
@@ -94,7 +94,7 @@
           <div class="mt-1"><code>{{ selectedFailedTask.error }}</code></div>
         </div>
         <Button variant="ghost" size="sm" @click="selectedFailedTask = null">
-          <i class="fas fa-times"></i>
+          <AppIcon  name="times" />
         </Button>
       </div>
     </div>
@@ -139,21 +139,21 @@ const filteredTasks = computed(() => {
 });
 
 function formatTime(isoString) {
-  if (!isoString) return "-";
+  if (!isoString) return"-";
   return new Date(isoString).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    second:"2-digit",
     hour12: false,
   });
 }
 
 function formatFileSize(bytes) {
-  if (!bytes) return "-";
-  const units = ["B", "KB", "MB", "GB"];
+  if (!bytes) return"-";
+  const units = ["B","KB","MB","GB"];
   let size = bytes;
   let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {
@@ -171,7 +171,7 @@ async function loadTasks() {
     const res = await axios.get("/api/export-tasks", { params });
     tasks.value = res.data.tasks || [];
   } catch (err) {
-    error.value = err.response?.data?.error || err.message || "加载任务列表失败";
+    error.value = err.response?.data?.error || err.message ||"加载任务列表失败";
   } finally {
     loading.value = false;
   }
@@ -186,7 +186,7 @@ function downloadTask(task) {
       exportImageArchiveFilename(task)
     );
   } catch (err) {
-    toastApiError(err, "下载失败");
+    toastApiError(err,"下载失败");
     downloading.value = null;
     return;
   }
@@ -196,13 +196,13 @@ function downloadTask(task) {
 }
 
 async function deleteTask(task) {
-  if (!(await showConfirm({ message: `确定要删除任务 "${task.image}:${task.tag}" 吗？`, danger: true }))) return;
+  if (!(await showConfirm({ message: `确定要删除任务"${task.image}:${task.tag}" 吗？`, danger: true }))) return;
   deleting.value = task.task_id;
   try {
     await axios.delete(`/api/export-tasks/${task.task_id}`);
     await loadTasks();
   } catch (err) {
-    toastApiError(err, "删除失败");
+    toastApiError(err,"删除失败");
   } finally {
     deleting.value = null;
   }
@@ -211,7 +211,7 @@ async function deleteTask(task) {
 onMounted(() => {
   loadTasks();
   refreshInterval = setInterval(() => {
-    const hasRunning = tasks.value.some((t) => t.status === "running" || t.status === "pending");
+    const hasRunning = tasks.value.some((t) => t.status ==="running" || t.status ==="pending");
     if (hasRunning) loadTasks();
   }, 5000);
 });

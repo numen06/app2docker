@@ -6,7 +6,7 @@
 import DeployTaskManager from "./DeployTaskManager.vue";
 
 export default {
-  name: "PortainerDeployManager",
+  name:"PortainerDeployManager",
   components: {
     DeployTaskManager,
   },

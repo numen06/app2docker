@@ -1,23 +1,19 @@
 <template>
   <Card
-    :class="
-      cn(
+    :class="cn(
         'h-full border-l-4 transition hover:-translate-y-0.5 hover:shadow-md',
         accentBorder[accent] || accentBorder.blue
-      )
-    "
+      )"
   >
     <CardContent class="p-4">
       <div class="flex items-center gap-3">
         <div
-          :class="
-            cn(
+          :class="cn(
               'flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white',
               accentBg[accent] || accentBg.blue
-            )
-          "
+            )"
         >
-          <i :class="['fas', icon, 'text-lg']"></i>
+          <AppIcon :name="icon" class="text-lg" />
         </div>
         <div class="min-w-0 flex-1">
           <p class="text-sm text-slate-500">{{ title }}</p>
@@ -43,9 +39,9 @@ const props = defineProps({
   icon: { type: String, required: true },
   accent: {
     type: String,
-    default: "blue",
+    default:"blue",
     validator: (v) =>
-      ["blue", "sky", "green", "amber", "red", "slate", "dark"].includes(v),
+      ["blue","sky","green","amber","red","slate","dark"].includes(v),
   },
 });
 
@@ -54,22 +50,22 @@ const displayValue = computed(() =>
 );
 
 const accentBorder = {
-  blue: "border-l-blue-600",
-  sky: "border-l-sky-500",
-  green: "border-l-green-600",
-  amber: "border-l-amber-500",
-  red: "border-l-red-600",
-  slate: "border-l-slate-500",
-  dark: "border-l-slate-800",
+  blue:"border-l-blue-600",
+  sky:"border-l-sky-500",
+  green:"border-l-green-600",
+  amber:"border-l-amber-500",
+  red:"border-l-red-600",
+  slate:"border-l-slate-500",
+  dark:"border-l-slate-800",
 };
 
 const accentBg = {
-  blue: "bg-blue-600",
-  sky: "bg-sky-500",
-  green: "bg-green-600",
-  amber: "bg-amber-500",
-  red: "bg-red-600",
-  slate: "bg-slate-500",
-  dark: "bg-slate-800",
+  blue:"bg-blue-600",
+  sky:"bg-sky-500",
+  green:"bg-green-600",
+  amber:"bg-amber-500",
+  red:"bg-red-600",
+  slate:"bg-slate-500",
+  dark:"bg-slate-800",
 };
 </script>

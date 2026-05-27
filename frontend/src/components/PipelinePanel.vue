@@ -1,7 +1,7 @@
 <template>
   <div class="pipeline-panel">
     <div class="pipeline-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-      <h5 class="mb-0"><i class="fas fa-project-diagram"></i> 流水线管理</h5>
+      <h5 class="mb-0"><AppIcon  name="project-diagram" /> 流水线管理</h5>
       <div class="pipeline-toolbar-actions flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
         <Button
           variant="outline" size="sm"
@@ -9,13 +9,13 @@
           :disabled="loading"
           title="刷新列表"
         >
-          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i> 刷新
+          <AppIcon name="sync-alt" /> 刷新
         </Button>
         <Button size="sm" @click="goToCreate">
-          <i class="fas fa-plus"></i> 新建流水线
+          <AppIcon  name="plus" /> 新建流水线
         </Button>
         <Button size="sm" @click="openJsonCreateModal">
-          <i class="fas fa-code"></i> 通过JSON创建
+          <AppIcon  name="code" /> 通过JSON创建
         </Button>
       </div>
     </div>
@@ -78,12 +78,12 @@
 
     <!-- 流水线列表 - 卡片式布局 -->
     <div v-if="loading" class="text-center py-12">
-      <i class="fas fa-spinner fa-spin"></i> 加载中...
+      <AppIcon  name="spinner" spin /> 加载中...
     </div>
     <div v-else-if="pipelines.length === 0" class="text-center py-12 text-slate-500">
-      <i class="fas fa-inbox text-4xl mb-3"></i>
+      <AppIcon  name="inbox" class="text-4xl mb-3" />
       <p class="mb-0">
-        {{ hasActiveFilters ? "暂无符合筛选条件的流水线" : "暂无流水线配置" }}
+        {{ hasActiveFilters ?"暂无符合筛选条件的流水线" :"暂无流水线配置" }}
       </p>
     </div>
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -91,11 +91,11 @@
         v-for="pipeline in pipelines"
         :key="pipeline.pipeline_id"
         >
-        <div class="card h-full shadow-sm">
+        <div class="rounded-lg border border-slate-200 bg-white shadow-sm h-full">
           <!-- 卡片头部 -->
-          <div class="card-header relative bg-white">
+          <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 relative bg-white">
             <div class="mb-2">
-              <h5 class="card-title mb-2">
+              <h5 class="text-base font-semibold text-slate-900 mb-2">
                 <strong class="break-words cursor-pointer text-blue-600 hover:underline" @click="goToDetail(pipeline)">{{ pipeline.name }}</strong>
               </h5>
               <!-- 徽章行 -->
@@ -103,19 +103,19 @@
                 class="pipeline-card-badges flex items-center justify-between mb-1"
               >
                 <div>
-                  <span v-if="pipeline.enabled" class="badge bg-success">
-                    <i class="fas fa-check-circle"></i> 已启用
+                  <span v-if="pipeline.enabled" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white">
+                    <AppIcon  name="check-circle" /> 已启用
                   </span>
-                  <span v-else class="badge bg-secondary">
-                    <i class="fas fa-times-circle"></i> 已禁用
+                  <span v-else class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white">
+                    <AppIcon  name="times-circle" /> 已禁用
                   </span>
                 </div>
                 <span
-                  class="badge"
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
                   :class="getProjectTypeBadgeClass(pipeline.project_type)"
                   style="font-size: 0.8rem; padding: 0.3rem 0.6rem"
                 >
-                  <i :class="getProjectTypeIcon(pipeline.project_type)"></i>
+                  <AppIcon :name="getProjectTypeIcon(pipeline.project_type)" />
                   {{ getProjectTypeLabel(pipeline.project_type) }}
                 </span>
               </div>
@@ -128,29 +128,28 @@
               </p>
             </div>
             <!-- 操作按钮行 -->
-            <div class="pipeline-card-actions btn-group btn-group-sm w-full flex flex-wrap gap-1">
+            <div class="pipeline-card-actions inline-flex items-stretch text-sm w-full flex flex-wrap gap-1">
               <Button
                 variant="outline" size="sm"
                 @click="runPipeline(pipeline)"
                 title="手动运行"
               >
-                <i class="fas fa-play"></i>
-                <span
+                <AppIcon  name="play" />
+                <AppIcon
                   v-if="running === pipeline.pipeline_id"
-                  class="fas fa-spinner fa-spin ml-1"
-                ></span>
+                  
+                 name="spinner" class="ml-1" spin />
                 <span
                   v-else-if="pipeline.queue_length && pipeline.queue_length > 0"
-                  class="badge bg-info ml-1"
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white ml-1"
                 >
                   {{ pipeline.queue_length }}个排队
                 </span>
                 <span
                   v-else-if="
                     pipeline.current_task_status === 'running' ||
-                    pipeline.current_task_status === 'pending'
-                  "
-                  class="badge bg-primary ml-1"
+                    pipeline.current_task_status === 'pending'"
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-600 text-white ml-1"
                 >
                   运行中
                 </span>
@@ -160,14 +159,14 @@
                 @click="showHistory(pipeline)"
                 title="历史构建"
               >
-                <i class="fas fa-history"></i>
+                <AppIcon  name="history" />
               </Button>
               <Button
                 variant="outline" size="sm"
                 @click="openPipelinePermission(pipeline)"
                 title="成员授权"
               >
-                <i class="fas fa-user-shield"></i>
+                <AppIcon  name="user-shield" />
               </Button>
               <Button
                 variant="outline" size="sm"
@@ -175,11 +174,11 @@
                 :disabled="copying === pipeline.pipeline_id"
                 title="复制流水线"
               >
-                <i
+                <AppIcon
                   v-if="copying === pipeline.pipeline_id"
-                  class="fas fa-spinner fa-spin"
-                ></i>
-                <i v-else class="fas fa-copy"></i>
+                  
+                 name="spinner" spin />
+                <AppIcon v-else  name="copy" />
                 复制
               </Button>
               <Button
@@ -187,20 +186,20 @@
                 @click="goToDetail(pipeline)"
                 title="配置流水线"
               >
-                <i class="fas fa-cog"></i> 配置
+                <AppIcon  name="cog" /> 配置
               </Button>
             </div>
           </div>
 
           <!-- 卡片内容 -->
-          <div class="card-body">
+          <div class="p-4">
             <!-- Git 信息 -->
             <div class="mb-3" style="min-height: 60px">
               <div class="flex items-center mb-2">
-                <i
-                  class="fas fa-code-branch text-slate-500 mr-2"
+                <AppIcon
+                  
                   style="width: 18px; flex-shrink: 0"
-                ></i>
+                 name="code-branch" class="text-slate-500 mr-2" />
                 <small
                   class="font-mono truncate flex-1"
                   :title="pipeline.git_url"
@@ -214,45 +213,44 @@
                     width: 24px;
                     height: 24px;
                     line-height: 1;
-                    flex-shrink: 0;
-                  "
+                    flex-shrink: 0;"
                   @click="copyTextWithFeedback(pipeline.git_url, 'Git 地址', $event)"
                   title="复制 Git 地址"
                 >
-                  <i class="fas fa-copy" style="font-size: 0.7rem"></i>
+                  <AppIcon  style="font-size: 0.7rem" name="copy" />
                 </Button>
               </div>
               <div
                 class="flex items-center flex-wrap gap-2 ml-4"
                 style="min-height: 24px"
               >
-                <span class="badge bg-secondary" style="font-size: 0.75rem">
-                  <i class="fas fa-code-branch"></i>
-                  {{ pipeline.branch || "默认" }}
+                <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white" style="font-size: 0.75rem">
+                  <AppIcon  name="code-branch" />
+                  {{ pipeline.branch ||"默认" }}
                 </span>
                 <span
                   v-if="pipeline.webhook_branch_filter"
-                  class="badge bg-warning"
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900"
                   title="启用分支过滤"
                   style="font-size: 0.75rem"
                 >
-                  <i class="fas fa-filter"></i> 分支过滤
+                  <AppIcon  name="filter" /> 分支过滤
                 </span>
                 <span
                   v-if="pipeline.webhook_token"
-                  class="badge bg-primary"
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-600 text-white"
                   title="Webhook 触发"
                   style="font-size: 0.75rem"
                 >
-                  <i class="fas fa-link"></i> Webhook
+                  <AppIcon  name="link" /> Webhook
                 </span>
                 <span
                   v-if="pipeline.cron_expression"
-                  class="badge bg-info"
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white"
                   :title="pipeline.cron_expression"
                   style="font-size: 0.75rem"
                 >
-                  <i class="fas fa-clock"></i> 定时
+                  <AppIcon  name="clock" /> 定时
                 </span>
               </div>
             </div>
@@ -260,10 +258,10 @@
             <!-- 镜像信息 -->
             <div class="mb-3" style="min-height: 24px">
               <div class="flex items-center">
-                <i
-                  class="fab fa-docker text-slate-500 mr-2"
+                <AppIcon
+                  
                   style="width: 18px; flex-shrink: 0"
-                ></i>
+                 name="docker" class="text-slate-500 mr-2" />
                 <small
                   class="font-mono truncate flex-1"
                   :title="`${pipeline.image_name}:${pipeline.tag}`"
@@ -277,74 +275,63 @@
                     width: 24px;
                     height: 24px;
                     line-height: 1;
-                    flex-shrink: 0;
-                  "
+                    flex-shrink: 0;"
                   @click="
                     copyTextWithFeedback(
                       `${pipeline.image_name}:${pipeline.tag}`,
                       '镜像名称',
                       $event
-                    )
-                  "
+                    )"
                   title="复制镜像名称"
                 >
-                  <i class="fas fa-copy" style="font-size: 0.7rem"></i>
+                  <AppIcon  style="font-size: 0.7rem" name="copy" />
                 </Button>
               </div>
               <!-- 多服务信息 -->
               <div
                 v-if="
                   pipeline.selected_services &&
-                  pipeline.selected_services.length > 0
-                "
+                  pipeline.selected_services.length > 0"
                 class="flex items-center flex-wrap gap-2 ml-4 mt-2"
               >
-                <span class="badge bg-info" style="font-size: 0.75rem">
-                  <i class="fas fa-layer-group"></i>
+                <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white" style="font-size: 0.75rem">
+                  <AppIcon  name="layer-group" />
                   {{ pipeline.selected_services.length }} 个服务
                 </span>
                 <span
-                  class="badge"
-                  :class="
-                    pipeline.push_mode === 'multi'
-                      ? 'bg-success'
-                      : 'bg-secondary'
-                  "
+                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                  :class="pipeline.push_mode === 'multi'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-slate-500 text-white'"
                   style="font-size: 0.75rem"
                 >
-                  <i
-                    class="fas"
-                    :class="
-                      pipeline.push_mode === 'multi' ? 'fa-sitemap' : 'fa-cube'
-                    "
-                  ></i>
-                  {{ pipeline.push_mode === "multi" ? "多阶段" : "单一" }}推送
+                  <AppIcon :name="pipeline.push_mode === 'multi' ? 'sitemap' : 'cube'" />
+                  {{ pipeline.push_mode ==="multi" ?"多阶段" :"单一" }}推送
                 </span>
               </div>
               <!-- 子路径 -->
               <div v-if="pipeline.sub_path" class="ml-4 mt-1">
                 <small class="text-slate-500" style="font-size: 0.8rem">
-                  <i class="fas fa-folder"></i> 子路径: {{ pipeline.sub_path }}
+                  <AppIcon  name="folder" /> 子路径: {{ pipeline.sub_path }}
                 </small>
               </div>
               <!-- 资源包信息 -->
               <div
                 v-if="
                   pipeline.resource_package_configs &&
-                  pipeline.resource_package_configs.length > 0
-                "
+                  pipeline.resource_package_configs.length > 0"
                 class="ml-4 mt-1"
               >
                 <small class="text-slate-500" style="font-size: 0.8rem">
-                  <i class="fas fa-archive"></i>
+                  <AppIcon  name="archive" />
                   {{ pipeline.resource_package_configs.length }} 个资源包
                 </small>
               </div>
               <!-- Dockerfile 信息 -->
               <div v-if="pipeline.use_project_dockerfile" class="ml-4 mt-1">
                 <small class="text-slate-500" style="font-size: 0.8rem">
-                  <i class="fas fa-file-code"></i>
-                  {{ pipeline.dockerfile_name || "Dockerfile" }}
+                  <AppIcon  name="file-code" />
+                  {{ pipeline.dockerfile_name ||"Dockerfile" }}
                 </small>
               </div>
             </div>
@@ -360,60 +347,56 @@
                     class="text-slate-500 fw-semibold"
                     style="font-size: 0.9rem"
                   >
-                    <i class="fas fa-hammer mr-1"></i>
-                    {{ isLastBuildRunning(pipeline) ? "当前任务" : "最后构建" }}
+                    <AppIcon  name="hammer" class="mr-1" />
+                    {{ isLastBuildRunning(pipeline) ?"当前任务" :"最后构建" }}
                   </span>
                   <!-- 如果最后构建是运行中或等待中，显示为当前任务 -->
                   <div
                     v-if="
                       pipeline.last_build &&
                       (pipeline.last_build.status === 'running' ||
-                        pipeline.last_build.status === 'pending')
-                    "
+                        pipeline.last_build.status === 'pending')"
                     class="flex items-center gap-2"
                   >
                     <span
                       v-if="pipeline.last_build.status === 'running'"
-                      class="badge bg-primary"
+                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-600 text-white"
                     >
-                      <span
-                        class="fas fa-spinner fa-spin mr-1"
+                      <AppIcon
+                        
                         style="width: 0.7rem; height: 0.7rem"
-                      ></span>
+                       name="spinner" class="mr-1" spin />
                       运行中
                     </span>
                     <span
                       v-else-if="pipeline.last_build.status === 'pending'"
-                      class="badge bg-warning"
+                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900"
                     >
-                      <i class="fas fa-clock"></i> 等待中
+                      <AppIcon  name="clock" /> 等待中
                     </span>
                     <span
                       v-else-if="
-                        pipeline.queue_length && pipeline.queue_length > 0
-                      "
-                      class="badge bg-info"
+                        pipeline.queue_length && pipeline.queue_length > 0"
+                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white"
                     >
-                      <i class="fas fa-list"></i>
+                      <AppIcon  name="list" />
                       {{ pipeline.queue_length }}个排队
                     </span>
                     <Button
                       v-if="
                         pipeline.last_build &&
                         pipeline.last_build.task_id &&
-                        pipeline.last_build.status !== 'deleted'
-                      "
+                        pipeline.last_build.status !== 'deleted'"
                       variant="outline" size="sm"
                       style="width: 24px; height: 24px; line-height: 1"
                       @click.stop="
                         buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
                           pipeline.last_build
-                        )
-                      "
+                        )"
                       title="查看日志"
                     >
-                      <i class="fas fa-terminal" style="font-size: 0.75rem"></i>
+                      <AppIcon  style="font-size: 0.75rem" name="terminal" />
                     </Button>
                   </div>
                   <!-- 如果最后构建已完成或失败，显示为历史构建 -->
@@ -421,49 +404,46 @@
                     v-else-if="
                       pipeline.last_build &&
                       (pipeline.last_build.status === 'completed' ||
-                        pipeline.last_build.status === 'failed')
-                    "
+                        pipeline.last_build.status === 'failed')"
                     class="flex items-center gap-2"
                   >
                     <span
                       :class="{
                         badge: true,
-                        'bg-success':
+                        'bg-green-600 text-white':
                           pipeline.last_build.status === 'completed',
-                        'bg-danger': pipeline.last_build.status === 'failed',
+                        'bg-red-600 text-white': pipeline.last_build.status === 'failed',
                       }"
                     >
-                      <i
+                      <AppIcon
                         v-if="pipeline.last_build.status === 'completed'"
-                        class="fas fa-check-circle"
-                      ></i>
-                      <i
+                        
+                       name="check-circle" />
+                      <AppIcon
                         v-else-if="pipeline.last_build.status === 'failed'"
-                        class="fas fa-times-circle"
-                      ></i>
+                        
+                       name="times-circle" />
                       {{
-                        pipeline.last_build.status === "completed"
-                          ? "成功"
-                          : "失败"
+                        pipeline.last_build.status ==="completed"
+                          ?"成功"
+                          :"失败"
                       }}
                     </span>
                     <Button
                       v-if="
                         pipeline.last_build &&
                         pipeline.last_build.task_id &&
-                        pipeline.last_build.status !== 'deleted'
-                      "
+                        pipeline.last_build.status !== 'deleted'"
                       variant="outline" size="sm"
                       style="width: 24px; height: 24px; line-height: 1"
                       @click.stop="
                         buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
                           pipeline.last_build
-                        )
-                      "
+                        )"
                       title="查看日志"
                     >
-                      <i class="fas fa-terminal" style="font-size: 0.75rem"></i>
+                      <AppIcon  style="font-size: 0.75rem" name="terminal" />
                     </Button>
                   </div>
                   <span v-else class="text-slate-500" style="font-size: 0.85rem"
@@ -481,11 +461,10 @@
                       formatDateTime(
                         pipeline.last_build.completed_at ||
                           pipeline.last_build.created_at
-                      )
-                    "
+                      )"
                     style="font-size: 0.8rem"
                   >
-                    <i class="fas fa-calendar-alt mr-1"></i>
+                    <AppIcon  name="calendar-alt" class="mr-1" />
                     {{
                       formatDateTime(
                         pipeline.last_build.completed_at ||
@@ -494,49 +473,49 @@
                     }}
                   </small>
                   <small class="text-slate-500">
-                    <i class="fas fa-hashtag mr-1"></i>
+                    <AppIcon  name="hashtag" class="mr-1" />
                     <code style="font-size: 0.8rem">{{
-                      pipeline.last_build.task_id?.substring(0, 8) || "-"
+                      pipeline.last_build.task_id?.substring(0, 8) ||"-"
                     }}</code>
                   </small>
                 </div>
               </div>
 
               <!-- 统计指标 -->
-              <div class="pipeline-stats row g-2">
-                <div class="col-4">
-                  <div class="bg-light rounded p-2 text-center">
+              <div class="pipeline-stats grid grid-cols-1 gap-3 md:grid-cols-12 gap-2">
+                <div class="col-span-4">
+                  <div class="bg-slate-50 rounded p-2 text-center">
                     <div class="text-slate-500 mb-1" style="font-size: 0.75rem">
-                      <i class="fas fa-chart-line"></i> 触发次数
+                      <AppIcon  name="chart-line" /> 触发次数
                     </div>
                     <div
-                      class="fw-bold"
+                      class="font-semibold"
                       style="font-size: 1.1rem; color: #0d6efd"
                     >
                       {{ pipeline.trigger_count || 0 }}
                     </div>
                   </div>
                 </div>
-                <div class="col-4">
-                  <div class="bg-light rounded p-2 text-center">
+                <div class="col-span-4">
+                  <div class="bg-slate-50 rounded p-2 text-center">
                     <div class="text-slate-500 mb-1" style="font-size: 0.75rem">
-                      <i class="fas fa-check-circle"></i> 成功
+                      <AppIcon  name="check-circle" /> 成功
                     </div>
                     <div
-                      class="fw-bold"
+                      class="font-semibold"
                       style="font-size: 1.1rem; color: #198754"
                     >
                       {{ pipeline.success_count || 0 }}
                     </div>
                   </div>
                 </div>
-                <div class="col-4">
-                  <div class="bg-light rounded p-2 text-center">
+                <div class="col-span-4">
+                  <div class="bg-slate-50 rounded p-2 text-center">
                     <div class="text-slate-500 mb-1" style="font-size: 0.75rem">
-                      <i class="fas fa-times-circle"></i> 失败
+                      <AppIcon  name="times-circle" /> 失败
                     </div>
                     <div
-                      class="fw-bold"
+                      class="font-semibold"
                       style="font-size: 1.1rem; color: #dc3545"
                     >
                       {{ pipeline.failed_count || 0 }}
@@ -568,15 +547,15 @@
       <div class="relative z-10 mx-auto w-full max-w-lg">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-play text-green-600"></i> 手动触发流水线 -
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="play" class="text-green-600" /> 手动触发流水线 -
               {{ manualRunPipeline?.name }}
             </h5>
             <button
               type="button"
               class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
               @click="closeManualRunModal"
-            ><i class="fas fa-times"></i></button>
+            ><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="mb-3">
@@ -586,18 +565,18 @@
               </label>
               <div
                 v-if="loadingManualRunBranches"
-                class="alert alert-info py-2"
+                class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900"
               >
-                <i class="fas fa-spinner fa-spin"></i> 正在加载分支列表...
+                <AppIcon  name="spinner" spin /> 正在加载分支列表...
               </div>
               <div
                 v-else-if="manualRunBranches.length === 0"
-                class="alert alert-warning py-2"
+                class="rounded-md border px-3 py-2 text-sm border-amber-200 bg-amber-50 text-amber-900"
               >
-                <i class="fas fa-exclamation-triangle"></i>
+                <AppIcon  name="exclamation-triangle" />
                 未找到可用分支，请点击刷新按钮重新加载
               </div>
-              <div v-else class="input-group">
+              <div v-else class="flex w-full">
                 <select
                   v-model="manualRunSelectedBranch"
                   class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -620,20 +599,20 @@
                   :disabled="loadingManualRunBranches"
                   title="刷新分支列表"
                 >
-                  <i
+                  <AppIcon
                     v-if="loadingManualRunBranches"
-                    class="fas fa-spinner fa-spin"
-                  ></i>
-                  <i v-else class="fas fa-sync-alt"></i>
+                    
+                   name="spinner" spin />
+                  <AppIcon v-else  name="sync-alt" />
                 </Button>
               </div>
               <small class="text-slate-500 block mt-1">
-                <i class="fas fa-info-circle"></i>
+                <AppIcon  name="info-circle" />
                 选择要用于构建的分支，点击刷新按钮可重新加载分支列表
               </small>
             </div>
           </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="pipeline-dialog-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <Button
               type="button"
               variant="outline" size="sm"
@@ -647,7 +626,7 @@
               @click="confirmManualRun"
               :disabled="!manualRunSelectedBranch"
             >
-              <i class="fas fa-play"></i> 确认触发
+              <AppIcon  name="play" /> 确认触发
             </Button>
           </div>
         </div>
@@ -662,28 +641,28 @@
       <div class="relative z-10 mx-auto w-full max-w-3xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-code"></i> 通过JSON创建流水线
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="code" /> 通过JSON创建流水线
             </h5>
             <button
               type="button"
               class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
               @click="closeJsonCreateModal"
-            ><i class="fas fa-times"></i></button>
+            ><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div class="alert alert-info">
-              <i class="fas fa-info-circle"></i>
+            <div class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900">
+              <AppIcon  name="info-circle" />
               <strong>提示：</strong
               >填写必要参数后，可在下方JSON中继续编辑完整配置。字段定义与"任务中另存为流水线"一致。
             </div>
 
             <!-- 必要参数输入框 -->
-            <div class="card mb-3">
-              <div class="card-header bg-light">
+            <div class="rounded-lg border border-slate-200 bg-white shadow-sm mb-3">
+              <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                 <strong>必要参数</strong>
               </div>
-              <div class="card-body">
+              <div class="p-4">
                 <div class="mb-3">
                   <label class="block text-sm font-medium text-slate-700"
                     >流水线名称 <span class="text-red-500">*</span></label
@@ -720,16 +699,16 @@
                 v-model="jsonInput"
                 class="flex h-10 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
                 rows="15"
-                placeholder='{"name": "my_pipeline", "git_url": "https://github.com/example/repo.git", "branch": "main", ...}'
+                placeholder='{"name":"my_pipeline","git_url":"https://github.com/example/repo.git","branch":"main", ...}'
                 style="font-size: 0.9rem"
               ></textarea>
             </div>
 
-            <div v-if="jsonError" class="alert alert-danger">
-              <i class="fas fa-exclamation-circle"></i> {{ jsonError }}
+            <div v-if="jsonError" class="rounded-md border px-3 py-2 text-sm border-red-200 bg-red-50 text-red-800">
+              <AppIcon  name="exclamation-circle" /> {{ jsonError }}
             </div>
           </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="pipeline-dialog-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <Button
               type="button"
               variant="outline" size="sm"
@@ -744,11 +723,11 @@
               @click="createPipelineFromJson"
               :disabled="savingJson || (!jsonFormData.name && !jsonInput)"
             >
-              <span
+              <AppIcon
                 v-if="savingJson"
-                class="fas fa-spinner fa-spin mr-1"
-              ></span>
-              <i v-else class="fas fa-save"></i> 创建流水线
+                
+               name="spinner" class="mr-1" spin />
+              <AppIcon v-else  name="save" /> 创建流水线
             </Button>
           </div>
         </div>
@@ -803,7 +782,7 @@ import {
 
 /** 分隔列表时仅使用半角逗号：输入中的全角逗号自动转为半角 */
 function normalizeAsciiCommaSeparators(s) {
-  return String(s ?? "").replace(/\uFF0C/g, ",");
+  return String(s ??"").replace(/\uFF0C/g,",");
 }
 
 function onPostBuildWebhookBranchesInput(webhook, e) {
@@ -826,9 +805,9 @@ function goToCreate() {
   router.push("/app/pipeline/new");
 }
 
-function goToDetail(pipeline, tab = "basic") {
+function goToDetail(pipeline, tab ="basic") {
   router.push({
-    name: "pipeline-detail",
+    name:"pipeline-detail",
     params: { pipelineId: pipeline.pipeline_id },
     query: { tab },
   });
@@ -878,11 +857,11 @@ const multiServiceConfigPipeline = ref(null);
 const savingMultiServiceConfig = ref(false);
 const parsingDockerfileForMultiService = ref(false);
 const multiServiceFormData = ref({
-  push_mode: "multi",
+  push_mode:"multi",
   selected_services: [],
   service_push_config: {},
-  global_image_name: "",
-  global_tag: "latest",
+  global_image_name:"",
+  global_tag:"latest",
 });
 // 临时存储多服务模式下的服务数据（用于单服务/多服务切换时恢复）
 const multiServiceBackup = ref({
@@ -901,8 +880,8 @@ const jsonError = ref(""); // JSON错误信息
 const savingJson = ref(false); // 正在保存JSON
 const jsonFormData = ref({
   // JSON表单数据（只包含必要参数）
-  name: "",
-  git_url: "",
+  name:"",
+  git_url:"",
 });
 
 // 多服务相关
@@ -936,32 +915,32 @@ const jsonEditorExtensions = [StreamLanguage.define(javascript), oneDark];
 const dockerfileEditorExtensions = [StreamLanguage.define(javascript), oneDark];
 
 const formData = ref({
-  name: "",
-  description: "",
-  git_url: "",
-  branch: "",
-  sub_path: "",
-  project_type: "jar",
-  template: "",
-  image_name: "",
-  tag: "latest",
+  name:"",
+  description:"",
+  git_url:"",
+  branch:"",
+  sub_path:"",
+  project_type:"jar",
+  template:"",
+  image_name:"",
+  tag:"latest",
   push: false,
-  webhook_token: "", // Webhook Token（用于 URL）
-  webhook_secret: "", // Webhook 密钥
-  webhook_branch_strategy: "use_push", // Webhook分支策略
+  webhook_token:"", // Webhook Token（用于 URL）
+  webhook_secret:"", // Webhook 密钥
+  webhook_branch_strategy:"use_push", // Webhook分支策略
   webhook_allowed_branches: [], // 允许触发的分支列表（用于选择分支触发策略）
   branch_tag_mapping: [], // 分支标签映射
   post_build_webhooks: [], // 构建完成后触发的webhook列表
   enabled: true,
   trigger_schedule: false, // 是否启用定时触发
-  cron_expression: "", // Cron 表达式
-  dockerfile_name: "Dockerfile", // Dockerfile文件名，默认Dockerfile
+  cron_expression:"", // Cron 表达式
+  dockerfile_name:"Dockerfile", // Dockerfile文件名，默认Dockerfile
   use_project_dockerfile: true, // 是否使用项目中的 Dockerfile
-  dockerfile_content: "", // Dockerfile内容（用于直接编辑）
-  source_id: "", // 数据源ID
+  dockerfile_content:"", // Dockerfile内容（用于直接编辑）
+  source_id:"", // 数据源ID
   // 多服务配置
-  push_mode: "multi", // 推送模式：'single' 或 'multi'
-  selected_service: "", // 单服务模式选中的服务
+  push_mode:"multi", // 推送模式：'single' 或 'multi'
+  selected_service:"", // 单服务模式选中的服务
   selected_services: [], // 多服务模式选中的服务列表
   service_push_config: {}, // 服务推送配置 {服务名: {imageName, tag, push}}
   service_template_params: {}, // 服务模板参数
@@ -977,8 +956,8 @@ watch(
 
 watch(
   () =>
-    route.name === "admin" &&
-    route.params.tab === "pipeline" &&
+    route.name ==="admin" &&
+    route.params.tab ==="pipeline" &&
     !route.params.pipelineId,
   (onList) => {
     if (onList) {
@@ -1011,7 +990,7 @@ onMounted(() => {
         if (config.project_type)
           formData.value.project_type = config.project_type;
         if (config.template !== undefined)
-          formData.value.template = config.template || "";
+          formData.value.template = config.template ||"";
         if (config.use_project_dockerfile !== undefined)
           formData.value.use_project_dockerfile = config.use_project_dockerfile;
         if (config.dockerfile_name)
@@ -1054,8 +1033,8 @@ async function onSourceSelected() {
   const sourceId = formData.value.source_id;
   if (!sourceId) {
     // 如果清空数据源选择，重置分支
-    formData.value.source_id = "";
-    formData.value.branch = "";
+    formData.value.source_id ="";
+    formData.value.branch ="";
     repoVerified.value = false;
     branchesAndTags.value = { branches: [], tags: [], default_branch: null };
     availableDockerfiles.value = [];
@@ -1079,7 +1058,7 @@ async function onSourceSelected() {
         !cached.branches.includes(formData.value.branch)
       ) {
         formData.value.branch =
-          cached.default_branch || cached.branches[0] || "";
+          cached.default_branch || cached.branches[0] ||"";
       }
 
       // 如果使用项目 Dockerfile，自动扫描 Dockerfile
@@ -1105,7 +1084,7 @@ async function onSourceSelected() {
         !source.branches.includes(formData.value.branch)
       ) {
         formData.value.branch =
-          source.default_branch || source.branches[0] || "";
+          source.default_branch || source.branches[0] ||"";
       }
 
       // 如果使用项目 Dockerfile，自动扫描 Dockerfile
@@ -1155,7 +1134,7 @@ watch(
           !cached.branches.includes(formData.value.branch)
         ) {
           formData.value.branch =
-            cached.default_branch || cached.branches[0] || "";
+            cached.default_branch || cached.branches[0] ||"";
         }
 
         // 如果使用项目 Dockerfile 且有分支，自动扫描 Dockerfile
@@ -1209,18 +1188,18 @@ watch(
       // 确保是真正的变化（不是初始化）
       // #region agent log (disabled - causes connection errors)
       // fetch(
-      //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+      //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
       //   {
-      //     method: "POST",
-      //     headers: { "Content-Type": "application/json" },
+      //     method:"POST",
+      //     headers: {"Content-Type":"application/json" },
       //     body: JSON.stringify({
-      //       location: "PipelinePanel.vue:1834",
-      //       message: "Dockerfile name changed, reloading services",
+      //       location:"PipelinePanel.vue:1834",
+      //       message:"Dockerfile name changed, reloading services",
       //       data: { old: oldName, newValue: newName },
       //       timestamp: Date.now(),
-      //       sessionId: "debug-session",
-      //       runId: "run1",
-      //       hypothesisId: "D",
+      //       sessionId:"debug-session",
+      //       runId:"run1",
+      //       hypothesisId:"D",
       //     }),
       //   }
       // ).catch(() => {});
@@ -1237,7 +1216,7 @@ watch(showBuildConfigJsonModal, (isVisible) => {
     // 使用 nextTick 确保在模态框完全显示后再更新
     nextTick(() => {
       buildConfigJsonText.value = buildConfigJson.value;
-      buildConfigJsonError.value = "";
+      buildConfigJsonError.value ="";
     });
   }
 });
@@ -1245,10 +1224,10 @@ watch(showBuildConfigJsonModal, (isVisible) => {
 // 监听activeTab变化，当切换到build Tab时（新建或编辑模式），更新JSON内容
 // 当切换到service Tab时，自动加载服务列表（如果还没有加载）
 watch(activeTab, (newTab) => {
-  if (newTab === "build") {
+  if (newTab ==="build") {
     nextTick(() => {
       buildConfigJsonText.value = buildConfigJson.value;
-      buildConfigJsonError.value = "";
+      buildConfigJsonError.value ="";
     });
   }
   // 编辑模式下不自动加载服务列表，需要用户手动点击加载按钮
@@ -1258,19 +1237,19 @@ watch(activeTab, (newTab) => {
 
 // 监听JSON文本变化，实时验证（新建和编辑模式下）
 watch(buildConfigJsonText, (newText) => {
-  if (activeTab.value !== "build") return;
+  if (activeTab.value !=="build") return;
 
-  buildConfigJsonError.value = "";
+  buildConfigJsonError.value ="";
   if (!newText || !newText.trim()) {
-    buildConfigJsonError.value = "JSON不能为空";
+    buildConfigJsonError.value ="JSON不能为空";
     return;
   }
 
   try {
     const parsed = JSON.parse(newText);
     // 基本验证：确保是对象
-    if (typeof parsed !== "object" || Array.isArray(parsed)) {
-      buildConfigJsonError.value = "JSON必须是对象格式";
+    if (typeof parsed !=="object" || Array.isArray(parsed)) {
+      buildConfigJsonError.value ="JSON必须是对象格式";
       return;
     }
   } catch (e) {
@@ -1281,14 +1260,14 @@ watch(buildConfigJsonText, (newText) => {
 // 关闭构建配置JSON模态框
 function closeBuildConfigJsonModal() {
   showBuildConfigJsonModal.value = false;
-  buildConfigJsonError.value = "";
+  buildConfigJsonError.value ="";
 }
 
 // 重置构建配置JSON（恢复到原始值）
 async function resetBuildConfigJson() {
-  if (await showConfirm({ message: "确定要重置构建配置JSON吗？未保存的修改将丢失。" })) {
+  if (await showConfirm({ message:"确定要重置构建配置JSON吗？未保存的修改将丢失。" })) {
     buildConfigJsonText.value = buildConfigJson.value;
-    buildConfigJsonError.value = "";
+    buildConfigJsonError.value ="";
   }
 }
 
@@ -1340,7 +1319,7 @@ function applyBuildConfigJson() {
       formData.value.service_template_params =
         config.service_template_params || {};
     if (config.push_mode !== undefined)
-      formData.value.push_mode = config.push_mode || "multi";
+      formData.value.push_mode = config.push_mode ||"multi";
     if (config.resource_package_configs !== undefined) {
       // 直接使用resource_package_configs配置（包含package_id和target_path）
       formData.value.resource_package_configs =
@@ -1351,13 +1330,13 @@ function applyBuildConfigJson() {
         config.resource_package_ids || []
       ).map((pkgId) => ({
         package_id: pkgId,
-        target_path: "", // 旧格式没有target_path，留空
+        target_path:"", // 旧格式没有target_path，留空
       }));
     }
 
     // 如果push_mode是single，设置selected_service
     if (
-      config.push_mode === "single" &&
+      config.push_mode ==="single" &&
       config.selected_services &&
       config.selected_services.length > 0
     ) {
@@ -1366,7 +1345,7 @@ function applyBuildConfigJson() {
 
     // 更新JSON文本以反映formData的变化
     buildConfigJsonText.value = buildConfigJson.value;
-    buildConfigJsonError.value = "";
+    buildConfigJsonError.value ="";
 
     // 不显示alert，静默应用，用户需要点击外部保存按钮才能真正保存
   } catch (e) {
@@ -1407,7 +1386,7 @@ async function loadDockerfileFromRepo() {
     }
   } catch (error) {
     console.error("加载Dockerfile失败:", error);
-    toastApiError(error, "加载Dockerfile失败");
+    toastApiError(error,"加载Dockerfile失败");
   } finally {
     loadingDockerfile.value = false;
   }
@@ -1435,7 +1414,7 @@ watch(
       );
       if (!currentTemplate || currentTemplate.project_type !== newType) {
         // 模板不匹配新的项目类型，清除模板选择并重新加载服务（项目类型变化不是切换 Dockerfile）
-        formData.value.template = "";
+        formData.value.template ="";
         if (
           formData.value.use_project_dockerfile &&
           formData.value.git_url &&
@@ -1487,9 +1466,9 @@ async function loadPipelines(options = {}) {
     if (searchQuery.value.trim()) {
       params.query = searchQuery.value.trim();
     }
-    if (enabledFilter.value === "enabled") {
+    if (enabledFilter.value ==="enabled") {
       params.enabled = true;
-    } else if (enabledFilter.value === "disabled") {
+    } else if (enabledFilter.value ==="disabled") {
       params.enabled = false;
     }
     if (projectTypeFilter.value) {
@@ -1562,8 +1541,8 @@ async function loadDeployTasks() {
 
 function getDeployWebhookUrl(token) {
   const baseUrl = window.location.origin
-    .replace(":3000", ":8000")
-    .replace(":5173", ":8000");
+    .replace(":3000",":8000")
+    .replace(":5173",":8000");
   return `${baseUrl}/api/webhook/deploy/${token}`;
 }
 
@@ -1582,36 +1561,36 @@ function onDeployTaskSelected(webhook, configId) {
     }).catch(() => {});
   }
   webhook.url = getDeployWebhookUrl(token);
-  webhook.method = "POST";
+  webhook.method ="POST";
 }
 
 function showCreateModal() {
   editingPipeline.value = null;
   formData.value = {
-    name: "",
-    description: "",
-    git_url: "",
-    branch: "",
-    sub_path: "",
-    project_type: "jar",
-    template: "",
-    image_name: "",
-    tag: "latest",
+    name:"",
+    description:"",
+    git_url:"",
+    branch:"",
+    sub_path:"",
+    project_type:"jar",
+    template:"",
+    image_name:"",
+    tag:"latest",
     push: false,
-    webhook_secret: "",
-    webhook_branch_strategy: "use_push",
+    webhook_secret:"",
+    webhook_branch_strategy:"use_push",
     webhook_allowed_branches: [],
     branch_tag_mapping: [],
     post_build_webhooks: [],
     enabled: true,
     trigger_schedule: false,
-    cron_expression: "",
-    dockerfile_name: "Dockerfile",
-    dockerfile_content: "", // Dockerfile内容
-    source_id: "",
+    cron_expression:"",
+    dockerfile_name:"Dockerfile",
+    dockerfile_content:"", // Dockerfile内容
+    source_id:"",
     use_project_dockerfile: true,
-    push_mode: "multi",
-    selected_service: "",
+    push_mode:"multi",
+    selected_service:"",
     selected_services: [],
     service_push_config: {},
     service_template_params: {},
@@ -1619,15 +1598,15 @@ function showCreateModal() {
   };
   services.value = [];
   loadingServices.value = false;
-  servicesError.value = "";
+  servicesError.value ="";
   // 初始化Dockerfile编辑器内容
-  dockerfileContentText.value = "";
+  dockerfileContentText.value ="";
   showModal.value = true;
   // 初始化JSON编辑器内容（新建模式）
   nextTick(() => {
-    if (activeTab.value === "build") {
+    if (activeTab.value ==="build") {
       buildConfigJsonText.value = buildConfigJson.value;
-      buildConfigJsonError.value = "";
+      buildConfigJsonError.value ="";
     }
   });
 }
@@ -1635,11 +1614,11 @@ function showCreateModal() {
 function editPipeline(pipeline) {
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:1918",
-  //     message: "editPipeline started",
+  //     location:"PipelinePanel.vue:1918",
+  //     message:"editPipeline started",
   //     data: {
   //       pipeline_id: pipeline.id,
   //       pipeline_name: pipeline.name,
@@ -1649,15 +1628,15 @@ function editPipeline(pipeline) {
   //       project_type: pipeline.project_type,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "B",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"B",
   //   }),
   // }).catch(() => {});
   // #endregion
 
   // 先重置Tab，确保显示基本信息Tab，而不是自动跳转到build Tab
-  activeTab.value = "basic";
+  activeTab.value ="basic";
   // 然后设置编辑模式
   editingPipeline.value = pipeline;
 
@@ -1667,8 +1646,8 @@ function editPipeline(pipeline) {
   );
 
   // 保存原始配置，避免被扫描覆盖
-  const savedDockerfileName = pipeline.dockerfile_name || "Dockerfile";
-  const savedTemplate = pipeline.template || "";
+  const savedDockerfileName = pipeline.dockerfile_name ||"Dockerfile";
+  const savedTemplate = pipeline.template ||"";
   // 优先使用后端返回的 use_project_dockerfile，如果没有则根据 template 推断
   const savedUseProjectDockerfile =
     pipeline.use_project_dockerfile !== undefined
@@ -1681,20 +1660,20 @@ function editPipeline(pipeline) {
 
   formData.value = {
     name: pipeline.name,
-    description: pipeline.description || "",
+    description: pipeline.description ||"",
     git_url: pipeline.git_url,
-    branch: pipeline.branch || "",
-    sub_path: pipeline.sub_path || "",
-    project_type: pipeline.project_type || "jar",
+    branch: pipeline.branch ||"",
+    sub_path: pipeline.sub_path ||"",
+    project_type: pipeline.project_type ||"jar",
     template: savedTemplate,
-    image_name: pipeline.image_name || "",
-    tag: pipeline.tag || "latest",
+    image_name: pipeline.image_name ||"",
+    tag: pipeline.tag ||"latest",
     push:
-      pipeline.push_mode === "multi"
+      pipeline.push_mode ==="multi"
         ? anyServicePushEnabled(normalizedPipelineSpc) || !!pipeline.push
         : pipeline.push || false,
-    webhook_token: pipeline.webhook_token || "",
-    webhook_secret: pipeline.webhook_secret || "",
+    webhook_token: pipeline.webhook_token ||"",
+    webhook_secret: pipeline.webhook_secret ||"",
     webhook_branch_strategy: getWebhookBranchStrategy(pipeline),
     webhook_allowed_branches: pipeline.webhook_allowed_branches
       ? [...pipeline.webhook_allowed_branches]
@@ -1714,28 +1693,28 @@ function editPipeline(pipeline) {
       }
       // 将headers对象转换为headers_json字符串
       return pipeline.post_build_webhooks.map((webhook) => ({
-        url: webhook.url || "",
-        method: webhook.method || "POST",
+        url: webhook.url ||"",
+        method: webhook.method ||"POST",
         headers: webhook.headers || {},
         headers_json: JSON.stringify(webhook.headers || {}, null, 2),
-        body_template: webhook.body_template || "{}",
+        body_template: webhook.body_template ||"{}",
         enabled: webhook.enabled !== false,
-        branch_strategy: webhook.branch_strategy || "all",
+        branch_strategy: webhook.branch_strategy ||"all",
         branches: webhook.branches || [],
       }));
     })(),
     enabled: pipeline.enabled !== false,
     trigger_schedule: !!pipeline.cron_expression, // 如果有cron表达式则启用
-    cron_expression: pipeline.cron_expression || "",
+    cron_expression: pipeline.cron_expression ||"",
     dockerfile_name: savedDockerfileName,
     use_project_dockerfile: savedUseProjectDockerfile,
-    dockerfile_content: pipeline.dockerfile_content || "", // Dockerfile内容
-    source_id: pipeline.source_id || (source ? source.source_id : ""),
-    push_mode: pipeline.push_mode || "multi",
+    dockerfile_content: pipeline.dockerfile_content ||"", // Dockerfile内容
+    source_id: pipeline.source_id || (source ? source.source_id :""),
+    push_mode: pipeline.push_mode ||"multi",
     selected_service:
       pipeline.selected_services && pipeline.selected_services.length === 1
         ? pipeline.selected_services[0]
-        : "",
+        :"",
     selected_services: pipeline.selected_services || [],
     service_push_config: normalizedPipelineSpc,
     service_template_params: pipeline.service_template_params || {},
@@ -1744,11 +1723,11 @@ function editPipeline(pipeline) {
 
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:1956",
-  //     message: "formData initialized",
+  //     location:"PipelinePanel.vue:1956",
+  //     message:"formData initialized",
   //     data: {
   //       dockerfile_name: formData.value.dockerfile_name,
   //       template: formData.value.template,
@@ -1756,9 +1735,9 @@ function editPipeline(pipeline) {
   //       branch: formData.value.branch,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "B",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"B",
   //   }),
   // }).catch(() => {});
   // #endregion
@@ -1780,8 +1759,7 @@ function editPipeline(pipeline) {
       formData.value.branch =
         source.default_branch ||
         source.branches[0] ||
-        formData.value.branch ||
-        "";
+        formData.value.branch ||"";
     }
 
     // 编辑模式下：不自动扫描 Dockerfile 和加载服务列表
@@ -1793,25 +1771,25 @@ function editPipeline(pipeline) {
   // 服务管理功能已移除
 
   // 初始化Dockerfile编辑器内容
-  dockerfileContentText.value = formData.value.dockerfile_content || "";
+  dockerfileContentText.value = formData.value.dockerfile_content ||"";
 
   showModal.value = true;
 
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:1980",
-  //     message: "editPipeline completed",
+  //     location:"PipelinePanel.vue:1980",
+  //     message:"editPipeline completed",
   //     data: {
   //       final_dockerfile_name: formData.value.dockerfile_name,
   //       final_template: formData.value.template,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "B",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"B",
   //   }),
   // }).catch(() => {});
   // #endregion
@@ -1822,7 +1800,7 @@ function addBranchTagMapping() {
   if (!formData.value.branch_tag_mapping) {
     formData.value.branch_tag_mapping = [];
   }
-  formData.value.branch_tag_mapping.push({ branch: "", tag: "" });
+  formData.value.branch_tag_mapping.push({ branch:"", tag:"" });
 }
 
 // 删除分支标签映射
@@ -1831,14 +1809,14 @@ function addPostBuildWebhook() {
     formData.value.post_build_webhooks = [];
   }
   formData.value.post_build_webhooks.push({
-    url: "",
-    method: "POST",
+    url:"",
+    method:"POST",
     headers: {},
-    headers_json: "{}",
+    headers_json:"{}",
     body_template:
-      '{"task_id": "{task_id}", "image": "{image}", "tag": "{tag}", "status": "{status}"}',
+      '{"task_id":"{task_id}","image":"{image}","tag":"{tag}","status":"{status}"}',
     enabled: true,
-    branch_strategy: "all",
+    branch_strategy:"all",
     branches: [],
   });
 }
@@ -1885,18 +1863,18 @@ function getWebhookBranchStrategy(pipeline) {
     Array.isArray(pipeline.webhook_allowed_branches) &&
     pipeline.webhook_allowed_branches.length > 0
   ) {
-    return "select_branches";
+    return"select_branches";
   }
 
   const webhook_branch_filter = pipeline.webhook_branch_filter || false;
   const webhook_use_push_branch = pipeline.webhook_use_push_branch !== false; // 默认为true
 
   if (webhook_branch_filter) {
-    return "filter_match";
+    return"filter_match";
   } else if (webhook_use_push_branch) {
-    return "use_push";
+    return"use_push";
   } else {
-    return "use_configured";
+    return"use_configured";
   }
 }
 
@@ -1937,13 +1915,13 @@ async function savePipeline() {
     let webhook_branch_filter = false;
     let webhook_use_push_branch = true;
 
-    if (formData.value.webhook_branch_strategy === "filter_match") {
+    if (formData.value.webhook_branch_strategy ==="filter_match") {
       webhook_branch_filter = true;
       webhook_use_push_branch = true;
-    } else if (formData.value.webhook_branch_strategy === "use_push") {
+    } else if (formData.value.webhook_branch_strategy ==="use_push") {
       webhook_branch_filter = false;
       webhook_use_push_branch = true;
-    } else if (formData.value.webhook_branch_strategy === "select_branches") {
+    } else if (formData.value.webhook_branch_strategy ==="select_branches") {
       // 选择分支触发策略：验证是否选择了分支
       if (
         !formData.value.webhook_allowed_branches ||
@@ -1965,7 +1943,7 @@ async function savePipeline() {
     // 如果使用项目 Dockerfile，则清空 template
     // 如果使用模板，则确保 use_project_dockerfile 为 false
     if (formData.value.use_project_dockerfile) {
-      formData.value.template = "";
+      formData.value.template ="";
     } else {
       // 使用模板时，确保选择了模板
       if (!formData.value.template) {
@@ -1983,8 +1961,8 @@ async function savePipeline() {
       // 如果使用项目 Dockerfile，template 应该为空字符串
       // 如果使用模板，template 必须有值（不能为空）
       template: formData.value.use_project_dockerfile
-        ? ""
-        : formData.value.template || "",
+        ?""
+        : formData.value.template ||"",
       // 将分支策略转换为旧格式（向后兼容）
       webhook_branch_filter: webhook_branch_filter,
       webhook_use_push_branch: webhook_use_push_branch,
@@ -2001,7 +1979,7 @@ async function savePipeline() {
       // 编辑模式下，如果formData中没有多阶段配置，从原始流水线数据中保留
       selected_services: (() => {
         const fromForm =
-          formData.value.push_mode === "single" &&
+          formData.value.push_mode ==="single" &&
           formData.value.selected_service
             ? [formData.value.selected_service]
             : formData.value.selected_services &&
@@ -2029,7 +2007,7 @@ async function savePipeline() {
       service_push_config: (() => {
         // 只处理已选择的服务
         const selectedServices =
-          formData.value.push_mode === "single" &&
+          formData.value.push_mode ==="single" &&
           formData.value.selected_service
             ? [formData.value.selected_service]
             : formData.value.selected_services || [];
@@ -2070,21 +2048,21 @@ async function savePipeline() {
 
         selectedServices.forEach((serviceName) => {
           const value = config[serviceName];
-          if (typeof value === "boolean") {
+          if (typeof value ==="boolean") {
             // 旧格式：只有push字段
             normalized[serviceName] = {
               push: value,
               imageName: getServiceDefaultImageName(serviceName),
-              tag: formData.value.tag || "latest",
+              tag: formData.value.tag ||"latest",
             };
-          } else if (value && typeof value === "object") {
+          } else if (value && typeof value ==="object") {
             // 获取最终镜像名（自定义或默认）
             const customImageName = value.imageName && value.imageName.trim();
             const finalImageName =
               customImageName || getServiceDefaultImageName(serviceName);
             // 获取最终标签（自定义或全局）
             const finalTag =
-              (value.tag && value.tag.trim()) || formData.value.tag || "latest";
+              (value.tag && value.tag.trim()) || formData.value.tag ||"latest";
 
             normalized[serviceName] = {
               push: value.push !== undefined ? value.push : false,
@@ -2096,7 +2074,7 @@ async function savePipeline() {
             normalized[serviceName] = {
               push: false,
               imageName: getServiceDefaultImageName(serviceName),
-              tag: formData.value.tag || "latest",
+              tag: formData.value.tag ||"latest",
             };
           }
         });
@@ -2129,8 +2107,7 @@ async function savePipeline() {
       // 确保push_mode被保留（编辑模式下，如果formData中没有，从原始流水线数据中保留）
       push_mode:
         formData.value.push_mode ||
-        (editingPipeline.value && editingPipeline.value.push_mode) ||
-        "multi",
+        (editingPipeline.value && editingPipeline.value.push_mode) ||"multi",
       resource_package_configs:
         formData.value.resource_package_configs &&
         formData.value.resource_package_configs.length > 0
@@ -2147,7 +2124,7 @@ async function savePipeline() {
           : null,
       // 选择分支触发：只在策略为select_branches时传递
       webhook_allowed_branches:
-        formData.value.webhook_branch_strategy === "select_branches"
+        formData.value.webhook_branch_strategy ==="select_branches"
           ? formData.value.webhook_allowed_branches || []
           : null,
       // 构建后webhook配置
@@ -2162,10 +2139,10 @@ async function savePipeline() {
         return formData.value.post_build_webhooks.map((webhook) => {
           const processed = {
             url: webhook.url,
-            method: webhook.method || "POST",
-            body_template: webhook.body_template || "{}",
+            method: webhook.method ||"POST",
+            body_template: webhook.body_template ||"{}",
             enabled: webhook.enabled !== false,
-            branch_strategy: webhook.branch_strategy || "all",
+            branch_strategy: webhook.branch_strategy ||"all",
             branches: webhook.branches || [],
           };
           // 解析headers_json为对象
@@ -2184,7 +2161,7 @@ async function savePipeline() {
       })(),
     };
     // 多阶段模式：顶层 push 与分服务推送开关同步（否则仅保存 service_push_config 时 DB 仍为 false）
-    if (payload.push_mode === "multi" && payload.service_push_config) {
+    if (payload.push_mode ==="multi" && payload.service_push_config) {
       payload.push = anyServicePushEnabled(payload.service_push_config);
     }
     // 移除webhook_branch_strategy，因为后端不需要这个字段
@@ -2236,7 +2213,7 @@ async function savePipeline() {
     loadPipelines({ resetPage: !isEdit });
   } catch (error) {
     console.error("保存流水线失败:", error);
-    toastApiError(error, "保存流水线失败");
+    toastApiError(error,"保存流水线失败");
   } finally {
     saving.value = false;
   }
@@ -2251,23 +2228,23 @@ function closeModal() {
   editingPipeline.value = null;
   services.value = [];
   loadingServices.value = false;
-  servicesError.value = "";
+  servicesError.value ="";
   saving.value = false; // 重置保存状态
   // 重置分支和 Dockerfile 相关状态
   branchesAndTags.value = { branches: [], tags: [], default_branch: null };
   availableDockerfiles.value = [];
   refreshingBranches.value = false;
   scanningDockerfiles.value = false;
-  dockerfilesError.value = "";
+  dockerfilesError.value ="";
   repoVerified.value = false;
 }
 
 function openJsonCreateModal() {
-  jsonInput.value = "";
-  jsonError.value = "";
+  jsonInput.value ="";
+  jsonError.value ="";
   jsonFormData.value = {
-    name: "",
-    git_url: "",
+    name:"",
+    git_url:"",
   };
   showJsonCreateModal.value = true;
 }
@@ -2305,7 +2282,7 @@ function updateJsonFromForm() {
       currentJson.use_project_dockerfile = true;
     }
     if (!currentJson.dockerfile_name) {
-      currentJson.dockerfile_name = "Dockerfile";
+      currentJson.dockerfile_name ="Dockerfile";
     }
     if (currentJson.webhook_branch_filter === undefined) {
       currentJson.webhook_branch_filter = false;
@@ -2314,13 +2291,13 @@ function updateJsonFromForm() {
       currentJson.webhook_use_push_branch = true;
     }
     if (!currentJson.push_mode) {
-      currentJson.push_mode = "multi";
+      currentJson.push_mode ="multi";
     }
     if (!currentJson.tag) {
-      currentJson.tag = "latest";
+      currentJson.tag ="latest";
     }
     if (!currentJson.project_type) {
-      currentJson.project_type = "jar";
+      currentJson.project_type ="jar";
     }
 
     // 更新JSON输入框
@@ -2335,13 +2312,13 @@ function closeJsonCreateModal() {
     return;
   }
   showJsonCreateModal.value = false;
-  jsonInput.value = "";
-  jsonError.value = "";
+  jsonInput.value ="";
+  jsonError.value ="";
 }
 
 async function createPipelineFromJson() {
   savingJson.value = true;
-  jsonError.value = "";
+  jsonError.value ="";
 
   try {
     let pipelineData;
@@ -2358,13 +2335,13 @@ async function createPipelineFromJson() {
     } else {
       // 如果JSON为空，从表单数据生成
       if (!jsonFormData.value.name) {
-        jsonError.value = "流水线名称不能为空";
+        jsonError.value ="流水线名称不能为空";
         savingJson.value = false;
         return;
       }
 
       if (!jsonFormData.value.git_url) {
-        jsonError.value = "Git 仓库地址不能为空";
+        jsonError.value ="Git 仓库地址不能为空";
         savingJson.value = false;
         return;
       }
@@ -2375,28 +2352,28 @@ async function createPipelineFromJson() {
         git_url: jsonFormData.value.git_url,
         branch: jsonFormData.value.branch || null,
         image_name: jsonFormData.value.image_name || null,
-        tag: jsonFormData.value.tag || "latest",
-        project_type: jsonFormData.value.project_type || "jar",
-        description: jsonFormData.value.description || "",
+        tag: jsonFormData.value.tag ||"latest",
+        project_type: jsonFormData.value.project_type ||"jar",
+        description: jsonFormData.value.description ||"",
         enabled: true,
         push: false,
         use_project_dockerfile: true,
-        dockerfile_name: "Dockerfile",
+        dockerfile_name:"Dockerfile",
         webhook_branch_filter: false,
         webhook_use_push_branch: true,
-        push_mode: "multi",
+        push_mode:"multi",
       };
     }
 
     // 验证必填字段
     if (!pipelineData.name) {
-      jsonError.value = "流水线名称(name)不能为空";
+      jsonError.value ="流水线名称(name)不能为空";
       savingJson.value = false;
       return;
     }
 
     if (!pipelineData.git_url && !pipelineData.source_id) {
-      jsonError.value = "必须提供 git_url 或 source_id";
+      jsonError.value ="必须提供 git_url 或 source_id";
       savingJson.value = false;
       return;
     }
@@ -2410,7 +2387,7 @@ async function createPipelineFromJson() {
   } catch (error) {
     console.error("通过JSON创建流水线失败:", error);
     const errorMsg =
-      error.response?.data?.detail || error.message || "创建流水线失败";
+      error.response?.data?.detail || error.message ||"创建流水线失败";
     jsonError.value = errorMsg;
   } finally {
     savingJson.value = false;
@@ -2463,12 +2440,12 @@ async function refreshBranches(forceRefresh = true) {
           !branchesAndTags.value.branches.includes(currentBranch) &&
           !branchesAndTags.value.tags.includes(currentBranch)
         ) {
-          formData.value.branch = branchesAndTags.value.default_branch || "";
+          formData.value.branch = branchesAndTags.value.default_branch ||"";
         }
       }
     } catch (error) {
       console.error("刷新分支列表失败:", error);
-      toastApiError(error, "刷新分支列表失败，请稍后重试");
+      toastApiError(error,"刷新分支列表失败，请稍后重试");
     } finally {
       refreshingBranches.value = false;
     }
@@ -2517,7 +2494,7 @@ async function refreshBranches(forceRefresh = true) {
         !branchesAndTags.value.branches.includes(currentBranch) &&
         !branchesAndTags.value.tags.includes(currentBranch)
       ) {
-        formData.value.branch = branchesAndTags.value.default_branch || "";
+        formData.value.branch = branchesAndTags.value.default_branch ||"";
       }
 
       // 如果使用项目 Dockerfile，重新扫描 Dockerfile
@@ -2527,7 +2504,7 @@ async function refreshBranches(forceRefresh = true) {
     }
   } catch (error) {
     console.error("刷新分支列表失败:", error);
-    toastApiError(error, "刷新分支列表失败，请稍后重试");
+    toastApiError(error,"刷新分支列表失败，请稍后重试");
   } finally {
     refreshingBranches.value = false;
   }
@@ -2540,11 +2517,11 @@ async function scanDockerfiles(
 ) {
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:2316",
-  //     message: "scanDockerfiles started",
+  //     location:"PipelinePanel.vue:2316",
+  //     message:"scanDockerfiles started",
   //     data: {
   //       source_id: formData.value.source_id,
   //       git_url: formData.value.git_url,
@@ -2554,15 +2531,15 @@ async function scanDockerfiles(
   //       editing: !!editingPipeline.value,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "A",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"A",
   //   }),
   // }).catch(() => {});
   // #endregion
   const sourceId = formData.value.source_id;
   if (!sourceId && !formData.value.git_url) {
-    dockerfilesError.value = "请先选择数据源或填写 Git 仓库地址";
+    dockerfilesError.value ="请先选择数据源或填写 Git 仓库地址";
     return;
   }
 
@@ -2574,7 +2551,7 @@ async function scanDockerfiles(
   const previousDockerfiles = [...availableDockerfiles.value];
 
   scanningDockerfiles.value = true;
-  dockerfilesError.value = "";
+  dockerfilesError.value ="";
   // 注意：不要立即清空 availableDockerfiles，这样下拉框可以继续显示已保存的值
   // 只有在扫描成功后才更新列表
 
@@ -2589,15 +2566,15 @@ async function scanDockerfiles(
     }
 
     if (!gitUrl) {
-      dockerfilesError.value = "无法获取 Git 仓库地址";
+      dockerfilesError.value ="无法获取 Git 仓库地址";
       return;
     }
 
     const branch =
-      formData.value.branch || branchesAndTags.value.default_branch || "main";
+      formData.value.branch || branchesAndTags.value.default_branch ||"main";
 
     if (!branch) {
-      dockerfilesError.value = "请先选择分支";
+      dockerfilesError.value ="请先选择分支";
       return;
     }
 
@@ -2623,16 +2600,16 @@ async function scanDockerfiles(
       const dockerfileList = dockerfilePaths.map((path) => {
         const parts = path.split("/");
         return {
-          path: path, // 完整路径，如 "frontend/Dockerfile"
-          name: parts[parts.length - 1], // 文件名，如 "Dockerfile"
+          path: path, // 完整路径，如"frontend/Dockerfile"
+          name: parts[parts.length - 1], // 文件名，如"Dockerfile"
         };
       });
 
       // 按路径排序
       dockerfileList.sort((a, b) => {
         // 根目录的 Dockerfile 优先
-        if (a.path === "Dockerfile") return -1;
-        if (b.path === "Dockerfile") return 1;
+        if (a.path ==="Dockerfile") return -1;
+        if (b.path ==="Dockerfile") return 1;
         return a.path.localeCompare(b.path);
       });
 
@@ -2650,11 +2627,11 @@ async function scanDockerfiles(
 
     // #region agent log (disabled - causes connection errors)
     // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
+    //   method:"POST",
+    //   headers: {"Content-Type":"application/json" },
     //   body: JSON.stringify({
-    //     location: "PipelinePanel.vue:2402",
-    //     message: "Dockerfiles scanned",
+    //     location:"PipelinePanel.vue:2402",
+    //     message:"Dockerfiles scanned",
     //     data: {
     //       count: availableDockerfiles.value.length,
     //       saved_dockerfile_name: savedDockerfileName,
@@ -2663,9 +2640,9 @@ async function scanDockerfiles(
     //       keep_current_selection: keepCurrentSelection,
     //     },
     //     timestamp: Date.now(),
-    //     sessionId: "debug-session",
-    //     runId: "run1",
-    //     hypothesisId: "A",
+    //     sessionId:"debug-session",
+    //     runId:"run1",
+    //     hypothesisId:"A",
     //   }),
     // }).catch(() => {});
     // #endregion
@@ -2680,23 +2657,23 @@ async function scanDockerfiles(
       );
       // #region agent log (disabled - causes connection errors)
       // fetch(
-      //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+      //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
       //   {
-      //     method: "POST",
-      //     headers: { "Content-Type": "application/json" },
+      //     method:"POST",
+      //     headers: {"Content-Type":"application/json" },
       //     body: JSON.stringify({
-      //       location: "PipelinePanel.vue:2412",
+      //       location:"PipelinePanel.vue:2412",
       //       message:
-      //         "Dockerfile name preserved (editing mode or has saved selection)",
+      //"Dockerfile name preserved (editing mode or has saved selection)",
       //       data: {
       //         dockerfile_name: savedDockerfileName,
       //         in_list: currentInList,
       //         is_editing: isEditing,
       //       },
       //       timestamp: Date.now(),
-      //       sessionId: "debug-session",
-      //       runId: "run1",
-      //       hypothesisId: "A",
+      //       sessionId:"debug-session",
+      //       runId:"run1",
+      //       hypothesisId:"A",
       //     }),
       //   }
       // ).catch(() => {});
@@ -2705,34 +2682,34 @@ async function scanDockerfiles(
       // 新建模式且没有保存的选择：自动选择第一个
       if (
         !savedDockerfileName ||
-        savedDockerfileName === "" ||
-        savedDockerfileName === "Dockerfile"
+        savedDockerfileName ==="" ||
+        savedDockerfileName ==="Dockerfile"
       ) {
         // 当前没有选择或只有默认值，自动选择第一个（优先选择根目录的 Dockerfile）
         const rootDockerfile = availableDockerfiles.value.find(
-          (df) => df.path === "Dockerfile"
+          (df) => df.path ==="Dockerfile"
         );
         formData.value.dockerfile_name = rootDockerfile
-          ? "Dockerfile"
+          ?"Dockerfile"
           : availableDockerfiles.value[0].path;
         // #region agent log (disabled - causes connection errors)
         // fetch(
-        //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+        //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
         //   {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
+        //     method:"POST",
+        //     headers: {"Content-Type":"application/json" },
         //     body: JSON.stringify({
-        //       location: "PipelinePanel.vue:2420",
+        //       location:"PipelinePanel.vue:2420",
         //       message:
-        //         "Dockerfile name auto-selected (new mode, no previous selection)",
+        //"Dockerfile name auto-selected (new mode, no previous selection)",
         //       data: {
         //         new: formData.value.dockerfile_name,
         //         old: savedDockerfileName,
         //       },
         //       timestamp: Date.now(),
-        //       sessionId: "debug-session",
-        //       runId: "run1",
-        //       hypothesisId: "A",
+        //       sessionId:"debug-session",
+        //       runId:"run1",
+        //       hypothesisId:"A",
         //     }),
         //   }
         // ).catch(() => {});
@@ -2746,31 +2723,31 @@ async function scanDockerfiles(
           formData.value.dockerfile_name = savedDockerfileName;
         } else {
           const rootDockerfile = availableDockerfiles.value.find(
-            (df) => df.path === "Dockerfile"
+            (df) => df.path ==="Dockerfile"
           );
           formData.value.dockerfile_name = rootDockerfile
-            ? "Dockerfile"
+            ?"Dockerfile"
             : availableDockerfiles.value[0].path;
         }
         // #region agent log (disabled - causes connection errors)
         // fetch(
-        //   "http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
+        //"http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e",
         //   {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
+        //     method:"POST",
+        //     headers: {"Content-Type":"application/json" },
         //     body: JSON.stringify({
-        //       location: "PipelinePanel.vue:2430",
+        //       location:"PipelinePanel.vue:2430",
         //       message:
-        //         "Dockerfile name handled (new mode with previous selection)",
+        //"Dockerfile name handled (new mode with previous selection)",
         //       data: {
         //         saved: savedDockerfileName,
         //         final: formData.value.dockerfile_name,
         //         in_list: currentInList,
         //       },
         //       timestamp: Date.now(),
-        //       sessionId: "debug-session",
-        //       runId: "run1",
-        //       hypothesisId: "A",
+        //       sessionId:"debug-session",
+        //       runId:"run1",
+        //       hypothesisId:"A",
         //     }),
         //   }
         // ).catch(() => {});
@@ -2784,31 +2761,31 @@ async function scanDockerfiles(
     } else {
       // 没有扫描到 Dockerfile，如果当前选择不为空，保持原选择，否则设为默认值
       if (!savedDockerfileName) {
-        formData.value.dockerfile_name = "Dockerfile";
+        formData.value.dockerfile_name ="Dockerfile";
       }
     }
   } catch (error) {
     console.error("扫描 Dockerfile 失败:", error);
     dockerfilesError.value =
-      error.response?.data?.detail || "扫描 Dockerfile 失败";
+      error.response?.data?.detail ||"扫描 Dockerfile 失败";
     // 扫描失败时不清空列表，保持之前的列表（如果有），这样已保存的值还能显示
     // availableDockerfiles.value 保持原值
     // #region agent log (disabled - causes connection errors)
     // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
+    //   method:"POST",
+    //   headers: {"Content-Type":"application/json" },
     //   body: JSON.stringify({
-    //     location: "PipelinePanel.vue:2404",
-    //     message: "scanDockerfiles error",
+    //     location:"PipelinePanel.vue:2404",
+    //     message:"scanDockerfiles error",
     //     data: {
     //       error: error.message,
     //       response: error.response?.data,
     //       preserved_list_count: availableDockerfiles.value.length,
     //     },
     //     timestamp: Date.now(),
-    //     sessionId: "debug-session",
-    //     runId: "run1",
-    //     hypothesisId: "A",
+    //     sessionId:"debug-session",
+    //     runId:"run1",
+    //     hypothesisId:"A",
     //   }),
     // }).catch(() => {});
     // #endregion
@@ -2816,16 +2793,16 @@ async function scanDockerfiles(
     scanningDockerfiles.value = false;
     // #region agent log (disabled - causes connection errors)
     // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
+    //   method:"POST",
+    //   headers: {"Content-Type":"application/json" },
     //   body: JSON.stringify({
-    //     location: "PipelinePanel.vue:2320",
-    //     message: "scanDockerfiles completed",
+    //     location:"PipelinePanel.vue:2320",
+    //     message:"scanDockerfiles completed",
     //     data: { final_dockerfile_name: formData.value.dockerfile_name },
     //     timestamp: Date.now(),
-    //     sessionId: "debug-session",
-    //     runId: "run1",
-    //     hypothesisId: "A",
+    //     sessionId:"debug-session",
+    //     runId:"run1",
+    //     hypothesisId:"A",
     //   }),
     // }).catch(() => {});
     // #endregion
@@ -2854,7 +2831,7 @@ async function loadServices(isDockerfileChanged = false) {
   // 生成唯一标识，用于去重
   const currentKey = `${formData.value.git_url}_${formData.value.branch}_${
     formData.value.dockerfile_name
-  }_${formData.value.source_id || ""}`;
+  }_${formData.value.source_id ||""}`;
 
   // 如果正在加载相同的服务配置，直接返回
   if (loadingServices.value && loadingServicesKey.value === currentKey) {
@@ -2891,7 +2868,7 @@ async function loadServices(isDockerfileChanged = false) {
         await loadServicesInternal(isDockerfileChanged, currentKey);
         // 加载完成后验证已保存的服务是否还存在（只验证一次）
         if (
-          formData.value.push_mode === "multi" &&
+          formData.value.push_mode ==="multi" &&
           formData.value.selected_services
         ) {
           const validServices = formData.value.selected_services.filter(
@@ -2910,7 +2887,7 @@ async function loadServices(isDockerfileChanged = false) {
             );
           }
         } else if (
-          formData.value.push_mode === "single" &&
+          formData.value.push_mode ==="single" &&
           formData.value.selected_service
         ) {
           if (
@@ -2918,7 +2895,7 @@ async function loadServices(isDockerfileChanged = false) {
               (s) => s.name === formData.value.selected_service
             )
           ) {
-            formData.value.selected_service = "";
+            formData.value.selected_service ="";
           }
         }
       } catch (error) {
@@ -2948,7 +2925,7 @@ async function loadServices(isDockerfileChanged = false) {
 // 内部加载服务列表函数
 async function loadServicesInternal(
   isDockerfileChanged = false,
-  currentKey = ""
+  currentKey =""
 ) {
   if (!formData.value.git_url) {
     services.value = [];
@@ -2960,7 +2937,7 @@ async function loadServicesInternal(
     currentKey ||
     `${formData.value.git_url}_${formData.value.branch}_${
       formData.value.dockerfile_name
-    }_${formData.value.source_id || ""}`;
+    }_${formData.value.source_id ||""}`;
 
   // 如果正在加载相同的服务配置，直接返回
   if (loadingServices.value && loadingServicesKey.value === key) {
@@ -2973,14 +2950,14 @@ async function loadServicesInternal(
 
   loadingServices.value = true;
   loadingServicesKey.value = key;
-  servicesError.value = "";
+  servicesError.value ="";
 
   try {
     if (formData.value.use_project_dockerfile) {
       // 使用项目 Dockerfile
       const gitUrl = formData.value.git_url;
       const branch = formData.value.branch || null;
-      const dockerfileName = formData.value.dockerfile_name || "Dockerfile";
+      const dockerfileName = formData.value.dockerfile_name ||"Dockerfile";
       const sourceId = formData.value.source_id || null;
 
       // 使用缓存机制获取服务分析结果
@@ -2995,7 +2972,7 @@ async function loadServicesInternal(
           return await axios.post("/api/parse-dockerfile-services", payload);
         },
         gitUrl,
-        branch || "main",
+        branch ||"main",
         dockerfileName,
         sourceId,
         false // 不强制刷新，使用缓存
@@ -3015,7 +2992,7 @@ async function loadServicesInternal(
             !formData.value.selected_services ||
             formData.value.selected_services.length === 0
           ) {
-            if (formData.value.push_mode === "multi") {
+            if (formData.value.push_mode ==="multi") {
               formData.value.selected_services = services.value.map(
                 (s) => s.name
               );
@@ -3028,7 +3005,7 @@ async function loadServicesInternal(
         // 如果没有服务，清空选择（但编辑模式下保持推送模式）
         if (!isEditing || isDockerfileChanged) {
           formData.value.selected_services = [];
-          formData.value.selected_service = "";
+          formData.value.selected_service ="";
         }
       }
     } else if (formData.value.template) {
@@ -3054,7 +3031,7 @@ async function loadServicesInternal(
             !formData.value.selected_services ||
             formData.value.selected_services.length === 0
           ) {
-            if (formData.value.push_mode === "single") {
+            if (formData.value.push_mode ==="single") {
               formData.value.selected_services = [];
             } else {
               formData.value.selected_services = services.value.map(
@@ -3069,7 +3046,7 @@ async function loadServicesInternal(
         // 如果没有服务，清空选择（但编辑模式下保持推送模式）
         if (!isEditing || isDockerfileChanged) {
           formData.value.selected_services = [];
-          formData.value.selected_service = "";
+          formData.value.selected_service ="";
         }
       }
     } else {
@@ -3077,12 +3054,12 @@ async function loadServicesInternal(
     }
   } catch (error) {
     console.error("加载服务列表失败:", error);
-    servicesError.value = error.response?.data?.detail || "加载服务列表失败";
+    servicesError.value = error.response?.data?.detail ||"加载服务列表失败";
     services.value = [];
     return Promise.reject(error);
   } finally {
     loadingServices.value = false;
-    loadingServicesKey.value = ""; // 清除加载标识
+    loadingServicesKey.value =""; // 清除加载标识
   }
 
   return Promise.resolve();
@@ -3096,25 +3073,25 @@ function initializeServiceConfigs() {
   formData.value.selected_services.forEach((serviceName) => {
     if (
       formData.value.service_push_config[serviceName] === undefined ||
-      typeof formData.value.service_push_config[serviceName] === "boolean"
+      typeof formData.value.service_push_config[serviceName] ==="boolean"
     ) {
       // 如果是布尔值（旧格式），转换为对象格式
       const oldValue = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
-        push: typeof oldValue === "boolean" ? oldValue : false,
-        imageName: "",
-        tag: "",
+        push: typeof oldValue ==="boolean" ? oldValue : false,
+        imageName:"",
+        tag:"",
       };
     } else if (
       formData.value.service_push_config[serviceName] &&
-      typeof formData.value.service_push_config[serviceName] === "object"
+      typeof formData.value.service_push_config[serviceName] ==="object"
     ) {
       // 确保对象格式包含所有字段
       const config = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
         push: config.push !== undefined ? config.push : false,
-        imageName: config.imageName !== undefined ? config.imageName : "",
-        tag: config.tag !== undefined ? config.tag : "",
+        imageName: config.imageName !== undefined ? config.imageName :"",
+        tag: config.tag !== undefined ? config.tag :"",
       };
     }
   });
@@ -3122,11 +3099,11 @@ function initializeServiceConfigs() {
 
 // 推送模式变化
 function onPushModeChange() {
-  if (formData.value.push_mode === "single") {
+  if (formData.value.push_mode ==="single") {
     formData.value.selected_services = [];
-    formData.value.selected_service = "";
+    formData.value.selected_service ="";
   } else {
-    formData.value.selected_service = "";
+    formData.value.selected_service ="";
     if (
       services.value.length > 0 &&
       (!formData.value.selected_services ||
@@ -3151,24 +3128,24 @@ function toggleService(serviceName) {
     formData.value.selected_services.push(serviceName);
     if (
       formData.value.service_push_config[serviceName] === undefined ||
-      typeof formData.value.service_push_config[serviceName] === "boolean"
+      typeof formData.value.service_push_config[serviceName] ==="boolean"
     ) {
       const oldValue = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
-        push: typeof oldValue === "boolean" ? oldValue : false,
-        imageName: "",
-        tag: "",
+        push: typeof oldValue ==="boolean" ? oldValue : false,
+        imageName:"",
+        tag:"",
       };
     } else if (
       formData.value.service_push_config[serviceName] &&
-      typeof formData.value.service_push_config[serviceName] === "object"
+      typeof formData.value.service_push_config[serviceName] ==="object"
     ) {
       // 确保包含所有字段
       const config = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
         push: config.push !== undefined ? config.push : false,
-        imageName: config.imageName !== undefined ? config.imageName : "",
-        tag: config.tag !== undefined ? config.tag : "",
+        imageName: config.imageName !== undefined ? config.imageName :"",
+        tag: config.tag !== undefined ? config.tag :"",
       };
     }
   }
@@ -3186,24 +3163,24 @@ function onServiceSelectionChange() {
   formData.value.selected_services.forEach((serviceName) => {
     if (
       formData.value.service_push_config[serviceName] === undefined ||
-      typeof formData.value.service_push_config[serviceName] === "boolean"
+      typeof formData.value.service_push_config[serviceName] ==="boolean"
     ) {
       const oldValue = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
-        push: typeof oldValue === "boolean" ? oldValue : false,
-        imageName: "",
-        tag: "",
+        push: typeof oldValue ==="boolean" ? oldValue : false,
+        imageName:"",
+        tag:"",
       };
     } else if (
       formData.value.service_push_config[serviceName] &&
-      typeof formData.value.service_push_config[serviceName] === "object"
+      typeof formData.value.service_push_config[serviceName] ==="object"
     ) {
       // 确保包含所有字段
       const config = formData.value.service_push_config[serviceName];
       formData.value.service_push_config[serviceName] = {
         push: config.push !== undefined ? config.push : false,
-        imageName: config.imageName !== undefined ? config.imageName : "",
-        tag: config.tag !== undefined ? config.tag : "",
+        imageName: config.imageName !== undefined ? config.imageName :"",
+        tag: config.tag !== undefined ? config.tag :"",
       };
     }
   });
@@ -3240,24 +3217,24 @@ function getServiceConfig(serviceName) {
   // 如果是布尔值（旧格式），转换为对象格式
   if (
     formData.value.service_push_config[serviceName] === undefined ||
-    typeof formData.value.service_push_config[serviceName] === "boolean"
+    typeof formData.value.service_push_config[serviceName] ==="boolean"
   ) {
     const oldValue = formData.value.service_push_config[serviceName];
     formData.value.service_push_config[serviceName] = {
-      push: typeof oldValue === "boolean" ? oldValue : false,
-      imageName: "",
-      tag: "",
+      push: typeof oldValue ==="boolean" ? oldValue : false,
+      imageName:"",
+      tag:"",
     };
   } else if (
     formData.value.service_push_config[serviceName] &&
-    typeof formData.value.service_push_config[serviceName] === "object"
+    typeof formData.value.service_push_config[serviceName] ==="object"
   ) {
     // 确保包含所有字段
     const config = formData.value.service_push_config[serviceName];
     formData.value.service_push_config[serviceName] = {
       push: config.push !== undefined ? config.push : false,
-      imageName: config.imageName !== undefined ? config.imageName : "",
-      tag: config.tag !== undefined ? config.tag : "",
+      imageName: config.imageName !== undefined ? config.imageName :"",
+      tag: config.tag !== undefined ? config.tag :"",
     };
   }
   return formData.value.service_push_config[serviceName];
@@ -3266,17 +3243,17 @@ function getServiceConfig(serviceName) {
 // 获取服务的默认镜像名称（基于全局镜像名称前缀 + 服务名）
 function getServiceDefaultImageName(serviceName) {
   if (!serviceName) {
-    return formData.value.image_name || "myapp/demo";
+    return formData.value.image_name ||"myapp/demo";
   }
 
-  let prefix = formData.value.image_name || "myapp/demo";
+  let prefix = formData.value.image_name ||"myapp/demo";
 
   // 去除前缀末尾的斜杠，避免出现双斜杠
-  prefix = prefix.replace(/\/+$/, "");
+  prefix = prefix.replace(/\/+$/,"");
 
   // 如果前缀已经以服务名结尾，直接返回前缀（避免重复拼接）
   // 检查格式：prefix/serviceName 或 prefix//serviceName 等
-  const normalizedPrefix = prefix.replace(/\/+$/, "");
+  const normalizedPrefix = prefix.replace(/\/+$/,"");
   if (
     normalizedPrefix.endsWith(`/${serviceName}`) ||
     normalizedPrefix === serviceName
@@ -3298,37 +3275,37 @@ function onServiceImageNameBlur(serviceName) {
   const config = getServiceConfig(serviceName);
   // 如果用户清空了自定义镜像名，确保使用默认值
   if (!config.imageName || !config.imageName.trim()) {
-    config.imageName = "";
+    config.imageName ="";
   }
 }
 
 // 恢复默认镜像名
 function resetServiceImageName(serviceName) {
   const config = getServiceConfig(serviceName);
-  config.imageName = "";
+  config.imageName ="";
 }
 
 // 规范化服务推送配置（将旧格式的布尔值转换为新格式的对象，保留 push、imageName 和 tag 字段）
 function normalizeServicePushConfig(config) {
-  if (!config || typeof config !== "object") {
+  if (!config || typeof config !=="object") {
     return {};
   }
   const normalized = {};
   Object.keys(config).forEach((serviceName) => {
     const value = config[serviceName];
     // 如果是布尔值（旧格式），转换为对象格式
-    if (typeof value === "boolean") {
+    if (typeof value ==="boolean") {
       normalized[serviceName] = {
         push: value,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
-    } else if (value && typeof value === "object") {
+    } else if (value && typeof value ==="object") {
       // 已经是对象格式，保留所有字段
       normalized[serviceName] = {
         push: value.push !== undefined ? value.push : false,
-        imageName: value.imageName !== undefined ? value.imageName : "",
-        tag: value.tag !== undefined ? value.tag : "",
+        imageName: value.imageName !== undefined ? value.imageName :"",
+        tag: value.tag !== undefined ? value.tag :"",
       };
     }
   });
@@ -3337,11 +3314,11 @@ function normalizeServicePushConfig(config) {
 
 /** 多阶段模式下任一分服务是否开启推送（用于同步顶层 pipeline.push） */
 function anyServicePushEnabled(servicePushConfig) {
-  if (!servicePushConfig || typeof servicePushConfig !== "object") {
+  if (!servicePushConfig || typeof servicePushConfig !=="object") {
     return false;
   }
   return Object.values(servicePushConfig).some(
-    (cfg) => cfg && typeof cfg === "object" && cfg.push === true
+    (cfg) => cfg && typeof cfg ==="object" && cfg.push === true
   );
 }
 
@@ -3355,7 +3332,7 @@ async function loadResourcePackages() {
     // 如果某个已保存的资源包配置没有 target_path 或为空，使用资源包名称作为默认值（与分步构建一致）
     if (editingPipeline.value && formData.value.resource_package_configs) {
       formData.value.resource_package_configs.forEach((config) => {
-        if (!config.target_path || config.target_path.trim() === "") {
+        if (!config.target_path || config.target_path.trim() ==="") {
           const pkg = resourcePackages.value.find(
             (p) => p.package_id === config.package_id
           );
@@ -3363,7 +3340,7 @@ async function loadResourcePackages() {
             // 如果路径为空，使用资源包名称（与分步构建一致）
             config.target_path = pkg.name;
           } else {
-            config.target_path = "resources";
+            config.target_path ="resources";
           }
         }
       });
@@ -3401,7 +3378,7 @@ function toggleResourcePackage(pkg) {
     formData.value.resource_package_configs.splice(index, 1);
   } else {
     // 选择：添加配置，使用默认路径（资源包名称，与分步构建一致）
-    const defaultPath = pkg.name || "resources";
+    const defaultPath = pkg.name ||"resources";
     formData.value.resource_package_configs.push({
       package_id: pkg.package_id,
       target_path: defaultPath, // 默认使用资源包名称作为路径，与分步构建一致
@@ -3422,7 +3399,7 @@ function getResourcePackageConfig(packageId) {
     // 这里返回一个临时对象，但不添加到列表中（由 toggleResourcePackage 处理）
     return {
       package_id: packageId,
-      target_path: pkg ? pkg.name || "resources" : "resources", // 默认使用资源包名称作为路径
+      target_path: pkg ? pkg.name ||"resources" :"resources", // 默认使用资源包名称作为路径
     };
   }
   return config;
@@ -3434,12 +3411,12 @@ function updateResourcePackagePath(packageId, targetPath) {
     (p) => p.package_id === packageId
   );
   if (config) {
-    config.target_path = targetPath || "";
+    config.target_path = targetPath ||"";
   } else {
     // 如果配置不存在，创建新配置
     formData.value.resource_package_configs.push({
       package_id: packageId,
-      target_path: targetPath || "",
+      target_path: targetPath ||"",
     });
   }
 }
@@ -3448,11 +3425,11 @@ function updateResourcePackagePath(packageId, targetPath) {
 async function onDockerfileSourceChange() {
   // #region agent log (disabled - causes connection errors)
   // fetch("http://127.0.0.1:7242/ingest/eabdd98b-6281-463e-ab2f-b0646adc831e", {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
+  //   method:"POST",
+  //   headers: {"Content-Type":"application/json" },
   //   body: JSON.stringify({
-  //     location: "PipelinePanel.vue:2744",
-  //     message: "Dockerfile source changed",
+  //     location:"PipelinePanel.vue:2744",
+  //     message:"Dockerfile source changed",
   //     data: {
   //       use_project_dockerfile: formData.value.use_project_dockerfile,
   //       template: formData.value.template,
@@ -3461,15 +3438,15 @@ async function onDockerfileSourceChange() {
   //       branch: formData.value.branch,
   //     },
   //     timestamp: Date.now(),
-  //     sessionId: "debug-session",
-  //     runId: "run1",
-  //     hypothesisId: "D",
+  //     sessionId:"debug-session",
+  //     runId:"run1",
+  //     hypothesisId:"D",
   //   }),
   // }).catch(() => {});
   // #endregion
   if (formData.value.use_project_dockerfile) {
     // 使用项目 Dockerfile 时，清空模板
-    formData.value.template = "";
+    formData.value.template ="";
     // 如果有数据源、分支和 Dockerfile，尝试加载 Dockerfile 内容
     if (
       formData.value.source_id &&
@@ -3480,11 +3457,11 @@ async function onDockerfileSourceChange() {
         await loadDockerfileFromRepo();
       } catch (error) {
         // 如果加载失败，清空编辑器
-        dockerfileContentText.value = "";
+        dockerfileContentText.value ="";
       }
     } else {
       // 如果没有完整信息，清空编辑器
-      dockerfileContentText.value = "";
+      dockerfileContentText.value ="";
     }
     // 如果有分支和 Dockerfile，重新加载服务（服务列表依赖于 Dockerfile）
     if (
@@ -3500,8 +3477,8 @@ async function onDockerfileSourceChange() {
     }
   } else {
     // 使用模板时，清空 Dockerfile 名称和内容
-    formData.value.dockerfile_name = "Dockerfile";
-    dockerfileContentText.value = "";
+    formData.value.dockerfile_name ="Dockerfile";
+    dockerfileContentText.value ="";
     // 如果选择了模板，加载模板内容并重新加载服务（切换到模板是用户主动切换）
     if (formData.value.template) {
       await onTemplateChange();
@@ -3528,7 +3505,7 @@ async function onTemplateChange() {
     } catch (error) {
       console.error("加载模板内容失败:", error);
       // 如果加载失败，清空编辑器
-      dockerfileContentText.value = "";
+      dockerfileContentText.value ="";
     }
     // 编辑模式下不自动加载，需要用户手动点击加载按钮
     // 新建模式下可以自动加载（通过判断 editingPipeline）
@@ -3537,7 +3514,7 @@ async function onTemplateChange() {
     }
   } else {
     // 清空模板时，清空 Dockerfile 内容
-    dockerfileContentText.value = "";
+    dockerfileContentText.value ="";
     // 清空模板时，如果使用项目 Dockerfile 且有分支，重新加载服务（切换到项目 Dockerfile 是用户主动切换）
     // 编辑模式下不自动加载，需要用户手动点击加载按钮
     if (
@@ -3569,7 +3546,7 @@ const buildConfigJson = computed(() => {
     formData.value.selected_services &&
     formData.value.selected_services.length > 0
   ) {
-    if (formData.value.push_mode === "multi") {
+    if (formData.value.push_mode ==="multi") {
       // 多服务模式：处理所有启用的服务
       formData.value.selected_services.forEach((serviceName) => {
         const config = getServiceConfig(serviceName);
@@ -3577,7 +3554,7 @@ const buildConfigJson = computed(() => {
         const finalImageName =
           customImageName || getServiceDefaultImageName(serviceName);
         const finalTag =
-          (config.tag && config.tag.trim()) || formData.value.tag || "latest";
+          (config.tag && config.tag.trim()) || formData.value.tag ||"latest";
 
         servicePushConfig[serviceName] = {
           push: config.push || false,
@@ -3585,7 +3562,7 @@ const buildConfigJson = computed(() => {
           tag: finalTag,
         };
       });
-    } else if (formData.value.push_mode === "single") {
+    } else if (formData.value.push_mode ==="single") {
       // 单服务模式：只处理第一个服务
       const firstService = formData.value.selected_services[0];
       if (firstService) {
@@ -3593,25 +3570,25 @@ const buildConfigJson = computed(() => {
         // 单服务模式使用全局镜像名和标签
         servicePushConfig[firstService] = {
           push: config.push || false,
-          imageName: formData.value.image_name || "",
-          tag: formData.value.tag || "latest",
+          imageName: formData.value.image_name ||"",
+          tag: formData.value.tag ||"latest",
         };
       }
     }
   }
 
   const config = {
-    git_url: formData.value.git_url || "",
-    image_name: formData.value.image_name || "",
-    tag: formData.value.tag || "latest",
+    git_url: formData.value.git_url ||"",
+    image_name: formData.value.image_name ||"",
+    tag: formData.value.tag ||"latest",
     branch: formData.value.branch || null,
-    project_type: formData.value.project_type || "jar",
-    template: formData.value.template || "",
+    project_type: formData.value.project_type ||"jar",
+    template: formData.value.template ||"",
     template_params: formData.value.template_params || {},
     should_push: formData.value.push || false,
     sub_path: formData.value.sub_path || null,
     use_project_dockerfile: formData.value.use_project_dockerfile !== false,
-    dockerfile_name: formData.value.dockerfile_name || "Dockerfile",
+    dockerfile_name: formData.value.dockerfile_name ||"Dockerfile",
     dockerfile_content: formData.value.dockerfile_content || null,
     source_id: formData.value.source_id || null,
     selected_services: formData.value.selected_services || [],
@@ -3620,17 +3597,13 @@ const buildConfigJson = computed(() => {
         ? servicePushConfig
         : formData.value.service_push_config || {},
     service_template_params: formData.value.service_template_params || {},
-    push_mode: formData.value.push_mode || "multi",
+    push_mode: formData.value.push_mode ||"multi",
     resource_package_configs: formData.value.resource_package_configs || [],
   };
 
   // 移除null值和空值（保留false和0）
   // 注意：多阶段相关配置（push_mode、selected_services、service_push_config、service_template_params）需要保留
-  const multiStageKeys = [
-    "push_mode",
-    "selected_services",
-    "service_push_config",
-    "service_template_params",
+  const multiStageKeys = ["push_mode","selected_services","service_push_config","service_template_params",
   ];
   Object.keys(config).forEach((key) => {
     // 多阶段相关配置始终保留
@@ -3640,9 +3613,9 @@ const buildConfigJson = computed(() => {
 
     if (
       config[key] === null ||
-      config[key] === "" ||
+      config[key] ==="" ||
       (Array.isArray(config[key]) && config[key].length === 0) ||
-      (typeof config[key] === "object" &&
+      (typeof config[key] ==="object" &&
         !Array.isArray(config[key]) &&
         Object.keys(config[key]).length === 0)
     ) {
@@ -3691,11 +3664,11 @@ async function copyPipeline(pipeline) {
     const newName = res.data?.name;
     await loadPipelines();
     toastSuccess(
-      newName ? `流水线已复制为「${newName}」` : "流水线复制成功"
+      newName ? `流水线已复制为「${newName}」` :"流水线复制成功"
     );
   } catch (error) {
     console.error("复制流水线失败:", error);
-    toastApiError(error, "复制流水线失败");
+    toastApiError(error,"复制流水线失败");
   } finally {
     copying.value = null;
   }
@@ -3709,7 +3682,7 @@ async function deletePipeline(pipeline) {
   try {
     await axios.delete(`/api/pipelines/${pipeline.pipeline_id}`);
     const onDetailOfDeleted =
-      route.name === "pipeline-detail" &&
+      route.name ==="pipeline-detail" &&
       route.params.pipelineId === pipeline.pipeline_id;
     if (onDetailOfDeleted) {
       await goToPipelineList(router);
@@ -3719,7 +3692,7 @@ async function deletePipeline(pipeline) {
     toastSuccess("流水线已删除");
   } catch (error) {
     console.error("删除流水线失败:", error);
-    toastApiError(error, "删除流水线失败");
+    toastApiError(error,"删除流水线失败");
   }
 }
 
@@ -3736,13 +3709,12 @@ async function runPipeline(pipeline) {
   debounceTimers.value[pipelineId] = setTimeout(async () => {
     // 保存要触发的流水线
     manualRunPipeline.value = pipeline;
-    manualRunSelectedBranch.value = pipeline.branch || ""; // 默认使用配置的分支
+    manualRunSelectedBranch.value = pipeline.branch ||""; // 默认使用配置的分支
 
     // 调试日志：初始化时的值
     console.log("🔍 runPipeline 初始化:");
     console.log("   - pipeline.branch:", pipeline.branch);
-    console.log(
-      "   - manualRunSelectedBranch.value:",
+    console.log("   - manualRunSelectedBranch.value:",
       manualRunSelectedBranch.value
     );
 
@@ -3751,8 +3723,7 @@ async function runPipeline(pipeline) {
 
     // 调试日志：加载分支列表后的值
     console.log("🔍 加载分支列表后:");
-    console.log(
-      "   - manualRunSelectedBranch.value:",
+    console.log("   - manualRunSelectedBranch.value:",
       manualRunSelectedBranch.value
     );
     console.log("   - manualRunBranches.value:", manualRunBranches.value);
@@ -3904,8 +3875,7 @@ async function refreshManualRunBranches() {
     console.error("刷新分支列表失败:", error);
     const errorMsg =
       error.response?.data?.detail ||
-      error.message ||
-      "刷新分支列表失败，请稍后重试";
+      error.message ||"刷新分支列表失败，请稍后重试";
     toastInfo(errorMsg);
 
     // 如果刷新失败，至少显示配置的分支
@@ -3923,21 +3893,17 @@ async function refreshManualRunBranches() {
 async function confirmManualRun() {
   // 调试日志：检查选择的分支
   console.log("🔍 confirmManualRun 开始:");
-  console.log(
-    "   - manualRunSelectedBranch.value:",
+  console.log("   - manualRunSelectedBranch.value:",
     manualRunSelectedBranch.value
   );
-  console.log(
-    "   - manualRunSelectedBranch.value类型:",
+  console.log("   - manualRunSelectedBranch.value类型:",
     typeof manualRunSelectedBranch.value
   );
-  console.log(
-    "   - manualRunSelectedBranch.value长度:",
+  console.log("   - manualRunSelectedBranch.value长度:",
     manualRunSelectedBranch.value?.length
   );
   console.log("   - manualRunPipeline.value:", manualRunPipeline.value);
-  console.log(
-    "   - manualRunPipeline.value.branch:",
+  console.log("   - manualRunPipeline.value.branch:",
     manualRunPipeline.value?.branch
   );
 
@@ -3962,14 +3928,14 @@ async function confirmManualRun() {
   const queueInfo =
     pipeline.queue_length > 0
       ? `\n当前已有 ${pipeline.queue_length} 个任务在排队`
-      : "";
+      :"";
   const runningInfo =
-    pipeline.current_task_status === "running" ||
-    pipeline.current_task_status === "pending"
-      ? "\n当前有任务正在运行，新任务将加入队列"
-      : "";
+    pipeline.current_task_status ==="running" ||
+    pipeline.current_task_status ==="pending"
+      ?"\n当前有任务正在运行，新任务将加入队列"
+      :"";
 
-  if (!(await showConfirm({ message: `确定要运行流水线 "${pipeline.name}" 吗？\n分支: ${selectedBranch}${queueInfo}${runningInfo}` }))) {
+  if (!(await showConfirm({ message: `确定要运行流水线"${pipeline.name}" 吗？\n分支: ${selectedBranch}${queueInfo}${runningInfo}` }))) {
     return;
   }
 
@@ -3981,8 +3947,7 @@ async function confirmManualRun() {
     // 调试日志：检查前端发送的分支参数
     console.log("🔍 前端发送请求:");
     console.log("   - 保存的分支值:", selectedBranch);
-    console.log(
-      "   - manualRunSelectedBranch.value (已清空):",
+    console.log("   - manualRunSelectedBranch.value (已清空):",
       manualRunSelectedBranch.value
     );
     console.log("   - pipelineId:", pipelineId);
@@ -3999,11 +3964,11 @@ async function confirmManualRun() {
     console.log("   - res.data:", res.data);
 
     // 检查任务状态
-    if (res.data.status === "queued") {
+    if (res.data.status ==="queued") {
       // 任务已加入队列
       const queueInfo = res.data.queue_length
         ? `（队列位置: ${res.data.queue_length}）`
-        : "";
+        :"";
       toastSuccess(`流水线已加入队列！${queueInfo}\n分支: ${
           res.data.branch || selectedBranch
         }`);
@@ -4013,7 +3978,7 @@ async function confirmManualRun() {
           new CustomEvent("taskCreated", {
             detail: {
               task_id: res.data.task_id,
-              task_type: "pipeline",
+              task_type:"pipeline",
               pipeline_name: pipeline.name,
             },
           })
@@ -4029,7 +3994,7 @@ async function confirmManualRun() {
         new CustomEvent("taskCreated", {
           detail: {
             task_id: res.data.task_id,
-            task_type: "pipeline",
+            task_type:"pipeline",
             pipeline_name: pipeline.name,
           },
         })
@@ -4039,7 +4004,7 @@ async function confirmManualRun() {
     loadPipelines();
   } catch (error) {
     console.error("运行流水线失败:", error);
-    const errorMsg = error.response?.data?.detail || "运行流水线失败";
+    const errorMsg = error.response?.data?.detail ||"运行流水线失败";
 
     // 如果是409冲突（已有任务运行），说明任务已加入队列
     if (error.response?.status === 409) {
@@ -4058,15 +4023,13 @@ function handleBranchChange(e) {
   const newValue = e.target.value;
   console.log("🔍 选择框change事件:");
   console.log("   - 新值:", newValue);
-  console.log(
-    "   - manualRunSelectedBranch (ref对象):",
+  console.log("   - manualRunSelectedBranch (ref对象):",
     manualRunSelectedBranch
   );
   // v-model 已经自动更新了 manualRunSelectedBranch.value，这里只记录日志
   // 使用 nextTick 确保 v-model 已经更新
   setTimeout(() => {
-    console.log(
-      "   - manualRunSelectedBranch.value (更新后):",
+    console.log("   - manualRunSelectedBranch.value (更新后):",
       manualRunSelectedBranch.value
     );
   }, 0);
@@ -4076,24 +4039,24 @@ function handleBranchChange(e) {
 function closeManualRunModal() {
   showManualRunModal.value = false;
   manualRunPipeline.value = null;
-  manualRunSelectedBranch.value = "";
+  manualRunSelectedBranch.value ="";
   manualRunBranches.value = [];
   loadingManualRunBranches.value = false;
 }
 
 function showWebhookUrl(pipeline) {
   const baseUrl = window.location.origin;
-  const token = pipeline.webhook_token || "未设置";
+  const token = pipeline.webhook_token ||"未设置";
   webhookUrl.value =
-    token !== "未设置"
+    token !=="未设置"
       ? `${baseUrl}/api/webhook/${token}`
-      : "请先设置 Webhook Token";
+      :"请先设置 Webhook Token";
   showWebhookModal.value = true;
 }
 
 // 重新生成 Webhook Token
 async function regenerateWebhookToken() {
-  if (await showConfirm({ message: "确定要重新生成 Webhook Token 吗？重新生成后需要更新 Git 平台的 Webhook URL。" })) {
+  if (await showConfirm({ message:"确定要重新生成 Webhook Token 吗？重新生成后需要更新 Git 平台的 Webhook URL。" })) {
     // 生成新的 UUID
     formData.value.webhook_token = generateUUID();
   }
@@ -4101,7 +4064,7 @@ async function regenerateWebhookToken() {
 
 // 重新生成 Webhook Secret
 async function regenerateWebhookSecret() {
-  if (await showConfirm({ message: "确定要重新生成 Webhook 密钥吗？重新生成后需要更新 Git 平台的 Webhook Secret。" })) {
+  if (await showConfirm({ message:"确定要重新生成 Webhook 密钥吗？重新生成后需要更新 Git 平台的 Webhook Secret。" })) {
     // 生成新的 UUID
     formData.value.webhook_secret = generateUUID();
   }
@@ -4109,9 +4072,9 @@ async function regenerateWebhookSecret() {
 
 // 生成 UUID（简单版本）
 function generateUUID() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+  return"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
     const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    const v = c ==="x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 }
@@ -4134,13 +4097,12 @@ async function copyTextWithFeedback(text, label, event) {
 
   const success = await copyToClipboard(text);
   if (success) {
-    const btn = event?.target?.closest?.("button");
-    if (btn) {
-      const originalHTML = btn.innerHTML;
-      btn.innerHTML =
-        '<i class="fas fa-check" style="font-size: 0.7rem; color: green;"></i>';
+    const actionButton = event?.target?.closest?.("button");
+    if (actionButton) {
+      const originalHTML = actionButton.innerHTML;
+      actionButton.textContent = "已复制";
       setTimeout(() => {
-        btn.innerHTML = originalHTML;
+        actionButton.innerHTML = originalHTML;
       }, 1000);
     }
   } else {
@@ -4155,18 +4117,18 @@ async function loadProjectTypes() {
 }
 
 function formatGitUrl(url) {
-  if (!url) return "";
+  if (!url) return"";
   // 简化显示
-  return url.replace("https://", "").replace("http://", "").replace(".git", "");
+  return url.replace("https://","").replace("http://","").replace(".git","");
 }
 
 function formatTime(isoString) {
-  if (!isoString) return "";
+  if (!isoString) return"";
   const date = new Date(isoString);
   const now = new Date();
   const diff = (now - date) / 1000; // 秒
 
-  if (diff < 60) return "刚刚";
+  if (diff < 60) return"刚刚";
   if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
   if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`;
@@ -4175,16 +4137,16 @@ function formatTime(isoString) {
 }
 
 function formatDateTime(isoString) {
-  if (!isoString) return "";
+  if (!isoString) return"";
   const date = new Date(isoString);
 
   // 格式：YYYY-MM-DD HH:mm:ss
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2,"0");
+  const day = String(date.getDate()).padStart(2,"0");
+  const hours = String(date.getHours()).padStart(2,"0");
+  const minutes = String(date.getMinutes()).padStart(2,"0");
+  const seconds = String(date.getSeconds()).padStart(2,"0");
 
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
@@ -4201,7 +4163,7 @@ function showHistory(pipeline) {
     return;
   }
   router.push({
-    name: "pipeline-history",
+    name:"pipeline-history",
     params: { pipelineId: id },
   });
 }
@@ -4210,8 +4172,8 @@ function showHistory(pipeline) {
 function isLastBuildRunning(pipeline) {
   return (
     pipeline.last_build &&
-    (pipeline.last_build.status === "running" ||
-      pipeline.last_build.status === "pending")
+    (pipeline.last_build.status ==="running" ||
+      pipeline.last_build.status ==="pending")
   );
 }
 
@@ -4238,33 +4200,33 @@ async function showMultiServiceConfig(pipeline) {
 
   // 初始化表单数据
   multiServiceFormData.value = {
-    push_mode: pipelineToUse.push_mode || "multi",
+    push_mode: pipelineToUse.push_mode ||"multi",
     selected_services: pipelineToUse.selected_services
       ? [...pipelineToUse.selected_services]
       : [],
     service_push_config: pipelineToUse.service_push_config
       ? JSON.parse(JSON.stringify(pipelineToUse.service_push_config))
       : {},
-    global_image_name: pipelineToUse.image_name || "",
-    global_tag: pipelineToUse.tag || "latest",
+    global_image_name: pipelineToUse.image_name ||"",
+    global_tag: pipelineToUse.tag ||"latest",
   };
 
   // 确保每个服务都有配置对象
-  const isSingleMode = multiServiceFormData.value.push_mode === "single";
+  const isSingleMode = multiServiceFormData.value.push_mode ==="single";
 
   // 如果是单服务模式但没有服务，自动添加一个默认服务
   if (
     isSingleMode &&
     multiServiceFormData.value.selected_services.length === 0
   ) {
-    const defaultServiceName = "service1";
+    const defaultServiceName ="service1";
     multiServiceFormData.value.selected_services.push(defaultServiceName);
     if (!multiServiceFormData.value.service_push_config[defaultServiceName]) {
       multiServiceFormData.value.service_push_config[defaultServiceName] = {
         enabled: false, // 单服务模式下默认禁用
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     }
   }
@@ -4274,12 +4236,11 @@ async function showMultiServiceConfig(pipeline) {
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: isSingleMode ? false : true, // 单服务模式下默认禁用
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     } else if (
-      typeof multiServiceFormData.value.service_push_config[serviceName] ===
-      "boolean"
+      typeof multiServiceFormData.value.service_push_config[serviceName] ==="boolean"
     ) {
       // 兼容旧格式
       const oldValue =
@@ -4287,8 +4248,8 @@ async function showMultiServiceConfig(pipeline) {
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: isSingleMode ? false : true, // 单服务模式下默认禁用
         push: oldValue,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     } else {
       // 确保enabled字段存在
@@ -4314,11 +4275,11 @@ async function showMultiServiceConfig(pipeline) {
 watch(
   () => multiServiceFormData.value.push_mode,
   (newMode, oldMode) => {
-    if (newMode === "single") {
+    if (newMode ==="single") {
       // 单服务模式下，保留所有服务但将所有服务设置为禁用状态
       if (multiServiceFormData.value.selected_services.length === 0) {
         // 如果没有服务，添加一个默认服务
-        const defaultServiceName = "service1";
+        const defaultServiceName ="service1";
         multiServiceFormData.value.selected_services.push(defaultServiceName);
         if (
           !multiServiceFormData.value.service_push_config[defaultServiceName]
@@ -4326,8 +4287,8 @@ watch(
           multiServiceFormData.value.service_push_config[defaultServiceName] = {
             enabled: false, // 单服务模式下默认禁用
             push: false,
-            imageName: "",
-            tag: "",
+            imageName:"",
+            tag:"",
           };
         } else {
           // 确保设置为禁用状态
@@ -4342,8 +4303,8 @@ watch(
             multiServiceFormData.value.service_push_config[serviceName] = {
               enabled: false, // 单服务模式下禁用
               push: false,
-              imageName: "",
-              tag: "",
+              imageName:"",
+              tag:"",
             };
           } else {
             // 设置为禁用状态，保留其他配置
@@ -4353,7 +4314,7 @@ watch(
           }
         });
       }
-    } else if (newMode === "multi" && oldMode === "single") {
+    } else if (newMode ==="multi" && oldMode ==="single") {
       // 从单服务模式切换到多服务模式，保留所有服务，但保持禁用状态（用户可以手动启用）
       // 确保每个服务都有配置对象，enabled字段保持当前状态（禁用）
       multiServiceFormData.value.selected_services.forEach((serviceName) => {
@@ -4361,8 +4322,8 @@ watch(
           multiServiceFormData.value.service_push_config[serviceName] = {
             enabled: false, // 从单服务切换过来时保持禁用，用户需要手动启用
             push: false,
-            imageName: "",
-            tag: "",
+            imageName:"",
+            tag:"",
           };
         } else {
           // 确保enabled字段存在，如果不存在则设置为false（保持禁用状态）
@@ -4389,11 +4350,11 @@ function closeMultiServiceConfigModal() {
   showMultiServiceConfigModal.value = false;
   multiServiceConfigPipeline.value = null;
   multiServiceFormData.value = {
-    push_mode: "multi",
+    push_mode:"multi",
     selected_services: [],
     service_push_config: {},
-    global_image_name: "",
-    global_tag: "latest",
+    global_image_name:"",
+    global_tag:"latest",
   };
   // 清空备份数据
   multiServiceBackup.value = {
@@ -4428,7 +4389,7 @@ async function parseDockerfileForMultiService() {
     const payload = {
       git_url: pipeline.git_url,
       branch: pipeline.branch,
-      dockerfile_name: pipeline.dockerfile_name || "Dockerfile",
+      dockerfile_name: pipeline.dockerfile_name ||"Dockerfile",
       source_id: pipeline.source_id || null,
     };
 
@@ -4462,8 +4423,8 @@ async function parseDockerfileForMultiService() {
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: true, // 默认启用
         push: false,
-        imageName: "", // 留空使用全局前缀拼接
-        tag: multiServiceFormData.value.global_tag || "latest",
+        imageName:"", // 留空使用全局前缀拼接
+        tag: multiServiceFormData.value.global_tag ||"latest",
       };
     });
 
@@ -4483,7 +4444,7 @@ async function parseDockerfileForMultiService() {
     toastSuccess(`成功识别 ${servicesList.length} 个服务`);
   } catch (error) {
     console.error("解析 Dockerfile 失败:", error);
-    const errorMsg = error.response?.data?.detail || "解析 Dockerfile 失败";
+    const errorMsg = error.response?.data?.detail ||"解析 Dockerfile 失败";
     toastError(`识别失败: ${errorMsg}`);
   } finally {
     parsingDockerfileForMultiService.value = false;
@@ -4499,8 +4460,8 @@ function addServiceToMultiConfig() {
   multiServiceFormData.value.service_push_config[newServiceName] = {
     enabled: true,
     push: false,
-    imageName: "",
-    tag: "",
+    imageName:"",
+    tag:"",
   };
 }
 
@@ -4533,8 +4494,8 @@ function updateServiceName(index, newName) {
     multiServiceFormData.value.service_push_config[newName] = {
       enabled: true,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
 }
@@ -4545,8 +4506,8 @@ function updateServiceImageName(serviceName, imageName) {
     multiServiceFormData.value.service_push_config[serviceName] = {
       enabled: true,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
   multiServiceFormData.value.service_push_config[serviceName].imageName =
@@ -4559,8 +4520,8 @@ function updateServiceTag(serviceName, tag) {
     multiServiceFormData.value.service_push_config[serviceName] = {
       enabled: true,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
   multiServiceFormData.value.service_push_config[serviceName].tag = tag;
@@ -4572,8 +4533,8 @@ function updateServicePush(serviceName, push) {
     multiServiceFormData.value.service_push_config[serviceName] = {
       enabled: true,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
   multiServiceFormData.value.service_push_config[serviceName].push = push;
@@ -4581,7 +4542,7 @@ function updateServicePush(serviceName, push) {
 
 // 获取单服务模式下的推送状态
 function getSingleServicePush() {
-  if (multiServiceFormData.value.push_mode !== "single") {
+  if (multiServiceFormData.value.push_mode !=="single") {
     return false;
   }
   const firstService =
@@ -4598,7 +4559,7 @@ function getSingleServicePush() {
 
 // 更新单服务模式下的推送状态
 function updateSingleServicePush(push) {
-  if (multiServiceFormData.value.push_mode !== "single") {
+  if (multiServiceFormData.value.push_mode !=="single") {
     return;
   }
   const firstService =
@@ -4618,8 +4579,8 @@ function updateServiceEnabled(serviceName, enabled) {
     multiServiceFormData.value.service_push_config[serviceName] = {
       enabled: true,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
   multiServiceFormData.value.service_push_config[serviceName].enabled = enabled;
@@ -4642,13 +4603,13 @@ function disableAllServices() {
 // 获取多服务默认镜像名称
 function getMultiServiceDefaultImageName(serviceName) {
   if (!serviceName) {
-    return multiServiceFormData.value.global_image_name || "myapp/demo";
+    return multiServiceFormData.value.global_image_name ||"myapp/demo";
   }
 
-  let prefix = multiServiceFormData.value.global_image_name || "myapp/demo";
-  prefix = prefix.replace(/\/+$/, "");
+  let prefix = multiServiceFormData.value.global_image_name ||"myapp/demo";
+  prefix = prefix.replace(/\/+$/,"");
 
-  const normalizedPrefix = prefix.replace(/\/+$/, "");
+  const normalizedPrefix = prefix.replace(/\/+$/,"");
   if (
     normalizedPrefix.endsWith(`/${serviceName}`) ||
     normalizedPrefix === serviceName
@@ -4675,7 +4636,7 @@ async function saveMultiServiceConfig() {
   );
   if (
     serviceNames.length === 0 &&
-    multiServiceFormData.value.push_mode === "multi"
+    multiServiceFormData.value.push_mode ==="multi"
   ) {
     toastInfo("多服务模式下至少需要添加一个服务");
     return;
@@ -4691,11 +4652,11 @@ async function saveMultiServiceConfig() {
   savingMultiServiceConfig.value = true;
 
   try {
-    if (multiServiceFormData.value.push_mode === "single") {
+    if (multiServiceFormData.value.push_mode ==="single") {
       // 单服务模式：使用全局配置，但保留所有服务配置（设置为禁用状态）
       // 如果没有服务，自动添加一个默认服务
       if (serviceNames.length === 0) {
-        const defaultServiceName = "service1";
+        const defaultServiceName ="service1";
         serviceNames.push(defaultServiceName);
         // 同时更新 multiServiceFormData，确保数据一致性
         if (
@@ -4711,8 +4672,8 @@ async function saveMultiServiceConfig() {
           multiServiceFormData.value.service_push_config[defaultServiceName] = {
             enabled: false,
             push: false,
-            imageName: "",
-            tag: "",
+            imageName:"",
+            tag:"",
           };
         }
       }
@@ -4727,15 +4688,15 @@ async function saveMultiServiceConfig() {
           normalizedServicePushConfig[serviceName] = {
             enabled: false, // 单服务模式下所有服务都禁用
             push: config.push !== undefined ? config.push : false,
-            imageName: config.imageName || "",
-            tag: config.tag || "",
+            imageName: config.imageName ||"",
+            tag: config.tag ||"",
           };
         } else {
           normalizedServicePushConfig[serviceName] = {
             enabled: false, // 单服务模式下所有服务都禁用
             push: false,
-            imageName: "",
-            tag: "",
+            imageName:"",
+            tag:"",
           };
         }
       });
@@ -4745,17 +4706,15 @@ async function saveMultiServiceConfig() {
         ? normalizedServicePushConfig[firstName]
         : null;
       const payload = {
-        push_mode: "single",
+        push_mode:"single",
         selected_services: serviceNames, // 保留所有服务
         service_push_config: normalizedServicePushConfig, // 保留所有服务配置，但enabled都是false
         image_name:
           multiServiceFormData.value.global_image_name ||
-          multiServiceConfigPipeline.value.image_name ||
-          "",
+          multiServiceConfigPipeline.value.image_name ||"",
         tag:
           multiServiceFormData.value.global_tag ||
-          multiServiceConfigPipeline.value.tag ||
-          "latest",
+          multiServiceConfigPipeline.value.tag ||"latest",
         push: !!(firstCfg && firstCfg.push),
       };
 
@@ -4789,8 +4748,7 @@ async function saveMultiServiceConfig() {
             customImageName || getMultiServiceDefaultImageName(serviceName);
           const finalTag =
             (config.tag && config.tag.trim()) ||
-            multiServiceFormData.value.global_tag ||
-            "latest";
+            multiServiceFormData.value.global_tag ||"latest";
 
           normalizedServicePushConfig[serviceName] = {
             push: config.push !== undefined ? config.push : false,
@@ -4801,23 +4759,21 @@ async function saveMultiServiceConfig() {
           normalizedServicePushConfig[serviceName] = {
             push: false,
             imageName: getMultiServiceDefaultImageName(serviceName),
-            tag: multiServiceFormData.value.global_tag || "latest",
+            tag: multiServiceFormData.value.global_tag ||"latest",
           };
         }
       });
 
       const payload = {
-        push_mode: "multi",
+        push_mode:"multi",
         selected_services: enabledServices,
         service_push_config: normalizedServicePushConfig,
         image_name:
           multiServiceFormData.value.global_image_name ||
-          multiServiceConfigPipeline.value.image_name ||
-          "",
+          multiServiceConfigPipeline.value.image_name ||"",
         tag:
           multiServiceFormData.value.global_tag ||
-          multiServiceConfigPipeline.value.tag ||
-          "latest",
+          multiServiceConfigPipeline.value.tag ||"latest",
         push: anyServicePushEnabled(normalizedServicePushConfig),
       };
 
@@ -4853,21 +4809,21 @@ async function saveMultiServiceConfig() {
         editingPipeline.value = updatedPipeline;
 
         // 更新 formData 中相关的字段（多服务配置相关的字段）
-        formData.value.push_mode = updatedPipeline.push_mode || "multi";
+        formData.value.push_mode = updatedPipeline.push_mode ||"multi";
         formData.value.selected_service =
           updatedPipeline.selected_services &&
           updatedPipeline.selected_services.length === 1
             ? updatedPipeline.selected_services[0]
-            : "";
+            :"";
         formData.value.selected_services =
           updatedPipeline.selected_services || [];
         formData.value.service_push_config = normalizeServicePushConfig(
           updatedPipeline.service_push_config || {}
         );
-        formData.value.image_name = updatedPipeline.image_name || "";
-        formData.value.tag = updatedPipeline.tag || "latest";
+        formData.value.image_name = updatedPipeline.image_name ||"";
+        formData.value.tag = updatedPipeline.tag ||"latest";
         formData.value.push =
-          updatedPipeline.push_mode === "multi"
+          updatedPipeline.push_mode ==="multi"
             ? anyServicePushEnabled(
                 normalizeServicePushConfig(
                   updatedPipeline.service_push_config || {}
@@ -4886,7 +4842,7 @@ async function saveMultiServiceConfig() {
     closeMultiServiceConfigModal();
   } catch (error) {
     console.error("保存多服务配置失败:", error);
-    toastApiError(error, "保存多服务配置失败");
+    toastApiError(error,"保存多服务配置失败");
   } finally {
     savingMultiServiceConfig.value = false;
   }
@@ -4900,61 +4856,12 @@ async function saveMultiServiceConfig() {
   min-width: 0;
   overflow-x: hidden;
   box-sizing: border-box;
-}
+}
 
-.card {
-  transition: transform 0.2s, box-shadow 0.2s;
-  border: 1px solid rgba(0, 0, 0, 0.125);
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-}
-
-.card-header {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.125);
-  padding: 1rem 1.25rem;
-  background-color: #f8f9fa;
-}
-
-.card-title {
-  font-size: 1.1rem;
-  margin: 0;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.card-body {
-  padding: 1.25rem;
-  line-height: 1.6;
-}
-
-/* 卡片操作按钮：桌面单行，移动端可换行 */
-.pipeline-panel .card-header .btn-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.pipeline-panel .card-header .btn-group > * {
-  flex: 1 1 calc(33.333% - 0.25rem);
-  min-width: 2.5rem;
-}
-
-.pipeline-stats .col-4 {
-  flex: 0 0 33.333333%;
-  width: 33.333333%;
-  max-width: 33.333333%;
-}
+/* 卡片操作按钮：桌面单行，移动端可换行 */
 
 /* 响应式调整 */
-@media (max-width: 767px) {
-  .pipeline-panel .row > [class*="col-md-"] {
-    flex: 0 0 100%;
-    width: 100%;
-    max-width: 100%;
-  }
+@media (max-width: 767px) {
 
   .pipeline-panel {
     padding: 0;
@@ -4974,24 +4881,10 @@ async function saveMultiServiceConfig() {
     justify-content: center;
   }
 
-  .pipeline-panel .card-header,
-  .pipeline-panel .card-body {
-    padding: 0.75rem;
-  }
-
-  .pipeline-panel .card:hover {
-    transform: none;
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05) !important;
-  }
-
   .pipeline-card-badges {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.375rem;
-  }
-
-  .pipeline-panel .card-body .ml-4 {
-    margin-left: 0.25rem !important;
   }
 
   .pipeline-build-header {
@@ -5010,28 +4903,7 @@ async function saveMultiServiceConfig() {
     align-items: flex-start;
     gap: 0.25rem;
     margin-left: 0 !important;
-  }
-
-  .pipeline-stats.row {
-    flex-direction: column;
-    margin-left: 0;
-    margin-right: 0;
-  }
-
-  .pipeline-stats .col-4 {
-    flex: 0 0 100%;
-    width: 100%;
-    max-width: 100%;
-    padding-left: 0;
-    padding-right: 0;
-  }
-
-  .pipeline-panel .card-header .btn-group > * {
-    flex: 1 1 calc(33.333% - 0.25rem);
-    min-height: 2.25rem;
-    padding-left: 0.25rem;
-    padding-right: 0.25rem;
-  }
+  }
 
   .pipeline-panel > .fixed.inset-0 {
     padding: 0.5rem;
@@ -5042,13 +4914,13 @@ async function saveMultiServiceConfig() {
     max-width: 100%;
   }
 
-  .pipeline-panel .modal-title {
+  .pipeline-panel .dialog-title {
     font-size: 0.9375rem;
     line-height: 1.35;
     word-break: break-word;
   }
 
-  .pipeline-panel .nav-tabs {
+  .pipeline-panel .pipeline-tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -5058,18 +4930,18 @@ async function saveMultiServiceConfig() {
     padding-bottom: 0.25rem;
   }
 
-  .pipeline-panel .nav-tabs .nav-link {
+  .pipeline-panel .pipeline-tabs .pipeline-tab {
     white-space: nowrap;
     font-size: 0.75rem;
     padding: 0.375rem 0.5rem;
   }
 
-  .pipeline-modal-footer {
+  .pipeline-dialog-footer {
     flex-direction: column-reverse;
     align-items: stretch;
   }
 
-  .pipeline-modal-footer > * {
+  .pipeline-dialog-footer > * {
     width: 100%;
     justify-content: center;
   }
@@ -5078,49 +4950,7 @@ async function saveMultiServiceConfig() {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
-  }
-
-  .pipeline-panel .flex.justify-between.items-center .btn-group {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .pipeline-panel .input-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .pipeline-panel .input-group > .btn,
-  .pipeline-panel .input-group > button {
-    width: 100%;
-    border-radius: 0.375rem !important;
-    margin-top: 0.375rem;
-  }
-
-  .pipeline-panel .input-group > input,
-  .pipeline-panel .input-group > select {
-    border-radius: 0.375rem !important;
-    width: 100%;
-  }
-
-  .pipeline-panel .btn-group.w-full {
-    flex-wrap: wrap;
-    gap: 0.25rem;
-  }
-
-  .pipeline-panel .btn-group.w-full > .btn,
-  .pipeline-panel .btn-group.w-full > button,
-  .pipeline-panel .btn-group.w-full > label {
-    flex: 1 1 calc(50% - 0.25rem);
-    min-width: 0;
-    white-space: normal;
-    line-height: 1.25;
-  }
-
-  .pipeline-branch-mapping-row .col-md-1.text-center {
-    padding-top: 0.125rem;
-    padding-bottom: 0.125rem;
-  }
+  }
 
   .pipeline-json-editor :deep(.cm-editor) {
     height: min(500px, 42vh) !important;

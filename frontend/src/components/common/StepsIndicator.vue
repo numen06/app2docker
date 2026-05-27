@@ -46,7 +46,7 @@
 
 <script setup>
 import { computed } from "vue";
-import "@/styles/steps-indicator.css";
+import"@/styles/steps-indicator.css";
 
 const props = defineProps({
   steps: {
@@ -69,20 +69,20 @@ const props = defineProps({
   },
   className: {
     type: String,
-    default: "mb-4",
+    default:"mb-4",
   },
   /** 桌面端步骤列之间的连接线宽度 */
   connectorWidth: {
     type: String,
-    default: "3.75rem",
+    default:"3.75rem",
   },
   mobileConnectorWidth: {
     type: String,
-    default: "1.25rem",
+    default:"1.25rem",
   },
 });
 
-const emit = defineEmits(["update:currentStep", "step-click"]);
+const emit = defineEmits(["update:currentStep","step-click"]);
 
 const gridStyle = computed(() => {
   const parts = [];
@@ -93,7 +93,7 @@ const gridStyle = computed(() => {
     }
   }
   return {
-    gridTemplateColumns: parts.join(" "),
+    gridTemplateColumns: parts.join(""),
   };
 });
 

@@ -3,7 +3,7 @@
     <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
         <RouterLink to="/" class="flex items-center gap-2 font-semibold text-slate-900">
-          <i class="fas fa-box-open text-blue-600"></i>
+          <AppIcon  name="box-open" class="text-blue-600" />
           <span>App2Docker</span>
         </RouterLink>
         <div class="flex shrink-0 items-center gap-2">
@@ -62,7 +62,7 @@
           >
             <div class="border-b border-slate-100 p-4 sm:p-5">
               <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-                <i :class="['fas', feature.icon, 'text-blue-600']"></i>
+                <AppIcon :name="feature.icon" class="text-blue-600" />
               </div>
               <h3 class="font-semibold text-slate-900">{{ feature.title }}</h3>
               <p class="mt-2 text-sm leading-relaxed text-slate-600">{{ feature.desc }}</p>
@@ -89,7 +89,7 @@
             class="flex gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
           >
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-50">
-              <i :class="['fas', item.icon, 'text-blue-600 text-sm']"></i>
+              <AppIcon :name="item.icon" class="text-sm text-blue-600" />
             </div>
             <div>
               <div class="font-medium text-slate-900">{{ item.title }}</div>
@@ -105,7 +105,7 @@
         <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <div class="flex items-center gap-2 font-semibold text-slate-900">
-              <i class="fas fa-box-open text-blue-600"></i>
+              <AppIcon  name="box-open" class="text-blue-600" />
               <span>App2Docker</span>
             </div>
             <p class="mt-3 text-sm leading-relaxed text-slate-600">
@@ -143,59 +143,59 @@ import ProductMockup from "@/components/landing/ProductMockup.vue";
 
 const year = new Date().getFullYear();
 
-const heroTags = ["流水线构建", "镜像迁移", "模板复用", "团队权限", "主机部署"];
+const heroTags = ["流水线构建","镜像迁移","模板复用","团队权限","主机部署"];
 
 const features = [
   {
-    icon: "fa-gears",
-    title: "流水线与构建",
-    desc: "多阶段 Dockerfile、Webhook/Cron 触发；支持复制流水线快速复用配置，构建日志实时查看。",
-    mockup: "pipeline",
-    mockupLabel: "流水线 · 构建任务",
+    icon:"gears",
+    title:"流水线与构建",
+    desc:"多阶段 Dockerfile、Webhook/Cron 触发；支持复制流水线快速复用配置，构建日志实时查看。",
+    mockup:"pipeline",
+    mockupLabel:"流水线 · 构建任务",
   },
   {
-    icon: "fa-right-left",
-    title: "镜像迁移",
-    desc: "在源/目标仓库间同步镜像，支持路径、标签与定时任务，适合多环境、多区域仓库对齐。",
-    mockup: "pipeline",
-    mockupLabel: "镜像迁移 · 任务列表",
+    icon:"right-left",
+    title:"镜像迁移",
+    desc:"在源/目标仓库间同步镜像，支持路径、标签与定时任务，适合多环境、多区域仓库对齐。",
+    mockup:"pipeline",
+    mockupLabel:"镜像迁移 · 任务列表",
   },
   {
-    icon: "fa-users",
-    title: "团队协作",
-    desc: "团队、成员与邀请链接统一管理，角色与菜单权限可控，多人共用模板与流水线。",
-    mockup: "team",
-    mockupLabel: "团队 · 成员管理",
+    icon:"users",
+    title:"团队协作",
+    desc:"团队、成员与邀请链接统一管理，角色与菜单权限可控，多人共用模板与流水线。",
+    mockup:"team",
+    mockupLabel:"团队 · 成员管理",
   },
   {
-    icon: "fa-rocket",
-    title: "部署联动",
-    desc: "关联 Agent/SSH/Portainer 主机与部署任务，从镜像构建到环境上线形成闭环。",
-    mockup: "deploy",
-    mockupLabel: "部署 · 任务列表",
+    icon:"rocket",
+    title:"部署联动",
+    desc:"关联 Agent/SSH/Portainer 主机与部署任务，从镜像构建到环境上线形成闭环。",
+    mockup:"deploy",
+    mockupLabel:"部署 · 任务列表",
   },
 ];
 
 const advantages = [
   {
-    icon: "fa-layer-group",
-    title: "多阶段构建",
-    desc: "支持复杂应用的镜像分层与构建阶段编排。",
+    icon:"layer-group",
+    title:"多阶段构建",
+    desc:"支持复杂应用的镜像分层与构建阶段编排。",
   },
   {
-    icon: "fa-file-code",
-    title: "模板管理",
-    desc: "Dockerfile 与构建模板可复用、可版本化。",
+    icon:"file-code",
+    title:"模板管理",
+    desc:"Dockerfile 与构建模板可复用、可版本化。",
   },
   {
-    icon: "fa-cloud-arrow-up",
-    title: "导出与迁移",
-    desc: "镜像 tar 导出、仓库推送，或跨仓库定时/手动迁移同步。",
+    icon:"cloud-arrow-up",
+    title:"导出与迁移",
+    desc:"镜像 tar 导出、仓库推送，或跨仓库定时/手动迁移同步。",
   },
   {
-    icon: "fa-shield-halved",
-    title: "权限控制",
-    desc: "团队级隔离，成员角色与资源访问可控。",
+    icon:"shield-halved",
+    title:"权限控制",
+    desc:"团队级隔离，成员角色与资源访问可控。",
   },
 ];
 </script>

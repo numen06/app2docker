@@ -2,15 +2,15 @@
   <div class="build-config-editor">
     <div class="flex justify-between items-center mb-4">
       <h5 class="mb-0">
-        <i class="fas fa-edit"></i> 编辑构建配置
+        <AppIcon  name="edit" /> 编辑构建配置
       </h5>
-      <div class="btn-group btn-group-sm">
+      <div class="inline-flex items-stretch text-sm">
         <Button 
           type="button"
           variant="outline" size="sm"
           @click="showJsonModal = true"
         >
-          <i class="fas fa-code"></i> 查看JSON
+          <AppIcon  name="code" /> 查看JSON
         </Button>
         <Button 
           type="button"
@@ -18,27 +18,27 @@
           @click="saveConfig"
           :disabled="saving"
         >
-          <i class="fas fa-save"></i> {{ saving ? '保存中...' : '保存配置' }}
+          <AppIcon  name="save" /> {{ saving ? '保存中...' : '保存配置' }}
         </Button>
         <Button 
           type="button"
           variant="outline"
           @click="cancel"
         >
-          <i class="fas fa-times"></i> 取消
+          <AppIcon  name="times" /> 取消
         </Button>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-body">
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="p-4">
         <!-- Git配置 -->
         <div class="mb-4">
           <h6 class="border-b border-slate-200 pb-2 mb-3">
-            <i class="fas fa-code-branch text-blue-600"></i> Git 配置
+            <AppIcon  name="code-branch" class="text-blue-600" /> Git 配置
           </h6>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">Git 仓库地址 <span class="text-red-500">*</span></label>
               <input 
                 v-model="formData.git_url" 
@@ -48,9 +48,9 @@
                 placeholder="https://github.com/user/repo.git"
               >
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">分支名称</label>
-              <div class="input-group">
+              <div class="flex w-full">
                 <select 
                   v-model="formData.branch" 
                   class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
@@ -68,8 +68,8 @@
                   :disabled="loadingBranches || !formData.git_url"
                   title="自动加载分支列表"
                 >
-                  <i v-if="loadingBranches" class="fas fa-spinner fa-spin"></i>
-                  <i v-else class="fas fa-sync-alt"></i>
+                  <AppIcon v-if="loadingBranches"  name="spinner" spin />
+                  <AppIcon v-else  name="sync-alt" />
                 </Button>
               </div>
               <small class="text-slate-500">
@@ -78,7 +78,7 @@
                 <span v-else>留空则使用默认分支，点击刷新按钮加载分支列表</span>
               </small>
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">Git 数据源</label>
               <select 
                 v-model="formData.source_id" 
@@ -91,7 +91,7 @@
                 </option>
               </select>
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">项目类型 <span class="text-red-500">*</span></label>
               <select v-model="formData.project_type" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                 <option value="">-- 请选择项目类型 --</option>
@@ -106,38 +106,38 @@
         <!-- Dockerfile配置 -->
         <div class="mb-4">
           <h6 class="border-b border-slate-200 pb-2 mb-3">
-            <i class="fas fa-file-code text-blue-600"></i> Dockerfile 配置
+            <AppIcon  name="file-code" class="text-blue-600" /> Dockerfile 配置
           </h6>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div class="col-12">
+            <div class="col-span-full">
               <label class="block text-sm font-medium text-slate-700">Dockerfile 来源</label>
-              <div class="btn-group w-full mb-2" role="group">
+              <div class="inline-flex items-stretch w-full mb-2" role="group">
                 <input 
                   type="radio" 
-                  class="btn-check" 
+                  class="choice-input" 
                   id="use-project-dockerfile" 
                   :value="true"
                   v-model="formData.use_project_dockerfile"
                   @change="onDockerfileSourceChange"
                 >
                 <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="use-project-dockerfile">
-                  <i class="fas fa-file-code"></i> 项目Dockerfile
+                  <AppIcon  name="file-code" /> 项目Dockerfile
                 </label>
                 
                 <input 
                   type="radio" 
-                  class="btn-check" 
+                  class="choice-input" 
                   id="use-template" 
                   :value="false"
                   v-model="formData.use_project_dockerfile"
                   @change="onDockerfileSourceChange"
                 >
                 <label class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="use-template">
-                  <i class="fas fa-layer-group"></i> 使用模板
+                  <AppIcon  name="layer-group" /> 使用模板
                 </label>
               </div>
             </div>
-            <div v-if="formData.use_project_dockerfile" class="col-md-6">
+            <div v-if="formData.use_project_dockerfile" class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">Dockerfile 文件名</label>
               <input 
                 v-model="formData.dockerfile_name" 
@@ -146,7 +146,7 @@
                 placeholder="Dockerfile"
               >
             </div>
-            <div v-else class="col-md-6">
+            <div v-else class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">模板名称</label>
               <select v-model="formData.template" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" @change="onTemplateChange">
                 <option value="">-- 请选择模板 --</option>
@@ -155,9 +155,9 @@
                 </option>
               </select>
             </div>
-            <div v-if="!formData.use_project_dockerfile && templateParams.length > 0" class="col-12">
+            <div v-if="!formData.use_project_dockerfile && templateParams.length > 0" class="col-span-full">
               <label class="block text-sm font-medium text-slate-700">模板参数</label>
-              <div class="table-responsive">
+              <div class="table-scroll overflow-x-auto">
                 <table class="w-full border-collapse text-sm border border-slate-200">
                   <thead>
                     <tr>
@@ -196,10 +196,10 @@
         <!-- 镜像配置 -->
         <div class="mb-4">
           <h6 class="border-b border-slate-200 pb-2 mb-3">
-            <i class="fab fa-docker text-blue-600"></i> 镜像配置
+            <AppIcon  name="docker" class="text-blue-600" /> 镜像配置
           </h6>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">镜像名称 <span class="text-red-500">*</span></label>
               <input 
                 v-model="formData.image_name" 
@@ -209,7 +209,7 @@
                 placeholder="myapp/demo"
               >
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">镜像标签</label>
               <input 
                 v-model="formData.tag" 
@@ -218,14 +218,14 @@
                 placeholder="latest"
               >
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">推送模式</label>
               <select v-model="formData.push_mode" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400" @change="onPushModeChange">
                 <option value="single">单服务推送</option>
                 <option value="multi">多服务推送</option>
               </select>
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <div class="mt-4 flex items-center gap-2">
                 <input 
                   class="h-4 w-4 rounded border-slate-300" 
@@ -244,7 +244,7 @@
         <!-- 服务配置（多服务模式） -->
         <div v-if="formData.push_mode === 'multi' && services.length > 0" class="mb-4">
           <h6 class="border-b border-slate-200 pb-2 mb-3">
-            <i class="fas fa-layer-group text-blue-600"></i> 服务配置
+            <AppIcon  name="layer-group" class="text-blue-600" /> 服务配置
           </h6>
           <div class="mb-3">
             <label class="block text-sm font-medium text-slate-700">选择服务</label>
@@ -261,7 +261,7 @@
               </label>
             </div>
           </div>
-          <div v-if="formData.selected_services.length > 0" class="table-responsive">
+          <div v-if="formData.selected_services.length > 0" class="table-scroll overflow-x-auto">
             <table class="w-full border-collapse text-sm border border-slate-200">
               <thead>
                 <tr>
@@ -315,10 +315,10 @@
         <!-- 单服务推送模式 -->
         <div v-if="formData.push_mode === 'single'" class="mb-4">
           <h6 class="border-b border-slate-200 pb-2 mb-3">
-            <i class="fas fa-cube text-blue-600"></i> 单服务配置
+            <AppIcon  name="cube" class="text-blue-600" /> 单服务配置
           </h6>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">选择服务</label>
               <select v-model="formData.selected_service" class="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
                 <option value="">-- 请选择服务 --</option>
@@ -327,7 +327,7 @@
                 </option>
               </select>
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6">
               <label class="block text-sm font-medium text-slate-700">完整镜像名</label>
               <input 
                 v-model="formData.custom_image_name" 
@@ -342,7 +342,7 @@
         <!-- 资源包配置 -->
         <div class="mb-4">
           <h6 class="border-b border-slate-200 pb-2 mb-3">
-            <i class="fas fa-archive text-blue-600"></i> 资源包配置
+            <AppIcon  name="archive" class="text-blue-600" /> 资源包配置
           </h6>
           <div v-if="packages.length === 0" class="text-slate-500">
             暂无资源包，请先创建资源包
@@ -360,7 +360,7 @@
                 全选
               </label>
             </div>
-            <div class="table-responsive">
+            <div class="table-scroll overflow-x-auto">
               <table class="w-full border-collapse text-sm border border-slate-200">
                 <thead>
                   <tr>
@@ -402,10 +402,10 @@
       <div class="relative z-10 mx-auto w-full max-w-3xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-code"></i> 构建配置JSON
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="code" /> 构建配置JSON
             </h5>
-            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showJsonModal = false"><i class="fas fa-times"></i></button>
+            <button type="button" class="rounded-md p-2 text-slate-500 hover:bg-slate-100" @click="showJsonModal = false"><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="flex justify-end mb-2">
@@ -414,7 +414,7 @@
                 variant="outline" size="sm"
                 @click="copyJson"
               >
-                <i class="fas fa-copy"></i> 复制JSON
+                <AppIcon  name="copy" /> 复制JSON
               </Button>
             </div>
             <codemirror

@@ -1,7 +1,7 @@
 <template>
   <section class="pipeline-webhook-block pipeline-webhook-block--url">
     <h3 class="pipeline-webhook-block__title">
-      <i class="fas fa-link"></i> Webhook URL
+      <AppIcon  name="link" /> Webhook URL
     </h3>
     <p class="pipeline-webhook-block__desc">
       将下方地址配置到 Git 仓库的 Webhook，推送代码时可触发本流水线构建。
@@ -14,7 +14,7 @@
         readonly
       />
       <Button variant="outline" size="sm" type="button" @click="copyWebhookUrl">
-        <i class="fas fa-copy mr-1"></i> 复制
+        <AppIcon  name="copy" class="mr-1" /> 复制
       </Button>
     </div>
     <p class="pipeline-webhook-field__hint mt-2 mb-0">
@@ -32,7 +32,7 @@ import { PIPELINE_DETAIL_KEY } from "@/composables/pipelineDetailContext";
 import { copyToClipboard } from "@/utils/clipboard.js";
 
 const props = defineProps({
-  webhookToken: { type: String, default: "" },
+  webhookToken: { type: String, default:"" },
 });
 
 const detail = inject(PIPELINE_DETAIL_KEY, null);
@@ -40,10 +40,9 @@ const detail = inject(PIPELINE_DETAIL_KEY, null);
 const webhookUrl = computed(() => {
   const token =
     props.webhookToken ||
-    detail?.pipeline?.value?.webhook_token ||
-    "";
+    detail?.pipeline?.value?.webhook_token ||"";
   if (!token) {
-    return "请先配置 Webhook Token（下方可生成）";
+    return"请先配置 Webhook Token（下方可生成）";
   }
   return `${window.location.origin}/api/webhook/${token}`;
 });
@@ -51,7 +50,7 @@ const webhookUrl = computed(() => {
 async function copyWebhookUrl() {
   const url = webhookUrl.value;
   if (!url || url.startsWith("请先")) {
-    toastInfo(url || "无可复制的 URL");
+    toastInfo(url ||"无可复制的 URL");
     return;
   }
   const ok = await copyToClipboard(url);

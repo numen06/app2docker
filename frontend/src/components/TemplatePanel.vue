@@ -1,23 +1,23 @@
 <template>
   <div class="template-panel">
-    <PageToolbar title="模板管理" icon="fa-layer-group">
+    <PageToolbar title="模板管理" icon="layer-group">
       <template #actions>
         <Button size="sm" @click="openEditor(null, true)">
-          <i class="fas fa-plus-circle"></i>
+          <AppIcon  name="plus-circle" />
           新增模板
         </Button>
       </template>
     </PageToolbar>
 
     <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
     <EmptyState
       v-else-if="templates.length === 0"
       message='暂无模板，请点击「新增模板」创建'
-      icon="fa-file-code"
+      icon="file-code"
     />
 
     <template v-else>
@@ -30,11 +30,11 @@
           <div class="min-w-0">
             <div class="font-medium text-slate-900">
               {{ tpl.name }}
-              <i
+              <AppIcon
                 v-if="tpl.type === 'builtin'"
-                class="fas fa-lock ml-1 text-slate-400"
+                
                 title="内置模板"
-              ></i>
+               name="lock" class="ml-1 text-slate-400" />
             </div>
             <div class="mt-2">
               <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
@@ -56,17 +56,17 @@
               :disabled="parsing === tpl.name"
               @click="parseTemplate(tpl)"
             >
-              <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
-              <i v-else class="fas fa-search"></i>
+              <AppIcon v-if="parsing === tpl.name"  name="spinner" spin />
+              <AppIcon v-else  name="search" />
             </Button>
             <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
-              <i class="fas fa-eye"></i>
+              <AppIcon  name="eye" />
             </Button>
             <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
-              <i class="fas fa-copy"></i>
+              <AppIcon  name="copy" />
             </Button>
             <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
-              <i class="fas fa-pen"></i>
+              <AppIcon  name="pen" />
             </Button>
             <Button
               v-if="tpl.type === 'user' && tpl.template_id"
@@ -75,10 +75,10 @@
               title="成员授权"
               @click="openResourcePermission(tpl)"
             >
-              <i class="fas fa-user-shield"></i>
+              <AppIcon  name="user-shield" />
             </Button>
             <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
-              <i class="fas fa-trash"></i>
+              <AppIcon  name="trash" />
             </Button>
           </div>
         </div>
@@ -99,11 +99,11 @@
             <TableRow v-for="tpl in templates" :key="tpl.name">
               <TableCell class="font-medium text-slate-900">
                 {{ tpl.name }}
-                <i
+                <AppIcon
                   v-if="tpl.type === 'builtin'"
-                  class="fas fa-lock ml-1 text-slate-400"
+                  
                   title="内置模板"
-                ></i>
+                 name="lock" class="ml-1 text-slate-400" />
               </TableCell>
               <TableCell>
                 <Badge :variant="projectTypeBadgeVariant(tpl.project_type)">
@@ -121,17 +121,17 @@
                     :disabled="parsing === tpl.name"
                     @click="parseTemplate(tpl)"
                   >
-                    <i v-if="parsing === tpl.name" class="fas fa-spinner fa-spin"></i>
-                    <i v-else class="fas fa-search"></i>
+                    <AppIcon v-if="parsing === tpl.name"  name="spinner" spin />
+                    <AppIcon v-else  name="search" />
                   </Button>
                   <Button variant="outline" size="sm" title="预览" @click="previewTemplate(tpl)">
-                    <i class="fas fa-eye"></i>
+                    <AppIcon  name="eye" />
                   </Button>
                   <Button variant="outline" size="sm" title="克隆" @click="cloneTemplate(tpl)">
-                    <i class="fas fa-copy"></i>
+                    <AppIcon  name="copy" />
                   </Button>
                   <Button variant="outline" size="sm" title="编辑" @click="openEditor(tpl, false)">
-                    <i class="fas fa-pen"></i>
+                    <AppIcon  name="pen" />
                   </Button>
                   <Button
                     v-if="tpl.type === 'user' && tpl.template_id"
@@ -140,10 +140,10 @@
                     title="成员授权"
                     @click="openResourcePermission(tpl)"
                   >
-                    <i class="fas fa-user-shield"></i>
+                    <AppIcon  name="user-shield" />
                   </Button>
                   <Button variant="destructive" size="sm" title="删除" @click="deleteTemplate(tpl)">
-                    <i class="fas fa-trash"></i>
+                    <AppIcon  name="trash" />
                   </Button>
                 </div>
               </TableCell>
@@ -182,7 +182,7 @@
     <FormDialog
       v-model="showParseModal"
       title="模板解析信息"
-      icon="fa-search"
+      icon="search"
       size="lg"
       @update:model-value="onParseModalUpdate"
     >
@@ -192,19 +192,19 @@
       >
         <span>{{ parseTemplateData.name }}</span>
         <Badge v-if="parseTemplateData.type === 'builtin'" variant="warning">
-          <i class="fas fa-lock"></i> 内置
+          <AppIcon  name="lock" /> 内置
         </Badge>
       </div>
 
       <div v-if="parsing" class="flex items-center justify-center gap-2 py-8 text-slate-500">
-        <i class="fas fa-spinner fa-spin"></i>
+        <AppIcon  name="spinner" spin />
         正在解析模板…
       </div>
       <AlertBanner v-else-if="parseError" :message="parseError" variant="danger" />
       <div v-else-if="parseInfo" class="space-y-6">
         <section>
           <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <i class="fas fa-sliders-h text-blue-600"></i>
+            <AppIcon  name="sliders-h" class="text-blue-600" />
             模板参数
             <Badge variant="default">{{ parseInfo.params?.length || 0 }} 个</Badge>
           </h4>
@@ -220,14 +220,14 @@
             <TableBody>
               <TableRow v-for="param in parseInfo.params" :key="param.name">
                 <TableCell><code class="text-xs text-blue-600">{{ param.name }}</code></TableCell>
-                <TableCell class="text-slate-600">{{ param.description || "—" }}</TableCell>
+                <TableCell class="text-slate-600">{{ param.description ||"—" }}</TableCell>
                 <TableCell>
                   <Badge v-if="param.default" variant="default">{{ param.default }}</Badge>
                   <span v-else class="text-slate-400">—</span>
                 </TableCell>
                 <TableCell>
                   <Badge :variant="param.required ? 'danger' : 'success'">
-                    {{ param.required ? "是" : "否" }}
+                    {{ param.required ?"是" :"否" }}
                   </Badge>
                 </TableCell>
               </TableRow>
@@ -239,7 +239,7 @@
         </section>
         <section>
           <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <i class="fas fa-server text-blue-600"></i>
+            <AppIcon  name="server" class="text-blue-600" />
             服务阶段（多阶段构建）
             <Badge variant="info">{{ parseInfo.services?.length || 0 }} 个</Badge>
           </h4>
@@ -337,14 +337,14 @@ const parseTemplateData = ref(null);
 
 function projectTypeBadgeVariant(type) {
   const map = {
-    jar: "default",
-    war: "warning",
-    node: "success",
-    python: "info",
-    go: "info",
-    static: "default",
+    jar:"default",
+    war:"warning",
+    node:"success",
+    python:"info",
+    go:"info",
+    static:"default",
   };
-  return map[type] || "default";
+  return map[type] ||"default";
 }
 
 function changePage(page) {
@@ -400,7 +400,7 @@ async function cloneTemplate(tpl) {
 
     while (
       templates.value.some(
-        (t) => t.name === newName && (t.project_type || "jar") === projectType
+        (t) => t.name === newName && (t.project_type ||"jar") === projectType
       )
     ) {
       newName = `${tpl.name}_copy_${counter}`;
@@ -411,13 +411,13 @@ async function cloneTemplate(tpl) {
       name: newName,
       project_type: projectType,
       content: res.data.content,
-      type: "user",
+      type:"user",
     };
     isNew.value = true;
     showEditor.value = true;
   } catch (error) {
     console.error("克隆模板失败:", error);
-    toastApiError(error, "克隆模板失败");
+    toastApiError(error,"克隆模板失败");
   }
 }
 
@@ -426,7 +426,7 @@ async function parseTemplate(tpl) {
   showParseModal.value = true;
   parsing.value = tpl.name;
   parseInfo.value = null;
-  parseError.value = "";
+  parseError.value ="";
 
   try {
     const res = await axios.get("/api/template-params", {
@@ -442,7 +442,7 @@ async function parseTemplate(tpl) {
     };
   } catch (error) {
     console.error("解析模板失败:", error);
-    parseError.value = error.response?.data?.detail || "解析模板失败";
+    parseError.value = error.response?.data?.detail ||"解析模板失败";
   } finally {
     parsing.value = null;
   }
@@ -451,7 +451,7 @@ async function parseTemplate(tpl) {
 function closeParseModal() {
   showParseModal.value = false;
   parseInfo.value = null;
-  parseError.value = "";
+  parseError.value ="";
   parseTemplateData.value = null;
 }
 
@@ -459,14 +459,14 @@ function onParseModalUpdate(open) {
   showParseModal.value = open;
   if (!open) {
     parseInfo.value = null;
-    parseError.value = "";
+    parseError.value ="";
     parseTemplateData.value = null;
   }
 }
 
 async function deleteTemplate(tpl) {
   const msg =
-    tpl.type === "builtin"
+    tpl.type ==="builtin"
       ? `此为内置模板，删除后仍可通过系统恢复。\n确认删除用户覆盖的 ${tpl.name} 吗？`
       : `确认删除模板 ${tpl.name} 吗？该操作不可恢复。`;
 
@@ -480,7 +480,7 @@ async function deleteTemplate(tpl) {
     toastSuccess("模板已删除");
     await loadTemplates();
   } catch (error) {
-    toastApiError(error, "删除失败");
+    toastApiError(error,"删除失败");
   }
 }
 
@@ -490,8 +490,8 @@ function handleSaved() {
 }
 
 function formatBytes(bytes) {
-  if (!bytes) return "—";
-  const units = ["B", "KB", "MB", "GB"];
+  if (!bytes) return"—";
+  const units = ["B","KB","MB","GB"];
   let idx = 0;
   let value = bytes;
   while (value >= 1024 && idx < units.length - 1) {
@@ -502,7 +502,7 @@ function formatBytes(bytes) {
 }
 
 function formatTime(timeStr) {
-  if (!timeStr) return "—";
+  if (!timeStr) return"—";
   try {
     return new Date(timeStr).toLocaleString("zh-CN");
   } catch {

@@ -14,7 +14,7 @@
         </p>
       </div>
       <Button v-if="teamStore.canManageTeam" size="sm" type="button" @click="$emit('invite')">
-        <i class="fas fa-user-plus mr-1"></i>
+        <AppIcon  name="user-plus" class="mr-1" />
         邀请成员
       </Button>
     </div>
@@ -34,7 +34,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
               <div class="font-medium text-slate-900">{{ m.username }}</div>
-              <div class="mt-0.5 truncate text-xs text-slate-500">{{ m.email || "—" }}</div>
+              <div class="mt-0.5 truncate text-xs text-slate-500">{{ m.email ||"—" }}</div>
             </div>
             <span
               v-if="!canManageMemberRow(m)"
@@ -82,7 +82,7 @@
           <TableBody>
             <TableRow v-for="m in members" :key="m.user_id">
               <TableCell class="font-medium">{{ m.username }}</TableCell>
-              <TableCell>{{ m.email || "—" }}</TableCell>
+              <TableCell>{{ m.email ||"—" }}</TableCell>
               <TableCell>
                 <NativeSelect
                   v-if="showRoleDropdown(m)"
@@ -133,7 +133,7 @@ import TableHeader from "@/components/ui/table/TableHeader.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 
 const props = defineProps({
-  teamId: { type: String, default: "" },
+  teamId: { type: String, default:"" },
 });
 
 defineEmits(["invite"]);
@@ -144,14 +144,14 @@ const loading = ref(false);
 const error = ref("");
 
 function roleLabel(r) {
-  const map = { owner: "所有者", admin: "管理员", member: "成员" };
+  const map = { owner:"所有者", admin:"管理员", member:"成员" };
   return map[r] || r;
 }
 
 function canManageMemberRow(m) {
   if (!teamStore.canManageTeam) return false;
-  if (m.role === "owner") return false;
-  if (m.role === "admin") return teamStore.canAssignTeamAdmin;
+  if (m.role ==="owner") return false;
+  if (m.role ==="admin") return teamStore.canAssignTeamAdmin;
   return true;
 }
 
@@ -162,7 +162,7 @@ function showRoleDropdown(m) {
 async function load() {
   if (!props.teamId) return;
   loading.value = true;
-  error.value = "";
+  error.value ="";
   try {
     const res = await axios.get(`/api/teams/${props.teamId}/members`);
     members.value = Array.isArray(res.data)
@@ -171,9 +171,9 @@ async function load() {
   } catch (e) {
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string"
+      typeof detail ==="string"
         ? detail
-        : "无法加载成员列表";
+        :"无法加载成员列表";
     members.value = [];
   } finally {
     loading.value = false;
@@ -191,7 +191,7 @@ async function onRoleChange(m, ev) {
   } catch (e) {
     m.role = prev;
     const detail = e?.response?.data?.detail;
-    toastError(typeof detail === "string" ? detail : "更新角色失败");
+    toastError(typeof detail ==="string" ? detail :"更新角色失败");
   }
 }
 
@@ -202,7 +202,7 @@ async function removeMember(m) {
     await load();
   } catch (e) {
     const detail = e?.response?.data?.detail;
-    toastError(typeof detail === "string" ? detail : "移除失败");
+    toastError(typeof detail ==="string" ? detail :"移除失败");
   }
 }
 

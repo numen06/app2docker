@@ -57,9 +57,27 @@
   list-style: none;
 }
 
-.host-manager-toolbar__tabs .nav-link {
+.host-manager-toolbar__tab {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
   padding: 0.375rem 0.625rem;
   font-size: 0.875rem;
+  font-weight: 500;
+  color: rgb(71 85 105);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.host-manager-toolbar__tab:hover {
+  background-color: rgb(241 245 249);
+  color: rgb(15 23 42);
+}
+
+.host-manager-toolbar__tab.is-active {
+  background-color: rgb(37 99 235);
+  color: #fff;
 }
 
 .host-manager-toolbar__actions {
@@ -83,7 +101,7 @@
   border: 1px solid rgb(241 245 249);
 }
 
-.host-manager-filter-btn {
+.host-manager-filter-button {
   display: inline-flex;
   cursor: pointer;
   align-items: center;
@@ -96,12 +114,12 @@
   transition: background-color 0.15s, color 0.15s;
 }
 
-.host-manager-filter-btn:hover {
+.host-manager-filter-button:hover {
   background-color: rgb(241 245 249);
   color: rgb(15 23 42);
 }
 
-.host-manager-filter-btn:has(:checked) {
+.host-manager-filter-button:has(:checked) {
   border-color: rgb(226 232 240);
   background-color: white;
   color: rgb(29 78 216);
@@ -327,24 +345,18 @@
   min-height: 15rem;
 }
 
-.pending-host-card .card-header {
+.pending-host-card > .border-b {
   background-color: rgb(255 251 235);
 }
 
-.pending-host-card .card-body {
+.pending-host-card > .p-4 {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
 }
 
-.pending-host-card .card-footer {
+.pending-host-card > .border-t {
   margin-top: auto;
-}
-
-.card-footer {
-  padding: 0.75rem 1rem;
-  border-top: 1px solid rgb(241 245 249);
-  background-color: rgb(248 250 252);
 }
 
 @media (max-width: 767px) {

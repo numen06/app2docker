@@ -2,31 +2,31 @@
   <FormDialog
     :model-value="modelValue"
     title="模板预览"
-    icon="fa-eye"
+    icon="eye"
     size="xl"
     @update:model-value="close"
   >
     <div v-if="template?.name" class="-mt-2 mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
       <span>{{ template.name }}</span>
       <Badge v-if="template?.type === 'builtin'" variant="warning">
-        <i class="fas fa-lock"></i> 内置
+        <AppIcon  name="lock" /> 内置
       </Badge>
     </div>
 
     <div v-if="loading" class="py-8 text-center text-slate-500">
-      <i class="fas fa-spinner fa-spin mr-2"></i> 加载中...
+      <AppIcon  name="spinner" class="mr-2" spin /> 加载中...
     </div>
 
     <template v-else>
       <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <p class="text-xs font-semibold text-slate-500">模板名称</p>
-          <p class="text-sm text-slate-900">{{ templateData?.name || "-" }}</p>
+          <p class="text-sm text-slate-900">{{ templateData?.name ||"-" }}</p>
         </div>
         <div>
           <p class="text-xs font-semibold text-slate-500">项目类型</p>
           <Badge :variant="template?.project_type === 'jar' ? 'default' : 'success'">
-            {{ template?.project_type === "nodejs" ? "Node.js" : "JAR" }}
+            {{ template?.project_type ==="nodejs" ?"Node.js" :"JAR" }}
           </Badge>
         </div>
         <div>
@@ -48,28 +48,24 @@
             v-if="templateInfo.params?.length > 0"
             type="button"
             class="border-b-2 px-4 py-2 text-sm font-medium transition"
-            :class="
-              activeTab === 'params'
+            :class="activeTab === 'params'
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            "
+                : 'border-transparent text-slate-500 hover:text-slate-800'"
             @click="activeTab = 'params'"
           >
-            <i class="fas fa-sliders-h"></i> 模板参数
+            <AppIcon  name="sliders-h" /> 模板参数
             <Badge variant="default" class="ml-1">{{ templateInfo.params.length }}</Badge>
           </button>
           <button
             v-if="templateInfo.services?.length > 0"
             type="button"
             class="border-b-2 px-4 py-2 text-sm font-medium transition"
-            :class="
-              activeTab === 'services'
+            :class="activeTab === 'services'
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            "
+                : 'border-transparent text-slate-500 hover:text-slate-800'"
             @click="activeTab = 'services'"
           >
-            <i class="fas fa-server"></i> 服务阶段
+            <AppIcon  name="server" /> 服务阶段
             <Badge variant="info" class="ml-1">{{ templateInfo.services.length }}</Badge>
           </button>
         </div>
@@ -119,7 +115,7 @@
       </div>
 
       <Label class="mb-2 block">
-        <i class="fas fa-file-code"></i> 模板内容
+        <AppIcon  name="file-code" /> 模板内容
       </Label>
       <codemirror
         v-model="content"
@@ -174,11 +170,11 @@ watch(
     if (!show || !props.template) return;
     loading.value = true;
     templateInfo.value = null;
-    activeTab.value = "params";
+    activeTab.value ="params";
     try {
       const res = await axios.get(`/api/templates?name=${encodeURIComponent(props.template.name)}`);
       templateData.value = res.data;
-      content.value = res.data.content || "";
+      content.value = res.data.content ||"";
       try {
         const infoRes = await axios.get("/api/template-params", {
           params: { template: props.template.name, project_type: props.template.project_type },
@@ -191,7 +187,7 @@ watch(
           (!templateInfo.value.params || templateInfo.value.params.length === 0) &&
           templateInfo.value.services?.length > 0
         ) {
-          activeTab.value = "services";
+          activeTab.value ="services";
         }
       } catch {
         templateInfo.value = { params: [], services: [] };
@@ -206,21 +202,21 @@ watch(
 );
 
 function formatSize(bytes) {
-  if (!bytes) return "-";
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  if (!bytes) return"-";
+  if (bytes < 1024) return bytes +" B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) +" KB";
+  return (bytes / (1024 * 1024)).toFixed(1) +" MB";
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return "-";
+  if (!dateStr) return"-";
   try {
     return new Date(dateStr).toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
+      year:"numeric",
+      month:"2-digit",
+      day:"2-digit",
+      hour:"2-digit",
+      minute:"2-digit",
     });
   } catch {
     return dateStr;

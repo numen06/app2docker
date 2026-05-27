@@ -2,23 +2,23 @@
   <div class="min-h-[400px]">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
-        <i class="fas fa-chart-line text-blue-600"></i>
+        <AppIcon  name="chart-line" class="text-blue-600" />
         {{ dashboardTitle }}
       </h2>
       <Button variant="outline" size="sm" :disabled="loading" @click="loadDashboard">
-        <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+        <AppIcon name="sync-alt" />
         刷新
       </Button>
     </div>
 
     <div v-if="loading && !stats" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
     <template v-else>
       <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard title="总任务数" :value="stats?.totalTasks" icon="fa-tasks" accent="blue">
+        <StatCard title="总任务数" :value="stats?.totalTasks" icon="tasks" accent="blue">
           <template #footer>
             <div class="grid grid-cols-2 gap-2 text-center text-sm">
               <div>
@@ -33,7 +33,7 @@
           </template>
         </StatCard>
 
-        <StatCard title="流水线" :value="stats?.pipelines" icon="fa-project-diagram" accent="sky">
+        <StatCard title="流水线" :value="stats?.pipelines" icon="project-diagram" accent="sky">
           <template #footer>
             <div class="grid grid-cols-2 gap-2 text-center text-sm">
               <div>
@@ -48,7 +48,7 @@
           </template>
         </StatCard>
 
-        <StatCard title="数据源" :value="stats?.datasources" icon="fa-database" accent="green">
+        <StatCard title="数据源" :value="stats?.datasources" icon="database" accent="green">
           <template #footer>
             <div class="text-center text-sm">
               <p class="text-slate-500">Git 仓库</p>
@@ -57,7 +57,7 @@
           </template>
         </StatCard>
 
-        <StatCard title="镜像仓库" :value="stats?.registries" icon="fa-box" accent="amber">
+        <StatCard title="镜像仓库" :value="stats?.registries" icon="box" accent="amber">
           <template #footer>
             <div class="text-center text-sm">
               <p class="text-slate-500">已配置</p>
@@ -66,13 +66,13 @@
           </template>
         </StatCard>
 
-        <StatCard title="模板" :value="stats?.templates" icon="fa-layer-group" accent="slate" />
-        <StatCard title="资源包" :value="stats?.resourcePackages" icon="fa-archive" accent="dark" />
-        <StatCard title="主机" :value="stats?.hosts" icon="fa-server" accent="red" />
+        <StatCard title="模板" :value="stats?.templates" icon="layer-group" accent="slate" />
+        <StatCard title="资源包" :value="stats?.resourcePackages" icon="archive" accent="dark" />
+        <StatCard title="主机" :value="stats?.hosts" icon="server" accent="red" />
         <StatCard
           title="存储使用"
           :value="formatStorage(stats?.totalStorage || 0)"
-          icon="fa-hdd"
+          icon="hdd"
           accent="blue"
         >
           <template #footer>
@@ -93,26 +93,26 @@
       <Card>
         <CardHeader class="border-b border-slate-100 pb-3">
           <CardTitle class="flex items-center gap-2 text-base">
-            <i class="fas fa-info-circle text-sky-600"></i>
+            <AppIcon  name="info-circle" class="text-sky-600" />
             系统信息
           </CardTitle>
         </CardHeader>
         <CardContent class="p-4">
           <div v-if="systemInfo" class="space-y-4 text-sm">
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <InfoBlock title="Docker 状态" icon="fab fa-docker" icon-class="text-sky-600">
+              <InfoBlock title="Docker 状态" icon="docker" icon-class="text-sky-600">
                 <Badge :variant="systemInfo.connected ? 'success' : 'danger'">
-                  {{ systemInfo.connected ? "已连接" : "未连接" }}
+                  {{ systemInfo.connected ?"已连接" :"未连接" }}
                 </Badge>
                 <div v-if="systemInfo.builder_type" class="mt-2 space-y-1 text-slate-600">
                   <p>
                     类型:
                     <span class="font-medium text-slate-900">{{
-                      systemInfo.builder_type === "local"
-                        ? "本地"
-                        : systemInfo.builder_type === "remote"
-                          ? "远程"
-                          : "模拟"
+                      systemInfo.builder_type ==="local"
+                        ?"本地"
+                        : systemInfo.builder_type ==="remote"
+                          ?"远程"
+                          :"模拟"
                     }}</span>
                   </p>
                   <p v-if="systemInfo.remote_host">
@@ -123,11 +123,11 @@
                   v-if="systemInfo.connection_error"
                   class="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
                 >
-                  <i class="fas fa-exclamation-triangle"></i> {{ systemInfo.connection_error }}
+                  <AppIcon  name="exclamation-triangle" /> {{ systemInfo.connection_error }}
                 </p>
               </InfoBlock>
 
-              <InfoBlock title="版本信息" icon="fas fa-code-branch" icon-class="text-blue-600">
+              <InfoBlock title="版本信息" icon="code-branch" icon-class="text-blue-600">
                 <div class="space-y-1 text-slate-600">
                   <p v-if="systemInfo.version">
                     Docker: <span class="font-medium text-slate-900">{{ systemInfo.version }}</span>
@@ -147,7 +147,7 @@
                 </div>
               </InfoBlock>
 
-              <InfoBlock title="系统资源" icon="fas fa-server" icon-class="text-green-600">
+              <InfoBlock title="系统资源" icon="server" icon-class="text-green-600">
                 <div class="space-y-1 text-slate-600">
                   <p v-if="systemInfo.ncpu">
                     CPU: <span class="font-medium text-slate-900">{{ systemInfo.ncpu }} 核</span>
@@ -165,7 +165,7 @@
                 </div>
               </InfoBlock>
 
-              <InfoBlock title="资源统计" icon="fas fa-cubes" icon-class="text-amber-600">
+              <InfoBlock title="资源统计" icon="cubes" icon-class="text-amber-600">
                 <div class="space-y-1 text-slate-600">
                   <p v-if="systemInfo.images_count !== undefined">
                     镜像:
@@ -198,7 +198,7 @@
               class="rounded-lg border border-slate-200 bg-slate-50/80 p-4"
             >
               <h4 class="mb-2 flex items-center gap-2 font-medium text-slate-900">
-                <i class="fas fa-cog text-slate-500"></i>
+                <AppIcon  name="cog" class="text-slate-500" />
                 系统配置
               </h4>
               <div class="grid grid-cols-1 gap-2 text-slate-600 md:grid-cols-3">
@@ -218,7 +218,7 @@
             </div>
           </div>
           <div v-else class="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
-            <i class="fas fa-spinner fa-spin"></i>
+            <AppIcon  name="spinner" spin />
             加载系统信息中…
           </div>
         </CardContent>
@@ -247,7 +247,7 @@ defineEmits(["navigate"]);
 const teamStore = useTeamStore();
 const dashboardTitle = computed(() => {
   const name = teamStore.activeTeam?.name;
-  return name ? `${name} · 团队仪表盘` : "系统仪表盘";
+  return name ? `${name} · 团队仪表盘` :"系统仪表盘";
 });
 
 const loading = ref(false);
@@ -288,7 +288,7 @@ async function loadDashboard() {
     systemInfo.value = dockerInfoRes?.data || null;
   } catch (error) {
     console.error("加载仪表盘数据失败:", error);
-    toastError("加载仪表盘数据失败: " + (error.response?.data?.detail || error.message));
+    toastError("加载仪表盘数据失败:" + (error.response?.data?.detail || error.message));
     stats.value = defaultStats();
   } finally {
     loading.value = false;
@@ -296,8 +296,8 @@ async function loadDashboard() {
 }
 
 function formatStorage(bytes) {
-  if (!bytes || bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  if (!bytes || bytes === 0) return"0 B";
+  const units = ["B","KB","MB","GB","TB"];
   let size = bytes;
   let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {

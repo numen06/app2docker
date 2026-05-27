@@ -1,7 +1,7 @@
 <template>
-  <FormDialog v-model="openProxy" title="邀请成员" icon="fa-link" size="md">
+  <FormDialog v-model="openProxy" title="邀请成员" icon="link" size="md">
     <div v-if="loading" class="py-6 text-center text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin mr-2"></i>正在生成邀请链接…
+      <AppIcon  name="spinner" class="mr-2" spin />正在生成邀请链接…
     </div>
     <div v-else-if="error" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {{ error }}
@@ -33,8 +33,8 @@
             :disabled="!inviteLink"
             @click="copyInviteLink"
           >
-            <i class="fas fa-copy mr-1"></i>
-            {{ copyDone ? "已复制" : "复制链接" }}
+            <AppIcon  name="copy" class="mr-1" />
+            {{ copyDone ?"已复制" :"复制链接" }}
           </Button>
         </div>
       </div>
@@ -68,11 +68,11 @@ import { buildTeamInviteLink, formatInviteExpiresAt } from "@/utils/teamInvite";
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  teamId: { type: String, default: "" },
+  teamId: { type: String, default:"" },
   allowAdminInvite: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["update:modelValue", "invited"]);
+const emit = defineEmits(["update:modelValue","invited"]);
 
 const openProxy = computed({
   get: () => props.modelValue,
@@ -99,18 +99,18 @@ function isExpiredIso(iso) {
 function applyInviteResponse(data, { copy = true } = {}) {
   const token = data?.token;
   if (!token) {
-    error.value = "未返回邀请令牌，请稍后重试";
+    error.value ="未返回邀请令牌，请稍后重试";
     return false;
   }
-  inviteExpiresAtIso.value = data?.expires_at || "";
+  inviteExpiresAtIso.value = data?.expires_at ||"";
   inviteExpiresAt.value = formatInviteExpiresAt(data?.expires_at);
   inviteLink.value = buildTeamInviteLink(token);
   if (copy) {
     copyToClipboard(inviteLink.value).then((copied) => {
       copyDone.value = copied;
       copyHint.value = copied
-        ? "链接已复制到剪贴板，可直接发送给被邀请人。"
-        : "请手动选中上方链接后复制。";
+        ?"链接已复制到剪贴板，可直接发送给被邀请人。"
+        :"请手动选中上方链接后复制。";
     });
   }
   emit("invited");
@@ -120,10 +120,10 @@ function applyInviteResponse(data, { copy = true } = {}) {
 watch(openProxy, (v) => {
   if (v && props.teamId) {
     skipRoleRegenerate = true;
-    role.value = "member";
-    error.value = "";
+    role.value ="member";
+    error.value ="";
     copyDone.value = false;
-    copyHint.value = "";
+    copyHint.value ="";
     fetchCurrentLink().finally(() => {
       skipRoleRegenerate = false;
     });
@@ -132,9 +132,9 @@ watch(openProxy, (v) => {
 
 watch(role, () => {
   if (skipRoleRegenerate || !openProxy.value || !props.teamId || loading.value) return;
-  if (role.value === "admin" && !props.allowAdminInvite) {
+  if (role.value ==="admin" && !props.allowAdminInvite) {
     skipRoleRegenerate = true;
-    role.value = "member";
+    role.value ="member";
     skipRoleRegenerate = false;
     return;
   }
@@ -146,9 +146,9 @@ watch(role, () => {
 
 async function fetchCurrentLink({ copy = true, retryIfExpired = true } = {}) {
   if (!props.teamId || loading.value) return;
-  error.value = "";
+  error.value ="";
   loading.value = true;
-  inviteLink.value = "";
+  inviteLink.value ="";
   try {
     const res = await axios.get(`/api/teams/${props.teamId}/invite/current`, {
       params: { role: role.value },
@@ -164,9 +164,9 @@ async function fetchCurrentLink({ copy = true, retryIfExpired = true } = {}) {
   } catch (e) {
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string"
+      typeof detail ==="string"
         ? detail
-        : e?.response?.data?.message || e?.message || "生成邀请链接失败";
+        : e?.response?.data?.message || e?.message ||"生成邀请链接失败";
   } finally {
     loading.value = false;
   }
@@ -175,10 +175,10 @@ async function fetchCurrentLink({ copy = true, retryIfExpired = true } = {}) {
 async function forceNewLink() {
   if (!props.teamId || loading.value) return;
   copyDone.value = false;
-  copyHint.value = "";
-  error.value = "";
+  copyHint.value ="";
+  error.value ="";
   loading.value = true;
-  inviteLink.value = "";
+  inviteLink.value ="";
   try {
     const res = await axios.post(`/api/teams/${props.teamId}/invite`, {
       role: role.value,
@@ -187,9 +187,9 @@ async function forceNewLink() {
   } catch (e) {
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string"
+      typeof detail ==="string"
         ? detail
-        : e?.response?.data?.message || e?.message || "生成邀请链接失败";
+        : e?.response?.data?.message || e?.message ||"生成邀请链接失败";
   } finally {
     loading.value = false;
   }
@@ -199,6 +199,6 @@ async function copyInviteLink() {
   if (!inviteLink.value) return;
   const ok = await copyToClipboard(inviteLink.value);
   copyDone.value = ok;
-  copyHint.value = ok ? "链接已复制到剪贴板。" : "自动复制失败，请手动选中链接后复制。";
+  copyHint.value = ok ?"链接已复制到剪贴板。" :"自动复制失败，请手动选中链接后复制。";
 }
 </script>

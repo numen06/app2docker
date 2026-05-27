@@ -1,12 +1,12 @@
 <template>
   <div class="pipeline-create-step-git pipeline-config-pane">
-    <div class="card">
-      <div class="card-header bg-light">
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
         <h6 class="mb-0">
-          <i class="fas fa-code-branch text-blue-600"></i> Git 仓库
+          <AppIcon  name="code-branch" class="text-blue-600" /> Git 仓库
         </h6>
       </div>
-      <div class="card-body">
+      <div class="p-4">
         <div class="pipeline-field-grid pipeline-field-grid--2">
           <div class="pipeline-field">
             <label class="block text-sm font-medium text-slate-700">Git 数据源</label>
@@ -24,8 +24,8 @@
                 {{ source.name }} ({{ formatGitUrl(source.git_url) }})
               </option>
             </select>
-            <div class="form-text small text-slate-500 mt-1">
-              <i class="fas fa-info-circle"></i>
+            <div class="text-xs text-slate-500 text-sm mt-1">
+              <AppIcon  name="info-circle" />
               可从已保存的数据源选择，或手动输入仓库地址
             </div>
           </div>
@@ -42,19 +42,18 @@
           </div>
           <div class="pipeline-field pipeline-field--full">
             <label class="block text-sm font-medium text-slate-700">分支名称</label>
-            <div class="input-group">
+            <div class="flex w-full">
               <select
                 v-if="repoVerified || formData.source_id || formData.git_url"
                 v-model="formData.branch"
                 class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                 :disabled="
                   refreshingBranches ||
-                  (!repoVerified && !formData.source_id && !formData.git_url)
-                "
+                  (!repoVerified && !formData.source_id && !formData.git_url)"
                 @change="onBranchChanged"
               >
                 <option value="">
-                  使用默认分支 ({{ branchesAndTags.default_branch || "main" }})
+                  使用默认分支 ({{ branchesAndTags.default_branch ||"main" }})
                 </option>
                 <optgroup v-if="branchesAndTags.branches.length > 0" label="分支">
                   <option
@@ -87,11 +86,11 @@
                 :disabled="refreshingBranches"
                 title="刷新分支列表"
               >
-                <i
+                <AppIcon
                   v-if="refreshingBranches"
-                  class="fas fa-spinner fa-spin"
-                ></i>
-                <i v-else class="fas fa-sync-alt"></i>
+                  
+                 name="spinner" spin />
+                <AppIcon v-else  name="sync-alt" />
               </Button>
             </div>
             <small class="text-slate-500">

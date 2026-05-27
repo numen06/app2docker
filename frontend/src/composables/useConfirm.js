@@ -10,9 +10,9 @@ let idSeq = 0;
  */
 export function showConfirm({
   message,
-  title = "确认",
-  confirmText = "确定",
-  cancelText = "取消",
+  title ="确认",
+  confirmText ="确定",
+  cancelText ="取消",
   danger = false,
 }) {
   return new Promise((resolve) => {

@@ -7,7 +7,7 @@
         :class="exportMode === 'single' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
         @click="exportMode = 'single'"
       >
-        <i class="fas fa-cube mr-1"></i> 单个镜像
+        <AppIcon  name="cube" class="mr-1" /> 单个镜像
       </button>
       <button
         type="button"
@@ -15,17 +15,17 @@
         :class="exportMode === 'compose' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
         @click="exportMode = 'compose'"
       >
-        <i class="fas fa-diagram-project mr-1"></i> Compose 批量导出
+        <AppIcon  name="diagram-project" class="mr-1" /> Compose 批量导出
       </button>
     </div>
 
     <div v-if="exportMode === 'single'">
       <form class="space-y-4" @submit.prevent="handleExport">
         <div class="space-y-2">
-          <Label><i class="fas fa-server mr-1"></i> 镜像仓库</Label>
+          <Label><AppIcon  name="server" class="mr-1" /> 镜像仓库</Label>
           <NativeSelect v-model="form.registry" @change="updateImageName">
             <option v-for="reg in registries" :key="reg.name" :value="reg.name">
-              {{ reg.name }} - {{ reg.registry }}{{ reg.active ? " (激活)" : "" }}
+              {{ reg.name }} - {{ reg.registry }}{{ reg.active ?" (激活)" :"" }}
             </option>
           </NativeSelect>
           <p class="text-xs text-slate-500">选择仓库后会自动拼接镜像名，默认使用激活的仓库</p>
@@ -60,15 +60,15 @@
         <label class="flex items-start gap-2 text-sm text-slate-700">
           <input v-model="form.useLocal" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300" />
           <span>
-            <i class="fas fa-server mr-1"></i> 使用本地仓库（不执行 pull 操作）
+            <AppIcon  name="server" class="mr-1" /> 使用本地仓库（不执行 pull 操作）
             <span class="mt-1 block text-xs text-slate-500">勾选后，将直接从本地 Docker 导出镜像，不会从远程仓库拉取</span>
           </span>
         </label>
 
         <Button type="submit" class="w-full" :disabled="exporting">
-          <i class="fas fa-download"></i>
-          {{ exporting ? "导出中..." : "导出镜像" }}
-          <i v-if="exporting" class="fas fa-spinner fa-spin"></i>
+          <AppIcon  name="download" />
+          {{ exporting ?"导出中..." :"导出镜像" }}
+          <AppIcon v-if="exporting"  name="spinner" spin />
         </Button>
       </form>
 
@@ -77,12 +77,12 @@
         class="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"
       >
         <div class="flex items-start gap-2">
-          <i class="fas fa-spinner fa-spin mt-0.5"></i>
+          <AppIcon  name="spinner" class="mt-0.5" spin />
           <div>
             <strong>正在创建导出任务...</strong>
             <p class="mt-1 text-xs">镜像: <code>{{ form.image }}:{{ form.tag }}</code></p>
             <p class="mt-1 text-xs text-slate-600">
-              <i class="fas fa-info-circle"></i> 任务创建后，请到「任务管理」标签页查看进度和下载文件
+              <AppIcon  name="info-circle" /> 任务创建后，请到「任务管理」标签页查看进度和下载文件
             </p>
           </div>
         </div>
@@ -108,10 +108,10 @@ import { registerTask } from "@/composables/useTaskCompletionWatcher";
 const exportMode = ref("single");
 
 const form = ref({
-  registry: "",
-  image: "",
-  tag: "latest",
-  compress: "none",
+  registry:"",
+  image:"",
+  tag:"latest",
+  compress:"none",
   useLocal: false,
 });
 
@@ -123,7 +123,7 @@ const imagePlaceholder = computed(() => {
   if (selectedRegistry?.registry_prefix?.trim()) {
     return `${selectedRegistry.registry_prefix.trim()}/myapp/demo`;
   }
-  return "myapp/demo";
+  return"myapp/demo";
 });
 
 async function loadRegistries() {
@@ -156,7 +156,7 @@ function updateImageName() {
             imageName = imageName.substring(regPrefix.length + 1);
           }
         });
-        form.value.image = imageName ? `${prefix}/${imageName}`.replace(/\/+/g, "/") : `${prefix}/myapp/demo`;
+        form.value.image = imageName ? `${prefix}/${imageName}`.replace(/\/+/g,"/") : `${prefix}/myapp/demo`;
       }
     } else if (form.value.image) {
       registries.value.forEach((reg) => {
@@ -178,7 +178,7 @@ function handleImageNamePaste() {
 }
 
 function parseImageNameAndTag(inputValue) {
-  if (!inputValue || typeof inputValue !== "string") return;
+  if (!inputValue || typeof inputValue !=="string") return;
   const lastColonIndex = inputValue.lastIndexOf(":");
   if (lastColonIndex > 0 && lastColonIndex < inputValue.length - 1) {
     const afterColon = inputValue.substring(lastColonIndex + 1);
@@ -210,14 +210,14 @@ async function handleExport() {
     const res = await axios.post("/api/export-image", payload);
     if (res.data?.task_id) {
       registerTask(res.data.task_id, {
-        task_type: "export",
+        task_type:"export",
         image: payload.image,
         tag: payload.tag,
       });
     }
     toastSuccess(`导出任务已创建！\n任务ID: ${res.data.task_id}\n\n请到「任务管理」标签页查看进度和下载文件。`);
   } catch (error) {
-    toastApiError(error, "创建导出任务失败");
+    toastApiError(error,"创建导出任务失败");
   } finally {
     exporting.value = false;
   }

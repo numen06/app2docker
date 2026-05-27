@@ -24,28 +24,28 @@
           </option>
         </NativeSelect>
         <Button variant="outline" size="sm" :disabled="loading" @click="loadLogs">
-          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+          <AppIcon name="sync-alt" />
           刷新
         </Button>
         <DropdownMenu>
           <template #trigger>
             <Button variant="outline" size="sm" class="text-red-600 hover:text-red-700">
-              <i class="fas fa-trash-alt"></i>
+              <AppIcon  name="trash-alt" />
               清理日志
-              <i class="fas fa-chevron-down text-xs opacity-70"></i>
+              <AppIcon  name="chevron-down" class="text-xs opacity-70" />
             </Button>
           </template>
           <DropdownMenuItem @select="clearLogs(7)">
-            <i class="fas fa-calendar-week mr-2 w-4"></i> 保留最近 7 天
+            <AppIcon  name="calendar-week" class="mr-2 w-4" /> 保留最近 7 天
           </DropdownMenuItem>
           <DropdownMenuItem @select="clearLogs(30)">
-            <i class="fas fa-calendar-alt mr-2 w-4"></i> 保留最近 30 天
+            <AppIcon  name="calendar-alt" class="mr-2 w-4" /> 保留最近 30 天
           </DropdownMenuItem>
           <DropdownMenuItem @select="clearLogs(90)">
-            <i class="fas fa-calendar mr-2 w-4"></i> 保留最近 90 天
+            <AppIcon  name="calendar" class="mr-2 w-4" /> 保留最近 90 天
           </DropdownMenuItem>
           <DropdownMenuItem class="text-red-600 focus:text-red-700" @select="clearLogs(null)">
-            <i class="fas fa-exclamation-triangle mr-2 w-4"></i> 清空所有日志
+            <AppIcon  name="exclamation-triangle" class="mr-2 w-4" /> 清空所有日志
           </DropdownMenuItem>
         </DropdownMenu>
       </div>
@@ -59,7 +59,7 @@
       v-if="loading"
       class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"
     >
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
@@ -148,8 +148,8 @@ import AlertBanner from "@/components/ui/AlertBanner.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 import NativeSelect from "@/components/ui/select/NativeSelect.vue";
-import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
-import DropdownMenuItem from "@/components/ui/dropdown-menu/DropdownMenuItem.vue";
+import DropdownMenu from "@/components/ui/dropdown/DropdownMenu.vue";
+import DropdownMenuItem from "@/components/ui/dropdown/DropdownMenuItem.vue";
 import { Badge } from "@/components/ui/badge";
 import Table from "@/components/ui/table/Table.vue";
 import TableHeader from "@/components/ui/table/TableHeader.vue";
@@ -177,7 +177,7 @@ const hasFilters = computed(
 );
 
 function logKey(log, index) {
-  return `${log.timestamp || ""}-${log.username || ""}-${log.operation || ""}-${index}`;
+  return `${log.timestamp ||""}-${log.username ||""}-${log.operation ||""}-${index}`;
 }
 
 function onPageChange(page) {
@@ -188,16 +188,16 @@ function onPageChange(page) {
 }
 
 function formatTime(isoString) {
-  if (!isoString) return "—";
+  if (!isoString) return"—";
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) return isoString;
   return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    second:"2-digit",
     hour12: false,
   });
 }
@@ -232,8 +232,7 @@ async function loadLogs() {
     error.value =
       err.response?.data?.detail ||
       err.response?.data?.error ||
-      err.message ||
-      "加载操作日志失败";
+      err.message ||"加载操作日志失败";
     logs.value = [];
     totalLogs.value = 0;
     totalPages.value = 0;
@@ -243,9 +242,9 @@ async function loadLogs() {
 }
 
 async function clearLogs(days) {
-  let confirmMessage = "";
+  let confirmMessage ="";
   if (days === null) {
-    confirmMessage = "确定要清空所有操作日志吗？此操作不可恢复！";
+    confirmMessage ="确定要清空所有操作日志吗？此操作不可恢复！";
   } else {
     confirmMessage = `确定要清理操作日志吗？将保留最近 ${days} 天的日志，其他日志将被删除。`;
   }
@@ -254,11 +253,11 @@ async function clearLogs(days) {
   try {
     const params = days ? { days } : {};
     const res = await axios.delete("/api/operation-logs", { params });
-    toastSuccess(res.data.message || "清理成功");
+    toastSuccess(res.data.message ||"清理成功");
     currentPage.value = 1;
     await loadLogs();
   } catch (err) {
-    toastApiError(err, "清理失败");
+    toastApiError(err,"清理失败");
   }
 }
 

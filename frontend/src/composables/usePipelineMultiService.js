@@ -4,33 +4,33 @@ import { showConfirm } from "@/composables/useConfirm";
 import { ref, watch } from "vue";
 
 function anyServicePushEnabled(servicePushConfig) {
-  if (!servicePushConfig || typeof servicePushConfig !== "object") return false;
+  if (!servicePushConfig || typeof servicePushConfig !=="object") return false;
   return Object.values(servicePushConfig).some(
-    (cfg) => cfg && typeof cfg === "object" && cfg.push === true
+    (cfg) => cfg && typeof cfg ==="object" && cfg.push === true
   );
 }
 
 function initFormFromPipeline(pipeline) {
   const form = {
-    push_mode: pipeline.push_mode || "multi",
+    push_mode: pipeline.push_mode ||"multi",
     selected_services: pipeline.selected_services
       ? [...pipeline.selected_services]
       : [],
     service_push_config: pipeline.service_push_config
       ? JSON.parse(JSON.stringify(pipeline.service_push_config))
       : {},
-    image_name: pipeline.image_name || "",
-    tag: pipeline.tag || "latest",
+    image_name: pipeline.image_name ||"",
+    tag: pipeline.tag ||"latest",
   };
-  const isSingle = form.push_mode === "single";
+  const isSingle = form.push_mode ==="single";
   if (isSingle && form.selected_services.length === 0) {
-    const name = "service1";
+    const name ="service1";
     form.selected_services.push(name);
     form.service_push_config[name] = {
       enabled: false,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
   form.selected_services.forEach((serviceName) => {
@@ -38,16 +38,16 @@ function initFormFromPipeline(pipeline) {
       form.service_push_config[serviceName] = {
         enabled: isSingle ? false : true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
-    } else if (typeof form.service_push_config[serviceName] === "boolean") {
+    } else if (typeof form.service_push_config[serviceName] ==="boolean") {
       const oldValue = form.service_push_config[serviceName];
       form.service_push_config[serviceName] = {
         enabled: isSingle ? false : true,
         push: oldValue,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     } else if (form.service_push_config[serviceName].enabled === undefined) {
       form.service_push_config[serviceName].enabled = isSingle ? false : true;
@@ -59,17 +59,17 @@ function initFormFromPipeline(pipeline) {
 }
 
 function ensureMultiServiceFormState(fd) {
-  const isSingle = fd.push_mode === "single";
+  const isSingle = fd.push_mode ==="single";
   if (isSingle && (!fd.selected_services || fd.selected_services.length === 0)) {
-    const name = "service1";
+    const name ="service1";
     if (!fd.selected_services) fd.selected_services = [];
     fd.selected_services.push(name);
     if (!fd.service_push_config) fd.service_push_config = {};
     fd.service_push_config[name] = {
       enabled: false,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
   (fd.selected_services || []).forEach((serviceName) => {
@@ -78,16 +78,16 @@ function ensureMultiServiceFormState(fd) {
       fd.service_push_config[serviceName] = {
         enabled: isSingle ? false : true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
-    } else if (typeof fd.service_push_config[serviceName] === "boolean") {
+    } else if (typeof fd.service_push_config[serviceName] ==="boolean") {
       const oldValue = fd.service_push_config[serviceName];
       fd.service_push_config[serviceName] = {
         enabled: isSingle ? false : true,
         push: oldValue,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     } else if (fd.service_push_config[serviceName].enabled === undefined) {
       fd.service_push_config[serviceName].enabled = isSingle ? false : true;
@@ -107,11 +107,11 @@ export function usePipelineMultiService({
   const multiServiceFormData =
     externalFormData ||
     ref({
-      push_mode: "multi",
+      push_mode:"multi",
       selected_services: [],
       service_push_config: {},
-      image_name: "",
-      tag: "latest",
+      image_name:"",
+      tag:"latest",
     });
   const savingMultiServiceConfig = ref(false);
   const parsingDockerfileForMultiService = ref(false);
@@ -126,16 +126,16 @@ export function usePipelineMultiService({
   }
 
   function resolvePipeline() {
-    if (typeof getPipeline === "function") return getPipeline();
+    if (typeof getPipeline ==="function") return getPipeline();
     return pipelineRef.value;
   }
 
   watch(
     () => multiServiceFormData.value.push_mode,
     (newMode, oldMode) => {
-      if (newMode === "single") {
+      if (newMode ==="single") {
         if (multiServiceFormData.value.selected_services.length === 0) {
-          const defaultServiceName = "service1";
+          const defaultServiceName ="service1";
           multiServiceFormData.value.selected_services.push(defaultServiceName);
           if (
             !multiServiceFormData.value.service_push_config[defaultServiceName]
@@ -144,8 +144,8 @@ export function usePipelineMultiService({
               {
                 enabled: false,
                 push: false,
-                imageName: "",
-                tag: "",
+                imageName:"",
+                tag:"",
               };
           }
         } else {
@@ -154,8 +154,8 @@ export function usePipelineMultiService({
               multiServiceFormData.value.service_push_config[serviceName] = {
                 enabled: false,
                 push: false,
-                imageName: "",
-                tag: "",
+                imageName:"",
+                tag:"",
               };
             } else {
               multiServiceFormData.value.service_push_config[
@@ -164,14 +164,14 @@ export function usePipelineMultiService({
             }
           });
         }
-      } else if (newMode === "multi" && oldMode === "single") {
+      } else if (newMode ==="multi" && oldMode ==="single") {
         multiServiceFormData.value.selected_services.forEach((serviceName) => {
           if (!multiServiceFormData.value.service_push_config[serviceName]) {
             multiServiceFormData.value.service_push_config[serviceName] = {
               enabled: false,
               push: false,
-              imageName: "",
-              tag: "",
+              imageName:"",
+              tag:"",
             };
           } else if (
             multiServiceFormData.value.service_push_config[serviceName]
@@ -188,11 +188,11 @@ export function usePipelineMultiService({
 
   function getMultiServiceDefaultImageName(serviceName) {
     if (!serviceName) {
-      return multiServiceFormData.value.image_name || "myapp/demo";
+      return multiServiceFormData.value.image_name ||"myapp/demo";
     }
-    let prefix = multiServiceFormData.value.image_name || "myapp/demo";
-    prefix = prefix.replace(/\/+$/, "");
-    const normalizedPrefix = prefix.replace(/\/+$/, "");
+    let prefix = multiServiceFormData.value.image_name ||"myapp/demo";
+    prefix = prefix.replace(/\/+$/,"");
+    const normalizedPrefix = prefix.replace(/\/+$/,"");
     if (
       normalizedPrefix.endsWith(`/${serviceName}`) ||
       normalizedPrefix === serviceName
@@ -211,8 +211,8 @@ export function usePipelineMultiService({
     multiServiceFormData.value.service_push_config[newServiceName] = {
       enabled: true,
       push: false,
-      imageName: "",
-      tag: "",
+      imageName:"",
+      tag:"",
     };
   }
 
@@ -236,8 +236,8 @@ export function usePipelineMultiService({
       multiServiceFormData.value.service_push_config[newName] = {
         enabled: true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     }
   }
@@ -247,8 +247,8 @@ export function usePipelineMultiService({
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     }
     multiServiceFormData.value.service_push_config[serviceName].imageName =
@@ -260,8 +260,8 @@ export function usePipelineMultiService({
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     }
     multiServiceFormData.value.service_push_config[serviceName].tag = tag;
@@ -272,15 +272,15 @@ export function usePipelineMultiService({
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     }
     multiServiceFormData.value.service_push_config[serviceName].push = push;
   }
 
   function getSingleServicePush() {
-    if (multiServiceFormData.value.push_mode !== "single") return false;
+    if (multiServiceFormData.value.push_mode !=="single") return false;
     const firstService =
       multiServiceFormData.value.selected_services?.[0] || null;
     if (!firstService) return false;
@@ -289,7 +289,7 @@ export function usePipelineMultiService({
   }
 
   function updateSingleServicePush(push) {
-    if (multiServiceFormData.value.push_mode !== "single") return;
+    if (multiServiceFormData.value.push_mode !=="single") return;
     const firstService =
       multiServiceFormData.value.selected_services?.[0] || null;
     if (!firstService) return;
@@ -301,8 +301,8 @@ export function usePipelineMultiService({
       multiServiceFormData.value.service_push_config[serviceName] = {
         enabled: true,
         push: false,
-        imageName: "",
-        tag: "",
+        imageName:"",
+        tag:"",
       };
     }
     multiServiceFormData.value.service_push_config[serviceName].enabled =
@@ -340,7 +340,7 @@ export function usePipelineMultiService({
       const res = await axios.post("/api/parse-dockerfile-services", {
         git_url: pipeline.git_url,
         branch: pipeline.branch,
-        dockerfile_name: pipeline.dockerfile_name || "Dockerfile",
+        dockerfile_name: pipeline.dockerfile_name ||"Dockerfile",
         source_id: pipeline.source_id || null,
       });
       const servicesList = res.data.services || [];
@@ -360,8 +360,8 @@ export function usePipelineMultiService({
         multiServiceFormData.value.service_push_config[serviceName] = {
           enabled: true,
           push: false,
-          imageName: "",
-          tag: multiServiceFormData.value.tag || "latest",
+          imageName:"",
+          tag: multiServiceFormData.value.tag ||"latest",
         };
       });
       if (!multiServiceFormData.value.image_name?.trim()) {
@@ -372,7 +372,7 @@ export function usePipelineMultiService({
       }
       toastSuccess(`成功识别 ${servicesList.length} 个服务`);
     } catch (error) {
-      toastError(`识别失败: ${error.response?.data?.detail || "解析 Dockerfile 失败"}`);
+      toastError(`识别失败: ${error.response?.data?.detail ||"解析 Dockerfile 失败"}`);
     } finally {
       parsingDockerfileForMultiService.value = false;
     }
@@ -388,7 +388,7 @@ export function usePipelineMultiService({
     );
     if (
       serviceNames.length === 0 &&
-      multiServiceFormData.value.push_mode === "multi"
+      multiServiceFormData.value.push_mode ==="multi"
     ) {
       toastInfo("多服务模式下至少需要添加一个服务");
       return;
@@ -401,7 +401,7 @@ export function usePipelineMultiService({
     savingMultiServiceConfig.value = true;
     try {
       let payload;
-      if (multiServiceFormData.value.push_mode === "single") {
+      if (multiServiceFormData.value.push_mode ==="single") {
         const names = [...serviceNames];
         if (names.length === 0) names.push("service1");
         const normalizedServicePushConfig = {};
@@ -411,23 +411,21 @@ export function usePipelineMultiService({
           normalizedServicePushConfig[serviceName] = {
             enabled: false,
             push: config?.push ?? false,
-            imageName: config?.imageName || "",
-            tag: config?.tag || "",
+            imageName: config?.imageName ||"",
+            tag: config?.tag ||"",
           };
         });
         const firstCfg = normalizedServicePushConfig[names[0]];
         payload = {
-          push_mode: "single",
+          push_mode:"single",
           selected_services: names,
           service_push_config: normalizedServicePushConfig,
           image_name:
             multiServiceFormData.value.image_name ||
-            pipeline.image_name ||
-            "",
+            pipeline.image_name ||"",
           tag:
             multiServiceFormData.value.tag ||
-            pipeline.tag ||
-            "latest",
+            pipeline.tag ||"latest",
           push: !!(firstCfg && firstCfg.push),
         };
       } else {
@@ -451,22 +449,19 @@ export function usePipelineMultiService({
               customImageName || getMultiServiceDefaultImageName(serviceName),
             tag:
               config?.tag?.trim() ||
-              multiServiceFormData.value.tag ||
-              "latest",
+              multiServiceFormData.value.tag ||"latest",
           };
         });
         payload = {
-          push_mode: "multi",
+          push_mode:"multi",
           selected_services: enabledServices,
           service_push_config: normalizedServicePushConfig,
           image_name:
             multiServiceFormData.value.image_name ||
-            pipeline.image_name ||
-            "",
+            pipeline.image_name ||"",
           tag:
             multiServiceFormData.value.tag ||
-            pipeline.tag ||
-            "latest",
+            pipeline.tag ||"latest",
           push: anyServicePushEnabled(normalizedServicePushConfig),
         };
       }
@@ -474,7 +469,7 @@ export function usePipelineMultiService({
       toastSuccess("多服务配置已保存");
       onSaved?.();
     } catch (error) {
-      toastApiError(error, "保存多服务配置失败");
+      toastApiError(error,"保存多服务配置失败");
     } finally {
       savingMultiServiceConfig.value = false;
     }

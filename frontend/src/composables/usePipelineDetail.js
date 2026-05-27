@@ -20,7 +20,7 @@ export function usePipelineDetail() {
     } catch (e) {
       console.error("加载流水线失败:", e);
       error.value =
-        e.response?.data?.detail || e.message || "加载流水线失败";
+        e.response?.data?.detail || e.message ||"加载流水线失败";
       pipeline.value = null;
       return false;
     } finally {

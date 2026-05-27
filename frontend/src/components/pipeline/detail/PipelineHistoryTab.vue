@@ -30,13 +30,13 @@
       </div>
       <div class="flex items-end">
         <Button variant="outline" size="sm" @click="loadHistory()">
-          <i class="fas fa-sync-alt"></i> 刷新
+          <AppIcon  name="sync-alt" /> 刷新
         </Button>
       </div>
     </div>
 
     <div v-if="historyLoading" class="py-8 text-center">
-      <i class="fas fa-spinner fa-spin"></i> 加载中...
+      <AppIcon  name="spinner" spin /> 加载中...
     </div>
     <div v-else-if="historyTasks.length === 0" class="py-8 text-center text-slate-500">
       <p class="mb-0">暂无历史构建记录</p>
@@ -56,7 +56,7 @@
         <tbody>
           <tr v-for="task in historyTasks" :key="task.task_id">
             <td><code>{{ task.task_id?.substring(0, 8) }}</code></td>
-            <td>{{ task.trigger_source || "-" }}</td>
+            <td>{{ task.trigger_source ||"-" }}</td>
             <td>{{ task.status }}</td>
             <td class="font-mono text-xs">{{ task.image }}:{{ task.tag }}</td>
             <td class="text-xs text-slate-500">{{ formatDateTime(task.triggered_at) }}</td>
@@ -117,7 +117,7 @@ import { formatDateTime } from "@/utils/pipelineDisplay";
 const detail = inject(PIPELINE_DETAIL_KEY);
 const historyTasks = ref([]);
 const historyLoading = ref(false);
-const historyFilter = ref({ trigger_source: "", status: "" });
+const historyFilter = ref({ trigger_source:"", status:"" });
 const historyPagination = ref({ currentPage: 1, pageSize: 10, total: 0 });
 
 const totalPages = computed(() =>
@@ -153,7 +153,7 @@ async function loadHistory(page = null) {
     historyTasks.value = res.data?.tasks || (Array.isArray(res.data) ? res.data : []);
     historyPagination.value.total = res.data?.total ?? historyTasks.value.length;
   } catch (e) {
-    toastApiError(e, "加载历史失败");
+    toastApiError(e,"加载历史失败");
     historyTasks.value = [];
   } finally {
     historyLoading.value = false;

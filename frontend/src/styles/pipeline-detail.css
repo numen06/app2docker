@@ -85,12 +85,14 @@
   border-bottom: 1px solid rgb(226 232 240);
 }
 
-.pipeline-config-page .pipeline-config-tabs .nav-item {
+.pipeline-config-page .pipeline-config-tabs__item {
   flex: 0 0 auto;
   margin: 0;
 }
 
-.pipeline-config-page .pipeline-config-tabs .nav-link {
+.pipeline-config-page .pipeline-config-tab {
+  display: inline-flex;
+  align-items: center;
   white-space: nowrap;
   border: none;
   border-bottom: 2px solid transparent;
@@ -103,12 +105,12 @@
   background: transparent;
 }
 
-.pipeline-config-page .pipeline-config-tabs .nav-link:hover {
+.pipeline-config-page .pipeline-config-tab:hover {
   background-color: rgb(241 245 249);
   color: rgb(15 23 42);
 }
 
-.pipeline-config-page .pipeline-config-tabs .nav-link.active {
+.pipeline-config-page .pipeline-config-tab.is-active {
   border-bottom-color: rgb(37 99 235);
   color: rgb(37 99 235);
   font-weight: 600;
@@ -155,30 +157,30 @@
   margin-bottom: 0.375rem;
 }
 
-.pipeline-config-page .pipeline-form-editor .card {
+.pipeline-config-page .pipeline-form-editor .rounded-lg {
   width: 100%;
   border-color: rgb(226 232 240);
   border-radius: 0.5rem;
   overflow: hidden;
 }
 
-.pipeline-config-page .pipeline-form-editor .card-header {
+.pipeline-config-page .pipeline-form-editor .border-b {
   padding: 0.75rem 1rem;
   background: rgb(248 250 252);
   border-bottom: 1px solid rgb(226 232 240);
 }
 
-.pipeline-config-page .pipeline-form-editor .card-body {
+.pipeline-config-page .pipeline-form-editor .p-4 {
   padding: 1rem;
 }
 
 @media (min-width: 768px) {
-  .pipeline-config-page .pipeline-form-editor .card-body {
+  .pipeline-config-page .pipeline-form-editor .p-4 {
     padding: 1.25rem;
   }
 }
 
-.pipeline-config-page .pipeline-form-editor .input-group {
+.pipeline-config-page .pipeline-form-editor .flex.w-full {
   display: flex;
   flex-wrap: nowrap;
   align-items: stretch;
@@ -186,15 +188,13 @@
   width: 100%;
 }
 
-.pipeline-config-page .pipeline-form-editor .input-group > select,
-.pipeline-config-page .pipeline-form-editor .input-group > input,
-.pipeline-config-page .pipeline-form-editor .input-group > .form-control {
+.pipeline-config-page .pipeline-form-editor .flex.w-full > select,
+.pipeline-config-page .pipeline-form-editor .flex.w-full > input {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.pipeline-config-page .pipeline-form-editor .input-group > button,
-.pipeline-config-page .pipeline-form-editor .input-group > .btn {
+.pipeline-config-page .pipeline-form-editor .flex.w-full > button {
   flex-shrink: 0;
 }
 
@@ -263,7 +263,7 @@
   margin-top: 0.5rem;
 }
 
-.pipeline-config-page .pipeline-option-group .btn-check {
+.pipeline-config-page .pipeline-option-group .choice-input {
   position: absolute;
   clip: rect(0, 0, 0, 0);
   pointer-events: none;
@@ -302,13 +302,13 @@
   background: rgb(248 250 252);
 }
 
-.pipeline-config-page .pipeline-option-group .btn-check:checked + label {
+.pipeline-config-page .pipeline-option-group .choice-input:checked + label {
   border-color: rgb(37 99 235);
   background: rgb(239 246 255);
   color: rgb(29 78 216);
 }
 
-.pipeline-config-page .pipeline-option-group .btn-check:checked + label .fas {
+.pipeline-config-page .pipeline-option-group .choice-input:checked + label svg {
   color: rgb(37 99 235);
 }
 
@@ -363,7 +363,7 @@
 }
 
 @media (max-width: 640px) {
-  .pipeline-config-page .pipeline-config-tabs .nav-link {
+  .pipeline-config-page .pipeline-config-tab {
     font-size: 0.8125rem;
     padding: 0.4375rem 0.625rem;
   }
@@ -412,8 +412,7 @@
   gap: 0.375rem;
 }
 
-.pipeline-webhook-block__title .fas,
-.pipeline-webhook-block__title .fab {
+.pipeline-webhook-block__title svg {
   color: rgb(37 99 235);
 }
 
@@ -479,7 +478,7 @@
   }
 }
 
-.pipeline-webhook-strategy .btn-check {
+.pipeline-webhook-strategy .choice-input {
   position: absolute;
   clip: rect(0, 0, 0, 0);
   pointer-events: none;
@@ -516,19 +515,19 @@
   line-height: 1.3;
 }
 
-.pipeline-webhook-strategy .btn-check:checked + .pipeline-webhook-strategy__option {
+.pipeline-webhook-strategy .choice-input:checked + .pipeline-webhook-strategy__option {
   border-color: rgb(37 99 235);
   background: rgb(239 246 255);
   color: rgb(29 78 216);
 }
 
-.pipeline-webhook-strategy__option .fas {
+.pipeline-webhook-strategy__option svg {
   font-size: 1rem;
   margin-bottom: 0.125rem;
   color: rgb(100 116 139);
 }
 
-.pipeline-webhook-strategy .btn-check:checked + .pipeline-webhook-strategy__option .fas {
+.pipeline-webhook-strategy .choice-input:checked + .pipeline-webhook-strategy__option svg {
   color: rgb(37 99 235);
 }
 
@@ -587,15 +586,15 @@
   color: rgb(15 23 42);
 }
 
-.pipeline-webhook-item__title > .fas {
+.pipeline-webhook-item__title > svg {
   color: rgb(37 99 235);
 }
 
-.pipeline-webhook-field__label .fas {
+.pipeline-webhook-field__label svg {
   color: rgb(37 99 235);
 }
 
-.pipeline-webhook-field__hint .fas {
+.pipeline-webhook-field__hint svg {
   margin-right: 0.25rem;
   color: rgb(59 130 246);
 }
@@ -610,7 +609,7 @@
   background: rgb(248 250 252);
 }
 
-.pipeline-webhook-empty .fas {
+.pipeline-webhook-empty svg {
   margin-right: 0.25rem;
   color: rgb(59 130 246);
 }

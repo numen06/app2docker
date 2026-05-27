@@ -13,10 +13,11 @@
         role="status"
       >
         <div class="flex items-start gap-2">
-          <i
-            class="fas mt-0.5 shrink-0"
-            :class="variantIcon[toast.variant] || variantIcon.info"
-          ></i>
+          <AppIcon
+            :name="variantIcon[toast.variant] || variantIcon.info"
+            class="mt-0.5 h-4 w-4 shrink-0"
+            :class="variantIconClass[toast.variant] || variantIconClass.info"
+          />
           <div
             class="min-w-0 flex-1 whitespace-pre-wrap text-sm text-slate-800"
           >
@@ -28,7 +29,7 @@
             aria-label="关闭"
             @click="dismissToast(toast.id)"
           >
-            <i class="fas fa-times"></i>
+            <AppIcon name="times" class="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -42,15 +43,21 @@ import { useToast } from "@/composables/useToast";
 const { toasts, dismissToast } = useToast();
 
 const variantBorder = {
-  success: "border-green-200",
-  error: "border-red-200",
-  info: "border-sky-200",
+  success:"border-green-200",
+  error:"border-red-200",
+  info:"border-sky-200",
 };
 
 const variantIcon = {
-  success: "fa-check-circle text-green-600",
-  error: "fa-times-circle text-red-600",
-  info: "fa-circle-info text-sky-600",
+  success:"check-circle",
+  error:"times-circle",
+  info:"circle-info",
+};
+
+const variantIconClass = {
+  success:"text-green-600",
+  error:"text-red-600",
+  info:"text-sky-600",
 };
 </script>
 

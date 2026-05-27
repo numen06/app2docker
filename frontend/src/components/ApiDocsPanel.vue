@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-      <i class="fas fa-circle-info mr-1"></i>
+      <AppIcon  name="circle-info" class="mr-1" />
       接口认证支持 <code class="rounded bg-white/80 px-1">Authorization: Bearer &lt;token&gt;</code> 或
       <code class="rounded bg-white/80 px-1">X-API-Key: &lt;appkey&gt;</code>
     </div>
@@ -12,11 +12,9 @@
         :key="tab.id"
         type="button"
         class="border-b-2 px-4 py-2 text-sm font-medium transition"
-        :class="
-          activeTab === tab.id
+        :class="activeTab === tab.id
             ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-slate-500 hover:text-slate-800'
-        "
+            : 'border-transparent text-slate-500 hover:text-slate-800'"
         @click="activeTab = tab.id"
       >
         {{ tab.label }}
@@ -59,7 +57,7 @@ import ApiEndpoint from "@/components/ui/ApiEndpoint.vue";
 
 const activeTab = ref("tasks");
 const tabs = [
-  { id: "tasks", label: "任务相关" },
-  { id: "pipeline", label: "流水线相关" },
+  { id:"tasks", label:"任务相关" },
+  { id:"pipeline", label:"流水线相关" },
 ];
 </script>

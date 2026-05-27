@@ -6,7 +6,7 @@
     >
       <div class="flex shrink-0 items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-3 text-white">
         <h3 class="flex items-center gap-2 text-lg font-semibold">
-          <i class="fas fa-terminal"></i> 构建日志
+          <AppIcon  name="terminal" /> 构建日志
         </h3>
         <button
           type="button"
@@ -14,7 +14,7 @@
           aria-label="关闭"
           @click="close"
         >
-          <i class="fas fa-times"></i>
+          <AppIcon  name="times" />
         </button>
       </div>
       <div class="flex flex-col overflow-hidden" style="height: 600px">
@@ -37,7 +37,7 @@
               @click="autoScroll = !autoScroll"
               title="自动滚动"
             >
-              <i class="fas fa-arrow-down"></i>
+              <AppIcon  name="arrow-down" />
             </Button>
             <Button
               type="button"
@@ -48,7 +48,7 @@
               @click="showLineNumber = !showLineNumber"
               title="行号"
             >
-              <i class="fas fa-list-ol"></i>
+              <AppIcon  name="list-ol" />
             </Button>
             <Button
               type="button"
@@ -59,24 +59,24 @@
               @click="showTimestamp = !showTimestamp"
               title="时间戳"
             >
-              <i class="fas fa-clock"></i>
+              <AppIcon  name="clock" />
             </Button>
           </div>
           <div class="flex gap-1">
             <Button type="button" variant="outline" size="sm" class="border-slate-600 text-slate-200" @click="copyLog" title="复制">
-              <i class="fas fa-copy"></i>
+              <AppIcon  name="copy" />
             </Button>
             <Button type="button" variant="outline" size="sm" class="border-slate-600 text-slate-200" @click="downloadLog" title="下载">
-              <i class="fas fa-download"></i>
+              <AppIcon  name="download" />
             </Button>
             <Button type="button" variant="outline" size="sm" class="border-slate-600 text-slate-200" @click="clearLog" title="清空">
-              <i class="fas fa-trash"></i>
+              <AppIcon  name="trash" />
             </Button>
             <Button type="button" variant="outline" size="sm" class="border-slate-600 text-slate-200" @click="scrollToTop" title="滚动到顶部">
-              <i class="fas fa-arrow-up"></i>
+              <AppIcon  name="arrow-up" />
             </Button>
             <Button type="button" variant="outline" size="sm" class="border-slate-600 text-slate-200" @click="scrollToBottom" title="滚动到底部">
-              <i class="fas fa-arrow-down"></i>
+              <AppIcon  name="arrow-down" />
             </Button>
           </div>
           <div class="log-stats">{{ logs.length }} 行 | {{ filteredLogs.length }} 显示</div>
@@ -122,18 +122,18 @@ const logContainer = ref(null);
 
 const filteredLogs = computed(() =>
   logs.value.filter((log) => {
-    if (levelFilter.value !== "all" && log.level !== levelFilter.value) return false;
+    if (levelFilter.value !=="all" && log.level !== levelFilter.value) return false;
     if (searchTerm.value && !log.text.toLowerCase().includes(searchTerm.value.toLowerCase())) return false;
     return true;
   })
 );
 
-function addLog(text, level = "info") {
+function addLog(text, level ="info") {
   const timestamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-  if (!level || level === "info") {
-    if (text.includes("❌") || text.includes("错误") || text.includes("失败") || text.includes("ERROR")) level = "error";
-    else if (text.includes("✅") || text.includes("成功") || text.includes("完成") || text.includes("SUCCESS")) level = "success";
-    else if (text.includes("⚠️") || text.includes("警告") || text.includes("WARNING")) level = "warning";
+  if (!level || level ==="info") {
+    if (text.includes("❌") || text.includes("错误") || text.includes("失败") || text.includes("ERROR")) level ="error";
+    else if (text.includes("✅") || text.includes("成功") || text.includes("完成") || text.includes("SUCCESS")) level ="success";
+    else if (text.includes("⚠️") || text.includes("警告") || text.includes("WARNING")) level ="warning";
   }
   logs.value.push({ number: logs.value.length + 1, timestamp, text, level });
   if (autoScroll.value) {
@@ -145,12 +145,12 @@ function addLog(text, level = "info") {
 
 function highlightSearch(text) {
   if (!searchTerm.value) return text;
-  const regex = new RegExp(`(${searchTerm.value})`, "gi");
-  return text.replace(regex, "<mark>$1</mark>");
+  const regex = new RegExp(`(${searchTerm.value})`,"gi");
+  return text.replace(regex,"<mark>$1</mark>");
 }
 
 async function clearLog() {
-  if (await showConfirm({ message: "确定要清空所有日志吗？", danger: true })) logs.value = [];
+  if (await showConfirm({ message:"确定要清空所有日志吗？", danger: true })) logs.value = [];
 }
 
 async function copyLog() {
@@ -164,19 +164,19 @@ async function copyLog() {
 function downloadLog() {
   const text = logs.value
     .map((log) => {
-      let line = "";
-      if (showLineNumber.value) line += `${log.number.toString().padStart(4, " ")} `;
+      let line ="";
+      if (showLineNumber.value) line += `${log.number.toString().padStart(4,"")} `;
       if (showTimestamp.value) line += `[${log.timestamp}] `;
       line += log.text.trim();
       return line;
     })
     .filter((line) => line.trim().length > 0)
     .join("\n");
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([text], { type:"text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `app2docker-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.log`;
+  a.download = `app2docker-${new Date().toISOString().slice(0, 19).replace(/:/g,"-")}.log`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -209,10 +209,10 @@ function close() {
 }
 
 function lockBodyScroll() {
-  document.body.style.overflow = "hidden";
+  document.body.style.overflow ="hidden";
 }
 function unlockBodyScroll() {
-  document.body.style.overflow = "";
+  document.body.style.overflow ="";
 }
 
 const handleShowBuildLog = () => emit("update:modelValue", true);

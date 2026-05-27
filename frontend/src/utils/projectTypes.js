@@ -10,11 +10,11 @@ const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24小时缓存
 
 // 默认项目类型（作为后备）
 const DEFAULT_PROJECT_TYPES = [
-  { value: "jar", label: "Java 应用（JAR）", icon: "fab fa-java", badgeClass: "bg-danger", order: 1 },
-  { value: "nodejs", label: "Node.js 应用", icon: "fab fa-node-js", badgeClass: "bg-success", order: 2 },
-  { value: "python", label: "Python 应用", icon: "fab fa-python", badgeClass: "bg-info", order: 3 },
-  { value: "go", label: "Go 应用", icon: "fas fa-code", badgeClass: "bg-primary", order: 4 },
-  { value: "web", label: "静态网站", icon: "fas fa-globe", badgeClass: "bg-secondary", order: 5 },
+  { value:"jar", label:"Java 应用（JAR）", icon:"java", badgeClass:"bg-red-600 text-white", order: 1 },
+  { value:"nodejs", label:"Node.js 应用", icon:"node-js", badgeClass:"bg-green-600 text-white", order: 2 },
+  { value:"python", label:"Python 应用", icon:"python", badgeClass:"bg-sky-500 text-white", order: 3 },
+  { value:"go", label:"Go 应用", icon:"code", badgeClass:"bg-blue-600 text-white", order: 4 },
+  { value:"web", label:"静态网站", icon:"globe", badgeClass:"bg-slate-500 text-white", order: 5 },
 ]
 
 /**
@@ -116,7 +116,7 @@ export function getProjectTypeLabel(type) {
  */
 export function getProjectTypeIcon(type) {
   const info = getProjectTypeInfo(type)
-  return info?.icon || 'fas fa-cube'
+  return info?.icon || 'cube'
 }
 
 /**
@@ -124,7 +124,7 @@ export function getProjectTypeIcon(type) {
  */
 export function getProjectTypeBadgeClass(type) {
   const info = getProjectTypeInfo(type)
-  return info?.badgeClass || 'bg-secondary'
+  return info?.badgeClass || 'bg-slate-500 text-white'
 }
 
 /**

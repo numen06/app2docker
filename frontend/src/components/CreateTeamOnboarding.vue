@@ -3,7 +3,7 @@
     <Card class="w-full max-w-lg shadow-lg shadow-slate-200/70">
       <CardHeader class="pb-4 text-center">
         <div class="mb-2 flex justify-center">
-          <i class="fas fa-people-group text-4xl text-blue-600"></i>
+          <AppIcon  name="people-group" class="text-4xl text-blue-600" />
         </div>
         <CardTitle class="text-center">加入或创建团队</CardTitle>
         <CardDescription>
@@ -18,11 +18,9 @@
           <button
             type="button"
             class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-            :class="
-              mode === 'create'
+            :class="mode === 'create'
                 ? 'bg-blue-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-            "
+                : 'text-slate-600 hover:bg-slate-100'"
             @click="mode = 'create'"
           >
             创建团队
@@ -30,11 +28,9 @@
           <button
             type="button"
             class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-            :class="
-              mode === 'join'
+            :class="mode === 'join'
                 ? 'bg-blue-600 text-white'
-                : 'text-slate-600 hover:bg-slate-100'
-            "
+                : 'text-slate-600 hover:bg-slate-100'"
             @click="mode = 'join'"
           >
             加入团队
@@ -57,13 +53,13 @@
             <Input id="team-desc" v-model="teamDesc" placeholder="团队简介" />
           </div>
           <Button type="submit" class="w-full" :disabled="loading">
-            {{ loading ? "创建中…" : "创建并进入" }}
+            {{ loading ?"创建中…" :"创建并进入" }}
           </Button>
         </form>
 
         <template v-else>
           <div v-if="previewLoading" class="py-8 text-center text-sm text-slate-500">
-            <i class="fas fa-spinner fa-spin mr-2"></i>正在加载邀请信息…
+            <AppIcon  name="spinner" class="mr-2" spin />正在加载邀请信息…
           </div>
 
           <div
@@ -78,7 +74,7 @@
               }}）。
             </div>
             <Button type="button" class="w-full" :disabled="loading" @click="enterTeam">
-              {{ loading ? "进入中…" : "进入团队" }}
+              {{ loading ?"进入中…" :"进入团队" }}
             </Button>
           </div>
 
@@ -95,7 +91,7 @@
               </p>
             </div>
             <Button type="button" class="w-full" :disabled="loading" @click="acceptInvite">
-              {{ loading ? "加入中…" : "接受邀请并进入" }}
+              {{ loading ?"加入中…" :"接受邀请并进入" }}
             </Button>
             <details v-if="!activeInviteFromQuery" class="text-sm text-slate-500">
               <summary class="cursor-pointer hover:text-slate-700">手动粘贴邀请链接</summary>
@@ -136,7 +132,7 @@
                 />
               </div>
               <Button type="submit" class="w-full" :disabled="loading">
-                {{ loading ? "加入中…" : "接受邀请并进入" }}
+                {{ loading ?"加入中…" :"接受邀请并进入" }}
               </Button>
             </form>
           </div>
@@ -166,7 +162,7 @@
               </p>
             </div>
             <Button type="submit" class="w-full" :disabled="loading">
-              {{ loading ? "加入中…" : "接受邀请并进入" }}
+              {{ loading ?"加入中…" :"接受邀请并进入" }}
             </Button>
           </form>
         </template>
@@ -245,7 +241,7 @@ const invitePreview = ref(null);
 
 const activeInviteFromQuery = computed(() => {
   const q = route.query.invite;
-  return typeof q === "string" && q.trim().length > 0;
+  return typeof q ==="string" && q.trim().length > 0;
 });
 
 const showBackLink = computed(
@@ -257,22 +253,22 @@ const showBackLink = computed(
 
 const backLinkTo = computed(() =>
   invitePreview.value?.already_member || teamStore.hasTeams
-    ? "/app/dashboard"
-    : "/"
+    ?"/app/dashboard"
+    :"/"
 );
 
 const backLinkLabel = computed(() =>
   invitePreview.value?.already_member || teamStore.hasTeams
-    ? "返回工作台"
-    : "返回首页"
+    ?"返回工作台"
+    :"返回首页"
 );
 
 function roleLabel(role) {
-  const r = (role || "").toLowerCase();
-  if (r === "owner") return "所有者";
-  if (r === "admin") return "管理员";
-  if (r === "member") return "成员";
-  return role || "—";
+  const r = (role ||"").toLowerCase();
+  if (r ==="owner") return"所有者";
+  if (r ==="admin") return"管理员";
+  if (r ==="member") return"成员";
+  return role ||"—";
 }
 
 async function handleStaleSession(e) {
@@ -301,12 +297,12 @@ async function renewInviteForAdmin(preview) {
   });
   const newToken = res.data?.token;
   if (!newToken) {
-    error.value = "续期失败：未返回新邀请令牌";
+    error.value ="续期失败：未返回新邀请令牌";
     return false;
   }
-  infoMessage.value = "邀请链接已过期，已自动为您生成新链接。";
+  infoMessage.value ="邀请链接已过期，已自动为您生成新链接。";
   await router.replace({
-    path: "/onboarding",
+    path:"/onboarding",
     query: { invite: newToken },
   });
   return true;
@@ -318,7 +314,7 @@ async function loadInvitePreview(token, { allowRenew = true } = {}) {
     return;
   }
   previewLoading.value = true;
-  error.value = "";
+  error.value ="";
   try {
     const res = await axios.get(
       `/api/teams/invitations/${encodeURIComponent(token)}`
@@ -326,7 +322,7 @@ async function loadInvitePreview(token, { allowRenew = true } = {}) {
     const data = res.data;
     if (
       allowRenew &&
-      data?.status === "expired" &&
+      data?.status ==="expired" &&
       data?.can_renew_as_admin
     ) {
       const renewed = await renewInviteForAdmin(data);
@@ -342,7 +338,7 @@ async function loadInvitePreview(token, { allowRenew = true } = {}) {
     invitePreview.value = null;
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string" ? detail : e?.message || "加载邀请信息失败";
+      typeof detail ==="string" ? detail : e?.message ||"加载邀请信息失败";
   } finally {
     previewLoading.value = false;
   }
@@ -351,11 +347,11 @@ async function loadInvitePreview(token, { allowRenew = true } = {}) {
 async function acceptInvite() {
   const token = resolveInviteToken();
   if (!token) {
-    error.value = "请输入有效的邀请码";
+    error.value ="请输入有效的邀请码";
     return;
   }
   if (loading.value) return;
-  error.value = "";
+  error.value ="";
   loading.value = true;
   try {
     const res = await axios.post(
@@ -363,7 +359,7 @@ async function acceptInvite() {
     );
     const teamId = res.data?.team?.team_id;
     if (!teamId) {
-      error.value = "加入失败：未返回团队信息";
+      error.value ="加入失败：未返回团队信息";
       return;
     }
     await goToAppDashboard(teamId);
@@ -371,7 +367,7 @@ async function acceptInvite() {
     if (await handleStaleSession(e)) return;
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string" ? detail : e?.message || "接受邀请失败";
+      typeof detail ==="string" ? detail : e?.message ||"接受邀请失败";
   } finally {
     loading.value = false;
   }
@@ -380,11 +376,11 @@ async function acceptInvite() {
 async function joinTeamManual() {
   const token = extractInviteToken(inviteToken.value);
   if (!token) {
-    error.value = "请输入有效的邀请码";
+    error.value ="请输入有效的邀请码";
     return;
   }
   await loadInvitePreview(token);
-  if (invitePreview.value?.status === "valid" && !invitePreview.value?.already_member) {
+  if (invitePreview.value?.status ==="valid" && !invitePreview.value?.already_member) {
     await acceptInvite();
   }
 }
@@ -392,13 +388,13 @@ async function joinTeamManual() {
 async function enterTeam() {
   const teamId = invitePreview.value?.team_id;
   if (!teamId || loading.value) return;
-  error.value = "";
+  error.value ="";
   loading.value = true;
   try {
     await goToAppDashboard(teamId);
   } catch (e) {
     if (await handleStaleSession(e)) return;
-    error.value = e?.message || "进入团队失败";
+    error.value = e?.message ||"进入团队失败";
   } finally {
     loading.value = false;
   }
@@ -406,7 +402,7 @@ async function enterTeam() {
 
 async function createTeam() {
   if (loading.value) return;
-  error.value = "";
+  error.value ="";
   loading.value = true;
   try {
     const res = await axios.post("/api/teams", {
@@ -415,7 +411,7 @@ async function createTeam() {
     });
     const teamId = res.data?.team_id;
     if (!teamId) {
-      error.value = "创建失败：未返回团队 ID";
+      error.value ="创建失败：未返回团队 ID";
       return;
     }
     await goToAppDashboard(teamId);
@@ -423,7 +419,7 @@ async function createTeam() {
     if (await handleStaleSession(e)) return;
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string" ? detail : e?.message || "创建团队失败";
+      typeof detail ==="string" ? detail : e?.message ||"创建团队失败";
   } finally {
     loading.value = false;
   }
@@ -432,21 +428,21 @@ async function createTeam() {
 watch(
   () => route.query.invite,
   async (invite) => {
-    if (typeof invite === "string" && invite.trim()) {
-      mode.value = "join";
+    if (typeof invite ==="string" && invite.trim()) {
+      mode.value ="join";
       inviteToken.value = invite.trim();
       await loadInvitePreview(extractInviteToken(invite));
     } else {
       invitePreview.value = null;
-      infoMessage.value = "";
+      infoMessage.value ="";
     }
   }
 );
 
 onMounted(async () => {
   const fromQuery = route.query.invite;
-  if (typeof fromQuery === "string" && fromQuery.trim()) {
-    mode.value = "join";
+  if (typeof fromQuery ==="string" && fromQuery.trim()) {
+    mode.value ="join";
     inviteToken.value = fromQuery.trim();
   }
 
@@ -459,7 +455,7 @@ onMounted(async () => {
   await teamStore.fetchMyTeams();
 
   const hasInvite =
-    typeof fromQuery === "string" && fromQuery.trim().length > 0;
+    typeof fromQuery ==="string" && fromQuery.trim().length > 0;
   if (hasInvite) {
     await loadInvitePreview(extractInviteToken(fromQuery));
   } else if (teamStore.memberships.length) {

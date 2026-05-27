@@ -1,13 +1,13 @@
 <template>
   <div>
-    <PageToolbar title="团队管理" icon="fa-people-group">
+    <PageToolbar title="团队管理" icon="people-group">
       <template #actions>
         <Button variant="outline" size="sm" title="刷新" @click="loadTeams">
-          <i class="fas fa-sync-alt"></i>
+          <AppIcon  name="sync-alt" />
           刷新
         </Button>
         <Button size="sm" @click="openCreate">
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           创建团队
         </Button>
       </template>
@@ -24,13 +24,13 @@
         <div class="mt-0.5 text-xs text-slate-500">{{ team.slug }}</div>
         <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
           <span>成员 {{ team.member_count }}</span>
-          <span>所有者 {{ team.owner_username || "—" }}</span>
+          <span>所有者 {{ team.owner_username ||"—" }}</span>
           <span>保留 {{ team.task_cleanup_days }} 天</span>
         </div>
         <p class="mt-1 text-xs text-slate-500">{{ formatDate(team.created_at) }}</p>
         <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
           <Button variant="outline" size="sm" title="编辑" @click="editTeam(team)">
-            <i class="fas fa-edit"></i>
+            <AppIcon  name="edit" />
           </Button>
           <Button
             variant="destructive"
@@ -38,7 +38,7 @@
             title="解散团队"
             @click="openDissolve(team)"
           >
-            <i class="fas fa-user-slash"></i>
+            <AppIcon  name="user-slash" />
             解散
           </Button>
         </div>
@@ -67,14 +67,14 @@
             <TableCell class="font-medium text-slate-900">{{ team.name }}</TableCell>
             <TableCell class="text-slate-600">{{ team.slug }}</TableCell>
             <TableCell>{{ team.member_count }}</TableCell>
-            <TableCell>{{ team.owner_username || "—" }}</TableCell>
-            <TableCell>{{ team.created_by_username || "—" }}</TableCell>
+            <TableCell>{{ team.owner_username ||"—" }}</TableCell>
+            <TableCell>{{ team.created_by_username ||"—" }}</TableCell>
             <TableCell>{{ team.task_cleanup_days }} 天</TableCell>
             <TableCell class="text-slate-600">{{ formatDate(team.created_at) }}</TableCell>
             <TableCell class="text-end">
               <div class="flex justify-end gap-1">
                 <Button variant="outline" size="sm" title="编辑" @click="editTeam(team)">
-                  <i class="fas fa-edit"></i>
+                  <AppIcon  name="edit" />
                 </Button>
                 <Button
                   variant="destructive"
@@ -82,7 +82,7 @@
                   title="解散团队"
                   @click="openDissolve(team)"
                 >
-                  <i class="fas fa-user-slash"></i>
+                  <AppIcon  name="user-slash" />
                   解散
                 </Button>
               </div>
@@ -103,7 +103,7 @@
     <FormDialog
       v-model="showDissolveModal"
       title="解散团队"
-      icon="fa-user-slash"
+      icon="user-slash"
       icon-class="text-red-600"
       size="md"
       @update:model-value="(v) => !v && closeDissolveModal()"
@@ -139,7 +139,7 @@
           :disabled="dissolving || (dissolveTarget && isProtectedTeam(dissolveTarget))"
           @click="confirmDissolve"
         >
-          {{ dissolving ? "解散中…" : "确认解散" }}
+          {{ dissolving ?"解散中…" :"确认解散" }}
         </Button>
       </template>
     </FormDialog>
@@ -147,7 +147,7 @@
     <FormDialog
       :model-value="showCreateModal || showEditModal"
       :title="showCreateModal ? '创建团队' : '编辑团队'"
-      icon="fa-people-group"
+      icon="people-group"
       size="md"
       @update:model-value="(v) => !v && closeModal()"
     >
@@ -179,7 +179,7 @@
           <NativeSelect v-model="form.owner_user_id" required class="w-full">
             <option value="" disabled>请选择用户</option>
             <option v-for="u in userOptions" :key="u.user_id" :value="u.user_id">
-              {{ u.username }}{{ u.email ? ` (${u.email})` : "" }}
+              {{ u.username }}{{ u.email ? ` (${u.email})` :"" }}
             </option>
           </NativeSelect>
         </div>
@@ -215,8 +215,8 @@ import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
 import PaginationBar from "@/components/ui/PaginationBar.vue";
 
-const DEFAULT_TEAM_NAME = "默认团队";
-const DEFAULT_TEAM_SLUG = "default";
+const DEFAULT_TEAM_NAME ="默认团队";
+const DEFAULT_TEAM_SLUG ="default";
 
 const teams = ref([]);
 const userOptions = ref([]);
@@ -234,11 +234,11 @@ const dissolving = ref(false);
 const error = ref("");
 
 const form = ref({
-  team_id: "",
-  name: "",
-  description: "",
+  team_id:"",
+  name:"",
+  description:"",
   task_cleanup_days: 7,
-  owner_user_id: "",
+  owner_user_id:"",
 });
 
 onMounted(async () => {
@@ -270,7 +270,7 @@ async function loadTeams() {
     }
   } catch (err) {
     console.error("加载团队管理数据失败:", err);
-    toastError("加载团队管理数据失败: " + (err.response?.data?.detail || err.message));
+    toastError("加载团队管理数据失败:" + (err.response?.data?.detail || err.message));
     teams.value = [];
     totalTeams.value = 0;
     totalPages.value = 0;
@@ -290,13 +290,13 @@ async function loadUserOptions() {
 
 function openCreate() {
   form.value = {
-    team_id: "",
-    name: "",
-    description: "",
+    team_id:"",
+    name:"",
+    description:"",
     task_cleanup_days: 7,
-    owner_user_id: userOptions.value[0]?.user_id || "",
+    owner_user_id: userOptions.value[0]?.user_id ||"",
   };
-  error.value = "";
+  error.value ="";
   showCreateModal.value = true;
   showEditModal.value = false;
 }
@@ -305,11 +305,11 @@ function editTeam(team) {
   form.value = {
     team_id: team.team_id,
     name: team.name,
-    description: team.description || "",
+    description: team.description ||"",
     task_cleanup_days: team.task_cleanup_days ?? 7,
-    owner_user_id: "",
+    owner_user_id:"",
   };
-  error.value = "";
+  error.value ="";
   showEditModal.value = true;
   showCreateModal.value = false;
 }
@@ -317,25 +317,25 @@ function editTeam(team) {
 function closeModal() {
   showCreateModal.value = false;
   showEditModal.value = false;
-  error.value = "";
+  error.value ="";
 }
 
 async function saveTeam() {
-  error.value = "";
+  error.value ="";
   const days = parseInt(form.value.task_cleanup_days, 10);
   if (isNaN(days) || days < 1 || days > 365) {
-    error.value = "任务保留天数须在 1–365 之间";
+    error.value ="任务保留天数须在 1–365 之间";
     return;
   }
   try {
     if (showCreateModal.value) {
       if (!form.value.owner_user_id) {
-        error.value = "请选择团队所有者";
+        error.value ="请选择团队所有者";
         return;
       }
       await axios.post("/api/admin/teams", {
         name: form.value.name.trim(),
-        description: form.value.description || "",
+        description: form.value.description ||"",
         owner_user_id: form.value.owner_user_id,
         task_cleanup_days: days,
       });
@@ -344,7 +344,7 @@ async function saveTeam() {
     } else {
       await axios.put(`/api/admin/teams/${form.value.team_id}`, {
         name: form.value.name.trim(),
-        description: form.value.description || "",
+        description: form.value.description ||"",
         task_cleanup_days: days,
       });
       toastSuccess("团队更新成功");
@@ -353,29 +353,29 @@ async function saveTeam() {
     await loadTeams();
   } catch (err) {
     console.error("保存团队失败:", err);
-    error.value = err.response?.data?.detail || err.message || "操作失败";
+    error.value = err.response?.data?.detail || err.message ||"操作失败";
   }
 }
 
 function openDissolve(team) {
   if (isProtectedTeam(team)) {
-    dissolveError.value = "不能解散系统保留的默认团队";
+    dissolveError.value ="不能解散系统保留的默认团队";
     dissolveTarget.value = team;
-    dissolveConfirmName.value = "";
+    dissolveConfirmName.value ="";
     showDissolveModal.value = true;
     return;
   }
   dissolveTarget.value = team;
-  dissolveConfirmName.value = "";
-  dissolveError.value = "";
+  dissolveConfirmName.value ="";
+  dissolveError.value ="";
   showDissolveModal.value = true;
 }
 
 function closeDissolveModal() {
   showDissolveModal.value = false;
   dissolveTarget.value = null;
-  dissolveConfirmName.value = "";
-  dissolveError.value = "";
+  dissolveConfirmName.value ="";
+  dissolveError.value ="";
   dissolving.value = false;
 }
 
@@ -383,20 +383,20 @@ async function confirmDissolve() {
   const team = dissolveTarget.value;
   if (!team) return;
   if (isProtectedTeam(team)) {
-    dissolveError.value = "不能解散系统保留的默认团队";
+    dissolveError.value ="不能解散系统保留的默认团队";
     return;
   }
   const typed = dissolveConfirmName.value.trim();
   if (!typed) {
-    dissolveError.value = "请输入团队名称";
+    dissolveError.value ="请输入团队名称";
     return;
   }
   if (typed !== team.name.trim()) {
-    dissolveError.value = "团队名称不匹配，请重新输入";
+    dissolveError.value ="团队名称不匹配，请重新输入";
     return;
   }
   dissolving.value = true;
-  dissolveError.value = "";
+  dissolveError.value ="";
   try {
     await axios.delete(`/api/admin/teams/${team.team_id}`);
     closeDissolveModal();
@@ -404,14 +404,14 @@ async function confirmDissolve() {
   } catch (err) {
     console.error("解散团队失败:", err);
     dissolveError.value =
-      err.response?.data?.detail || err.message || "解散团队失败";
+      err.response?.data?.detail || err.message ||"解散团队失败";
   } finally {
     dissolving.value = false;
   }
 }
 
 function formatDate(dateString) {
-  if (!dateString) return "—";
+  if (!dateString) return"—";
   return new Date(dateString).toLocaleString("zh-CN");
 }
 </script>
