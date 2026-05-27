@@ -2403,6 +2403,8 @@ class BuildManager:
         image_name = task_config.get("image_name")
         tag = task_config.get("tag", "latest")
         branch = task_config.get("branch")
+        git_ref_type = task_config.get("git_ref_type", "branch")
+        git_ref_name = task_config.get("git_ref_name") or branch
 
         # 调试日志：检查任务配置中的分支
         import json
@@ -2452,6 +2454,8 @@ class BuildManager:
             resource_package_ids=resource_package_ids,
             trigger_source=trigger_source,
             team_id=task_config.get("team_id"),
+            git_ref_type=git_ref_type,
+            git_ref_name=git_ref_name,
         )
 
     def _start_build_from_source_thread(self, task_id: str, task_config: dict):
@@ -2463,6 +2467,8 @@ class BuildManager:
         image_name = task_config.get("image_name")
         tag = task_config.get("tag", "latest")
         branch = task_config.get("branch")
+        git_ref_type = task_config.get("git_ref_type", "branch")
+        git_ref_name = task_config.get("git_ref_name") or branch
         project_type = task_config.get("project_type", "jar")
         template = task_config.get("template", "")
         template_params = task_config.get("template_params", {})
@@ -2499,6 +2505,8 @@ class BuildManager:
                 push_mode,
                 service_template_params,
                 resource_package_ids or [],
+                git_ref_type,
+                git_ref_name,
             ),
             daemon=True,
         )
@@ -2530,6 +2538,8 @@ class BuildManager:
         resource_package_ids: list = None,  # 资源包ID列表或配置列表
         trigger_source: str = "manual",  # 触发来源
         team_id: str = None,
+        git_ref_type: str = "branch",
+        git_ref_name: str = None,
     ):
         """从 Git 源码开始构建"""
         try:
@@ -2560,6 +2570,8 @@ class BuildManager:
                 resource_package_ids=resource_package_ids or [],  # 传递资源包ID列表
                 trigger_source=trigger_source,  # 传递触发来源
                 team_id=team_id,
+                git_ref_type=git_ref_type,
+                git_ref_name=git_ref_name or branch,
             )
             print(f"✅ 任务创建成功: task_id={task_id}")
         except Exception as e:
@@ -2593,6 +2605,8 @@ class BuildManager:
                         "service_template_params": service_template_params or {},
                         "push_mode": push_mode,
                         "resource_package_ids": resource_package_ids or [],
+                        "git_ref_type": git_ref_type,
+                        "git_ref_name": git_ref_name or branch,
                     },
                 )
             )
@@ -2638,6 +2652,8 @@ class BuildManager:
         push_mode: str = "multi",  # 推送模式：'single' 单一推送，'multi' 多阶段推送（仅模板模式）
         service_template_params: dict = None,  # 服务模板参数
         resource_package_ids: list = None,  # 资源包ID列表
+        git_ref_type: str = "branch",
+        git_ref_name: str = None,
     ):
         """从 Git 源码构建任务"""
         # 兼容场景：页面选择多阶段模式但仅选了一个服务时，实际会走单服务构建分支。
@@ -2783,6 +2799,8 @@ class BuildManager:
                 "project_type": project_type,
                 "template_params": template_params or {},
                 "branch": branch,
+                "git_ref_type": git_ref_type,
+                "git_ref_name": git_ref_name or branch,
                 "sub_path": sub_path,
                 "use_project_dockerfile": use_project_dockerfile,
                 "dockerfile_name": dockerfile_name,
@@ -2842,10 +2860,21 @@ class BuildManager:
             # 调试日志：检查构建时使用的分支
             print(f"🔍 _build_from_source_task:")
             print(f"   - 参数branch: {branch}")
+            print(f"   - git_ref_type: {git_ref_type}")
+            print(f"   - git_ref_name: {git_ref_name or branch}")
             print(f"   - git_url: {git_url}")
-            log(f"📌 准备克隆分支: {branch or '默认分支'}\n")
+            if git_ref_type == "tag":
+                log(f"📌 准备克隆标签: {git_ref_name or branch}\n")
+            else:
+                log(f"📌 准备克隆分支: {branch or '默认分支'}\n")
             clone_success, clone_error = self._clone_git_repo(
-                git_url, temp_clone_dir, branch, git_config, log
+                git_url,
+                temp_clone_dir,
+                branch,
+                git_config,
+                log,
+                git_ref_type=git_ref_type,
+                git_ref_name=git_ref_name or branch,
             )
 
             if not clone_success:
@@ -4160,6 +4189,8 @@ logs/
         branch: str = None,
         git_config: dict = None,
         log_func=None,
+        git_ref_type: str = "branch",
+        git_ref_name: str = None,
     ):
         """克隆 Git 仓库"""
         try:
@@ -4211,10 +4242,14 @@ logs/
             print(f"   - branch参数: {repr(branch)}")
             print(f"   - branch类型: {type(branch)}")
             print(f"   - branch是否为真值: {bool(branch)}")
+            print(f"   - git_ref_type: {git_ref_type}")
+            print(f"   - git_ref_name: {git_ref_name}")
 
-            if branch:
+            if branch and git_ref_type != "tag":
                 cmd.extend(["-b", branch])
                 log(f"📌 检出分支: {branch}\n")
+            elif git_ref_type == "tag":
+                log(f"📌 将在克隆后检出标签: {git_ref_name or branch}\n")
             else:
                 log(f"📌 使用默认分支（未指定分支）\n")
 
@@ -4253,6 +4288,45 @@ logs/
                 if "GIT_SSH_COMMAND" in os.environ:
                     del os.environ["GIT_SSH_COMMAND"]
                 return (False, error_msg)
+
+            if git_ref_type == "tag":
+                tag_ref = git_ref_name or branch
+                fetch_result = subprocess.run(
+                    ["git", "fetch", "--tags", "--force"],
+                    cwd=abs_target_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if fetch_result.returncode != 0:
+                    error_msg = (
+                        fetch_result.stderr.strip()
+                        or fetch_result.stdout.strip()
+                        or "获取标签失败"
+                    )
+                    log(f"❌ Git 标签获取失败: {error_msg}\n")
+                    if "GIT_SSH_COMMAND" in os.environ:
+                        del os.environ["GIT_SSH_COMMAND"]
+                    return (False, error_msg)
+
+                checkout_result = subprocess.run(
+                    ["git", "checkout", "--detach", f"refs/tags/{tag_ref}"],
+                    cwd=abs_target_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if checkout_result.returncode != 0:
+                    error_msg = (
+                        checkout_result.stderr.strip()
+                        or checkout_result.stdout.strip()
+                        or "检出标签失败"
+                    )
+                    log(f"❌ Git 标签检出失败: {error_msg}\n")
+                    if "GIT_SSH_COMMAND" in os.environ:
+                        del os.environ["GIT_SSH_COMMAND"]
+                    return (False, error_msg)
+                log(f"✅ Git 标签检出成功: {tag_ref}\n")
 
             log(f"✅ Git 仓库克隆成功\n")
             log(f"📂 仓库已克隆到: {abs_target_dir}\n")
@@ -4502,6 +4576,8 @@ def build_task_config(
     resource_package_ids: list = None,
     pipeline_id: str = None,
     trigger_source: str = "manual",
+    git_ref_type: str = "branch",
+    git_ref_name: str = None,
     **kwargs,
 ) -> dict:
     """
@@ -4584,6 +4660,8 @@ def build_task_config(
         "resource_package_ids": resource_package_ids or [],
         "pipeline_id": pipeline_id,
         "trigger_source": trigger_source,
+        "git_ref_type": git_ref_type or "branch",
+        "git_ref_name": git_ref_name or branch,
     }
 
     # 添加其他参数
@@ -4667,6 +4745,8 @@ def pipeline_to_task_config(
     Returns:
         标准化的任务配置字典
     """
+    git_ref_type = (kwargs.pop("git_ref_type", "branch") or "branch").lower()
+    git_ref_name = kwargs.pop("git_ref_name", None)
     # 确定使用的分支和标签
     # 如果明确提供了branch参数（不为None），使用它；否则使用流水线配置的分支
     # 注意：空字符串也是有效的分支名（表示默认分支），所以只检查 None
@@ -4674,6 +4754,7 @@ def pipeline_to_task_config(
         final_branch = branch
     else:
         final_branch = pipeline.get("branch")
+    git_ref_name = git_ref_name or final_branch
 
     # 保存流水线的原始标签（用于多服务模式下的标签更新判断）
     pipeline_original_tag = pipeline.get("tag", "latest")
@@ -4696,7 +4777,7 @@ def pipeline_to_task_config(
 
     # 处理分支标签映射（webhook和manual触发时都应用）
     # 注意：即使传入了tag参数，我们仍然需要检查分支标签映射，确保多服务模式下的标签正确更新
-    if trigger_source in ["webhook", "manual"]:
+    if trigger_source in ["webhook", "manual"] and git_ref_type != "tag":
         mapping = branch_tag_mapping or pipeline.get("branch_tag_mapping", {})
         # webhook触发时，优先使用webhook推送的分支；手动触发时，使用实际使用的分支
         branch_for_mapping = (
@@ -4858,6 +4939,8 @@ def pipeline_to_task_config(
         resource_package_ids=pipeline.get("resource_package_configs", []),
         pipeline_id=pipeline.get("pipeline_id"),
         trigger_source=trigger_source,
+        git_ref_type=git_ref_type,
+        git_ref_name=git_ref_name,
         **kwargs,
     )
 
@@ -5007,6 +5090,9 @@ class BuildTaskManager:
                         trigger_source=serializable_kwargs.get(
                             "trigger_source", "manual"
                         ),
+                        git_ref_type=serializable_kwargs.get("git_ref_type", "branch"),
+                        git_ref_name=serializable_kwargs.get("git_ref_name")
+                        or serializable_kwargs.get("branch"),
                     )
                 elif task_type == "build":
                     # 文件上传构建（文件上传没有git_url，但可以保存其他配置）

@@ -971,6 +971,25 @@
                   </section>
 
                   <section class="pipeline-webhook-block">
+                    <div class="flex items-start gap-2">
+                      <input
+                        v-model="formData.tag_build_enabled"
+                        class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        type="checkbox"
+                        id="tagBuildEnabled"
+                      />
+                      <div>
+                        <label class="text-sm font-medium text-slate-700" for="tagBuildEnabled">
+                          启用 Tag 构建
+                        </label>
+                        <p class="pipeline-webhook-field__hint mb-0">
+                          开启后，手动触发可选择 Git tag，Webhook 收到 refs/tags/* 时按 tag 名称构建镜像标签。
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="pipeline-webhook-block">
                     <h3 class="pipeline-webhook-block__title">
                       <AppIcon  name="code-branch" /> 分支触发策略
                     </h3>

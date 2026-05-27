@@ -20,7 +20,7 @@
           <label class="block text-sm font-medium text-slate-700">
             数据源类型 <span class="text-red-500">*</span>
           </label>
-          <div class="inline-flex items-stretch w-full" role="group">
+          <div class="button-group w-full" role="group">
             <button
               type="button"
               class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
@@ -95,7 +95,7 @@
             Git 数据源 <span class="text-red-500">*</span>
           </label>
           <div class="relative">
-            <div class="flex w-full">
+            <div class="field-group w-full">
               <input
                 v-model="gitSourceSearchQuery"
                 type="text"
@@ -153,7 +153,7 @@
           <label class="block text-sm font-medium text-slate-700">
             分支/标签 <span class="text-red-500">*</span>
           </label>
-          <div class="flex w-full">
+          <div class="field-group w-full">
             <select
               v-if="repoVerified"
               v-model="buildConfig.branch"
@@ -229,7 +229,7 @@
           <label class="block text-sm font-medium text-slate-700">
             项目类型 <span class="text-red-500">*</span>
           </label>
-          <div class="inline-flex items-stretch button-group--multi w-full" role="group">
+          <div class="button-group button-group--multi w-full" role="group">
             <button
               v-for="type in projectTypes"
               :key="type.value"
@@ -251,7 +251,7 @@
           <label class="block text-sm font-medium text-slate-700">
             Dockerfile 来源 <span class="text-red-500">*</span>
           </label>
-          <div class="inline-flex items-stretch w-full" role="group">
+          <div class="button-group w-full" role="group">
             <input
               type="radio"
               class="choice-input"
@@ -308,7 +308,7 @@
                   <AppIcon  name="spinner" spin />
                   <small class="text-slate-500">正在扫描项目中的 Dockerfile...</small>
                 </div>
-                <div class="flex w-full text-sm">
+                <div class="field-group w-full text-sm">
                   <select
                     v-model="buildConfig.dockerfileName"
                     class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
@@ -372,7 +372,7 @@
                 </div>
                 
                 <div class="relative">
-                  <div class="flex w-full text-sm mb-1">
+                  <div class="field-group w-full text-sm mb-1">
                     <span class="inline-flex items-center border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500"><AppIcon  name="search" /></span>
                     <input
                       v-model="templateSearchQuery"
@@ -502,7 +502,7 @@
             <label class="block text-sm font-medium text-slate-700"
               >推送模式 <span class="text-red-500">*</span></label
             >
-            <div class="inline-flex items-stretch w-full" role="group">
+            <div class="button-group w-full" role="group">
               <button
                 type="button"
                 class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
@@ -548,8 +548,8 @@
               buildConfig.sourceType === 'git'"
             class="mb-3"
           >
-            <div class="rounded-lg border border-slate-200 bg-white shadow-sm border-blue-300">
-              <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 bg-blue-600 text-white bg-opacity-10">
+            <div class="rounded-lg border border-blue-200 bg-white shadow-sm">
+              <div class="border-b border-blue-100 bg-blue-50 px-4 py-3 text-blue-900">
                 <h6 class="mb-0">
                   <AppIcon  name="box" class="text-blue-600" /> 单服务推送模式
                 </h6>
@@ -596,12 +596,12 @@
                 </div>
 
                 <div v-if="buildConfig.selectedService" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <div class="md:col-span-6">
+                  <div>
                     <label class="block text-sm font-medium text-slate-700">
                       镜像前缀 <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
-                      <div class="flex w-full mb-2">
+                      <div class="field-group w-full mb-2">
                         <input
                           v-model="registrySearchQuery"
                           type="text"
@@ -673,7 +673,7 @@
                       </Button>
                     </div>
                   </div>
-                  <div class="md:col-span-6">
+                  <div>
                     <label class="block text-sm font-medium text-slate-700">标签</label>
                     <input
                       v-model="buildConfig.tag"
@@ -705,11 +705,11 @@
           <div v-else class="mb-3">
             <div class="rounded-lg border border-slate-200 bg-white shadow-sm border-sky-300">
               <div
-                class="border-b border-slate-200 bg-slate-50 px-4 py-3 bg-sky-500 text-white bg-opacity-10 flex justify-between items-center"
+                class="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3"
               >
                 <div>
                   <AppIcon  name="server" /> 服务选择
-                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white ml-2"
+                  <span class="ml-2 inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700"
                     >{{ services.length }} 个服务</span
                   >
                   <small class="text-slate-500 ml-2">
@@ -753,7 +753,7 @@
                     <div
                       v-for="param in templateParams"
                       :key="param.name"
-                      class="md:col-span-6"
+                      class="min-w-0"
                     >
                       <label class="block text-sm font-medium text-slate-700">
                         {{ param.description || param.name }}
@@ -780,10 +780,10 @@
                     {{ selectedServices.length }} 个服务）
                   </h6>
                   <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <div class="md:col-span-4">
+                    <div>
                       <label class="block text-sm font-medium text-slate-700">批量设置镜像前缀</label>
                       <div class="relative">
-                        <div class="flex w-full text-sm mb-2">
+                        <div class="field-group w-full text-sm mb-2">
                           <input
                             v-model="batchRegistrySearchQuery"
                             type="text"
@@ -823,7 +823,7 @@
                           <div class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100 text-slate-500">无匹配结果</div>
                         </div>
                       </div>
-                      <div class="flex w-full text-sm">
+                      <div class="field-group w-full text-sm">
                         <input
                           v-if="!isRegistrySelected(batchImagePrefix)"
                           v-model="batchImagePrefix"
@@ -845,9 +845,9 @@
                         前缀会自动与服务名称拼接
                       </small>
                     </div>
-                    <div class="md:col-span-4">
+                    <div>
                       <label class="block text-sm font-medium text-slate-700">批量设置标签</label>
-                      <div class="flex w-full text-sm">
+                      <div class="field-group w-full text-sm">
                         <input
                           v-model="batchTag"
                           type="text"
@@ -864,9 +864,9 @@
                         </Button>
                       </div>
                     </div>
-                    <div class="md:col-span-4">
+                    <div>
                       <label class="block text-sm font-medium text-slate-700">批量设置推送</label>
-                      <div class="inline-flex items-stretch w-full" role="group">
+                      <div class="button-group w-full" role="group">
                         <Button
                           variant="outline" size="sm"
                           type="button"
@@ -891,15 +891,15 @@
                   <div
                     v-for="service in services"
                     :key="service.name"
-                    class="md:col-span-6 lg:col-span-4"
+                    class="min-w-0"
                   >
                     <div
                       class="rounded-lg border border-slate-200 bg-white shadow-sm h-full"
                       :class="{
-                        'border-success': selectedServices.includes(
+                        'border-green-300 bg-green-50/40': selectedServices.includes(
                           service.name
                         ),
-                        'border-secondary': !selectedServices.includes(
+                        'border-slate-200': !selectedServices.includes(
                           service.name
                         ),
                       }"
@@ -926,7 +926,7 @@
                         </div>
                         <span
                           v-if="selectedServices.includes(service.name)"
-                          class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white"
+                          class="inline-flex items-center rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700"
                         >
                           <AppIcon  name="check" /> 已选择
                         </span>
@@ -1207,7 +1207,7 @@
                   </td>
                   <td>{{ formatBytes(pkg.size) }}</td>
                   <td>
-                    <div class="flex w-full text-sm">
+                    <div class="field-group w-full text-sm">
                       <span
                         class="inline-flex items-center border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500"
                         style="font-size: 0.75rem"
@@ -1288,7 +1288,7 @@
                     <AppIcon  name="database" class="mr-2" /> 数据源信息
                   </h6>
                   <div class="mb-2">
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white mr-2">类型</span>
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-sky-200 bg-sky-50 text-sky-700 mr-2">类型</span>
                     <strong>{{
                       buildConfig.sourceType ==="file"
                         ?"文件上传"
@@ -1296,7 +1296,7 @@
                     }}</strong>
                   </div>
                   <div v-if="buildConfig.sourceType === 'file'" class="mb-2">
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white mr-2">文件</span>
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-sky-200 bg-sky-50 text-sky-700 mr-2">文件</span>
                     <code class="text-sm">{{ buildConfig.file?.name }}</code>
                     <span class="text-slate-500 text-sm ml-2"
                       >({{ formatFileSize(buildConfig.file?.size) }})</span
@@ -1304,11 +1304,11 @@
                   </div>
                   <div v-if="buildConfig.sourceType === 'git'">
                     <div class="mb-2">
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white mr-2">数据源</span>
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-sky-200 bg-sky-50 text-sky-700 mr-2">数据源</span>
                       <strong>{{ getSourceName(buildConfig.sourceId) }}</strong>
                     </div>
                     <div>
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white mr-2">分支</span>
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-sky-200 bg-sky-50 text-sky-700 mr-2">分支</span>
                       <code>{{
                         buildConfig.branch ||
                         branchesAndTags.default_branch ||"默认分支"
@@ -1325,13 +1325,13 @@
                     <AppIcon  name="cogs" class="mr-2" /> 构建配置
                   </h6>
                   <div class="mb-2">
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white mr-2">项目类型</span>
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-green-200 bg-green-50 text-green-700 mr-2">项目类型</span>
                     <strong>{{
                       getProjectTypeLabel(buildConfig.projectType)
                     }}</strong>
                   </div>
                   <div class="mb-2">
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white mr-2">模板</span>
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-green-200 bg-green-50 text-green-700 mr-2">模板</span>
                     <code>{{
                       buildConfig.useProjectDockerfile
                         ?"项目 Dockerfile"
@@ -1339,22 +1339,22 @@
                     }}</code>
                   </div>
                   <div v-if="services.length > 0" class="mb-2">
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white mr-2">服务</span>
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-green-200 bg-green-50 text-green-700 mr-2">服务</span>
                     <span
                       v-if="
                         buildConfig.pushMode === 'single' &&
                         buildConfig.selectedService"
                     >
                       <code>{{ buildConfig.selectedService }}</code>
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900 ml-2"
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-800 ml-2"
                         >单服务推送</span
                       >
                     </span>
                     <span v-else-if="selectedServices.length > 0">
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-600 text-white"
+                      <span class="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700"
                         >{{ selectedServices.length }}个服务</span
                       >
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900 ml-2"
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-800 ml-2"
                         >多服务推送</span
                       >
                     </span>
@@ -1375,7 +1375,7 @@
                         :key="serviceName"
                         class="mb-1 text-sm"
                       >
-                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900 mr-2">{{
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-800 mr-2">{{
                           serviceName
                         }}</span>
                         <code class="text-sm">
@@ -1386,14 +1386,14 @@
                         </code>
                         <span
                           v-if="getServiceConfig(serviceName).push"
-                          class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white ml-1"
+                          class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-green-200 bg-green-50 text-green-700 ml-1"
                           >推送</span
                         >
                       </div>
                     </div>
                     <div v-else>
                       <div class="mb-1">
-                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900 mr-2"
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-800 mr-2"
                           >镜像名</span
                         >
                         <code class="text-sm">{{
@@ -1407,7 +1407,7 @@
                         }}</code>
                       </div>
                       <div>
-                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900 mr-2">标签</span>
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-800 mr-2">标签</span>
                         <code class="text-sm">{{ buildConfig.tag ||"latest" }}</code>
                       </div>
                     </div>
@@ -1423,11 +1423,11 @@
                         !forceSingleAppMode && services.length > 0 && buildConfig.pushMode === 'multi'"
                     >
                       <div class="mb-1">
-                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-600 text-white mr-2">推送模式</span>
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-red-200 bg-red-50 text-red-700 mr-2">推送模式</span>
                         <strong class="text-sm">多服务推送</strong>
                       </div>
                       <div>
-                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-600 text-white mr-2">推送服务数</span>
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-red-200 bg-red-50 text-red-700 mr-2">推送服务数</span>
                         <strong class="text-sm"
                           >{{
                             selectedServices.filter(
@@ -1438,11 +1438,11 @@
                       </div>
                     </div>
                     <div v-else>
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-600 text-white mr-2">推送</span>
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-red-200 bg-red-50 text-red-700 mr-2">推送</span>
                       <span
                         :class="buildConfig.push
-                            ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white'
-                            : 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white'"
+                            ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-green-200 bg-green-50 text-green-700'
+                            : 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-slate-200 bg-slate-50 text-slate-700'"
                       >
                         {{ buildConfig.push ?"是" :"否" }}
                       </span>
@@ -1468,10 +1468,10 @@
                       <span
                         v-for="param in templateParams"
                         :key="param.name"
-                        class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white"
+                        class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-sky-200 bg-sky-50 text-sky-700"
                       >
                         {{ param.description || param.name }}:
-                        <code class="text-white">{{
+                        <code class="text-slate-800">{{
                           buildConfig.templateParams[param.name] ||
                           param.default ||"(空)"
                         }}</code>
@@ -1490,16 +1490,16 @@
                       :key="serviceName"
                       class="mb-2"
                     >
-                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white mr-2">{{
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-slate-200 bg-slate-50 text-slate-700 mr-2">{{
                         serviceName
                       }}</span>
                       <span
                         v-for="(value, paramName) in params"
                         :key="paramName"
-                        class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white mr-1"
+                        class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-sky-200 bg-sky-50 text-sky-700 mr-1"
                       >
                         {{ paramName }}:
-                        <code class="text-white">{{ value ||"(空)" }}</code>
+                        <code class="text-slate-800">{{ value ||"(空)" }}</code>
                       </span>
                     </div>
                   </div>
@@ -1514,7 +1514,7 @@
                 class="build-summary-grid__item build-summary-grid__item--full"
               >
                 <section class="build-summary-block">
-                  <h6 class="build-summary-block__title text-secondary">
+                  <h6 class="build-summary-block__title text-slate-600">
                     <AppIcon  name="archive" class="mr-2" /> 资源包
                   </h6>
                   <div class="table-scroll overflow-x-auto">
@@ -1630,17 +1630,15 @@
                 <span>上传进度</span>
                 <span class="font-semibold">{{ uploadProgress.toFixed(1) }}%</span>
               </div>
-              <div class="progress" style="height: 25px;">
-                <div 
-                  class="progress-bar progress-bar-striped progress-bar-animated" 
-                  role="progressbar" 
+              <div class="h-3 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  class="h-full rounded-full bg-blue-600 transition-[width] duration-300"
+                  role="progressbar"
                   :style="{ width: uploadProgress + '%' }"
-                  :aria-valuenow="uploadProgress" 
-                  aria-valuemin="0" 
+                  :aria-valuenow="uploadProgress"
+                  aria-valuemin="0"
                   aria-valuemax="100"
-                >
-                  {{ uploadProgress.toFixed(1) }}%
-                </div>
+                ></div>
               </div>
             </div>
             <div class="text-slate-500 text-sm text-center">
@@ -3723,6 +3721,7 @@ onUnmounted(() => {
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
+  color: rgb(15 23 42);
 }
 
 .step-build-panel .step-content {
@@ -3743,11 +3742,46 @@ onUnmounted(() => {
 
 .step-build-panel .step-panel {
   min-height: 400px;
-  padding: 20px;
+  padding: 1rem;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.step-build-panel .step-panel > h5,
+.step-build-panel .step-panel-header h5 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: rgb(15 23 42);
+}
+
+.step-build-panel label {
+  margin-bottom: 0.375rem;
+}
+
+.step-build-panel input:not([type="checkbox"]):not([type="radio"]),
+.step-build-panel select,
+.step-build-panel textarea {
+  min-width: 0;
+  border-color: rgb(203 213 225);
+  background: #fff;
+}
+
+.step-build-panel input:not([type="checkbox"]):not([type="radio"]):focus,
+.step-build-panel select:focus,
+.step-build-panel textarea:focus {
+  outline: none;
+  border-color: rgb(59 130 246);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.16);
 }
 
 .step-build-panel .build-summary-card {
-  border: 1px solid rgb(59 130 246);
+  border: 1px solid rgb(226 232 240);
   border-radius: 0.5rem;
   overflow: hidden;
   background: #fff;
@@ -3755,8 +3789,9 @@ onUnmounted(() => {
 
 .step-build-panel .build-summary-card__header {
   padding: 0.75rem 1rem;
-  background: rgb(37 99 235);
-  color: #fff;
+  border-bottom: 1px solid rgb(226 232 240);
+  background: rgb(248 250 252);
+  color: rgb(15 23 42);
 }
 
 .step-build-panel .build-summary-card__header h6 {
@@ -3811,40 +3846,6 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.step-build-panel .build-summary-grid .badge {
-  display: inline-block;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 0.25rem;
-  vertical-align: middle;
-}
-
-.step-build-panel .build-summary-grid .bg-info {
-  background: rgb(14 165 233);
-  color: #fff;
-}
-.step-build-panel .build-summary-grid .bg-success {
-  background: rgb(34 197 94);
-  color: #fff;
-}
-.step-build-panel .build-summary-grid .bg-warning {
-  background: rgb(250 204 21);
-  color: rgb(15 23 42);
-}
-.step-build-panel .build-summary-grid .bg-danger {
-  background: rgb(239 68 68);
-  color: #fff;
-}
-.step-build-panel .build-summary-grid .bg-primary {
-  background: rgb(37 99 235);
-  color: #fff;
-}
-.step-build-panel .build-summary-grid .bg-secondary {
-  background: rgb(100 116 139);
-  color: #fff;
-}
-
 .step-build-panel .build-summary-grid .table-scroll {
   overflow-x: auto;
 }
@@ -3868,17 +3869,25 @@ onUnmounted(() => {
   gap: 0.5rem;
 }
 
-.step-build-panel .button-group.w-full > .button,
 .step-build-panel .button-group.w-full > button,
 .step-build-panel .button-group.w-full > label {
   flex: 1 1 calc(50% - 0.25rem);
   min-width: 0;
+  gap: 0.5rem;
+  white-space: normal;
 }
 
-.step-build-panel .button-group--multi > .button,
 .step-build-panel .button-group--multi > button {
   flex: 1 1 auto;
   min-width: 5.5rem;
+}
+
+.step-build-panel .choice-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .step-build-panel .field-group {
@@ -3917,7 +3926,9 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(226 232 240);
 }
 
 .step-nav--end {
@@ -3937,7 +3948,7 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   .step-build-panel .step-panel {
     min-height: 0;
-    padding: 12px 0;
+    padding: 0.75rem;
   }
 
   .step-build-panel .button-group.w-full > .button,
@@ -3978,3 +3989,4 @@ onUnmounted(() => {
   }
 }
 </style>
+

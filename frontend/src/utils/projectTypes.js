@@ -10,12 +10,20 @@ const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24小时缓存
 
 // 默认项目类型（作为后备）
 const DEFAULT_PROJECT_TYPES = [
-  { value:"jar", label:"Java 应用（JAR）", icon:"java", badgeClass:"bg-red-600 text-white", order: 1 },
-  { value:"nodejs", label:"Node.js 应用", icon:"node-js", badgeClass:"bg-green-600 text-white", order: 2 },
-  { value:"python", label:"Python 应用", icon:"python", badgeClass:"bg-sky-500 text-white", order: 3 },
-  { value:"go", label:"Go 应用", icon:"code", badgeClass:"bg-blue-600 text-white", order: 4 },
-  { value:"web", label:"静态网站", icon:"globe", badgeClass:"bg-slate-500 text-white", order: 5 },
+  { value:"jar", label:"Java 应用（JAR）", icon:"java", order: 1 },
+  { value:"nodejs", label:"Node.js 应用", icon:"node-js", order: 2 },
+  { value:"python", label:"Python 应用", icon:"python", order: 3 },
+  { value:"go", label:"Go 应用", icon:"code", order: 4 },
+  { value:"web", label:"静态网站", icon:"globe", order: 5 },
 ]
+
+const PROJECT_TYPE_BADGE_CLASSES = {
+  jar:"border border-red-200 bg-red-50 text-red-700",
+  nodejs:"border border-emerald-200 bg-emerald-50 text-emerald-700",
+  python:"border border-sky-200 bg-sky-50 text-sky-700",
+  go:"border border-blue-200 bg-blue-50 text-blue-700",
+  web:"border border-slate-200 bg-slate-50 text-slate-700",
+}
 
 /**
  * 从缓存获取项目类型列表
@@ -123,8 +131,7 @@ export function getProjectTypeIcon(type) {
  * 获取项目类型徽章样式类
  */
 export function getProjectTypeBadgeClass(type) {
-  const info = getProjectTypeInfo(type)
-  return info?.badgeClass || 'bg-slate-500 text-white'
+  return PROJECT_TYPE_BADGE_CLASSES[type] || 'border border-slate-200 bg-slate-50 text-slate-700'
 }
 
 /**

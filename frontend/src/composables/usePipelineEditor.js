@@ -100,6 +100,7 @@ const formData = ref({
   webhook_secret:"", // Webhook 密钥
   webhook_branch_strategy:"use_push", // Webhook分支策略
   webhook_allowed_branches: [], // 允许触发的分支列表（用于选择分支触发策略）
+  tag_build_enabled: false,
   branch_tag_mapping: [], // 分支标签映射
   post_build_webhooks: [], // 构建完成后触发的webhook列表
   enabled: true,
@@ -618,6 +619,7 @@ function initCreateForm() {
     webhook_secret:"",
     webhook_branch_strategy:"use_push",
     webhook_allowed_branches: [],
+    tag_build_enabled: false,
     branch_tag_mapping: [],
     post_build_webhooks: [],
     enabled: true,
@@ -717,6 +719,7 @@ function applyPipelineToForm(pipeline) {
     webhook_allowed_branches: pipeline.webhook_allowed_branches
       ? [...pipeline.webhook_allowed_branches]
       : [],
+    tag_build_enabled: !!pipeline.tag_build_enabled,
     branch_tag_mapping: pipeline.branch_tag_mapping
       ? Object.entries(pipeline.branch_tag_mapping).map(([branch, tag]) => ({
           branch,

@@ -7,6 +7,7 @@
         {{ getProjectTypeLabel(pipeline.project_type) }}
       </span>
       <span v-if="pipeline.webhook_token" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-600 text-white">Webhook</span>
+      <span v-if="pipeline.tag_build_enabled" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-500 text-white">Tag 构建</span>
       <span v-if="pipeline.cron_expression" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white">定时</span>
     </div>
 

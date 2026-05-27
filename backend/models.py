@@ -53,6 +53,7 @@ class Pipeline(Base):
     webhook_branch_filter = Column(Boolean, default=False)
     webhook_use_push_branch = Column(Boolean, default=True)
     webhook_allowed_branches = Column(JSON, default=list)  # 允许触发的分支列表
+    tag_build_enabled = Column(Boolean, default=False)
     branch_tag_mapping = Column(JSON, default=dict)
 
     # 多服务配置

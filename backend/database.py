@@ -125,6 +125,9 @@ def _run_init_db_migrations():
     # 迁移：添加post_build_webhooks字段（如果不存在）
     migrate_add_post_build_webhooks()
 
+    # 迁移：添加流水线 Tag 构建开关字段（如果不存在）
+    migrate_add_pipeline_tag_build_enabled()
+
     # 迁移：添加Portainer相关字段到agent_hosts表（如果不存在）
     migrate_add_portainer_fields()
 
@@ -256,6 +259,45 @@ def migrate_add_post_build_webhooks():
             print(f"⚠️ 迁移post_build_webhooks字段失败: {e}")
     except Exception as e:
         print(f"⚠️ 迁移post_build_webhooks字段失败: {e}")
+
+
+def migrate_add_pipeline_tag_build_enabled():
+    """迁移：为pipelines表添加tag_build_enabled字段"""
+    if not os.path.exists(DB_FILE):
+        return
+
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='pipelines'"
+        )
+        if not cursor.fetchone():
+            conn.close()
+            return
+
+        cursor.execute("PRAGMA table_info(pipelines)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if "tag_build_enabled" not in columns:
+            print("🔄 添加 tag_build_enabled 字段到 pipelines 表...")
+            cursor.execute(
+                "ALTER TABLE pipelines ADD COLUMN tag_build_enabled BOOLEAN DEFAULT 0"
+            )
+            conn.commit()
+            print("✅ tag_build_enabled 字段添加成功")
+        else:
+            print("✅ tag_build_enabled 字段已存在")
+
+        conn.close()
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e).lower():
+            print("✅ tag_build_enabled 字段已存在")
+        else:
+            print(f"⚠️ 迁移tag_build_enabled字段失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 迁移tag_build_enabled字段失败: {e}")
 
 
 def migrate_add_portainer_fields():

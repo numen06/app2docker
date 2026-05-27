@@ -6166,6 +6166,7 @@ class CreatePipelineRequest(BaseModel):
     webhook_branch_filter: bool = False
     webhook_use_push_branch: bool = True
     webhook_allowed_branches: Optional[list] = None  # 允许触发的分支列表
+    tag_build_enabled: bool = False
     branch_tag_mapping: Optional[dict] = (
         None  # 分支到标签的映射，如 {"main": "latest", "dev": "dev"}
     )
@@ -6186,6 +6187,8 @@ class RunPipelineRequest(BaseModel):
     """手动触发流水线请求"""
 
     branch: Optional[str] = None  # 指定构建分支（如果提供则覆盖流水线配置）
+    ref_type: Optional[str] = None  # branch / tag
+    ref_name: Optional[str] = None  # 指定构建的分支或标签名称
 
 
 class UpdatePipelineRequest(BaseModel):
@@ -6210,6 +6213,7 @@ class UpdatePipelineRequest(BaseModel):
     webhook_branch_filter: Optional[bool] = None
     webhook_use_push_branch: Optional[bool] = None
     webhook_allowed_branches: Optional[list] = None
+    tag_build_enabled: Optional[bool] = None
     branch_tag_mapping: Optional[dict] = None
     source_id: Optional[str] = None
     selected_services: Optional[list] = None
@@ -6218,6 +6222,26 @@ class UpdatePipelineRequest(BaseModel):
     push_mode: Optional[str] = None
     resource_package_configs: Optional[list] = None
     post_build_webhooks: Optional[list] = None  # 构建完成后触发的webhook列表
+
+
+def _is_valid_docker_tag(tag: str) -> bool:
+    """Validate a Docker image tag without changing the user's Git tag."""
+    import re
+
+    if not isinstance(tag, str):
+        return False
+    return tag == tag.strip() and bool(re.fullmatch(r"[\w][\w.-]{0,127}", tag))
+
+
+def _require_valid_git_tag_for_image(tag: str):
+    if not _is_valid_docker_tag(tag):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Git tag 不能作为 Docker 镜像标签使用。"
+                "Docker tag 必须以字母、数字或下划线开头，且只能包含字母、数字、下划线、点和短横线，长度不超过128。"
+            ),
+        )
 
 
 @router.post("/pipelines")
@@ -6284,6 +6308,7 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
             webhook_branch_filter=request.webhook_branch_filter,
             webhook_use_push_branch=request.webhook_use_push_branch,
             webhook_allowed_branches=request.webhook_allowed_branches,
+            tag_build_enabled=request.tag_build_enabled,
             branch_tag_mapping=request.branch_tag_mapping,
             source_id=request.source_id,
             selected_services=request.selected_services,
@@ -6399,6 +6424,8 @@ async def create_pipeline_from_json(pipeline_data: dict, http_request: Request):
             cron_expression=pipeline_data.get("cron_expression"),
             webhook_branch_filter=pipeline_data.get("webhook_branch_filter", False),
             webhook_use_push_branch=pipeline_data.get("webhook_use_push_branch", True),
+            webhook_allowed_branches=pipeline_data.get("webhook_allowed_branches"),
+            tag_build_enabled=pipeline_data.get("tag_build_enabled", False),
             branch_tag_mapping=pipeline_data.get("branch_tag_mapping"),
             source_id=pipeline_data.get("source_id"),
             selected_services=pipeline_data.get("selected_services"),
@@ -6847,6 +6874,7 @@ async def update_pipeline(
             webhook_branch_filter=request.webhook_branch_filter,
             webhook_use_push_branch=request.webhook_use_push_branch,
             webhook_allowed_branches=request.webhook_allowed_branches,
+            tag_build_enabled=request.tag_build_enabled,
             branch_tag_mapping=request.branch_tag_mapping,
             source_id=request.source_id,
             selected_services=request.selected_services,
@@ -7003,16 +7031,37 @@ async def run_pipeline(
         # 获取请求中的分支参数（如果提供则覆盖流水线配置）
         # 如果请求体存在且有branch字段，使用请求的分支；否则使用流水线配置的分支
         selected_branch = None
+        final_ref_type = "branch"
+        final_ref_name = None
         if request:
+            requested_ref_type = (getattr(request, "ref_type", None) or "").strip().lower()
+            requested_ref_name = (getattr(request, "ref_name", None) or "").strip()
+            if requested_ref_type:
+                if requested_ref_type not in ("branch", "tag"):
+                    raise HTTPException(status_code=400, detail="ref_type 仅支持 branch 或 tag")
+                final_ref_type = requested_ref_type
+                final_ref_name = requested_ref_name or None
             # 检查请求对象是否有branch属性
             if hasattr(request, "branch"):
                 selected_branch = request.branch
                 # 如果branch是空字符串，也视为有效（表示使用默认分支）
                 if selected_branch == "":
                     selected_branch = None
+            if final_ref_type == "branch" and not final_ref_name:
+                final_ref_name = selected_branch
+        if final_ref_type == "tag":
+            if not pipeline.get("tag_build_enabled", False):
+                raise HTTPException(status_code=403, detail="流水线未启用 Tag 构建")
+            if not final_ref_name:
+                raise HTTPException(status_code=400, detail="Tag 构建必须提供 ref_name")
+            _require_valid_git_tag_for_image(final_ref_name)
+            selected_branch = final_ref_name
         final_branch = (
-            selected_branch if selected_branch is not None else pipeline.get("branch")
+            final_ref_name
+            if final_ref_type == "tag"
+            else selected_branch if selected_branch is not None else pipeline.get("branch")
         )
+        final_ref_name = final_ref_name or final_branch
 
         # 调试日志 - 详细输出
         print(f"🔍 手动触发流水线 {pipeline_id}:")
@@ -7033,15 +7082,17 @@ async def run_pipeline(
             f"   - selected_branch == pipeline.get('branch'): {selected_branch == pipeline.get('branch')}"
         )
         print(f"   - selected_branch is not None: {selected_branch is not None}")
+        print(f"   - final_ref_type: {final_ref_type}")
+        print(f"   - final_ref_name: {final_ref_name}")
 
         # 处理分支标签映射（与webhook使用相同的逻辑）
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         default_tag = pipeline.get("tag", "latest")  # 默认标签
 
         # 获取标签列表（支持单个标签或多个标签）
-        tags = [default_tag]  # 默认只有一个标签
+        tags = [final_ref_name] if final_ref_type == "tag" else [default_tag]  # 默认只有一个标签
 
-        if final_branch and branch_tag_mapping:
+        if final_ref_type != "tag" and final_branch and branch_tag_mapping:
             mapped_tag_value = None
             # 优先精确匹配
             if final_branch in branch_tag_mapping:
@@ -7087,6 +7138,8 @@ async def run_pipeline(
                     branch=final_branch,
                     tag=tag,
                     branch_tag_mapping=branch_tag_mapping,
+                    git_ref_type=final_ref_type,
+                    git_ref_name=final_ref_name,
                 )
                 task_config["username"] = username
                 task_id = build_manager._trigger_task_from_config(task_config)
@@ -7104,6 +7157,8 @@ async def run_pipeline(
                     "task_id": task_ids[0] if task_ids else None,
                     "queue_length": queue_length,
                     "branch": final_branch,
+                    "ref_type": final_ref_type,
+                    "ref_name": final_ref_name,
                     "trigger_source": "manual",
                     "reason": "debounce",
                 },
@@ -7119,6 +7174,8 @@ async def run_pipeline(
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
             else:
@@ -7130,6 +7187,8 @@ async def run_pipeline(
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
 
@@ -7138,9 +7197,9 @@ async def run_pipeline(
         default_tag = pipeline.get("tag", "latest")  # 默认标签
 
         # 获取标签列表（支持单个标签或多个标签）
-        tags = [default_tag]  # 默认只有一个标签
+        tags = [final_ref_name] if final_ref_type == "tag" else [default_tag]  # 默认只有一个标签
 
-        if final_branch and branch_tag_mapping:
+        if final_ref_type != "tag" and final_branch and branch_tag_mapping:
             mapped_tag_value = None
             # 优先精确匹配
             if final_branch in branch_tag_mapping:
@@ -7187,6 +7246,8 @@ async def run_pipeline(
                 branch=final_branch,
                 tag=tag,
                 branch_tag_mapping=branch_tag_mapping,
+                git_ref_type=final_ref_type,
+                git_ref_name=final_ref_name,
             )
             task_config["username"] = username
 
@@ -7222,6 +7283,8 @@ async def run_pipeline(
                 trigger_info={
                     "username": username,
                     "branch": final_branch,
+                    "ref_type": final_ref_type,
+                    "ref_name": final_ref_name,
                 },
             )
 
@@ -7235,6 +7298,8 @@ async def run_pipeline(
                     "task_id": first_task_id,
                     "task_ids": task_ids if len(task_ids) > 1 else None,
                     "branch": final_branch,
+                    "ref_type": final_ref_type,
+                    "ref_name": final_ref_name,
                     "trigger_source": "manual",
                 },
             )
@@ -7251,6 +7316,8 @@ async def run_pipeline(
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
             else:
@@ -7261,6 +7328,8 @@ async def run_pipeline(
                         "task_id": first_task_id,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
         else:
@@ -7386,6 +7455,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
 
         # 提取分支信息（不同平台格式不同）
         webhook_branch = None
+        webhook_tag = None
 
         # 首先尝试从 ref 字段提取分支（最可靠的方式）
         if "ref" in payload:
@@ -7396,17 +7466,10 @@ async def webhook_trigger(webhook_token: str, request: Request):
             if ref.startswith("refs/heads/"):
                 webhook_branch = ref.replace("refs/heads/", "")
                 print(f"✅ 从 refs/heads/ 提取分支: {webhook_branch}")
-            # 处理标签引用：refs/tags/tag_name（应该忽略）
+            # 处理标签引用：refs/tags/tag_name
             elif ref.startswith("refs/tags/"):
-                print(f"⚠️ 检测到标签推送 (refs/tags/)，忽略此 webhook 触发")
-                return JSONResponse(
-                    {
-                        "message": "标签推送事件，已忽略触发",
-                        "pipeline": pipeline.get("name"),
-                        "ref": ref,
-                        "ignored": True,
-                    }
-                )
+                webhook_tag = ref.replace("refs/tags/", "")
+                print(f"✅ 从 refs/tags/ 提取标签: {webhook_tag}")
             # GitLab: ref = main (可能已经是分支名，不包含 refs/ 前缀)
             elif not ref.startswith("refs/"):
                 webhook_branch = ref
@@ -7437,6 +7500,116 @@ async def webhook_trigger(webhook_token: str, request: Request):
         else:
             print(f"⚠️ 未能从 payload 中提取分支信息")
             print(f"   可用的 payload 字段: {list(payload.keys())}")
+
+        if webhook_tag:
+            if not pipeline.get("tag_build_enabled", False):
+                return JSONResponse(
+                    {
+                        "message": "标签推送事件，流水线未启用 Tag 构建，已忽略触发",
+                        "pipeline": pipeline.get("name"),
+                        "ref": payload.get("ref"),
+                        "tag": webhook_tag,
+                        "ignored": True,
+                    }
+                )
+
+            _require_valid_git_tag_for_image(webhook_tag)
+
+            from backend.handlers import pipeline_to_task_config
+
+            build_manager = BuildManager()
+            pipeline_id = pipeline["pipeline_id"]
+            branch = webhook_tag
+            tags = [webhook_tag]
+            task_config = pipeline_to_task_config(
+                pipeline,
+                trigger_source="webhook",
+                branch=branch,
+                tag=webhook_tag,
+                webhook_branch=None,
+                branch_tag_mapping={},
+                git_ref_type="tag",
+                git_ref_name=webhook_tag,
+            )
+            duplicate_result = manager.check_duplicate_task(
+                pipeline_id, task_config, debounce_seconds=3
+            )
+            if duplicate_result == "debounced":
+                return JSONResponse(
+                    {
+                        "message": "触发过于频繁，相同标签的触发已被屏蔽（3秒内）",
+                        "status": "debounced",
+                        "pipeline": pipeline.get("name"),
+                        "tag": webhook_tag,
+                        "ref_type": "tag",
+                        "ref_name": webhook_tag,
+                    }
+                )
+
+            has_same_ref_task = (
+                duplicate_result in ("running_same_config", "queued_same_config")
+                or manager.check_same_branch_task_running_or_queued(pipeline_id, branch)
+            )
+            task_id = build_manager._trigger_task_from_config(task_config)
+            queue_length = manager.get_queue_length(pipeline_id)
+            webhook_info = {
+                "branch": branch,
+                "tag": webhook_tag,
+                "tags": tags,
+                "ref_type": "tag",
+                "ref_name": webhook_tag,
+                "event": request.headers.get("x-gitee-event")
+                or request.headers.get("x-gitlab-event")
+                or request.headers.get("x-github-event", "unknown"),
+                "platform": (
+                    "gitee"
+                    if "x-gitee-event" in request.headers
+                    else ("gitlab" if "x-gitlab-event" in request.headers else "github")
+                ),
+            }
+            if payload.get("repository"):
+                webhook_info["repository"] = payload["repository"].get("name", "")
+
+            manager.record_trigger(
+                pipeline_id,
+                task_id,
+                trigger_source="webhook",
+                trigger_info=webhook_info,
+            )
+            OperationLogger.log(
+                "webhook",
+                "pipeline_trigger",
+                {
+                    "pipeline_id": pipeline_id,
+                    "pipeline_name": pipeline.get("name"),
+                    "task_id": task_id,
+                    "tag": webhook_tag,
+                    "tags": tags,
+                    "branch": branch,
+                    "ref_type": "tag",
+                    "ref_name": webhook_tag,
+                    "trigger_source": "webhook",
+                    "webhook_info": webhook_info,
+                },
+            )
+            return JSONResponse(
+                {
+                    "message": (
+                        "任务已创建并加入队列（相同 Tag 任务正在执行）"
+                        if has_same_ref_task
+                        else "构建任务已启动"
+                    ),
+                    "status": "queued" if has_same_ref_task else "started",
+                    "task_id": task_id,
+                    "queue_length": queue_length,
+                    "pipeline": pipeline.get("name"),
+                    "branch": branch,
+                    "tag": webhook_tag,
+                    "tags": tags,
+                    "ref_type": "tag",
+                    "ref_name": webhook_tag,
+                }
+            )
 
         # 统一分支策略处理（与手动触发保持一致）
         # 支持新的webhook_branch_strategy字段，同时兼容旧的webhook_branch_filter和webhook_use_push_branch字段
@@ -7634,6 +7807,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 tag=first_tag,
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
+                git_ref_type="branch",
+                git_ref_name=branch,
             )
             print(
                 f"🔍 [Webhook触发] 任务配置已生成: pipeline_id={pipeline_id[:8]}..., branch={first_task_config.get('branch')}, tag={first_task_config.get('tag')}"
@@ -7698,6 +7873,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 tag=tag,
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
+                git_ref_type="branch",
+                git_ref_name=branch,
             )
             print(
                 f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
@@ -7724,6 +7901,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
         webhook_info = {
             "branch": branch,
             "tags": tags,  # 添加标签列表信息
+            "ref_type": "branch",
+            "ref_name": branch,
             "event": request.headers.get("x-gitee-event")
             or request.headers.get("x-gitlab-event")
             or request.headers.get("x-github-event", "unknown"),

@@ -100,23 +100,22 @@
               </h5>
               <!-- 徽章行 -->
               <div
-                class="pipeline-card-badges flex items-center justify-between mb-1"
+                class="pipeline-card-badges mb-1 flex items-center justify-between gap-2"
               >
-                <div>
-                  <span v-if="pipeline.enabled" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white">
-                    <AppIcon  name="check-circle" /> 已启用
+                <div class="shrink-0">
+                  <span v-if="pipeline.enabled" class="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                    <AppIcon name="check-circle" class="h-3.5 w-3.5" /> 已启用
                   </span>
-                  <span v-else class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white">
-                    <AppIcon  name="times-circle" /> 已禁用
+                  <span v-else class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    <AppIcon name="times-circle" class="h-3.5 w-3.5" /> 已禁用
                   </span>
                 </div>
                 <span
-                  class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
+                  class="pipeline-type-badge inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium"
                   :class="getProjectTypeBadgeClass(pipeline.project_type)"
-                  style="font-size: 0.8rem; padding: 0.3rem 0.6rem"
                 >
-                  <AppIcon :name="getProjectTypeIcon(pipeline.project_type)" />
-                  {{ getProjectTypeLabel(pipeline.project_type) }}
+                  <AppIcon :name="getProjectTypeIcon(pipeline.project_type)" class="h-3.5 w-3.5" />
+                  <span class="truncate">{{ getProjectTypeLabel(pipeline.project_type) }}</span>
                 </span>
               </div>
               <p
@@ -341,13 +340,12 @@
               <!-- 最后构建状态 -->
               <div class="mb-3">
                 <div
-                  class="pipeline-build-header flex items-center justify-between mb-2"
+                  class="pipeline-build-header mb-2 flex min-w-0 items-center justify-between gap-3"
                 >
                   <span
-                    class="text-slate-500 fw-semibold"
-                    style="font-size: 0.9rem"
+                    class="inline-flex shrink-0 items-center text-sm font-semibold text-slate-600"
                   >
-                    <AppIcon  name="hammer" class="mr-1" />
+                    <AppIcon name="hammer" class="mr-1 h-4 w-4" />
                     {{ isLastBuildRunning(pipeline) ?"当前任务" :"最后构建" }}
                   </span>
                   <!-- 如果最后构建是运行中或等待中，显示为当前任务 -->
@@ -356,30 +354,31 @@
                       pipeline.last_build &&
                       (pipeline.last_build.status === 'running' ||
                         pipeline.last_build.status === 'pending')"
-                    class="flex items-center gap-2"
+                    class="pipeline-build-status flex min-w-0 flex-wrap items-center justify-end gap-2"
                   >
                     <span
                       v-if="pipeline.last_build.status === 'running'"
-                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-600 text-white"
+                      class="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
                     >
                       <AppIcon
-                        
-                        style="width: 0.7rem; height: 0.7rem"
-                       name="spinner" class="mr-1" spin />
+                        name="spinner"
+                        class="h-3.5 w-3.5"
+                        spin
+                      />
                       运行中
                     </span>
                     <span
                       v-else-if="pipeline.last_build.status === 'pending'"
-                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-amber-400 text-slate-900"
+                      class="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
                     >
-                      <AppIcon  name="clock" /> 等待中
+                      <AppIcon name="clock" class="h-3.5 w-3.5" /> 等待中
                     </span>
                     <span
                       v-else-if="
                         pipeline.queue_length && pipeline.queue_length > 0"
-                      class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white"
+                      class="inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800"
                     >
-                      <AppIcon  name="list" />
+                      <AppIcon name="list" class="h-3.5 w-3.5" />
                       {{ pipeline.queue_length }}个排队
                     </span>
                     <Button
@@ -387,8 +386,9 @@
                         pipeline.last_build &&
                         pipeline.last_build.task_id &&
                         pipeline.last_build.status !== 'deleted'"
-                      variant="outline" size="sm"
-                      style="width: 24px; height: 24px; line-height: 1"
+                      variant="outline"
+                      size="sm"
+                      class="h-8 min-h-8 w-8 shrink-0 px-0 py-0"
                       @click.stop="
                         buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
@@ -396,7 +396,7 @@
                         )"
                       title="查看日志"
                     >
-                      <AppIcon  style="font-size: 0.75rem" name="terminal" />
+                      <AppIcon name="terminal" class="h-4 w-4" />
                     </Button>
                   </div>
                   <!-- 如果最后构建已完成或失败，显示为历史构建 -->
@@ -405,24 +405,26 @@
                       pipeline.last_build &&
                       (pipeline.last_build.status === 'completed' ||
                         pipeline.last_build.status === 'failed')"
-                    class="flex items-center gap-2"
+                    class="pipeline-build-status flex min-w-0 flex-wrap items-center justify-end gap-2"
                   >
                     <span
+                      class="inline-flex min-w-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium"
                       :class="{
-                        badge: true,
-                        'bg-green-600 text-white':
+                        'bg-green-100 text-green-800':
                           pipeline.last_build.status === 'completed',
-                        'bg-red-600 text-white': pipeline.last_build.status === 'failed',
+                        'bg-red-100 text-red-800': pipeline.last_build.status === 'failed',
                       }"
                     >
                       <AppIcon
                         v-if="pipeline.last_build.status === 'completed'"
-                        
-                       name="check-circle" />
+                        name="check-circle"
+                        class="h-3.5 w-3.5"
+                      />
                       <AppIcon
                         v-else-if="pipeline.last_build.status === 'failed'"
-                        
-                       name="times-circle" />
+                        name="times-circle"
+                        class="h-3.5 w-3.5"
+                      />
                       {{
                         pipeline.last_build.status ==="completed"
                           ?"成功"
@@ -434,8 +436,9 @@
                         pipeline.last_build &&
                         pipeline.last_build.task_id &&
                         pipeline.last_build.status !== 'deleted'"
-                      variant="outline" size="sm"
-                      style="width: 24px; height: 24px; line-height: 1"
+                      variant="outline"
+                      size="sm"
+                      class="h-8 min-h-8 w-8 shrink-0 px-0 py-0"
                       @click.stop="
                         buildTaskLogs.viewTaskLogs(
                           pipeline.last_build.task_id,
@@ -443,12 +446,10 @@
                         )"
                       title="查看日志"
                     >
-                      <AppIcon  style="font-size: 0.75rem" name="terminal" />
+                      <AppIcon name="terminal" class="h-4 w-4" />
                     </Button>
                   </div>
-                  <span v-else class="text-slate-500" style="font-size: 0.85rem"
-                    >暂无构建</span
-                  >
+                  <span v-else class="text-sm text-slate-400">暂无构建</span>
                 </div>
                 <!-- 构建详情 -->
                 <div
@@ -560,7 +561,7 @@
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div class="mb-3">
               <label class="block text-sm font-medium text-slate-700">
-                <strong>选择分支</strong>
+                <strong>选择分支或标签</strong>
                 <span class="text-red-500">*</span>
               </label>
               <div
@@ -570,7 +571,7 @@
                 <AppIcon  name="spinner" spin /> 正在加载分支列表...
               </div>
               <div
-                v-else-if="manualRunBranches.length === 0"
+                v-else-if="manualRunBranches.length === 0 && manualRunTags.length === 0"
                 class="rounded-md border px-3 py-2 text-sm border-amber-200 bg-amber-50 text-amber-900"
               >
                 <AppIcon  name="exclamation-triangle" />
@@ -583,14 +584,28 @@
                   required
                   @change="handleBranchChange"
                 >
-                  <option value="">-- 请选择分支 --</option>
-                  <option
-                    v-for="branch in manualRunBranches"
-                    :key="branch"
-                    :value="branch"
+                  <option value="">-- 请选择分支或标签 --</option>
+                  <optgroup v-if="manualRunBranches.length > 0" label="分支">
+                    <option
+                      v-for="branch in manualRunBranches"
+                      :key="`branch-${branch}`"
+                      :value="makeManualRunRefValue('branch', branch)"
+                    >
+                      {{ branch }}
+                    </option>
+                  </optgroup>
+                  <optgroup
+                    v-if="manualRunPipeline?.tag_build_enabled && manualRunTags.length > 0"
+                    label="标签"
                   >
-                    {{ branch }}
-                  </option>
+                    <option
+                      v-for="tag in manualRunTags"
+                      :key="`tag-${tag}`"
+                      :value="makeManualRunRefValue('tag', tag)"
+                    >
+                      {{ tag }}
+                    </option>
+                  </optgroup>
                 </select>
                 <Button
                   variant="outline" size="sm"
@@ -608,7 +623,7 @@
               </div>
               <small class="text-slate-500 block mt-1">
                 <AppIcon  name="info-circle" />
-                选择要用于构建的分支，点击刷新按钮可重新加载分支列表
+                选择要用于构建的分支；启用 Tag 构建后也可选择标签，点击刷新按钮可重新加载列表
               </small>
             </div>
           </div>
@@ -852,6 +867,7 @@ const showManualRunModal = ref(false); // 手动触发分支选择模态框
 const manualRunPipeline = ref(null); // 要手动触发的流水线
 const manualRunSelectedBranch = ref(""); // 手动触发选择的分支
 const manualRunBranches = ref([]); // 手动触发可用的分支列表
+const manualRunTags = ref([]); // 手动触发可用的标签列表
 const loadingManualRunBranches = ref(false); // 正在加载分支列表
 const multiServiceConfigPipeline = ref(null);
 const savingMultiServiceConfig = ref(false);
@@ -929,6 +945,7 @@ const formData = ref({
   webhook_secret:"", // Webhook 密钥
   webhook_branch_strategy:"use_push", // Webhook分支策略
   webhook_allowed_branches: [], // 允许触发的分支列表（用于选择分支触发策略）
+  tag_build_enabled: false,
   branch_tag_mapping: [], // 分支标签映射
   post_build_webhooks: [], // 构建完成后触发的webhook列表
   enabled: true,
@@ -1580,6 +1597,7 @@ function showCreateModal() {
     webhook_secret:"",
     webhook_branch_strategy:"use_push",
     webhook_allowed_branches: [],
+    tag_build_enabled: false,
     branch_tag_mapping: [],
     post_build_webhooks: [],
     enabled: true,
@@ -1678,6 +1696,7 @@ function editPipeline(pipeline) {
     webhook_allowed_branches: pipeline.webhook_allowed_branches
       ? [...pipeline.webhook_allowed_branches]
       : [],
+    tag_build_enabled: !!pipeline.tag_build_enabled,
     branch_tag_mapping: pipeline.branch_tag_mapping
       ? Object.entries(pipeline.branch_tag_mapping).map(([branch, tag]) => ({
           branch,
@@ -3697,6 +3716,22 @@ async function deletePipeline(pipeline) {
 }
 
 // 手动运行流水线（带防抖）
+function makeManualRunRefValue(type, name) {
+  return name ? `${type}:${name}` :"";
+}
+
+function parseManualRunRefValue(value) {
+  const raw = value ||"";
+  const separatorIndex = raw.indexOf(":");
+  if (separatorIndex <= 0) {
+    return { type:"branch", name: raw };
+  }
+  return {
+    type: raw.slice(0, separatorIndex),
+    name: raw.slice(separatorIndex + 1),
+  };
+}
+
 async function runPipeline(pipeline) {
   const pipelineId = pipeline.pipeline_id;
 
@@ -3709,7 +3744,7 @@ async function runPipeline(pipeline) {
   debounceTimers.value[pipelineId] = setTimeout(async () => {
     // 保存要触发的流水线
     manualRunPipeline.value = pipeline;
-    manualRunSelectedBranch.value = pipeline.branch ||""; // 默认使用配置的分支
+    manualRunSelectedBranch.value = makeManualRunRefValue("branch", pipeline.branch ||""); // 默认使用配置的分支
 
     // 调试日志：初始化时的值
     console.log("🔍 runPipeline 初始化:");
@@ -3738,6 +3773,7 @@ async function runPipeline(pipeline) {
 // 加载手动触发可用的分支列表
 async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
   loadingManualRunBranches.value = true;
+  manualRunTags.value = [];
 
   try {
     // 如果不是强制刷新，优先从gitSources中获取分支列表
@@ -3746,8 +3782,13 @@ async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
         const source = gitSources.value.find(
           (s) => s.source_id === pipeline.source_id
         );
-        if (source && source.branches && source.branches.length > 0) {
-          manualRunBranches.value = [...source.branches];
+        if (
+          source &&
+          ((source.branches && source.branches.length > 0) ||
+            (pipeline.tag_build_enabled && source.tags && source.tags.length > 0))
+        ) {
+          manualRunBranches.value = [...(source.branches || [])];
+          manualRunTags.value = pipeline.tag_build_enabled ? [...(source.tags || [])] : [];
           loadingManualRunBranches.value = false;
           return;
         }
@@ -3758,8 +3799,13 @@ async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
         const source = gitSources.value.find(
           (s) => s.git_url === pipeline.git_url
         );
-        if (source && source.branches && source.branches.length > 0) {
-          manualRunBranches.value = [...source.branches];
+        if (
+          source &&
+          ((source.branches && source.branches.length > 0) ||
+            (pipeline.tag_build_enabled && source.tags && source.tags.length > 0))
+        ) {
+          manualRunBranches.value = [...(source.branches || [])];
+          manualRunTags.value = pipeline.tag_build_enabled ? [...(source.tags || [])] : [];
           loadingManualRunBranches.value = false;
           return;
         }
@@ -3776,12 +3822,14 @@ async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
       );
       if (res.data && res.data.branches) {
         manualRunBranches.value = res.data.branches;
+        manualRunTags.value = pipeline.tag_build_enabled ? res.data.tags || [] : [];
         // 更新gitSources中的分支列表
         const source = gitSources.value.find(
           (s) => s.source_id === pipeline.source_id
         );
         if (source) {
           source.branches = res.data.branches;
+          source.tags = res.data.tags || [];
         }
       }
     } else if (pipeline.git_url) {
@@ -3793,6 +3841,7 @@ async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
         const res = await axios.get("/api/git-sources", { params });
         if (res.data && res.data.length > 0 && res.data[0].branches) {
           manualRunBranches.value = res.data[0].branches;
+          manualRunTags.value = pipeline.tag_build_enabled ? res.data[0].tags || [] : [];
         }
       } catch (error) {
         console.error("通过git_url获取分支列表失败:", error);
@@ -3803,12 +3852,16 @@ async function loadBranchesForManualRun(pipeline, forceRefresh = false) {
     if (manualRunBranches.value.length === 0 && pipeline.branch) {
       manualRunBranches.value = [pipeline.branch];
     }
+    if (!pipeline.tag_build_enabled) {
+      manualRunTags.value = [];
+    }
   } catch (error) {
     console.error("加载分支列表失败:", error);
     // 如果加载失败，至少显示配置的分支
     if (pipeline.branch) {
       manualRunBranches.value = [pipeline.branch];
     }
+    manualRunTags.value = [];
   } finally {
     loadingManualRunBranches.value = false;
   }
@@ -3844,6 +3897,7 @@ async function refreshManualRunBranches() {
 
     if (response.data && response.data.branches) {
       manualRunBranches.value = response.data.branches || [];
+      manualRunTags.value = pipeline.tag_build_enabled ? response.data.tags || [] : [];
 
       // 更新gitSources中的分支列表缓存
       if (sourceId) {
@@ -3870,6 +3924,7 @@ async function refreshManualRunBranches() {
       } else {
         manualRunBranches.value = [];
       }
+      manualRunTags.value = [];
     }
   } catch (error) {
     console.error("刷新分支列表失败:", error);
@@ -3884,6 +3939,7 @@ async function refreshManualRunBranches() {
     } else {
       manualRunBranches.value = [];
     }
+    manualRunTags.value = [];
   } finally {
     loadingManualRunBranches.value = false;
   }
@@ -3908,19 +3964,23 @@ async function confirmManualRun() {
   );
 
   if (!manualRunSelectedBranch.value) {
-    toastError("请选择分支");
+    toastError("请选择分支或标签");
     return;
   }
 
   const pipeline = manualRunPipeline.value;
   const pipelineId = pipeline.pipeline_id;
 
-  // 重要：在关闭模态框之前，先保存选择的分支值
-  const selectedBranch = manualRunSelectedBranch.value;
+  // 重要：在关闭模态框之前，先保存选择的引用值
+  const selectedRef = parseManualRunRefValue(manualRunSelectedBranch.value);
+  const selectedBranch = selectedRef.name;
+  const selectedRefType = selectedRef.type ==="tag" ?"tag" :"branch";
+  const selectedRefLabel = selectedRefType ==="tag" ?"标签" :"分支";
 
   // 调试日志：确认要发送的分支
   console.log("🔍 准备发送请求:");
-  console.log("   - 选择的分支:", selectedBranch);
+  console.log("   - 选择的引用类型:", selectedRefType);
+  console.log("   - 选择的引用名称:", selectedBranch);
   console.log("   - 流水线默认分支:", pipeline.branch);
   console.log("   - 是否相同:", selectedBranch === pipeline.branch);
 
@@ -3935,7 +3995,7 @@ async function confirmManualRun() {
       ?"\n当前有任务正在运行，新任务将加入队列"
       :"";
 
-  if (!(await showConfirm({ message: `确定要运行流水线"${pipeline.name}" 吗？\n分支: ${selectedBranch}${queueInfo}${runningInfo}` }))) {
+  if (!(await showConfirm({ message: `确定要运行流水线"${pipeline.name}" 吗？\n${selectedRefLabel}: ${selectedBranch}${queueInfo}${runningInfo}` }))) {
     return;
   }
 
@@ -3946,17 +4006,19 @@ async function confirmManualRun() {
   try {
     // 调试日志：检查前端发送的分支参数
     console.log("🔍 前端发送请求:");
-    console.log("   - 保存的分支值:", selectedBranch);
+    console.log("   - 保存的引用值:", selectedBranch);
     console.log("   - manualRunSelectedBranch.value (已清空):",
       manualRunSelectedBranch.value
     );
     console.log("   - pipelineId:", pipelineId);
-    console.log("   - 请求体:", { branch: selectedBranch });
+    const runPayload =
+      selectedRefType ==="tag"
+        ? { ref_type:"tag", ref_name: selectedBranch }
+        : { branch: selectedBranch, ref_type:"branch", ref_name: selectedBranch };
+    console.log("   - 请求体:", runPayload);
 
     // 调用API时传递分支参数（使用保存的值，而不是 manualRunSelectedBranch.value）
-    const res = await axios.post(`/api/pipelines/${pipelineId}/run`, {
-      branch: selectedBranch,
-    });
+    const res = await axios.post(`/api/pipelines/${pipelineId}/run`, runPayload);
 
     // 调试日志：检查后端返回的分支
     console.log("🔍 后端返回响应:");
@@ -3969,8 +4031,8 @@ async function confirmManualRun() {
       const queueInfo = res.data.queue_length
         ? `（队列位置: ${res.data.queue_length}）`
         :"";
-      toastSuccess(`流水线已加入队列！${queueInfo}\n分支: ${
-          res.data.branch || selectedBranch
+      toastSuccess(`流水线已加入队列！${queueInfo}\n${selectedRefLabel}: ${
+          res.data.ref_name || res.data.branch || selectedBranch
         }`);
       // 发送事件通知任务管理页面刷新（队列中的任务也会创建pending状态的任务）
       if (res.data.task_id) {
@@ -3986,8 +4048,8 @@ async function confirmManualRun() {
       }
     } else if (res.data.task_id) {
       // 任务立即运行
-      toastSuccess(`流水线已启动！\n任务 ID: ${res.data.task_id}\n分支: ${
-          res.data.branch || selectedBranch
+      toastSuccess(`流水线已启动！\n任务 ID: ${res.data.task_id}\n${selectedRefLabel}: ${
+          res.data.ref_name || res.data.branch || selectedBranch
         }`);
       // 发送事件通知任务管理页面刷新
       window.dispatchEvent(
@@ -4041,6 +4103,7 @@ function closeManualRunModal() {
   manualRunPipeline.value = null;
   manualRunSelectedBranch.value ="";
   manualRunBranches.value = [];
+  manualRunTags.value = [];
   loadingManualRunBranches.value = false;
 }
 
