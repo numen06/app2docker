@@ -86,7 +86,11 @@ from backend.app_key_manager import (
     delete_app_key,
     toggle_app_key,
 )
-from backend.team_permissions import get_user_id_by_username, require_team_member
+from backend.team_permissions import (
+    get_user_id_by_username,
+    require_team_admin,
+    require_team_member,
+)
 from backend.team_scope import (
     export_task_visible_to_user,
     get_effective_team_id_for_task,
@@ -4195,6 +4199,7 @@ async def cleanup_tasks(
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
             user_id = get_user_id_by_username(db, username)
+            require_team_admin(db, scoped_team_id, user_id)
         finally:
             db.close()
         removed_count = 0
@@ -4209,9 +4214,7 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = build_manager.list_tasks(
-                    team_id=scoped_team_id, user_id=user_id
-                )
+                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4229,7 +4232,7 @@ async def cleanup_tasks(
                 tasks_to_remove = [
                     task["task_id"]
                     for task in build_manager.list_tasks(
-                        status=status, team_id=scoped_team_id, user_id=user_id
+                        status=status, team_id=scoped_team_id
                     )
                 ]
 
@@ -4239,9 +4242,7 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = build_manager.list_tasks(
-                    team_id=scoped_team_id, user_id=user_id
-                )
+                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4263,9 +4264,7 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = export_manager.list_tasks(
-                    team_id=scoped_team_id, user_id=user_id
-                )
+                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4283,7 +4282,7 @@ async def cleanup_tasks(
                 tasks_to_remove = [
                     task["task_id"]
                     for task in export_manager.list_tasks(
-                        status=status, team_id=scoped_team_id, user_id=user_id
+                        status=status, team_id=scoped_team_id
                     )
                 ]
 
@@ -4293,9 +4292,7 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = export_manager.list_tasks(
-                    team_id=scoped_team_id, user_id=user_id
-                )
+                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4327,6 +4324,8 @@ async def cleanup_tasks(
                 "message": f"已清理 {removed_count} 个任务",
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
 

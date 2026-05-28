@@ -42,6 +42,11 @@ def team_to_dict(t: Team) -> dict:
         "task_cleanup_days": (
             max(1, int(t.task_cleanup_days)) if t.task_cleanup_days is not None else 7
         ),
+        "max_concurrent_tasks": (
+            min(10, max(1, int(t.max_concurrent_tasks)))
+            if t.max_concurrent_tasks is not None
+            else 10
+        ),
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None,
     }

@@ -736,6 +736,7 @@ class Team(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     task_cleanup_days = Column(Integer, default=7)  # 任务自动清理保留天数
+    max_concurrent_tasks = Column(Integer, default=10)  # 团队最大并发任务数
 
     members = relationship(
         "TeamMember",

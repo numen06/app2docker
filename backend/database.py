@@ -169,6 +169,7 @@ def _run_init_db_migrations():
 
     # 迁移：团队任务清理天数
     migrate_add_team_task_cleanup_days()
+    migrate_add_team_max_concurrent_tasks()
 
     # 迁移：任务/导出/主机/资源包/操作日志 team_id
     migrate_add_team_id_to_misc_tables()
@@ -1670,6 +1671,29 @@ def migrate_add_team_task_cleanup_days():
         conn.close()
     except Exception as e:
         print(f"⚠️ 迁移 task_cleanup_days 字段失败: {e}")
+
+
+def migrate_add_team_max_concurrent_tasks():
+    """迁移：为 teams 表添加 max_concurrent_tasks 字段"""
+    if not os.path.exists(DB_FILE):
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE, timeout=30.0)
+        cursor = conn.cursor()
+        _add_column_if_missing(
+            cursor,
+            "teams",
+            "max_concurrent_tasks",
+            "max_concurrent_tasks INTEGER DEFAULT 10",
+        )
+        cursor.execute(
+            "UPDATE teams SET max_concurrent_tasks = 10 "
+            "WHERE max_concurrent_tasks IS NULL OR max_concurrent_tasks < 1 OR max_concurrent_tasks > 10"
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"⚠️ 迁移 max_concurrent_tasks 字段失败: {e}")
 
 
 def migrate_add_team_id_to_misc_tables():

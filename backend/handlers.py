@@ -1598,7 +1598,8 @@ class BuildManager:
 
         queue_manager = GlobalTaskQueueManager()
         started = queue_manager.start_if_slot_available(
-            lambda: self._start_build_upload_thread(task_id)
+            lambda: self._start_build_upload_thread(task_id),
+            team_id=team_id,
         )
         if started:
             print(f"✅ 文件上传构建已启动: task_id={task_id}")
@@ -2633,7 +2634,8 @@ class BuildManager:
                         "git_ref_type": git_ref_type,
                         "git_ref_name": git_ref_name or branch,
                     },
-                )
+                ),
+                team_id=team_id,
             )
             if started:
                 print(f"✅ 构建线程已启动: task_id={task_id}")
@@ -4388,74 +4390,83 @@ def _process_global_queued_tasks():
 
     while True:
         started = False
-        candidate_kind = None
-        candidate_id = None
+        candidates = []
         db = get_db_session()
         try:
-            next_task = (
+            pending_tasks = (
                 db.query(Task)
                 .filter(Task.status == "pending")
                 .filter(Task.task_type.in_(["build", "build_from_source", "deploy"]))
                 .order_by(Task.created_at.asc())
-                .first()
+                .all()
             )
-            next_export = (
+            pending_exports = (
                 db.query(ExportTask)
                 .filter(ExportTask.status == "pending")
                 .order_by(ExportTask.created_at.asc())
-                .first()
+                .all()
             )
-            next_migration = (
+            pending_migrations = (
                 db.query(MigrationTask)
                 .filter(MigrationTask.status == "pending")
                 .order_by(MigrationTask.updated_at.asc())
-                .first()
+                .all()
             )
 
-            candidates = []
-            if next_task:
+            for task in pending_tasks:
                 candidates.append(
-                    ("task", next_task.task_id, next_task.created_at or datetime.max)
+                    (
+                        "task",
+                        task.task_id,
+                        task.created_at or datetime.max,
+                        task.team_id,
+                    )
                 )
-            if next_export:
+            for export in pending_exports:
                 candidates.append(
                     (
                         "export",
-                        next_export.task_id,
-                        next_export.created_at or datetime.max,
+                        export.task_id,
+                        export.created_at or datetime.max,
+                        export.team_id,
                     )
                 )
-            if next_migration:
+            for migration in pending_migrations:
                 candidates.append(
                     (
                         "migration",
-                        next_migration.task_id,
-                        next_migration.updated_at or datetime.max,
+                        migration.task_id,
+                        migration.updated_at or datetime.max,
+                        migration.team_id,
                     )
                 )
             if candidates:
                 candidates.sort(key=lambda x: x[2])
-                candidate_kind, candidate_id, _ = candidates[0]
         finally:
             db.close()
 
-        if not candidate_id:
+        if not candidates:
             return
 
-        def _starter():
-            nonlocal started
-            if candidate_kind == "task":
-                started = BuildTaskManager().start_pending_task(candidate_id)
-            elif candidate_kind == "export":
-                started = ExportTaskManager().start_pending_task(candidate_id)
-            else:
-                from backend.migration_manager import MigrationTaskManager
+        for candidate_kind, candidate_id, _, candidate_team_id in candidates:
 
-                started = MigrationTaskManager().start_pending_task(candidate_id)
+            def _starter():
+                nonlocal started
+                if candidate_kind == "task":
+                    started = BuildTaskManager().start_pending_task(candidate_id)
+                elif candidate_kind == "export":
+                    started = ExportTaskManager().start_pending_task(candidate_id)
+                else:
+                    from backend.migration_manager import MigrationTaskManager
 
-        can_start = queue_manager.start_if_slot_available(_starter)
-        if not can_start:
-            return
+                    started = MigrationTaskManager().start_pending_task(candidate_id)
+
+            can_start = queue_manager.start_if_slot_available(
+                _starter, team_id=candidate_team_id
+            )
+            if can_start and started:
+                break
+
         if not started:
             return
 
@@ -4528,7 +4539,8 @@ def _process_next_queued_task(pipeline_manager, pipeline_id: str):
         task_config = next_task.get("task_config", {})
 
         started = GlobalTaskQueueManager().start_if_slot_available(
-            lambda: build_manager.task_manager.start_pending_task(task_id)
+            lambda: build_manager.task_manager.start_pending_task(task_id),
+            team_id=next_task.get("team_id") or task_config.get("team_id"),
         )
         if not started:
             print(
@@ -6211,7 +6223,8 @@ class BuildTaskManager:
 
         queue_manager = GlobalTaskQueueManager()
         started = queue_manager.start_if_slot_available(
-            lambda: self.start_pending_task(new_task_id)
+            lambda: self.start_pending_task(new_task_id),
+            team_id=getattr(deploy_config, "team_id", None),
         )
         if not started:
             print(f"⏳ 部署任务进入全局队列等待: task_id={new_task_id[:8]}")
@@ -6491,7 +6504,8 @@ class BuildTaskManager:
             # 由全局并发队列决定立即执行或排队
             queue_manager = GlobalTaskQueueManager()
             started = queue_manager.start_if_slot_available(
-                lambda: self.start_pending_task(task_id)
+                lambda: self.start_pending_task(task_id),
+                team_id=getattr(task, "team_id", None),
             )
             if not started:
                 print(f"⏳ 重试部署任务进入全局队列等待: task_id={task_id[:8]}")
@@ -6885,7 +6899,8 @@ class ExportTaskManager:
             # 通过全局并发控制决定立即启动或进入排队
             queue_manager = GlobalTaskQueueManager()
             started = queue_manager.start_if_slot_available(
-                lambda: self.start_pending_task(task_id)
+                lambda: self.start_pending_task(task_id),
+                team_id=team_id,
             )
             if not started:
                 print(f"⏳ 导出任务进入全局队列等待: task_id={task_id[:8]}")
@@ -7386,7 +7401,8 @@ class ExportTaskManager:
             print(f"🔄 重新启动导出任务: {task_id[:8]}, image={task.image}:{task.tag}")
             queue_manager = GlobalTaskQueueManager()
             started = queue_manager.start_if_slot_available(
-                lambda: self.start_pending_task(task_id)
+                lambda: self.start_pending_task(task_id),
+                team_id=getattr(task, "team_id", None),
             )
             if not started:
                 print(f"⏳ 重试导出任务进入全局队列等待: task_id={task_id[:8]}")
