@@ -8132,7 +8132,11 @@ async def webhook_trigger(webhook_token: str, request: Request):
         # 如果没有新策略字段，根据旧字段推断策略
         if not webhook_branch_strategy:
             if webhook_allowed_branches and len(webhook_allowed_branches) > 0:
-                webhook_branch_strategy = "select_branches"
+                webhook_branch_strategy = (
+                    "select_branches"
+                    if webhook_use_push_branch
+                    else "select_configured"
+                )
             elif webhook_branch_filter:
                 webhook_branch_strategy = "filter_match"
             elif webhook_use_push_branch:
@@ -8194,6 +8198,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
         branch = branch_resolution.get("branch")
         if webhook_branch_strategy == "use_configured":
             print(f"✅ 推送分支匹配配置分支，使用配置分支构建: {branch}")
+        elif webhook_branch_strategy == "select_configured":
+            print(f"✅ 分支匹配允许规则，使用配置分支构建: {branch}")
         elif webhook_branch_strategy == "select_branches":
             print(f"✅ 分支匹配允许规则，使用推送分支: {branch}")
         elif webhook_branch_strategy == "filter_match":

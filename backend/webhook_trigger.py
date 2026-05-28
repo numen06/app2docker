@@ -93,6 +93,13 @@ def resolve_pipeline_webhook_branch(
             return {"ok": True, "branch": normalize_branch_name(webhook_branch)}
         return {"ok": False, "ignored": True, "reason": "branch_not_allowed"}
 
+    if strategy == "select_configured":
+        if not webhook_branch:
+            return {"ok": False, "error": "missing_webhook_branch"}
+        if matches_any_branch_rule(webhook_branch, allowed_branches):
+            return {"ok": True, "branch": normalize_branch_name(configured_branch)}
+        return {"ok": False, "ignored": True, "reason": "branch_not_allowed"}
+
     if strategy == "filter_match":
         if not webhook_branch:
             return {"ok": False, "error": "missing_webhook_branch"}

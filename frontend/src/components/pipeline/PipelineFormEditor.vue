@@ -1044,6 +1044,19 @@
                         仅匹配允许规则触发
                         <small>编译推送分支</small>
                       </label>
+
+                      <input
+                        type="radio"
+                        class="choice-input"
+                        id="strategy-select-configured"
+                        value="select_configured"
+                        v-model="formData.webhook_branch_strategy"
+                      />
+                      <label class="pipeline-webhook-strategy__option" for="strategy-select-configured">
+                        <AppIcon  name="check-square" />
+                        仅匹配允许规则触发
+                        <small>编译配置分支</small>
+                      </label>
                     </div>
                     <p class="pipeline-webhook-field__hint mt-2 mb-0">
                       <span
@@ -1066,6 +1079,13 @@
                         <AppIcon  name="info-circle" />
                         只有推送分支匹配下方允许规则时触发，编译推送分支。
                       </span>
+                      <span
+                        v-else-if="
+                          formData.webhook_branch_strategy === 'select_configured'"
+                      >
+                        <AppIcon  name="info-circle" />
+                        只有推送分支匹配下方允许规则时触发，编译配置分支。
+                      </span>
                       <span v-else>
                         <AppIcon  name="info-circle" />
                         只有推送分支等于 Git 配置分支时触发，编译配置分支。
@@ -1078,7 +1098,11 @@
                       <AppIcon  name="cog" /> 编译目标
                     </h3>
                     <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      <span v-if="formData.webhook_branch_strategy === 'use_configured'">
+                      <span
+                        v-if="
+                          formData.webhook_branch_strategy === 'use_configured' ||
+                          formData.webhook_branch_strategy === 'select_configured'"
+                      >
                         编译配置分支：{{ formData.branch || branchesAndTags.default_branch || "默认分支" }}
                       </span>
                       <span v-else>
@@ -1088,7 +1112,9 @@
                   </section>
 
                   <section
-                    v-if="formData.webhook_branch_strategy === 'select_branches'"
+                    v-if="
+                      formData.webhook_branch_strategy === 'select_branches' ||
+                      formData.webhook_branch_strategy === 'select_configured'"
                     class="pipeline-webhook-block"
                   >
                     <h3 class="pipeline-webhook-block__title">

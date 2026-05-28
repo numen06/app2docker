@@ -925,7 +925,9 @@ function getWebhookBranchStrategy(pipeline) {
     Array.isArray(pipeline.webhook_allowed_branches) &&
     pipeline.webhook_allowed_branches.length > 0
   ) {
-    return"select_branches";
+    return pipeline.webhook_use_push_branch === false
+      ?"select_configured"
+      :"select_branches";
   }
 
   const webhook_branch_filter = pipeline.webhook_branch_filter || false;
@@ -983,7 +985,10 @@ async function savePipeline() {
     } else if (formData.value.webhook_branch_strategy ==="use_push") {
       webhook_branch_filter = false;
       webhook_use_push_branch = true;
-    } else if (formData.value.webhook_branch_strategy ==="select_branches") {
+    } else if (
+      formData.value.webhook_branch_strategy ==="select_branches" ||
+      formData.value.webhook_branch_strategy ==="select_configured"
+    ) {
       // 选择分支触发策略：验证是否选择了分支
       if (
         !formData.value.webhook_allowed_branches ||
@@ -994,7 +999,8 @@ async function savePipeline() {
         return false;
       }
       webhook_branch_filter = true;
-      webhook_use_push_branch = true;
+      webhook_use_push_branch =
+        formData.value.webhook_branch_strategy ==="select_branches";
     } else {
       // use_configured
       webhook_branch_filter = false;
@@ -1186,7 +1192,8 @@ async function savePipeline() {
           : null,
       // 选择分支触发：只在策略为select_branches时传递
       webhook_allowed_branches:
-        formData.value.webhook_branch_strategy ==="select_branches"
+        formData.value.webhook_branch_strategy ==="select_branches" ||
+        formData.value.webhook_branch_strategy ==="select_configured"
           ? formData.value.webhook_allowed_branches || []
           : null,
       // 构建后webhook配置

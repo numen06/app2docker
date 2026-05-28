@@ -62,6 +62,18 @@ def test_selected_branch_rules_support_exact_and_wildcard():
     )["ignored"]
 
 
+def test_selected_branch_rules_can_build_configured_branch():
+    result = resolve_pipeline_webhook_branch(
+        "select_configured",
+        webhook_branch="dev",
+        configured_branch="test",
+        allowed_branches=["dev", "master", "test"],
+    )
+
+    assert result["ok"]
+    assert result["branch"] == "test"
+
+
 def test_branch_tag_mapping_prefers_exact_match_then_wildcard():
     mapping = {"dev*": "wildcard", "dev": "exact"}
 
