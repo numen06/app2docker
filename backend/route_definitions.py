@@ -66,6 +66,7 @@ from backend.utils import get_safe_filename
 from backend.webhook_trigger import (
     get_branch_mapping_value,
     matches_any_branch_rule,
+    resolve_branch_tags,
     resolve_pipeline_webhook_branch,
 )
 from backend.auth import (
@@ -8128,6 +8129,17 @@ async def webhook_trigger(webhook_token: str, request: Request):
         webhook_branch_filter = pipeline.get("webhook_branch_filter", False)
         webhook_use_push_branch = pipeline.get("webhook_use_push_branch", True)
         configured_branch = pipeline.get("branch")
+        branch_tag_mapping = pipeline.get("branch_tag_mapping", {}) or {}
+        mapped_branch_rules = (
+            list(branch_tag_mapping.keys())
+            if isinstance(branch_tag_mapping, dict)
+            else []
+        )
+        effective_allowed_branches = (
+            webhook_allowed_branches
+            if webhook_allowed_branches and len(webhook_allowed_branches) > 0
+            else mapped_branch_rules
+        )
 
         # 如果没有新策略字段，根据旧字段推断策略
         if not webhook_branch_strategy:
@@ -8138,7 +8150,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     else "select_configured"
                 )
             elif webhook_branch_filter:
-                webhook_branch_strategy = "filter_match"
+                webhook_branch_strategy = (
+                    "select_branches" if mapped_branch_rules else "filter_match"
+                )
             elif webhook_use_push_branch:
                 webhook_branch_strategy = "use_push"
             else:
@@ -8148,6 +8162,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
         print(f"🔍 Webhook 分支配置:")
         print(f"   - webhook_branch_strategy: {webhook_branch_strategy}")
         print(f"   - webhook_allowed_branches: {webhook_allowed_branches}")
+        print(f"   - branch_tag_mapping_rules: {mapped_branch_rules}")
+        print(f"   - effective_allowed_branches: {effective_allowed_branches}")
         print(f"   - configured_branch: {configured_branch}")
         print(f"   - webhook_branch: {webhook_branch}")
 
@@ -8155,7 +8171,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
             webhook_branch_strategy,
             webhook_branch,
             configured_branch,
-            webhook_allowed_branches,
+            effective_allowed_branches,
         )
 
         if branch_resolution.get("error"):
@@ -8190,7 +8206,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     "pipeline": pipeline.get("name"),
                     "webhook_branch": webhook_branch,
                     "configured_branch": configured_branch,
-                    "allowed_branches": webhook_allowed_branches,
+                    "allowed_branches": effective_allowed_branches,
                     "ignored": True,
                 }
             )
@@ -8219,10 +8235,6 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 status_code=400,
             )
 
-        # 根据推送的分支查找对应的标签（分支标签映射应该基于推送的分支，而不是用于构建的分支）
-        branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
-        default_tag = pipeline.get("tag", "latest")  # 默认标签
-
         # 调试信息：输出最终确定的分支（详细总结）
         print(f"📊 分支确定总结:")
         print(f"   - 原始 ref 字段: {payload.get('ref', 'N/A')}")
@@ -8241,29 +8253,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
         branch_for_tag_mapping = webhook_branch if webhook_branch else branch
 
         # 获取标签列表（支持单个标签或多个标签）
-        tags = [default_tag]  # 默认只有一个标签
-
-        if branch_for_tag_mapping and branch_tag_mapping:
-            mapped_tag_value = get_branch_mapping_value(
-                branch_for_tag_mapping, branch_tag_mapping
-            )
-
-            # 处理标签值（支持字符串、数组或逗号分隔的字符串）
-            if mapped_tag_value:
-                if isinstance(mapped_tag_value, list):
-                    # 如果是数组，直接使用
-                    tags = mapped_tag_value
-                elif isinstance(mapped_tag_value, str):
-                    # 如果是字符串，检查是否包含逗号（兼容全角逗号）
-                    normalized = mapped_tag_value.replace("，", ",")
-                    if "," in normalized:
-                        # 逗号分隔的多个标签
-                        tags = [
-                            t.strip() for t in normalized.split(",") if t.strip()
-                        ]
-                    else:
-                        # 单个标签
-                        tags = [normalized]
+        tags = resolve_branch_tags(branch_for_tag_mapping, branch_tag_mapping)
 
         # 为每个标签创建任务
         from backend.handlers import pipeline_to_task_config

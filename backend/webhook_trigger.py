@@ -70,6 +70,32 @@ def get_branch_mapping_value(branch: Optional[str], mapping: Optional[dict]):
     return None
 
 
+def normalize_tag_values(tag_value) -> List[str]:
+    if not tag_value:
+        return []
+    if isinstance(tag_value, list):
+        return [str(tag).strip() for tag in tag_value if str(tag).strip()]
+    if isinstance(tag_value, str):
+        normalized = tag_value.replace("，", ",")
+        return [tag.strip() for tag in normalized.split(",") if tag.strip()]
+    return [str(tag_value).strip()] if str(tag_value).strip() else []
+
+
+def resolve_branch_tags(
+    branch: Optional[str],
+    mapping: Optional[dict] = None,
+    default_tag: Optional[str] = None,
+) -> List[str]:
+    """Resolve image tags for a branch. Defaults to the branch name."""
+    mapped_tag_value = get_branch_mapping_value(branch, mapping)
+    mapped_tags = normalize_tag_values(mapped_tag_value)
+    if mapped_tags:
+        return mapped_tags
+
+    fallback = default_tag or normalize_branch_name(branch)
+    return [fallback] if fallback else []
+
+
 def resolve_pipeline_webhook_branch(
     strategy: str,
     webhook_branch: Optional[str],

@@ -842,6 +842,45 @@ function addBranchTagMapping() {
   formData.value.branch_tag_mapping.push({ branch:"", tag:"" });
 }
 
+function splitTagList(tagValue) {
+  return String(tagValue || "")
+    .replace(/，/g, ",")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function mappingHasLatest(mapping) {
+  return splitTagList(mapping?.tag).includes("latest");
+}
+
+function addLatestBranchMapping() {
+  if (!formData.value.branch_tag_mapping) {
+    formData.value.branch_tag_mapping = [];
+  }
+
+  const branch =
+    (formData.value.branch || branchesAndTags.value.default_branch || "").trim();
+  if (!branch) {
+    toastError("请先在 Git 配置中选择一个分支");
+    return;
+  }
+
+  const existing = formData.value.branch_tag_mapping.find(
+    (mapping) => mapping.branch === branch
+  );
+  if (existing) {
+    const tags = splitTagList(existing.tag);
+    if (!tags.includes("latest")) {
+      tags.push("latest");
+    }
+    existing.tag = tags.join(",");
+    return;
+  }
+
+  formData.value.branch_tag_mapping.push({ branch, tag:"latest" });
+}
+
 // 删除分支标签映射
 function addPostBuildWebhook() {
   if (!formData.value.post_build_webhooks) {
@@ -870,26 +909,9 @@ function removeBranchTagMapping(index) {
   formData.value.branch_tag_mapping.splice(index, 1);
 }
 
-function splitBranchRules(value) {
-  if (!value) return [];
-  return String(value)
-    .split(/[\n,，]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function uniqueBranchRules(rules) {
   return [...new Set((rules || []).map((item) => String(item).trim()).filter(Boolean))];
 }
-
-const webhookAllowedBranchesText = computed({
-  get() {
-    return (formData.value.webhook_allowed_branches || []).join("\n");
-  },
-  set(value) {
-    formData.value.webhook_allowed_branches = uniqueBranchRules(splitBranchRules(value));
-  },
-});
 
 // 全选/取消全选分支
 function toggleAllBranches(event) {
@@ -926,14 +948,20 @@ function getWebhookBranchStrategy(pipeline) {
     pipeline.webhook_allowed_branches.length > 0
   ) {
     return pipeline.webhook_use_push_branch === false
-      ?"select_configured"
-      :"select_branches";
+      ?"use_configured"
+      :"use_push";
   }
 
   const webhook_branch_filter = pipeline.webhook_branch_filter || false;
   const webhook_use_push_branch = pipeline.webhook_use_push_branch !== false; // 默认为true
+  const has_branch_tag_mapping =
+    pipeline.branch_tag_mapping &&
+    typeof pipeline.branch_tag_mapping === "object" &&
+    Object.keys(pipeline.branch_tag_mapping).length > 0;
 
-  if (webhook_branch_filter) {
+  if (webhook_branch_filter && has_branch_tag_mapping && webhook_use_push_branch) {
+    return"select_branches";
+  } else if (webhook_branch_filter) {
     return"filter_match";
   } else if (webhook_use_push_branch) {
     return"use_push";
@@ -985,22 +1013,14 @@ async function savePipeline() {
     } else if (formData.value.webhook_branch_strategy ==="use_push") {
       webhook_branch_filter = false;
       webhook_use_push_branch = true;
-    } else if (
-      formData.value.webhook_branch_strategy ==="select_branches" ||
-      formData.value.webhook_branch_strategy ==="select_configured"
-    ) {
-      // 选择分支触发策略：验证是否选择了分支
-      if (
-        !formData.value.webhook_allowed_branches ||
-        formData.value.webhook_allowed_branches.length === 0
-      ) {
-        toastError("请至少选择一个允许触发的分支");
+    } else if (formData.value.webhook_branch_strategy ==="select_branches") {
+      if (Object.keys(branch_tag_mapping).length === 0) {
+        toastError("白名单模式请至少添加一个分支标签映射");
         saving.value = false;
         return false;
       }
       webhook_branch_filter = true;
-      webhook_use_push_branch =
-        formData.value.webhook_branch_strategy ==="select_branches";
+      webhook_use_push_branch = true;
     } else {
       // use_configured
       webhook_branch_filter = false;
@@ -1190,12 +1210,8 @@ async function savePipeline() {
         formData.value.webhook_secret && formData.value.webhook_secret.trim()
           ? formData.value.webhook_secret.trim()
           : null,
-      // 选择分支触发：只在策略为select_branches时传递
-      webhook_allowed_branches:
-        formData.value.webhook_branch_strategy ==="select_branches" ||
-        formData.value.webhook_branch_strategy ==="select_configured"
-          ? formData.value.webhook_allowed_branches || []
-          : null,
+      // 分支标签映射的左侧分支即为常用的 Webhook 允许分支规则。
+      webhook_allowed_branches: null,
       // 构建后webhook配置
       post_build_webhooks: (() => {
         if (
@@ -2764,7 +2780,6 @@ function generateUUID() {
     filteredTemplates,
     buildConfigJson,
     isAllBranchesSelected,
-    webhookAllowedBranchesText,
     initCreateForm,
     applyPipelineToForm,
     loadPipelineForEdit,
@@ -2788,6 +2803,8 @@ function generateUUID() {
     loadDockerfileFromRepo,
     applyDockerfileContent,
     addBranchTagMapping,
+    addLatestBranchMapping,
+    mappingHasLatest,
     addPostBuildWebhook,
     removePostBuildWebhook,
     removeBranchTagMapping,

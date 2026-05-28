@@ -1,6 +1,7 @@
 from backend.webhook_trigger import (
     get_branch_mapping_value,
     matches_branch_rule,
+    resolve_branch_tags,
     resolve_pipeline_webhook_branch,
 )
 
@@ -60,6 +61,30 @@ def test_selected_branch_rules_support_exact_and_wildcard():
         configured_branch="main",
         allowed_branches=["dev", "release/*"],
     )["ignored"]
+
+
+def test_use_push_does_not_treat_mappings_as_allowed_rules():
+    result = resolve_pipeline_webhook_branch(
+        "use_push",
+        webhook_branch="hotfix",
+        configured_branch="main",
+        allowed_branches=["dev", "release/*"],
+    )
+
+    assert result["ok"]
+    assert result["branch"] == "hotfix"
+
+
+def test_branch_tags_default_to_branch_name_without_mapping():
+    assert resolve_branch_tags("dev1", {}) == ["dev1"]
+    assert resolve_branch_tags("refs/heads/dev2", {}) == ["dev2"]
+
+
+def test_branch_tags_use_mapping_when_matched():
+    mapping = {"dev1": "dev", "test2": "test,dev"}
+
+    assert resolve_branch_tags("dev1", mapping) == ["dev"]
+    assert resolve_branch_tags("test2", mapping) == ["test", "dev"]
 
 
 def test_selected_branch_rules_can_build_configured_branch():

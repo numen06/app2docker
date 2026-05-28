@@ -1002,8 +1002,8 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-use-push">
                         <AppIcon  name="code-branch" />
-                        任意分支推送触发
-                        <small>编译推送分支</small>
+                        任意分支触发
+                        <small>默认分支名作为 tag</small>
                       </label>
 
                       <input
@@ -1015,21 +1015,8 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-filter-match">
                         <AppIcon  name="filter" />
-                        仅配置分支规则触发
-                        <small>编译推送分支</small>
-                      </label>
-
-                      <input
-                        type="radio"
-                        class="choice-input"
-                        id="strategy-use-configured"
-                        value="use_configured"
-                        v-model="formData.webhook_branch_strategy"
-                      />
-                      <label class="pipeline-webhook-strategy__option" for="strategy-use-configured">
-                        <AppIcon  name="cog" />
                         仅配置分支触发
-                        <small>编译配置分支</small>
+                        <small>默认分支名作为 tag</small>
                       </label>
 
                       <input
@@ -1041,20 +1028,20 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-select-branches">
                         <AppIcon  name="check-square" />
-                        仅匹配允许规则触发
-                        <small>编译推送分支</small>
+                        白名单映射分支
+                        <small>只按映射触发</small>
                       </label>
 
                       <input
                         type="radio"
                         class="choice-input"
-                        id="strategy-select-configured"
-                        value="select_configured"
+                        id="strategy-use-configured"
+                        value="use_configured"
                         v-model="formData.webhook_branch_strategy"
                       />
-                      <label class="pipeline-webhook-strategy__option" for="strategy-select-configured">
-                        <AppIcon  name="check-square" />
-                        仅匹配允许规则触发
+                      <label class="pipeline-webhook-strategy__option" for="strategy-use-configured">
+                        <AppIcon  name="cog" />
+                        指向编译配置分支
                         <small>编译配置分支</small>
                       </label>
                     </div>
@@ -1063,32 +1050,25 @@
                         v-if="formData.webhook_branch_strategy === 'use_push'"
                       >
                         <AppIcon  name="info-circle" />
-                        任意分支推送触发，编译推送分支。
+                        任意分支推送都触发；默认镜像 tag 使用分支名，例如 dev1 -> dev1。若命中下方映射，则按映射生成 tag。
                       </span>
                       <span
                         v-else-if="
                           formData.webhook_branch_strategy === 'filter_match'"
                       >
                         <AppIcon  name="info-circle" />
-                        只有推送分支匹配 Git 配置中的分支规则时触发，编译推送分支。
+                        只有推送分支匹配 Git 配置分支时触发；默认镜像 tag 使用分支名。若命中下方映射，则按映射生成 tag。
                       </span>
                       <span
                         v-else-if="
                           formData.webhook_branch_strategy === 'select_branches'"
                       >
                         <AppIcon  name="info-circle" />
-                        只有推送分支匹配下方允许规则时触发，编译推送分支。
-                      </span>
-                      <span
-                        v-else-if="
-                          formData.webhook_branch_strategy === 'select_configured'"
-                      >
-                        <AppIcon  name="info-circle" />
-                        只有推送分支匹配下方允许规则时触发，编译配置分支。
+                        只有推送分支匹配下方分支标签映射左侧规则时触发，其他分支不触发；镜像 tag 按右侧映射生成。
                       </span>
                       <span v-else>
                         <AppIcon  name="info-circle" />
-                        只有推送分支等于 Git 配置分支时触发，编译配置分支。
+                        仅 Git 配置分支触发，触发后编译配置分支；默认镜像 tag 使用分支名，若命中下方映射则按映射生成 tag。
                       </span>
                     </p>
                   </section>
@@ -1100,8 +1080,7 @@
                     <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                       <span
                         v-if="
-                          formData.webhook_branch_strategy === 'use_configured' ||
-                          formData.webhook_branch_strategy === 'select_configured'"
+                          formData.webhook_branch_strategy === 'use_configured'"
                       >
                         编译配置分支：{{ formData.branch || branchesAndTags.default_branch || "默认分支" }}
                       </span>
@@ -1111,79 +1090,6 @@
                     </div>
                   </section>
 
-                  <section
-                    v-if="
-                      formData.webhook_branch_strategy === 'select_branches' ||
-                      formData.webhook_branch_strategy === 'select_configured'"
-                    class="pipeline-webhook-block"
-                  >
-                    <h3 class="pipeline-webhook-block__title">
-                      <AppIcon  name="list-check" /> 允许触发的分支规则
-                      <span class="text-red-500 text-sm font-normal">*</span>
-                    </h3>
-                    <div
-                      v-if="
-                        !branchesAndTags.branches ||
-                        branchesAndTags.branches.length === 0"
-                      class="rounded-md border px-3 py-2 text-sm border-amber-200 bg-amber-50 text-amber-900"
-                    >
-                      <AppIcon  name="exclamation-triangle" /> 请先在 Git
-                      配置中选择数据源和分支，以加载可用分支列表
-                    </div>
-                    <div
-                      v-else
-                      class="pipeline-webhook-list-box pipeline-webhook-list-box--scroll"
-                    >
-                      <div class="flex items-center gap-2 mb-2">
-                        <input
-                          class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          type="checkbox"
-                          id="selectAllBranches"
-                          :checked="isAllBranchesSelected"
-                          @change="toggleAllBranches"
-                        />
-                        <label
-                          class="text-sm text-slate-700 font-semibold"
-                          for="selectAllBranches"
-                        >
-                          全选
-                        </label>
-                      </div>
-                      <hr class="my-2" />
-                      <div
-                        v-for="branch in branchesAndTags.branches"
-                        :key="branch"
-                        class="flex items-center gap-2 mb-1"
-                      >
-                        <input
-                          class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          type="checkbox"
-                          :id="`branch-${branch}`"
-                          :value="branch"
-                          v-model="formData.webhook_allowed_branches"
-                        />
-                        <label
-                          class="text-sm text-slate-700"
-                          :for="`branch-${branch}`"
-                        >
-                          <AppIcon name="code-branch" class="mr-1 text-blue-600" />{{ branch }}
-                        </label>
-                      </div>
-                    </div>
-                    <div class="pipeline-webhook-field mt-3">
-                      <label class="pipeline-webhook-field__label">手动分支规则</label>
-                      <textarea
-                        v-model="webhookAllowedBranchesText"
-                        rows="4"
-                        class="flex w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
-                        placeholder="dev&#10;release/*&#10;feature/*"
-                      ></textarea>
-                    </div>
-                    <p class="pipeline-webhook-field__hint mt-2 mb-0">
-                      普通文本精确匹配：dev 只匹配 dev。显式通配符才模糊匹配：dev* 可匹配 dev1/dev2，release/* 可匹配 release/1.0。不使用包含匹配。
-                    </p>
-                  </section>
-
                   <section class="pipeline-webhook-block">
                     <div class="pipeline-webhook-block__head">
                       <div>
@@ -1191,10 +1097,19 @@
                           <AppIcon  name="tags" /> 分支标签映射
                         </h3>
                         <p class="pipeline-webhook-block__desc">
-                          为不同分支设置镜像标签，支持通配符（如 feature/*）；多标签用半角逗号分隔；支持
+                          左侧分支同时作为 Webhook 允许触发分支规则；普通文本精确匹配，通配符需显式写出（如 feature/*）。右侧为镜像标签，多标签用半角逗号分隔；支持
                           ${DATE}、${TIMESTAMP} 等占位符。
                         </p>
                       </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        @click="addLatestBranchMapping"
+                        title="将当前配置分支映射为 latest"
+                      >
+                        <AppIcon  name="star" /> 当前分支设为 latest
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
@@ -1214,7 +1129,12 @@
                       <div
                         v-for="(mapping, index) in formData.branch_tag_mapping"
                         :key="index"
-                        class="pipeline-branch-mapping-row"
+                        class="pipeline-branch-mapping-row rounded-md border border-transparent p-1"
+                        :class="
+                          mappingHasLatest(mapping)
+                            ? 'border-amber-300 bg-amber-50'
+                            : ''
+                        "
                       >
                         <input
                           v-model="mapping.branch"
@@ -1237,6 +1157,13 @@
                             )"
                         />
                         <div class="pipeline-branch-mapping-row__action">
+                          <span
+                            v-if="mappingHasLatest(mapping)"
+                            class="inline-flex items-center rounded-md bg-amber-500 px-2 py-0.5 text-xs font-medium text-white"
+                            title="该分支会产出 latest 标签"
+                          >
+                            latest
+                          </span>
                           <Button
                             type="button"
                             variant="destructive" size="sm"
@@ -1817,8 +1744,6 @@ const dockerfileEditorExtensions = editor.dockerfileEditorExtensions;
 const resourcePackages = editor.resourcePackages;
 const showResourcePackageModal = editor.showResourcePackageModal;
 const showBuildConfigJsonModal = editor.showBuildConfigJsonModal;
-const isAllBranchesSelected = editor.isAllBranchesSelected;
-const webhookAllowedBranchesText = editor.webhookAllowedBranchesText;
 const deployTaskList = editor.deployTaskList;
 const onSourceSelected = editor.onSourceSelected;
 const refreshBranches = editor.refreshBranches;
@@ -1852,10 +1777,11 @@ const formatGitUrl = editor.formatGitUrl;
 const regenerateWebhookToken = editor.regenerateWebhookToken;
 const regenerateWebhookSecret = editor.regenerateWebhookSecret;
 const addBranchTagMapping = editor.addBranchTagMapping;
+const addLatestBranchMapping = editor.addLatestBranchMapping;
+const mappingHasLatest = editor.mappingHasLatest;
 const addPostBuildWebhook = editor.addPostBuildWebhook;
 const removePostBuildWebhook = editor.removePostBuildWebhook;
 const removeBranchTagMapping = editor.removeBranchTagMapping;
-const toggleAllBranches = editor.toggleAllBranches;
 const onPostBuildWebhookBranchesInput = editor.onPostBuildWebhookBranchesInput;
 const onDeployTaskSelected = editor.onDeployTaskSelected;
 const closeBuildConfigJsonModal = editor.closeBuildConfigJsonModal;
