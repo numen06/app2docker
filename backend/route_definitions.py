@@ -1785,6 +1785,13 @@ class TestRegistryRequest(BaseModel):
     password: Optional[str] = None  # 可选，如果不提供则从配置中获取
 
 
+class ValidateRegistryPushRequest(BaseModel):
+    """验证镜像地址是否可推送"""
+
+    image_refs: List[str] = []
+    team_id: Optional[str] = None
+
+
 def _registry_v2_url(registry_host: str) -> str:
     """构建 Registry HTTP API v2 探测地址"""
     host = (registry_host or "docker.io").strip().rstrip("/")
@@ -1904,6 +1911,432 @@ def _test_registry_connectivity(registry_host: str) -> dict:
                 "确认本机网络可访问该仓库",
             ],
         }
+
+
+def _registry_v2_base_url(registry_host: str) -> str:
+    url = _registry_v2_url(registry_host)
+    return url[:-4] if url.endswith("/v2/") else url.rstrip("/")
+
+
+def _normalize_registry_host_for_match(value: str) -> str:
+    host = (value or "").strip().lower().rstrip("/")
+    if host.startswith("https://"):
+        host = host[8:]
+    elif host.startswith("http://"):
+        host = host[7:]
+    if host in ("index.docker.io", "registry-1.docker.io"):
+        return "docker.io"
+    return host
+
+
+def _split_push_image_ref(image_ref: str) -> dict:
+    image = validate_and_clean_image_name((image_ref or "").strip())
+    if "@" in image:
+        raise ValueError("推送校验仅支持 tag 格式，不支持 digest 镜像地址")
+
+    last_slash = image.rfind("/")
+    last_colon = image.rfind(":")
+    if last_colon > last_slash:
+        name = image[:last_colon]
+        tag = image[last_colon + 1 :]
+    else:
+        name = image
+        tag = "latest"
+
+    if not tag:
+        raise ValueError("镜像标签不能为空")
+
+    parts = name.split("/")
+    first = parts[0] if parts else ""
+    has_registry = "." in first or ":" in first or first == "localhost"
+    if has_registry:
+        registry = first
+        repository = "/".join(parts[1:])
+    else:
+        registry = "docker.io"
+        repository = name
+
+    if not repository or repository.startswith("/") or repository.endswith("/"):
+        raise ValueError("镜像仓库路径不能为空")
+    if any(not part for part in repository.split("/")):
+        raise ValueError("镜像仓库路径格式不正确")
+    if repository.lower() != repository:
+        raise ValueError("镜像仓库路径必须使用小写字母")
+
+    return {
+        "image": f"{name}:{tag}",
+        "registry": registry,
+        "repository": repository,
+        "tag": tag,
+        "has_registry": has_registry,
+    }
+
+
+def _basic_auth_header(username: str, password: str) -> Optional[str]:
+    if not username or not password:
+        return None
+    import base64
+
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode(
+        "ascii"
+    )
+    return f"Basic {token}"
+
+
+def _parse_www_authenticate(header: str) -> dict:
+    import re
+
+    if not header:
+        return {}
+    scheme, _, rest = header.partition(" ")
+    result = {"scheme": scheme.lower()}
+    for key, value in re.findall(r'(\w+)="([^"]*)"', rest):
+        result[key.lower()] = value
+    return result
+
+
+def _request_bearer_token(
+    challenge: dict,
+    repository: str,
+    username: str,
+    password: str,
+) -> Optional[str]:
+    import urllib.parse
+    import urllib.request
+
+    realm = challenge.get("realm")
+    if not realm:
+        return None
+
+    scope = f"repository:{repository}:push,pull"
+    query = {"scope": scope}
+    if challenge.get("service"):
+        query["service"] = challenge["service"]
+    if username:
+        query["account"] = username
+
+    separator = "&" if "?" in realm else "?"
+    url = f"{realm}{separator}{urllib.parse.urlencode(query)}"
+    req = urllib.request.Request(url, method="GET")
+    auth_header = _basic_auth_header(username, password)
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    req.add_header("Accept", "application/json")
+
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        body = resp.read().decode("utf-8")
+    data = json.loads(body or "{}")
+    return data.get("token") or data.get("access_token")
+
+
+def _make_registry_upload_request(
+    registry_host: str,
+    repository: str,
+    auth_header: Optional[str] = None,
+):
+    import urllib.parse
+    import urllib.request
+
+    base = _registry_v2_base_url(registry_host)
+    repo_path = urllib.parse.quote(repository, safe="/")
+    req = urllib.request.Request(
+        f"{base}/v2/{repo_path}/blobs/uploads/", method="POST"
+    )
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    req.add_header("Content-Length", "0")
+    return req
+
+
+def _cancel_registry_upload(
+    registry_host: str,
+    location: str,
+    auth_header: Optional[str],
+) -> None:
+    if not location:
+        return
+    import urllib.parse
+    import urllib.request
+
+    base = _registry_v2_base_url(registry_host)
+    upload_url = urllib.parse.urljoin(f"{base}/", location)
+    req = urllib.request.Request(upload_url, method="DELETE")
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    try:
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception:
+        pass
+
+
+def _probe_registry_push_permission(
+    registry_host: str,
+    repository: str,
+    username: str,
+    password: str,
+) -> dict:
+    import urllib.error
+    import urllib.request
+
+    auth_header = _basic_auth_header(username, password)
+
+    def handle_success(resp, used_auth_header: Optional[str]) -> dict:
+        location = resp.headers.get("Location", "")
+        _cancel_registry_upload(registry_host, location, used_auth_header)
+        return {
+            "success": True,
+            "message": "镜像地址可推送",
+            "details": f"Registry 接受 repository:{repository}:push,pull 权限探测",
+        }
+
+    try:
+        with urllib.request.urlopen(
+            _make_registry_upload_request(registry_host, repository, auth_header),
+            timeout=15,
+        ) as resp:
+            if 200 <= resp.status < 300:
+                return handle_success(resp, auth_header)
+            return {
+                "success": False,
+                "message": f"仓库响应异常: HTTP {resp.status}",
+                "details": f"{registry_host}/{repository}",
+            }
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            challenge = _parse_www_authenticate(e.headers.get("WWW-Authenticate", ""))
+            if challenge.get("scheme") != "bearer":
+                return {
+                    "success": False,
+                    "message": "认证失败或仓库不支持自动确认推送权限",
+                    "details": f"HTTP 401 {e.headers.get('WWW-Authenticate', '')}",
+                    "suggestions": ["请检查仓库账号密码，或确认 Registry 支持标准 v2 认证挑战"],
+                }
+            try:
+                token = _request_bearer_token(
+                    challenge, repository, username or "", password or ""
+                )
+                if not token:
+                    return {
+                        "success": False,
+                        "message": "未能获取推送权限令牌",
+                        "details": "Token 响应中没有 token",
+                    }
+                bearer_header = f"Bearer {token}"
+                with urllib.request.urlopen(
+                    _make_registry_upload_request(
+                        registry_host, repository, bearer_header
+                    ),
+                    timeout=15,
+                ) as retry_resp:
+                    if 200 <= retry_resp.status < 300:
+                        return handle_success(retry_resp, bearer_header)
+                    return {
+                        "success": False,
+                        "message": f"仓库响应异常: HTTP {retry_resp.status}",
+                        "details": f"{registry_host}/{repository}",
+                    }
+            except urllib.error.HTTPError as token_error:
+                if token_error.code in (401, 403):
+                    return {
+                        "success": False,
+                        "message": "认证失败或没有该镜像命名空间的推送权限",
+                        "details": f"HTTP {token_error.code}",
+                        "suggestions": [
+                            "请检查镜像地址中的命名空间是否归当前账号所有",
+                            "请确认仓库账号或访问令牌包含 push 权限",
+                        ],
+                    }
+                return {
+                    "success": False,
+                    "message": f"推送权限探测失败: HTTP {token_error.code}",
+                    "details": str(token_error),
+                }
+            except Exception as token_error:
+                return {
+                    "success": False,
+                    "message": f"推送权限探测失败: {token_error}",
+                    "details": str(token_error),
+                }
+        if e.code in (403, 405):
+            return {
+                "success": False,
+                "message": "没有该镜像地址的推送权限，或仓库不支持自动确认推送权限",
+                "details": f"HTTP {e.code}",
+                "suggestions": ["请确认目标命名空间可写，并使用支持标准 Registry v2 的地址"],
+            }
+        return {
+            "success": False,
+            "message": f"推送权限探测失败: HTTP {e.code}",
+            "details": str(e),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"无法连接仓库进行推送权限探测: {e}",
+            "details": f"{registry_host}/{repository}",
+            "suggestions": ["请检查 Registry 地址是否正确，以及服务端网络是否可访问该仓库"],
+        }
+
+
+def _match_registry_config_for_image(parsed: dict, team_id: str, user_id: str) -> dict:
+    target_host = _normalize_registry_host_for_match(parsed["registry"])
+    all_registries = get_all_registries(team_id=team_id, user_id=user_id)
+
+    def matches(reg: dict) -> bool:
+        reg_host = _normalize_registry_host_for_match(reg.get("registry", ""))
+        if reg_host and reg_host == target_host:
+            return True
+        return False
+
+    def prefix_matches(reg: dict) -> bool:
+        reg_prefix = _normalize_registry_host_for_match(reg.get("registry_prefix", ""))
+        image_name = parsed["image"].rsplit(":", 1)[0]
+        if reg_prefix and (
+            image_name == reg_prefix or image_name.startswith(reg_prefix + "/")
+        ):
+            return True
+        return False
+
+    matched = next((reg for reg in all_registries if prefix_matches(reg)), None)
+    if not matched:
+        matched = next((reg for reg in all_registries if matches(reg)), None)
+    if not matched and target_host == "docker.io":
+        matched = get_active_registry(team_id=team_id, user_id=user_id)
+        if matched and _normalize_registry_host_for_match(
+            matched.get("registry", "")
+        ) != "docker.io":
+            matched = None
+
+    if not matched:
+        raise ValueError(
+            f"未找到匹配的镜像仓库配置，请先在当前团队中配置 {parsed['registry']}"
+        )
+
+    reg_key = matched.get("registry_id") or matched.get("name")
+    registry_config = get_registry_by_name(reg_key, team_id=team_id, user_id=user_id)
+    if not registry_config:
+        raise ValueError("当前用户没有访问匹配镜像仓库配置的权限")
+    return registry_config
+
+
+def _validate_push_image_refs(
+    image_refs: List[str], team_id: str, user_id: str
+) -> dict:
+    unique_refs = []
+    for ref in image_refs or []:
+        text = (ref or "").strip()
+        if text and text not in unique_refs:
+            unique_refs.append(text)
+
+    results = []
+    if not unique_refs:
+        return {
+            "success": True,
+            "results": [],
+            "message": "没有需要推送的镜像地址",
+        }
+
+    for image_ref in unique_refs:
+        result = {
+            "success": False,
+            "image": image_ref,
+            "registry": "",
+            "repository": "",
+            "message": "",
+            "details": "",
+            "suggestions": [],
+        }
+        try:
+            parsed = _split_push_image_ref(image_ref)
+            result.update(
+                {
+                    "image": parsed["image"],
+                    "registry": parsed["registry"],
+                    "repository": parsed["repository"],
+                }
+            )
+            registry_config = _match_registry_config_for_image(parsed, team_id, user_id)
+            username = (registry_config.get("username") or "").strip()
+            password = registry_config.get("password") or ""
+            if not username or not password:
+                raise ValueError("匹配的镜像仓库未配置用户名和密码，无法确认推送权限")
+
+            probe = _probe_registry_push_permission(
+                parsed["registry"], parsed["repository"], username, password
+            )
+            result.update(probe)
+        except Exception as e:
+            result["success"] = False
+            result["message"] = f"镜像地址不可推送：{e}"
+            result["details"] = str(e)
+            if not result["suggestions"]:
+                result["suggestions"] = [
+                    "请检查镜像地址、Registry 配置、账号密码和命名空间写权限"
+                ]
+        results.append(result)
+
+    success = all(item.get("success") for item in results)
+    return {
+        "success": success,
+        "results": results,
+        "message": "推送权限校验通过" if success else "存在不可推送的镜像地址",
+    }
+
+
+def _raise_if_push_targets_invalid(
+    image_refs: List[str], team_id: str, username: str
+) -> None:
+    from backend.database import get_db_session
+
+    db = get_db_session()
+    try:
+        user_id = get_user_id_by_username(db, username)
+    finally:
+        db.close()
+
+    result = _validate_push_image_refs(image_refs, team_id, user_id)
+    if result.get("success"):
+        return
+    failed = next(
+        (item for item in result.get("results", []) if not item.get("success")), None
+    )
+    if failed:
+        image = failed.get("image") or "未知镜像"
+        message = failed.get("message") or "无法确认推送权限"
+        raise HTTPException(
+            status_code=400, detail=f"镜像地址 {image} 不可推送：{message}"
+        )
+    raise HTTPException(status_code=400, detail="存在不可推送的镜像地址")
+
+
+@router.post("/registries/validate-push")
+async def validate_registry_push(
+    request: ValidateRegistryPushRequest,
+    http_request: Request,
+):
+    """验证镜像地址是否具备推送权限，不推送真实镜像。"""
+    try:
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, request.team_id
+            )
+        finally:
+            db.close()
+
+        result = _validate_push_image_refs(
+            request.image_refs or [], scoped_team_id, user_id
+        )
+        status_code = 200 if result.get("success") else 400
+        return JSONResponse(result, status_code=status_code)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"验证推送权限失败: {str(e)}")
 
 
 @router.post("/registries/test")
@@ -2367,6 +2800,11 @@ async def upload_file(
                 resource_package_configs_list = json.loads(resource_package_configs)
             except json.JSONDecodeError:
                 print(f"⚠️ 资源包配置格式错误，忽略: {resource_package_configs}")
+
+        if push == "on":
+            _raise_if_push_targets_invalid(
+                [f"{imagename}:{tag or 'latest'}"], scoped_team_id, username
+            )
 
         # 调用构建管理器
         manager = BuildManager()
@@ -2888,6 +3326,27 @@ async def build_from_source(
                     service_template_params_dict = json.loads(service_template_params)
                 except json.JSONDecodeError:
                     raise HTTPException(status_code=400, detail="服务模板参数格式错误")
+
+        push_refs = []
+        if push == "on":
+            push_refs.append(f"{imagename}:{tag or 'latest'}")
+        if service_push_config:
+            selected_service_names = set(
+                selected_services or service_push_config.keys()
+            )
+            for service_name, cfg in service_push_config.items():
+                if service_name not in selected_service_names:
+                    continue
+                if isinstance(cfg, dict) and cfg.get("push"):
+                    service_image = (
+                        cfg.get("imageName") or f"{imagename}-{service_name}"
+                    ).strip()
+                    service_tag = (cfg.get("tag") or tag or "latest").strip()
+                    push_refs.append(f"{service_image}:{service_tag}")
+                elif cfg is True:
+                    push_refs.append(f"{imagename}-{service_name}:{tag or 'latest'}")
+        if push_refs:
+            _raise_if_push_targets_invalid(push_refs, scoped_team_id, username)
 
         # 调用构建管理器
         try:

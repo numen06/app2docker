@@ -1110,6 +1110,20 @@
           </div>
         </div>
 
+        <div
+          v-if="pushValidationFailures.length > 0"
+          class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
+          <div class="mb-1 font-medium">
+            <AppIcon  name="exclamation-triangle" /> 推送权限校验未通过
+          </div>
+          <ul class="mb-0 list-disc pl-5">
+            <li v-for="item in pushValidationFailures" :key="item.image || item.message">
+              <code>{{ item.image ||"未知镜像" }}</code>：{{ item.message ||"无法确认推送权限" }}
+            </li>
+          </ul>
+        </div>
+
         <div class="step-nav">
           <Button variant="outline" size="sm" @click="prevStep">
             <AppIcon  name="arrow-left" class="mr-1" /> 上一步
@@ -1118,6 +1132,7 @@
             size="sm"
             @click="nextStep"
             :disabled="
+              pushValidationLoading ||
               !buildConfig.imageName ||
               (!forceSingleAppMode && services.length > 0 &&
                 buildConfig.pushMode === 'single' &&
@@ -1126,7 +1141,9 @@
                 buildConfig.pushMode === 'multi' &&
                 selectedServices.length === 0)"
           >
-            下一步 <AppIcon  name="arrow-right" class="ml-1" />
+            <AppIcon v-if="pushValidationLoading"  name="spinner" class="mr-1" spin />
+            {{ pushValidationLoading ?"验证推送权限中..." :"下一步" }}
+            <AppIcon v-if="!pushValidationLoading"  name="arrow-right" class="ml-1" />
           </Button>
         </div>
       </div>
@@ -1567,14 +1584,11 @@
           <Button
             size="sm"
             @click="startBuild"
-            :disabled="building"
+            :disabled="building || pushValidationLoading"
           >
-            <AppIcon  name="play" />
-            {{ building ?"构建中..." :"开始构建" }}
-            <AppIcon
-              v-if="building"
-              
-             name="spinner" class="ml-2" spin />
+            <AppIcon v-if="pushValidationLoading || building"  name="spinner" spin />
+            <AppIcon v-else  name="play" />
+            {{ pushValidationLoading ?"验证推送权限中..." : building ?"构建中..." :"开始构建" }}
           </Button>
         </div>
       </div>
@@ -1764,6 +1778,12 @@ const batchRegistrySearchResults = ref([]);
 const batchRegistrySearchLoading = ref(false);
 const batchRegistryDropdownOpen = ref(false);
 const batchTag = ref(""); // 批量设置标签
+const pushValidationLoading = ref(false);
+const pushValidationResults = ref([]);
+const lastPushValidationKey = ref("");
+const pushValidationFailures = computed(() =>
+  pushValidationResults.value.filter((item) => item && !item.success)
+);
 // 批量设置相关变量已移除，使用全局配置
 
 // 资源包相关
@@ -1822,9 +1842,145 @@ const canProceedStep1 = computed(() => {
   }
 });
 
+function buildImageRef(imageName, tag) {
+  const image = (imageName ||"").trim();
+  if (!image) return"";
+  return `${image}:${(tag ||"latest").trim() ||"latest"}`;
+}
+
+function collectPushImageRefs() {
+  const refs = [];
+  const addRef = (imageName, tag) => {
+    const ref = buildImageRef(imageName, tag);
+    if (ref && !refs.includes(ref)) refs.push(ref);
+  };
+
+  if (buildConfig.value.sourceType ==="file") {
+    if (buildConfig.value.push) {
+      addRef(buildConfig.value.imageName, buildConfig.value.tag);
+    }
+    return refs;
+  }
+
+  const usesServiceCards =
+    !forceSingleAppMode.value &&
+    services.value.length > 0 &&
+    buildConfig.value.sourceType ==="git";
+
+  if (
+    usesServiceCards &&
+    buildConfig.value.pushMode ==="single" &&
+    !buildConfig.value.useProjectDockerfile
+  ) {
+    if (buildConfig.value.push && buildConfig.value.selectedService) {
+      const imageName =
+        buildConfig.value.customImageName &&
+        buildConfig.value.customImageName.trim()
+          ? buildConfig.value.customImageName.trim()
+          : `${
+              buildConfig.value.imagePrefix ||
+              buildConfig.value.imageName ||
+              "myapp/demo"
+            }/${buildConfig.value.selectedService}`;
+      addRef(imageName, buildConfig.value.tag);
+    }
+    return refs;
+  }
+
+  if (usesServiceCards && selectedServices.value.length > 0) {
+    selectedServices.value.forEach((serviceName) => {
+      const config = getServiceConfig(serviceName);
+      if (!config.push) return;
+      const imageName =
+        config.customImageName && config.customImageName.trim()
+          ? config.customImageName.trim()
+          : getServiceDefaultImageName(serviceName);
+      addRef(imageName, config.tag || buildConfig.value.tag);
+    });
+    return refs;
+  }
+
+  if (buildConfig.value.push) {
+    addRef(buildConfig.value.imageName, buildConfig.value.tag);
+  }
+  return refs;
+}
+
+function invalidatePushValidation() {
+  lastPushValidationKey.value ="";
+  pushValidationResults.value = [];
+}
+
+async function validatePushTargets({ silent = false } = {}) {
+  const imageRefs = collectPushImageRefs();
+  if (imageRefs.length === 0) {
+    invalidatePushValidation();
+    return true;
+  }
+
+  const teamId = teamStore.activeTeamIdForApi;
+  const validationKey = `${teamId ||""}|${imageRefs.slice().sort().join("|")}`;
+  if (
+    validationKey === lastPushValidationKey.value &&
+    pushValidationResults.value.length > 0 &&
+    pushValidationFailures.value.length === 0
+  ) {
+    return true;
+  }
+
+  pushValidationLoading.value = true;
+  pushValidationResults.value = [];
+  try {
+    const res = await axios.post("/api/registries/validate-push", {
+      image_refs: imageRefs,
+      team_id: teamId,
+    });
+    pushValidationResults.value = res.data.results || [];
+    lastPushValidationKey.value = validationKey;
+    return true;
+  } catch (error) {
+    const data = error.response?.data || {};
+    pushValidationResults.value = data.results || [
+      {
+        success: false,
+        image: imageRefs[0] ||"",
+        message: data.detail || data.message || error.message ||"推送权限校验失败",
+      },
+    ];
+    lastPushValidationKey.value ="";
+    if (!silent) {
+      const firstFailure = pushValidationFailures.value[0];
+      showToast({
+        message:
+          firstFailure?.message ||
+          data.detail ||
+          data.message ||
+          "镜像地址不可推送，请检查仓库配置和命名空间权限",
+        variant:"error",
+        duration: 10000,
+      });
+    }
+    return false;
+  } finally {
+    pushValidationLoading.value = false;
+  }
+}
+
+watch(
+  [buildConfig, selectedServices, servicePushConfig],
+  () => {
+    invalidatePushValidation();
+  },
+  { deep: true }
+);
 
 // 步骤导航
-function nextStep() {
+async function nextStep() {
+  if (currentStep.value === 3) {
+    const pushValid = await validatePushTargets();
+    if (!pushValid) return;
+  }
+
   if (currentStep.value < 5) {
     currentStep.value++;
 
@@ -3084,6 +3240,9 @@ async function startBuild() {
     showToast({ message: validationError, variant:"error", duration: 8000 });
     return;
   }
+
+  const pushValid = await validatePushTargets();
+  if (!pushValid) return;
 
   building.value = true;
 
