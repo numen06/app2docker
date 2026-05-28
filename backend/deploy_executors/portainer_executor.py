@@ -190,38 +190,41 @@ class PortainerExecutor(DeployExecutor):
                     update_status_callback("正在清理已有部署...")
                 
                 if deploy_mode == "docker_compose":
-                    # 尝试删除 Stack
                     stack_name = deploy_config.get("stack_name") or f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}"
-                    try:
-                        client._request('DELETE', f'/stacks', params={
-                            "endpointId": self.portainer_endpoint_id,
-                            "name": stack_name
-                        })
-                        logger.info(f"已删除 Stack: {stack_name}")
-                        # 等待 Stack 完全删除
-                        await asyncio.sleep(2)
-                    except Exception as e:
-                        logger.warning(f"删除 Stack 失败（可能不存在）: {e}")
+                    selected_stack_id = deploy_config.get("stack_id")
                 else:
-                    # Portainer 模式下 docker_run 已统一为单容器 Stack，按 stack 名称清理
                     stack_name = deploy_config.get(
                         "stack_name",
                     ) or deploy_config.get(
                         "container_name",
                         f"{context.get('app', {}).get('name', 'app') if context else 'app'}-{target_name}",
                     )
-                    try:
-                        client._request(
-                            "DELETE",
-                            "/stacks",
-                            params={
-                                "endpointId": self.portainer_endpoint_id,
-                                "name": stack_name,
-                            },
+                    selected_stack_id = deploy_config.get("stack_id")
+
+                try:
+                    delete_result = await asyncio.to_thread(
+                        client.remove_stack,
+                        stack_id=int(selected_stack_id) if selected_stack_id else None,
+                        stack_name=stack_name,
+                        wait=True,
+                        timeout=90,
+                    )
+                    logger.info(f"Portainer Stack delete result: {delete_result}")
+                    if update_status_callback:
+                        update_status_callback(
+                            f"[Portainer] Stack 清理结果: stack_id={delete_result.get('stack_id') or '-'}, stack_name={delete_result.get('stack_name') or stack_name}, deleted={delete_result.get('deleted')}"
                         )
-                        logger.info(f"已删除单容器 Stack: {stack_name}")
-                    except Exception as e:
-                        logger.warning(f"删除单容器 Stack 失败（可能不存在）: {e}")
+                except Exception as e:
+                    logger.exception("Portainer Stack deletion failed")
+                    return {
+                        "success": False,
+                        "message": f"Stack 删除失败，已停止发布以避免继续使用旧镜像: {e}",
+                        "host_type": "portainer",
+                        "deploy_method": "portainer_api",
+                        "host_name": target_name,
+                        "stack_name": stack_name,
+                        "stack_id": selected_stack_id,
+                    }
             
             # 执行部署
             logger.info(f"开始执行 Portainer Stack 发布: mode={deploy_mode}")
@@ -270,6 +273,14 @@ class PortainerExecutor(DeployExecutor):
                     update_status_callback(
                         f"[Portainer] Stack 策略: {stack_strategy}, selected_stack_id={selected_stack_id or '-'}, stack_name={stack_name}"
                     )
+
+                compose_content, revision_injected, revision_service_count = (
+                    client.inject_deploy_revision(compose_content, task_id)
+                )
+                if revision_injected and update_status_callback:
+                    update_status_callback(
+                        f"[Portainer] 检测到非 digest 镜像引用，已注入发布 revision 以强制服务更新: {task_id} ({revision_service_count} 个服务)"
+                    )
                 
                 # 使用重试机制执行部署
                 result = None
@@ -288,10 +299,20 @@ class PortainerExecutor(DeployExecutor):
                         # 选择“更新已有 Stack”时优先按 stack_id 更新，避免同名 Stack 或名称解析导致更新错目标
                         if stack_strategy == "update_existing" and selected_stack_id:
                             result = client.update_stack(
-                                int(selected_stack_id), compose_content
+                                int(selected_stack_id),
+                                compose_content,
+                                stack_name=stack_name,
                             )
                         else:
                             result = client.deploy_stack(stack_name, compose_content)
+                        result.setdefault("stack_name", stack_name)
+                        result["revision_injected"] = revision_injected or bool(
+                            result.get("revision_injected")
+                        )
+                        result["revision_service_count"] = max(
+                            revision_service_count,
+                            int(result.get("revision_service_count") or 0),
+                        )
                         logger.info(f"Docker Compose 部署结果: {result}")
                         break
                         
@@ -334,6 +355,30 @@ class PortainerExecutor(DeployExecutor):
                     result.setdefault("host_type", "portainer")
                     result.setdefault("deploy_method", "portainer_api")
                     result.setdefault("host_name", target_name)
+
+                if result.get("success"):
+                    verification = None
+                    for verify_attempt in range(6):
+                        if verify_attempt > 0:
+                            await asyncio.sleep(2)
+                        verification = await asyncio.to_thread(
+                            client.verify_stack_services,
+                            result.get("stack_name") or stack_name,
+                            task_id if result.get("revision_injected") else None,
+                            result.get("revision_service_count") or 0,
+                        )
+                        if verification.get("success") or not verification.get("checked"):
+                            break
+                    result["verification"] = verification
+                    if verification and update_status_callback:
+                        update_status_callback(
+                            f"[Portainer] Stack 服务校验: {verification.get('message')}"
+                        )
+                    if verification and verification.get("checked") and not verification.get("success"):
+                        result["success"] = False
+                        result["message"] = (
+                            f"{result.get('message', 'Stack 部署完成')}；但发布后服务校验失败: {verification.get('message')}"
+                        )
                 
                 return result
             else:
@@ -582,4 +627,3 @@ class PortainerExecutor(DeployExecutor):
             }
 
         return await asyncio.to_thread(_sync_check)
-

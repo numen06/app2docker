@@ -1,21 +1,21 @@
 <template>
   <div class="pipeline-create-step-push-mode pipeline-config-pane">
     <div v-if="analyzing" class="py-6 text-center text-slate-500">
-      <i class="fas fa-spinner fa-spin mr-1"></i>
+      <AppIcon  name="spinner" class="mr-1" spin />
       正在根据 Dockerfile 分析服务结构…
     </div>
 
     <template v-else>
-      <div v-if="servicesError" class="alert alert-warning mb-3">
-        <i class="fas fa-exclamation-triangle"></i> {{ servicesError }}
+      <div v-if="servicesError" class="rounded-md border px-3 py-2 text-sm border-amber-200 bg-amber-50 text-amber-900 mb-3">
+        <AppIcon  name="exclamation-triangle" /> {{ servicesError }}
         <span class="block mt-1 text-sm">无法完成解析，请手动选择推送模式。</span>
       </div>
-      <div v-else-if="services.length === 0" class="alert alert-info mb-3">
-        <i class="fas fa-info-circle"></i>
+      <div v-else-if="services.length === 0" class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900 mb-3">
+        <AppIcon  name="info-circle" />
         未从 <code class="text-xs">{{ dockerfileLabel }}</code> 识别到多阶段服务，建议选用<strong>单服务</strong>模式。
       </div>
-      <div v-else class="alert alert-warning alert-sm mb-3">
-        <i class="fas fa-info-circle"></i>
+      <div v-else class="rounded-md border px-3 py-2 text-sm border-amber-200 bg-amber-50 text-amber-900 px-2 py-1 text-xs mb-3">
+        <AppIcon  name="info-circle" />
         已从 <code class="text-xs">{{ dockerfileLabel }}</code> 识别到
         {{ services.length }} 个服务（{{ serviceNamesPreview }}），建议选用<strong>多服务</strong>模式。
       </div>
@@ -33,28 +33,28 @@
         >
           <input
             type="radio"
-            class="btn-check"
+            class="choice-input"
             id="create-mode-single"
             value="single"
             v-model="formData.push_mode"
             @change="onPushModePick"
           />
           <label class="pipeline-webhook-strategy__option" for="create-mode-single">
-            <i class="fas fa-cube"></i>
+            <AppIcon  name="cube" />
             单服务模式
             <small>一个镜像对应整仓构建</small>
           </label>
 
           <input
             type="radio"
-            class="btn-check"
+            class="choice-input"
             id="create-mode-multi"
             value="multi"
             v-model="formData.push_mode"
             @change="onPushModePick"
           />
           <label class="pipeline-webhook-strategy__option" for="create-mode-multi">
-            <i class="fas fa-sitemap"></i>
+            <AppIcon  name="sitemap" />
             多服务模式
             <small>按 Dockerfile 阶段拆分镜像</small>
           </label>
@@ -110,7 +110,7 @@ const analyzing = computed(
 );
 
 const dockerfileLabel = computed(
-  () => formData.value.dockerfile_name || "Dockerfile"
+  () => formData.value.dockerfile_name ||"Dockerfile"
 );
 
 const serviceNamesPreview = computed(() =>

@@ -2,7 +2,7 @@
   <FormDialog
     :model-value="show"
     title="用户中心"
-    icon="fa-user-circle"
+    icon="user-circle"
     size="lg"
     @update:model-value="onDialogUpdate"
   >
@@ -14,12 +14,12 @@
 
     <div v-if="!requirePasswordChange" class="mb-4">
       <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-        <i class="fas fa-user text-blue-600"></i>
+        <AppIcon  name="user" class="text-blue-600" />
         用户信息
       </h4>
       <Card>
         <CardContent class="flex items-center gap-3 p-4">
-          <i class="fas fa-user-circle text-3xl text-blue-600"></i>
+          <AppIcon  name="user-circle" class="text-3xl text-blue-600" />
           <div>
             <div class="font-semibold text-slate-900">{{ username }}</div>
             <p v-if="isGlobalAdmin" class="text-xs text-slate-500">系统管理员</p>
@@ -35,11 +35,9 @@
       <button
         type="button"
         class="border-b-2 px-4 py-2 text-sm font-medium transition"
-        :class="
-          activeTab === 'password'
+        :class="activeTab === 'password'
             ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-slate-500 hover:text-slate-800'
-        "
+            : 'border-transparent text-slate-500 hover:text-slate-800'"
         @click="activeTab = 'password'"
       >
         修改密码
@@ -47,11 +45,9 @@
       <button
         type="button"
         class="border-b-2 px-4 py-2 text-sm font-medium transition"
-        :class="
-          activeTab === 'appkeys'
+        :class="activeTab === 'appkeys'
             ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-slate-500 hover:text-slate-800'
-        "
+            : 'border-transparent text-slate-500 hover:text-slate-800'"
         @click="switchToAppKeys"
       >
         API 密钥
@@ -63,7 +59,7 @@
         v-if="!requirePasswordChange"
         class="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900"
       >
-        <i class="fas fa-key text-blue-600"></i>
+        <AppIcon  name="key" class="text-blue-600" />
         修改密码
       </h4>
       <form class="space-y-4" @submit.prevent="handleChangePassword">
@@ -106,7 +102,7 @@
     <div v-else-if="activeTab === 'appkeys' && !requirePasswordChange">
       <div class="mb-3 flex items-center justify-between">
         <h4 class="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <i class="fas fa-fingerprint text-blue-600"></i>
+          <AppIcon  name="fingerprint" class="text-blue-600" />
           API 密钥
         </h4>
         <Button
@@ -115,7 +111,7 @@
           :disabled="appKeysLoading"
           @click="showCreateForm = !showCreateForm"
         >
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           创建密钥
         </Button>
       </div>
@@ -140,7 +136,7 @@
             :disabled="creatingAppKey || !newAppKey.name.trim()"
             @click="createAppKey"
           >
-            <i v-if="creatingAppKey" class="fas fa-spinner fa-spin"></i>
+            <AppIcon v-if="creatingAppKey"  name="spinner" spin />
             生成密钥
           </Button>
         </CardContent>
@@ -156,10 +152,10 @@
         v-if="appKeysLoading"
         class="flex items-center gap-2 py-6 text-sm text-slate-500"
       >
-        <i class="fas fa-spinner fa-spin"></i>
+        <AppIcon  name="spinner" spin />
         加载中…
       </div>
-      <EmptyState v-else-if="appKeys.length === 0" message="暂无 API 密钥" icon="fa-fingerprint" />
+      <EmptyState v-else-if="appKeys.length === 0" message="暂无 API 密钥" icon="fingerprint" />
       <Table v-else min-width-class="min-w-[48rem]">
           <TableHeader>
             <TableRow>
@@ -179,7 +175,7 @@
               </TableCell>
               <TableCell>
                 <Badge :variant="item.enabled ? 'success' : 'default'">
-                  {{ item.enabled ? "启用" : "禁用" }}
+                  {{ item.enabled ?"启用" :"禁用" }}
                 </Badge>
               </TableCell>
               <TableCell class="text-slate-600">{{ formatTime(item.last_used_at) }}</TableCell>
@@ -192,7 +188,7 @@
                     type="button"
                     @click="toggleAppKey(item.key_id)"
                   >
-                    {{ item.enabled ? "禁用" : "启用" }}
+                    {{ item.enabled ?"禁用" :"启用" }}
                   </Button>
                   <Button
                     variant="destructive"
@@ -219,17 +215,16 @@
       <Button
         type="button"
         :disabled="
-          (activeTab === 'password' || requirePasswordChange) && (loading || !canSubmit)
-        "
+          (activeTab === 'password' || requirePasswordChange) && (loading || !canSubmit)"
         @click="handlePrimaryAction"
       >
-        <i v-if="loading" class="fas fa-spinner fa-spin"></i>
+        <AppIcon v-if="loading"  name="spinner" spin />
         {{
-          activeTab === "password" || requirePasswordChange
+          activeTab ==="password" || requirePasswordChange
             ? loading
-              ? "修改中…"
-              : "修改密码"
-            : "确定"
+              ?"修改中…"
+              :"修改密码"
+            :"确定"
         }}
       </Button>
     </template>
@@ -266,7 +261,7 @@ const props = defineProps({
   },
   username: {
     type: String,
-    default: "",
+    default:"",
   },
   requirePasswordChange: {
     type: Boolean,
@@ -274,11 +269,11 @@ const props = defineProps({
   },
   initialTab: {
     type: String,
-    default: "password",
+    default:"password",
   },
 });
 
-const emit = defineEmits(["update:show", "password-changed"]);
+const emit = defineEmits(["update:show","password-changed"]);
 
 const teamStore = useTeamStore();
 const authStore = useAuthStore();
@@ -286,14 +281,14 @@ const authStore = useAuthStore();
 const isGlobalAdmin = computed(() => authStore.isGlobalAdmin);
 
 function teamRoleLabel(role) {
-  const map = { owner: "所有者", admin: "管理员", member: "成员" };
+  const map = { owner:"所有者", admin:"管理员", member:"成员" };
   return map[role] || role;
 }
 
 const form = ref({
-  oldPassword: "",
-  newPassword: "",
-  confirmPassword: "",
+  oldPassword:"",
+  newPassword:"",
+  confirmPassword:"",
 });
 
 const loading = ref(false);
@@ -306,8 +301,8 @@ const showCreateForm = ref(false);
 const creatingAppKey = ref(false);
 const createdAppKey = ref("");
 const newAppKey = ref({
-  name: "",
-  expiresAt: "",
+  name:"",
+  expiresAt:"",
 });
 
 const canSubmit = computed(() => {
@@ -334,22 +329,22 @@ function close() {
 
 function resetState() {
   form.value = {
-    oldPassword: "",
-    newPassword: "",
-    confirmPassword: "",
+    oldPassword:"",
+    newPassword:"",
+    confirmPassword:"",
   };
   const tab = props.initialTab;
-  activeTab.value = tab === "appkeys" ? "appkeys" : "password";
+  activeTab.value = tab ==="appkeys" ?"appkeys" :"password";
   appKeys.value = [];
   showCreateForm.value = false;
-  createdAppKey.value = "";
-  newAppKey.value = { name: "", expiresAt: "" };
-  error.value = "";
-  success.value = "";
+  createdAppKey.value ="";
+  newAppKey.value = { name:"", expiresAt:"" };
+  error.value ="";
+  success.value ="";
 }
 
 function handlePrimaryAction() {
-  if (activeTab.value === "password" || props.requirePasswordChange) {
+  if (activeTab.value ==="password" || props.requirePasswordChange) {
     handleChangePassword();
   } else {
     close();
@@ -357,12 +352,12 @@ function handlePrimaryAction() {
 }
 
 async function switchToAppKeys() {
-  activeTab.value = "appkeys";
+  activeTab.value ="appkeys";
   await loadAppKeys();
 }
 
 function formatTime(value) {
-  if (!value) return "—";
+  if (!value) return"—";
   try {
     return new Date(value).toLocaleString("zh-CN");
   } catch {
@@ -372,12 +367,12 @@ function formatTime(value) {
 
 async function loadAppKeys() {
   appKeysLoading.value = true;
-  error.value = "";
+  error.value ="";
   try {
     const res = await axios.get("/api/user/app-keys");
     appKeys.value = res.data?.app_keys || [];
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || "加载 API 密钥失败";
+    error.value = err.response?.data?.detail || err.message ||"加载 API 密钥失败";
   } finally {
     appKeysLoading.value = false;
   }
@@ -386,70 +381,70 @@ async function loadAppKeys() {
 async function createAppKey() {
   if (!newAppKey.value.name.trim()) return;
   creatingAppKey.value = true;
-  error.value = "";
-  success.value = "";
+  error.value ="";
+  success.value ="";
   try {
     const payload = { name: newAppKey.value.name.trim() };
     if (newAppKey.value.expiresAt) {
       payload.expires_at = new Date(newAppKey.value.expiresAt).toISOString();
     }
     const res = await axios.post("/api/user/app-keys", payload);
-    createdAppKey.value = res.data?.app_key || "";
-    success.value = "API 密钥创建成功";
-    newAppKey.value = { name: "", expiresAt: "" };
+    createdAppKey.value = res.data?.app_key ||"";
+    success.value ="API 密钥创建成功";
+    newAppKey.value = { name:"", expiresAt:"" };
     showCreateForm.value = false;
     await loadAppKeys();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || "创建 API 密钥失败";
+    error.value = err.response?.data?.detail || err.message ||"创建 API 密钥失败";
   } finally {
     creatingAppKey.value = false;
   }
 }
 
 async function toggleAppKey(keyId) {
-  error.value = "";
-  success.value = "";
+  error.value ="";
+  success.value ="";
   try {
     await axios.put(`/api/user/app-keys/${keyId}/toggle`);
-    success.value = "API 密钥状态已更新";
+    success.value ="API 密钥状态已更新";
     await loadAppKeys();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || "更新 API 密钥状态失败";
+    error.value = err.response?.data?.detail || err.message ||"更新 API 密钥状态失败";
   }
 }
 
 async function removeAppKey(keyId) {
-  if (!(await showConfirm({ message: "确定删除该 API 密钥吗？删除后不可恢复。", danger: true }))) return;
-  error.value = "";
-  success.value = "";
+  if (!(await showConfirm({ message:"确定删除该 API 密钥吗？删除后不可恢复。", danger: true }))) return;
+  error.value ="";
+  success.value ="";
   try {
     await axios.delete(`/api/user/app-keys/${keyId}`);
-    success.value = "API 密钥已删除";
+    success.value ="API 密钥已删除";
     await loadAppKeys();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || "删除 API 密钥失败";
+    error.value = err.response?.data?.detail || err.message ||"删除 API 密钥失败";
   }
 }
 
 async function handleChangePassword() {
   if (!canSubmit.value) {
-    error.value = "请填写完整信息，且新密码长度至少 6 位，两次输入需一致";
+    error.value ="请填写完整信息，且新密码长度至少 6 位，两次输入需一致";
     return;
   }
 
   if (form.value.newPassword !== form.value.confirmPassword) {
-    error.value = "两次输入的密码不一致";
+    error.value ="两次输入的密码不一致";
     return;
   }
 
   if (form.value.newPassword.length < 6) {
-    error.value = "新密码长度至少 6 位";
+    error.value ="新密码长度至少 6 位";
     return;
   }
 
   loading.value = true;
-  error.value = "";
-  success.value = "";
+  error.value ="";
+  success.value ="";
 
   try {
     const res = await axios.post("/api/change-password", {
@@ -458,11 +453,11 @@ async function handleChangePassword() {
     });
 
     if (res.data.success) {
-      success.value = "密码修改成功！";
+      success.value ="密码修改成功！";
       form.value = {
-        oldPassword: "",
-        newPassword: "",
-        confirmPassword: "",
+        oldPassword:"",
+        newPassword:"",
+        confirmPassword:"",
       };
 
       if (props.requirePasswordChange) {
@@ -472,14 +467,14 @@ async function handleChangePassword() {
         }, 1000);
       } else {
         setTimeout(() => {
-          success.value = "";
+          success.value ="";
         }, 3000);
       }
     } else {
-      error.value = res.data.error || "修改密码失败";
+      error.value = res.data.error ||"修改密码失败";
     }
   } catch (err) {
-    error.value = err.response?.data?.error || err.message || "修改密码失败";
+    error.value = err.response?.data?.error || err.message ||"修改密码失败";
   } finally {
     loading.value = false;
   }
@@ -490,8 +485,8 @@ watch(
   (visible) => {
     if (visible) {
       const tab = props.initialTab;
-      activeTab.value = tab === "appkeys" ? "appkeys" : "password";
-      if (activeTab.value === "appkeys") {
+      activeTab.value = tab ==="appkeys" ?"appkeys" :"password";
+      if (activeTab.value ==="appkeys") {
         loadAppKeys();
       }
     } else {

@@ -78,6 +78,7 @@ class PipelineManager:
                 "webhook_allowed_branches": self._safe_get_json_field(
                     pipeline, "webhook_allowed_branches", []
                 ),
+                "tag_build_enabled": bool(getattr(pipeline, "tag_build_enabled", False)),
                 "branch_tag_mapping": self._safe_get_json_field(
                     pipeline, "branch_tag_mapping", {}
                 ),
@@ -160,6 +161,7 @@ class PipelineManager:
         webhook_branch_filter: bool = False,
         webhook_use_push_branch: bool = True,
         webhook_allowed_branches: list = None,
+        tag_build_enabled: bool = False,
         branch_tag_mapping: dict = None,
         source_id: str = None,
         selected_services: list = None,
@@ -233,6 +235,7 @@ class PipelineManager:
                 webhook_branch_filter=webhook_branch_filter,
                 webhook_use_push_branch=webhook_use_push_branch,
                 webhook_allowed_branches=webhook_allowed_branches or [],
+                tag_build_enabled=bool(tag_build_enabled),
                 branch_tag_mapping=branch_tag_mapping or {},
                 source_id=source_id,
                 selected_services=selected_services or [],
@@ -315,6 +318,11 @@ class PipelineManager:
                         else None
                     ),
                     [],
+                ),
+                "tag_build_enabled": (
+                    bool(row["tag_build_enabled"])
+                    if "tag_build_enabled" in row.keys()
+                    else False
                 ),
                 "branch_tag_mapping": self._safe_parse_json(
                     row["branch_tag_mapping"], {}
@@ -439,6 +447,11 @@ class PipelineManager:
                     else None
                 ),
                 [],
+            ),
+            "tag_build_enabled": (
+                bool(row["tag_build_enabled"])
+                if "tag_build_enabled" in row.keys()
+                else False
             ),
             "branch_tag_mapping": self._safe_parse_json(row["branch_tag_mapping"], {}),
             "source_id": row["source_id"],
@@ -598,6 +611,7 @@ class PipelineManager:
         webhook_branch_filter: bool = None,
         webhook_use_push_branch: bool = None,
         webhook_allowed_branches: list = None,
+        tag_build_enabled: bool = None,
         branch_tag_mapping: dict = None,
         source_id: str = None,
         selected_services: list = None,
@@ -682,6 +696,8 @@ class PipelineManager:
                 pipeline.webhook_use_push_branch = webhook_use_push_branch
             if webhook_allowed_branches is not None:
                 pipeline.webhook_allowed_branches = webhook_allowed_branches
+            if tag_build_enabled is not None:
+                pipeline.tag_build_enabled = bool(tag_build_enabled)
             if branch_tag_mapping is not None:
                 pipeline.branch_tag_mapping = branch_tag_mapping
             if source_id is not None:
@@ -813,6 +829,8 @@ class PipelineManager:
                                 updates["webhook_allowed_branches"] = (
                                     webhook_allowed_branches
                                 )
+                            if tag_build_enabled is not None:
+                                updates["tag_build_enabled"] = bool(tag_build_enabled)
                             if branch_tag_mapping is not None:
                                 updates["branch_tag_mapping"] = branch_tag_mapping
                             if source_id is not None:
@@ -946,6 +964,7 @@ class PipelineManager:
             webhook_allowed_branches=self._safe_get_json_field(
                 source, "webhook_allowed_branches", []
             ),
+            tag_build_enabled=bool(getattr(source, "tag_build_enabled", False)),
             branch_tag_mapping=self._safe_get_json_field(
                 source, "branch_tag_mapping", {}
             ),

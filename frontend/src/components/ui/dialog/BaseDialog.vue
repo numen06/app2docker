@@ -26,22 +26,22 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue"]);
 
 function onKeydown(e) {
-  if (e.key === "Escape" && props.modelValue) {
+  if (e.key ==="Escape" && props.modelValue) {
     emit("update:modelValue", false);
   }
 }
 
 let bodyScrollLockCount = 0;
-let savedBodyOverflow = "";
-let savedBodyPaddingRight = "";
+let savedBodyOverflow ="";
+let savedBodyPaddingRight ="";
 
 function lockBodyScroll() {
-  if (typeof document === "undefined") return;
+  if (typeof document ==="undefined") return;
   if (bodyScrollLockCount === 0) {
     savedBodyOverflow = document.body.style.overflow;
     savedBodyPaddingRight = document.body.style.paddingRight;
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow ="hidden";
     if (scrollbarWidth > 0) {
       document.body.style.paddingRight = `${scrollbarWidth}px`;
     }
@@ -50,7 +50,7 @@ function lockBodyScroll() {
 }
 
 function unlockBodyScroll() {
-  if (typeof document === "undefined") return;
+  if (typeof document ==="undefined") return;
   bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
   if (bodyScrollLockCount === 0) {
     document.body.style.overflow = savedBodyOverflow;

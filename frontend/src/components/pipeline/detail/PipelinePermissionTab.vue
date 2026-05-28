@@ -4,7 +4,7 @@
       管理团队成员对此流水线的访问权限。
     </p>
     <Button size="sm" @click="permissionDialogOpen = true">
-      <i class="fas fa-user-shield mr-1"></i> 配置成员授权
+      <AppIcon  name="user-shield" class="mr-1" /> 配置成员授权
     </Button>
     <ResourceMemberPermissionDialog
       v-model="permissionDialogOpen"

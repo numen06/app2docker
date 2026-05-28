@@ -39,13 +39,13 @@
                   role="tabpanel"
                   id="git-pane"
                 >
-                  <div class="card">
-                    <div class="card-header bg-light">
+                  <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <h6 class="mb-0">
-                        <i class="fas fa-code-branch text-blue-600"></i> Git 配置
+                        <AppIcon  name="code-branch" class="text-blue-600" /> Git 配置
                       </h6>
                     </div>
-                    <div class="card-body">
+                    <div class="p-4">
                       <div class="pipeline-field-grid pipeline-field-grid--3">
                         <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700">Git 数据源</label>
@@ -65,8 +65,8 @@
                               }})
                             </option>
                           </select>
-                          <div class="form-text small text-slate-500 mt-1">
-                            <i class="fas fa-info-circle"></i>
+                          <div class="text-xs text-slate-500 text-sm mt-1">
+                            <AppIcon  name="info-circle" />
                             可以从已保存的数据源中选择，或手动输入 Git 仓库地址
                           </div>
                         </div>
@@ -85,26 +85,24 @@
                         </div>
                         <div class="pipeline-field">
                           <label class="block text-sm font-medium text-slate-700">分支名称</label>
-                          <div class="input-group">
+                          <div class="flex w-full">
                             <select
                               v-if="
                                 repoVerified ||
                                 formData.source_id ||
-                                formData.git_url
-                              "
+                                formData.git_url"
                               v-model="formData.branch"
                               class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                               :disabled="
                                 refreshingBranches ||
                                 (!repoVerified &&
                                   !formData.source_id &&
-                                  !formData.git_url)
-                              "
+                                  !formData.git_url)"
                               @change="onBranchChanged"
                             >
                               <option value="">
                                 使用默认分支 ({{
-                                  branchesAndTags.default_branch || "main"
+                                  branchesAndTags.default_branch ||"main"
                                 }})
                               </option>
                               <optgroup
@@ -147,11 +145,11 @@
                               :disabled="refreshingBranches"
                               title="刷新分支列表"
                             >
-                              <i
+                              <AppIcon
                                 v-if="refreshingBranches"
-                                class="fas fa-spinner fa-spin"
-                              ></i>
-                              <i v-else class="fas fa-sync-alt"></i>
+                                
+                               name="spinner" spin />
+                              <AppIcon v-else  name="sync-alt" />
                             </Button>
                           </div>
                           <small class="text-slate-500">
@@ -161,8 +159,7 @@
                             <span
                               v-else-if="
                                 repoVerified &&
-                                branchesAndTags.branches.length > 0
-                              "
+                                branchesAndTags.branches.length > 0"
                             >
                               已加载
                               {{ branchesAndTags.branches.length }} 个分支、{{
@@ -202,6 +199,24 @@
                             placeholder="留空表示根目录"
                           />
                         </div>
+                        <div class="pipeline-field pipeline-field--full">
+                          <div class="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                            <input
+                              v-model="formData.tag_build_enabled"
+                              class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              type="checkbox"
+                              id="gitTagBuildEnabled"
+                            />
+                            <div>
+                              <label class="text-sm font-medium text-slate-700" for="gitTagBuildEnabled">
+                                启用 Tag 构建
+                              </label>
+                              <p class="mb-0 text-xs leading-5 text-slate-500">
+                                开启后，手动触发可选择 Git tag，Webhook 收到 refs/tags/* 时按 tag 名称构建镜像标签。
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -225,21 +240,21 @@
                       class="flex justify-between items-center mb-3"
                     >
                       <h6 class="mb-0">
-                        <i class="fas fa-code"></i>
-                        {{ editingPipeline ? "编辑" : "新建" }}构建配置JSON
+                        <AppIcon  name="code" />
+                        {{ editingPipeline ?"编辑" :"新建" }}构建配置JSON
                       </h6>
-                      <div class="btn-group btn-group-sm" role="group">
+                      <div class="inline-flex items-stretch text-sm" role="group">
                         <Button
                           type="button"
                           variant="outline" size="sm"
                           @click="copyBuildConfigJson"
                         >
-                          <i class="fas fa-copy"></i> 复制JSON
+                          <AppIcon  name="copy" /> 复制JSON
                         </Button>
                       </div>
                     </div>
-                    <div class="alert alert-info mb-3">
-                      <i class="fas fa-info-circle"></i>
+                    <div class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900 mb-3">
+                      <AppIcon  name="info-circle" />
                       <strong>提示：</strong
                       >编辑JSON后点击"应用"将配置应用到表单，然后点击底部"保存"按钮保存流水线。
                     </div>
@@ -252,9 +267,9 @@
                     </div>
                     <div
                       v-if="buildConfigJsonError"
-                      class="alert alert-danger mt-2"
+                      class="rounded-md border px-3 py-2 text-sm border-red-200 bg-red-50 text-red-800 mt-2"
                     >
-                      <i class="fas fa-exclamation-circle"></i>
+                      <AppIcon  name="exclamation-circle" />
                       {{ buildConfigJsonError }}
                     </div>
                     <div class="mt-3 flex justify-end gap-2">
@@ -263,7 +278,7 @@
                         variant="outline" size="sm"
                         @click="resetBuildConfigJson"
                       >
-                        <i class="fas fa-undo"></i> 重置
+                        <AppIcon  name="undo" /> 重置
                       </Button>
                       <Button
                         type="button"
@@ -271,7 +286,7 @@
                         @click="applyBuildConfigJson"
                         :disabled="!!buildConfigJsonError"
                       >
-                        <i class="fas fa-check"></i> 应用
+                        <AppIcon  name="check" /> 应用
                       </Button>
                     </div>
                   </div>
@@ -283,28 +298,28 @@
                       class="flex justify-between items-center mb-3"
                     >
                       <h6 class="mb-0">
-                        <i class="fas fa-cogs"></i> 编辑构建配置JSON
+                        <AppIcon  name="cogs" /> 编辑构建配置JSON
                       </h6>
-                      <div class="btn-group btn-group-sm" role="group">
+                      <div class="inline-flex items-stretch text-sm" role="group">
                         <Button
                           type="button"
                           variant="outline" size="sm"
                           @click="showBuildConfigJsonModal = true"
                         >
-                          <i class="fas fa-code"></i> 查看JSON
+                          <AppIcon  name="code" /> 查看JSON
                         </Button>
                       </div>
                     </div>
 
                     <!-- Dockerfile 配置模块 -->
-                    <div class="card mb-4">
-                      <div class="card-header bg-light">
+                    <div class="rounded-lg border border-slate-200 bg-white shadow-sm mb-4">
+                      <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                         <h6 class="mb-0">
-                          <i class="fas fa-file-code text-blue-600"></i>
+                          <AppIcon  name="file-code" class="text-blue-600" />
                           Dockerfile 配置
                         </h6>
                       </div>
-                      <div class="card-body">
+                      <div class="p-4">
                         <div class="pipeline-field-grid pipeline-field-grid--3">
                           <div class="pipeline-field pipeline-field--full">
                             <label class="block text-sm font-medium text-slate-700">Dockerfile 来源</label>
@@ -314,7 +329,7 @@
                             >
                               <input
                                 type="radio"
-                                class="btn-check"
+                                class="choice-input"
                                 id="use-project-dockerfile"
                                 :value="true"
                                 v-model="formData.use_project_dockerfile"
@@ -324,12 +339,12 @@
                                 class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                                 for="use-project-dockerfile"
                               >
-                                <i class="fas fa-file-code"></i> 项目Dockerfile
+                                <AppIcon  name="file-code" /> 项目Dockerfile
                               </label>
 
                               <input
                                 type="radio"
-                                class="btn-check"
+                                class="choice-input"
                                 id="use-template"
                                 :value="false"
                                 v-model="formData.use_project_dockerfile"
@@ -339,7 +354,7 @@
                                 class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                                 for="use-template"
                               >
-                                <i class="fas fa-layer-group"></i> 使用模板
+                                <AppIcon  name="layer-group" /> 使用模板
                               </label>
                             </div>
                           </div>
@@ -349,18 +364,17 @@
                           >
                             <label class="block text-sm font-medium text-slate-700">Dockerfile 文件名</label>
                             <div v-if="scanningDockerfiles" class="mb-2">
-                              <i class="fas fa-spinner fa-spin"></i>
+                              <AppIcon  name="spinner" spin />
                               <small class="text-slate-500"
                                 >正在扫描项目中的 Dockerfile...</small
                               >
                             </div>
-                            <div class="input-group">
+                            <div class="flex w-full">
                               <select
                                 v-model="formData.dockerfile_name"
                                 class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                                 :disabled="
-                                  scanningDockerfiles || !formData.branch
-                                "
+                                  scanningDockerfiles || !formData.branch"
                                 required
                               >
                                 <option value="">-- 请先选择分支 --</option>
@@ -375,8 +389,7 @@
                                     !availableDockerfiles.some(
                                       (df) =>
                                         df.path === formData.dockerfile_name
-                                    )
-                                  "
+                                    )"
                                   :value="formData.dockerfile_name"
                                   :key="'current-' + formData.dockerfile_name"
                                 >
@@ -391,7 +404,7 @@
                                   {{
                                     dockerfile.path !== dockerfile.name
                                       ? `(${dockerfile.name})`
-                                      : ""
+                                      :""
                                   }}
                                 </option>
                               </select>
@@ -402,41 +415,40 @@
                                 :disabled="
                                   scanningDockerfiles ||
                                   (!formData.branch &&
-                                    !branchesAndTags.default_branch)
-                                "
+                                    !branchesAndTags.default_branch)"
                                 title="刷新 Dockerfile 列表（强制刷新）"
                               >
-                                <i
+                                <AppIcon
                                   v-if="scanningDockerfiles"
-                                  class="fas fa-spinner fa-spin"
-                                ></i>
-                                <i v-else class="fas fa-sync-alt"></i>
+                                  
+                                 name="spinner" spin />
+                                <AppIcon v-else  name="sync-alt" />
                               </Button>
                             </div>
                             <small
                               v-if="dockerfilesError"
                               class="text-red-500 block mt-1"
                             >
-                              <i class="fas fa-exclamation-triangle"></i>
+                              <AppIcon  name="exclamation-triangle" />
                               {{ dockerfilesError }}
                             </small>
                             <small
                               v-else-if="availableDockerfiles.length > 0"
                               class="text-slate-500 block mt-1"
                             >
-                              <i class="fas fa-check-circle"></i> 已扫描到
+                              <AppIcon  name="check-circle" /> 已扫描到
                               {{ availableDockerfiles.length }} 个 Dockerfile
                             </small>
                             <small
                               v-else-if="formData.branch"
                               class="text-slate-500 block mt-1"
                             >
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               请先选择分支，然后点击刷新按钮扫描项目中的
                               Dockerfile
                             </small>
                             <small v-else class="text-slate-500 block mt-1">
-                              <i class="fas fa-info-circle"></i> 请先选择分支
+                              <AppIcon  name="info-circle" /> 请先选择分支
                             </small>
                           </div>
                           <div v-else class="pipeline-field">
@@ -445,18 +457,16 @@
                             <!-- 当前选择提示 -->
                             <div
                               v-if="
-                                formData.template && formData.template !== ''
-                              "
-                              class="alert alert-success alert-sm py-2 mb-2"
+                                formData.template && formData.template !== ''"
+                              class="rounded-md border px-3 py-2 text-sm border-green-200 bg-green-50 text-green-800 px-2 py-1 text-xs mb-2"
                             >
-                              <i class="fas fa-check-circle mr-2"></i>
+                              <AppIcon  name="check-circle" class="mr-2" />
                               <strong>当前选择：</strong>{{ formData.template }}
                               <span
                                 v-if="
                                   filteredTemplates.find(
                                     (t) => t.name === formData.template
-                                  )
-                                "
+                                  )"
                               >
                                 ({{
                                   filteredTemplates.find(
@@ -484,26 +494,24 @@
                             <small
                               v-if="
                                 formData.project_type &&
-                                filteredTemplates.length === 0
-                              "
+                                filteredTemplates.length === 0"
                               class="text-slate-500 block mt-1"
                             >
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               当前项目类型没有可用的模板
                             </small>
                             <small
                               v-else-if="
                                 formData.project_type &&
-                                filteredTemplates.length > 0
-                              "
+                                filteredTemplates.length > 0"
                               class="text-slate-500 block mt-1"
                             >
-                              <i class="fas fa-check-circle"></i>
+                              <AppIcon  name="check-circle" />
                               已按项目类型过滤，共
                               {{ filteredTemplates.length }} 个模板
                             </small>
                             <small v-else class="text-slate-500 block mt-1">
-                              <i class="fas fa-info-circle"></i> 请先在 Git
+                              <AppIcon  name="info-circle" /> 请先在 Git
                               配置中选择项目类型
                             </small>
                           </div>
@@ -512,13 +520,13 @@
                     </div>
 
                     <!-- 镜像配置 -->
-                    <div class="card mb-4">
-                      <div class="card-header bg-light">
+                    <div class="rounded-lg border border-slate-200 bg-white shadow-sm mb-4">
+                      <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                         <h6 class="mb-0">
-                          <i class="fab fa-docker text-blue-600"></i> 镜像配置
+                          <AppIcon  name="docker" class="text-blue-600" /> 镜像配置
                         </h6>
                       </div>
-                      <div class="card-body">
+                      <div class="p-4">
                         <div class="pipeline-field-grid pipeline-field-grid--3">
                           <div class="pipeline-field">
                             <label class="block text-sm font-medium text-slate-700"
@@ -534,11 +542,11 @@
                             />
                             <small class="text-slate-500 block mt-1">
                               <span v-if="formData.push_mode === 'single'">
-                                <i class="fas fa-info-circle"></i>
+                                <AppIcon  name="info-circle" />
                                 单服务模式：直接使用此镜像名称
                               </span>
                               <span v-else>
-                                <i class="fas fa-info-circle"></i>
+                                <AppIcon  name="info-circle" />
                                 多服务模式：作为镜像名称前缀，每个服务会自动拼接服务名
                               </span>
                             </small>
@@ -552,20 +560,20 @@
                               placeholder="latest"
                             />
                             <small class="text-slate-500 block mt-1">
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               所有服务使用此标签，支持动态日期占位符
                             </small>
                           </div>
                           <div class="pipeline-field">
-                            <div class="form-check mt-4">
+                            <div class="flex items-center gap-2 mt-4">
                               <input
                                 v-model="formData.push"
-                                class="form-check-input"
+                                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                 type="checkbox"
                                 id="pushCheckBuild"
                               />
                               <label
-                                class="form-check-label"
+                                class="text-sm text-slate-700"
                                 for="pushCheckBuild"
                               >
                                 构建完成后推送到仓库
@@ -575,22 +583,22 @@
                         </div>
                         <div
                           v-if="formData.push_mode === 'single'"
-                          class="alert alert-info mt-3 mb-0"
+                          class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900 mt-3 mb-0"
                         >
-                          <i class="fas fa-info-circle"></i>
+                          <AppIcon  name="info-circle" />
                           <strong>单服务模式：</strong
                           >使用上方配置的镜像名称和标签
                         </div>
                         <div
                           v-else-if="formData.push_mode === 'multi'"
-                          class="alert alert-info mt-3 mb-0"
+                          class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900 mt-3 mb-0"
                         >
-                          <i class="fas fa-info-circle"></i>
+                          <AppIcon  name="info-circle" />
                           <strong>多服务模式：</strong
                           >每个服务的镜像名称将自动生成为
                           <code
                             >{{
-                              formData.image_name || "myapp/demo"
+                              formData.image_name ||"myapp/demo"
                             }}-服务名</code
                           >，标签使用上方配置的全局标签
                         </div>
@@ -607,14 +615,14 @@
                   id="dockerfile-pane"
                 >
                   <!-- Dockerfile 来源选择 -->
-                  <div class="card mb-3">
-                    <div class="card-header bg-light">
+                  <div class="rounded-lg border border-slate-200 bg-white shadow-sm mb-3">
+                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <h6 class="mb-0">
-                        <i class="fas fa-layer-group text-blue-600"></i>
+                        <AppIcon  name="layer-group" class="text-blue-600" />
                         Dockerfile 来源
                       </h6>
                     </div>
-                    <div class="card-body">
+                    <div class="p-4">
                       <div class="mb-2">
                         <label class="block text-sm font-medium text-slate-700"
                           >Dockerfile 来源
@@ -626,7 +634,7 @@
                         >
                           <input
                             type="radio"
-                            class="btn-check"
+                            class="choice-input"
                             id="dockerfile-from-project"
                             :value="true"
                             v-model="formData.use_project_dockerfile"
@@ -636,12 +644,12 @@
                             class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                             for="dockerfile-from-project"
                           >
-                            <i class="fas fa-file-code"></i> 从项目中选择
+                            <AppIcon  name="file-code" /> 从项目中选择
                           </label>
 
                           <input
                             type="radio"
-                            class="btn-check"
+                            class="choice-input"
                             id="dockerfile-from-template"
                             :value="false"
                             v-model="formData.use_project_dockerfile"
@@ -651,11 +659,11 @@
                             class="inline-flex flex-1 cursor-pointer items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
                             for="dockerfile-from-template"
                           >
-                            <i class="fas fa-layer-group"></i> 从模板库中选择
+                            <AppIcon  name="layer-group" /> 从模板库中选择
                           </label>
                         </div>
-                        <div class="form-text small text-slate-500 mt-1">
-                          <i class="fas fa-info-circle"></i> 选择 Dockerfile
+                        <div class="text-xs text-slate-500 text-sm mt-1">
+                          <AppIcon  name="info-circle" /> 选择 Dockerfile
                           的来源方式
                         </div>
                       </div>
@@ -663,14 +671,14 @@
                   </div>
 
                   <!-- 模式1: 从项目中选择 Dockerfile -->
-                  <div v-if="formData.use_project_dockerfile" class="card mb-3">
-                    <div class="card-header bg-light">
+                  <div v-if="formData.use_project_dockerfile" class="rounded-lg border border-slate-200 bg-white shadow-sm mb-3">
+                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <h6 class="mb-0">
-                        <i class="fas fa-file-code text-blue-600"></i>
+                        <AppIcon  name="file-code" class="text-blue-600" />
                         从项目中选择 Dockerfile
                       </h6>
                     </div>
-                    <div class="card-body">
+                    <div class="p-4">
                       <div class="mb-2">
                         <label class="block text-sm font-medium text-slate-700"
                           >Dockerfile 文件
@@ -681,22 +689,21 @@
                         <div
                           v-if="
                             formData.dockerfile_name &&
-                            formData.dockerfile_name !== ''
-                          "
-                          class="alert alert-success alert-sm py-2 mb-2"
+                            formData.dockerfile_name !== ''"
+                          class="rounded-md border px-3 py-2 text-sm border-green-200 bg-green-50 text-green-800 px-2 py-1 text-xs mb-2"
                         >
-                          <i class="fas fa-check-circle mr-2"></i>
+                          <AppIcon  name="check-circle" class="mr-2" />
                           <strong>当前选择：</strong
                           >{{ formData.dockerfile_name }}
                         </div>
 
                         <div v-if="scanningDockerfiles" class="mb-2">
-                          <i class="fas fa-spinner fa-spin"></i>
+                          <AppIcon  name="spinner" spin />
                           <small class="text-slate-500"
                             >正在扫描项目中的 Dockerfile...</small
                           >
                         </div>
-                        <div class="input-group input-group-sm">
+                        <div class="flex w-full text-sm">
                           <select
                             v-model="formData.dockerfile_name"
                             class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
@@ -714,8 +721,7 @@
                                 formData.dockerfile_name !== 'Dockerfile' &&
                                 !availableDockerfiles.some(
                                   (df) => df.path === formData.dockerfile_name
-                                )
-                              "
+                                )"
                               :value="formData.dockerfile_name"
                               :key="'current-' + formData.dockerfile_name"
                             >
@@ -730,7 +736,7 @@
                               {{
                                 dockerfile.path !== dockerfile.name
                                   ? `(${dockerfile.name})`
-                                  : ""
+                                  :""
                               }}
                             </option>
                           </select>
@@ -741,40 +747,39 @@
                             :disabled="
                               scanningDockerfiles ||
                               (!formData.branch &&
-                                !branchesAndTags.default_branch)
-                            "
+                                !branchesAndTags.default_branch)"
                             title="刷新 Dockerfile 列表（强制刷新）"
                           >
-                            <i
+                            <AppIcon
                               v-if="scanningDockerfiles"
-                              class="fas fa-spinner fa-spin"
-                            ></i>
-                            <i v-else class="fas fa-sync-alt"></i>
+                              
+                             name="spinner" spin />
+                            <AppIcon v-else  name="sync-alt" />
                           </Button>
                         </div>
                         <small
                           v-if="dockerfilesError"
                           class="text-red-500 block mt-1"
                         >
-                          <i class="fas fa-exclamation-triangle"></i>
+                          <AppIcon  name="exclamation-triangle" />
                           {{ dockerfilesError }}
                         </small>
                         <small
                           v-else-if="availableDockerfiles.length > 0"
                           class="text-slate-500 block mt-1"
                         >
-                          <i class="fas fa-check-circle"></i> 已扫描到
+                          <AppIcon  name="check-circle" /> 已扫描到
                           {{ availableDockerfiles.length }} 个 Dockerfile
                         </small>
                         <small
                           v-else-if="formData.branch"
                           class="text-slate-500 block mt-1"
                         >
-                          <i class="fas fa-info-circle"></i>
+                          <AppIcon  name="info-circle" />
                           请先选择分支，然后点击刷新按钮扫描项目中的 Dockerfile
                         </small>
                         <small v-else class="text-slate-500 block mt-1">
-                          <i class="fas fa-info-circle"></i> 请先在 Git
+                          <AppIcon  name="info-circle" /> 请先在 Git
                           配置中选择分支
                         </small>
                       </div>
@@ -784,15 +789,15 @@
                   <!-- 模式2: 从模板库中选择 -->
                   <div
                     v-if="!formData.use_project_dockerfile"
-                    class="card mb-3"
+                    class="rounded-lg border border-slate-200 bg-white shadow-sm mb-3"
                   >
-                    <div class="card-header bg-light">
+                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <h6 class="mb-0">
-                        <i class="fas fa-layer-group text-blue-600"></i>
+                        <AppIcon  name="layer-group" class="text-blue-600" />
                         从模板库中选择
                       </h6>
                     </div>
-                    <div class="card-body">
+                    <div class="p-4">
                       <div class="mb-2">
                         <label class="block text-sm font-medium text-slate-700"
                           >模板 <span class="text-red-500">*</span></label
@@ -801,16 +806,15 @@
                         <!-- 当前选择提示 -->
                         <div
                           v-if="formData.template && formData.template !== ''"
-                          class="alert alert-success alert-sm py-2 mb-2"
+                          class="rounded-md border px-3 py-2 text-sm border-green-200 bg-green-50 text-green-800 px-2 py-1 text-xs mb-2"
                         >
-                          <i class="fas fa-check-circle mr-2"></i>
+                          <AppIcon  name="check-circle" class="mr-2" />
                           <strong>当前选择：</strong>{{ formData.template }}
                           <span
                             v-if="
                               filteredTemplates.find(
                                 (t) => t.name === formData.template
-                              )
-                            "
+                              )"
                           >
                             ({{
                               filteredTemplates.find(
@@ -839,26 +843,24 @@
                         <small
                           v-if="
                             formData.project_type &&
-                            filteredTemplates.length === 0
-                          "
+                            filteredTemplates.length === 0"
                           class="text-slate-500 block mt-1"
                         >
-                          <i class="fas fa-info-circle"></i>
+                          <AppIcon  name="info-circle" />
                           当前项目类型没有可用的模板
                         </small>
                         <small
                           v-else-if="
                             formData.project_type &&
-                            filteredTemplates.length > 0
-                          "
+                            filteredTemplates.length > 0"
                           class="text-slate-500 block mt-1"
                         >
-                          <i class="fas fa-check-circle"></i>
+                          <AppIcon  name="check-circle" />
                           已按项目类型过滤，共
                           {{ filteredTemplates.length }} 个模板
                         </small>
                         <small v-else class="text-slate-500 block mt-1">
-                          <i class="fas fa-info-circle"></i> 请先在 Git
+                          <AppIcon  name="info-circle" /> 请先在 Git
                           配置中选择项目类型
                         </small>
                       </div>
@@ -873,12 +875,12 @@
                   role="tabpanel"
                   id="resource-pane"
                 >
-                  <div class="card">
+                  <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
                     <div
-                      class="card-header bg-light flex justify-between items-center"
+                      class="border-b border-slate-200 bg-slate-50 px-4 py-3 flex justify-between items-center"
                     >
                       <h6 class="mb-0">
-                        <i class="fas fa-archive text-blue-600"></i> 资源包配置
+                        <AppIcon  name="archive" class="text-blue-600" /> 资源包配置
                       </h6>
                       <Button
                         type="button"
@@ -886,15 +888,14 @@
                         @click="showResourcePackageModal = true"
                         title="添加资源包"
                       >
-                        <i class="fas fa-plus"></i> 添加
+                        <AppIcon  name="plus" /> 添加
                       </Button>
                     </div>
-                    <div class="card-body">
+                    <div class="p-4">
                       <div
                         v-if="
                           formData.resource_package_configs &&
-                          formData.resource_package_configs.length > 0
-                        "
+                          formData.resource_package_configs.length > 0"
                         class="border rounded p-2"
                       >
                         <div
@@ -902,14 +903,14 @@
                             pkg, index
                           ) in formData.resource_package_configs"
                           :key="index"
-                          class="flex items-center justify-between mb-2 p-2 bg-light rounded"
+                          class="flex items-center justify-between mb-2 p-2 bg-slate-50 rounded"
                         >
                           <div class="flex-1">
                             <strong>{{
                               getResourcePackageName(pkg.package_id)
                             }}</strong>
                             <small class="text-slate-500 ml-2"
-                              >→ {{ pkg.target_path || "resources" }}</small
+                              >→ {{ pkg.target_path ||"resources" }}</small
                             >
                           </div>
                           <Button
@@ -917,11 +918,11 @@
                             variant="destructive" size="sm"
                             @click="removeResourcePackage(index)"
                           >
-                            <i class="fas fa-trash"></i>
+                            <AppIcon  name="trash" />
                           </Button>
                         </div>
                       </div>
-                      <div v-else class="text-slate-500 small">
+                      <div v-else class="text-slate-500 text-sm">
                         暂无资源包，点击"添加"按钮添加资源包
                       </div>
                     </div>
@@ -939,12 +940,12 @@
 
                   <section class="pipeline-webhook-block">
                     <h3 class="pipeline-webhook-block__title">
-                      <i class="fas fa-key"></i> 认证配置
+                      <AppIcon  name="key" /> 认证配置
                     </h3>
                     <div class="pipeline-field-grid pipeline-field-grid--2">
                       <div class="pipeline-webhook-field">
                         <label class="pipeline-webhook-field__label">Webhook Token（用于 URL）</label>
-                        <div class="input-group">
+                        <div class="flex w-full">
                           <input
                             v-model="formData.webhook_token"
                             type="text"
@@ -958,14 +959,14 @@
                             @click="regenerateWebhookToken"
                             title="重新生成 Token"
                           >
-                            <i class="fas fa-sync-alt"></i> 重新生成
+                            <AppIcon  name="sync-alt" /> 重新生成
                           </Button>
                         </div>
                         <span class="pipeline-webhook-field__hint">留空将自动生成 UUID</span>
                       </div>
                       <div class="pipeline-webhook-field">
                         <label class="pipeline-webhook-field__label">Webhook 密钥</label>
-                        <div class="input-group">
+                        <div class="flex w-full">
                           <input
                             v-model="formData.webhook_secret"
                             type="text"
@@ -979,7 +980,7 @@
                             @click="regenerateWebhookSecret"
                             title="重新生成密钥"
                           >
-                            <i class="fas fa-sync-alt"></i> 重新生成
+                            <AppIcon  name="sync-alt" /> 重新生成
                           </Button>
                         </div>
                         <span class="pipeline-webhook-field__hint">用于验证 Webhook 签名（可选）</span>
@@ -989,163 +990,114 @@
 
                   <section class="pipeline-webhook-block">
                     <h3 class="pipeline-webhook-block__title">
-                      <i class="fas fa-code-branch"></i> 分支触发策略
+                      <AppIcon  name="filter" /> 触发条件
                     </h3>
                     <div class="pipeline-webhook-strategy" role="group">
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="strategy-use-push"
                         value="use_push"
                         v-model="formData.webhook_branch_strategy"
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-use-push">
-                        <i class="fas fa-code-branch"></i>
-                        使用推送分支
-                        <small>所有分支都触发</small>
+                        <AppIcon  name="code-branch" />
+                        任意分支触发
+                        <small>默认分支名作为 tag</small>
                       </label>
 
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="strategy-filter-match"
                         value="filter_match"
                         v-model="formData.webhook_branch_strategy"
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-filter-match">
-                        <i class="fas fa-filter"></i>
-                        只允许匹配分支
-                        <small>使用推送分支构建</small>
+                        <AppIcon  name="filter" />
+                        仅配置分支触发
+                        <small>默认分支名作为 tag</small>
                       </label>
 
                       <input
                         type="radio"
-                        class="btn-check"
-                        id="strategy-use-configured"
-                        value="use_configured"
-                        v-model="formData.webhook_branch_strategy"
-                      />
-                      <label class="pipeline-webhook-strategy__option" for="strategy-use-configured">
-                        <i class="fas fa-cog"></i>
-                        使用配置分支
-                        <small>所有分支都触发</small>
-                      </label>
-
-                      <input
-                        type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="strategy-select-branches"
                         value="select_branches"
                         v-model="formData.webhook_branch_strategy"
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-select-branches">
-                        <i class="fas fa-check-square"></i>
-                        选择分支触发
-                        <small>仅选中的分支触发</small>
+                        <AppIcon  name="check-square" />
+                        白名单映射分支
+                        <small>只按映射触发</small>
+                      </label>
+
+                      <input
+                        type="radio"
+                        class="choice-input"
+                        id="strategy-use-configured"
+                        value="use_configured"
+                        v-model="formData.webhook_branch_strategy"
+                      />
+                      <label class="pipeline-webhook-strategy__option" for="strategy-use-configured">
+                        <AppIcon  name="cog" />
+                        指向编译配置分支
+                        <small>编译配置分支</small>
                       </label>
                     </div>
                     <p class="pipeline-webhook-field__hint mt-2 mb-0">
                       <span
                         v-if="formData.webhook_branch_strategy === 'use_push'"
                       >
-                        <i class="fas fa-info-circle"></i>
-                        任何分支推送都会触发，使用推送的分支进行构建
+                        <AppIcon  name="info-circle" />
+                        任意分支推送都触发；默认镜像 tag 使用分支名，例如 dev1 -> dev1。若命中下方映射，则按映射生成 tag。
                       </span>
                       <span
                         v-else-if="
-                          formData.webhook_branch_strategy === 'filter_match'
-                        "
+                          formData.webhook_branch_strategy === 'filter_match'"
                       >
-                        <i class="fas fa-info-circle"></i>
-                        只有推送的分支与上方配置的分支一致时才会触发，使用推送的分支构建
+                        <AppIcon  name="info-circle" />
+                        只有推送分支匹配 Git 配置分支时触发；默认镜像 tag 使用分支名。若命中下方映射，则按映射生成 tag。
                       </span>
                       <span
                         v-else-if="
-                          formData.webhook_branch_strategy === 'select_branches'
-                        "
+                          formData.webhook_branch_strategy === 'select_branches'"
                       >
-                        <i class="fas fa-info-circle"></i>
-                        只有选中的分支推送时才会触发，使用推送的分支进行构建
+                        <AppIcon  name="info-circle" />
+                        只有推送分支匹配下方分支标签映射左侧规则时触发，其他分支不触发；镜像 tag 按右侧映射生成。
                       </span>
                       <span v-else>
-                        <i class="fas fa-info-circle"></i>
-                        任何分支推送都会触发，但使用配置的分支进行构建
+                        <AppIcon  name="info-circle" />
+                        仅 Git 配置分支触发，触发后编译配置分支；默认镜像 tag 使用分支名，若命中下方映射则按映射生成 tag。
                       </span>
                     </p>
                   </section>
 
-                  <section
-                    v-if="formData.webhook_branch_strategy === 'select_branches'"
-                    class="pipeline-webhook-block"
-                  >
+                  <section class="pipeline-webhook-block">
                     <h3 class="pipeline-webhook-block__title">
-                      <i class="fas fa-list-check"></i> 允许触发的分支
-                      <span class="text-red-500 text-sm font-normal">*</span>
+                      <AppIcon  name="cog" /> 编译目标
                     </h3>
-                    <div
-                      v-if="
-                        !branchesAndTags.branches ||
-                        branchesAndTags.branches.length === 0
-                      "
-                      class="alert alert-warning py-2"
-                    >
-                      <i class="fas fa-exclamation-triangle"></i> 请先在 Git
-                      配置中选择数据源和分支，以加载可用分支列表
-                    </div>
-                    <div
-                      v-else
-                      class="pipeline-webhook-list-box pipeline-webhook-list-box--scroll"
-                    >
-                      <div class="form-check mb-2">
-                        <input
-                          class="form-check-input"
-                          type="checkbox"
-                          id="selectAllBranches"
-                          :checked="isAllBranchesSelected"
-                          @change="toggleAllBranches"
-                        />
-                        <label
-                          class="form-check-label fw-bold"
-                          for="selectAllBranches"
-                        >
-                          全选
-                        </label>
-                      </div>
-                      <hr class="my-2" />
-                      <div
-                        v-for="branch in branchesAndTags.branches"
-                        :key="branch"
-                        class="form-check mb-1"
+                    <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <span
+                        v-if="
+                          formData.webhook_branch_strategy === 'use_configured'"
                       >
-                        <input
-                          class="form-check-input"
-                          type="checkbox"
-                          :id="`branch-${branch}`"
-                          :value="branch"
-                          v-model="formData.webhook_allowed_branches"
-                        />
-                        <label
-                          class="form-check-label"
-                          :for="`branch-${branch}`"
-                        >
-                          <i class="fas fa-code-branch text-blue-600 mr-1"></i
-                          >{{ branch }}
-                        </label>
-                      </div>
+                        编译配置分支：{{ formData.branch || branchesAndTags.default_branch || "默认分支" }}
+                      </span>
+                      <span v-else>
+                        编译 Webhook 推送分支。
+                      </span>
                     </div>
-                    <p class="pipeline-webhook-field__hint mt-2 mb-0">
-                      只有选中的分支推送时才会触发构建；未选择任何分支则不会触发。
-                    </p>
                   </section>
 
                   <section class="pipeline-webhook-block">
                     <div class="pipeline-webhook-block__head">
                       <div>
                         <h3 class="pipeline-webhook-block__title">
-                          <i class="fas fa-tags"></i> 分支标签映射
+                          <AppIcon  name="tags" /> 分支标签映射
                         </h3>
                         <p class="pipeline-webhook-block__desc">
-                          为不同分支设置镜像标签，支持通配符（如 feature/*）；多标签用半角逗号分隔；支持
+                          左侧分支同时作为 Webhook 允许触发分支规则；普通文本精确匹配，通配符需显式写出（如 feature/*）。右侧为镜像标签，多标签用半角逗号分隔；支持
                           ${DATE}、${TIMESTAMP} 等占位符。
                         </p>
                       </div>
@@ -1153,23 +1105,36 @@
                         type="button"
                         variant="outline"
                         size="sm"
+                        @click="addLatestBranchMapping"
+                        title="将当前配置分支映射为 latest"
+                      >
+                        <AppIcon  name="star" /> 当前分支设为 latest
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
                         @click="addBranchTagMapping"
                         title="添加映射"
                       >
-                        <i class="fas fa-plus"></i> 添加
+                        <AppIcon  name="plus" /> 添加
                       </Button>
                     </div>
                     <div
                       v-if="
                         formData.branch_tag_mapping &&
-                        formData.branch_tag_mapping.length > 0
-                      "
+                        formData.branch_tag_mapping.length > 0"
                       class="pipeline-webhook-list-box"
                     >
                       <div
                         v-for="(mapping, index) in formData.branch_tag_mapping"
                         :key="index"
-                        class="pipeline-branch-mapping-row"
+                        class="pipeline-branch-mapping-row rounded-md border border-transparent p-1"
+                        :class="
+                          mappingHasLatest(mapping)
+                            ? 'border-amber-300 bg-amber-50'
+                            : ''
+                        "
                       >
                         <input
                           v-model="mapping.branch"
@@ -1178,7 +1143,7 @@
                           placeholder="分支名（如：main 或 feature/*）"
                         />
                         <span class="pipeline-branch-mapping-row__arrow text-center text-slate-500">
-                          <i class="fas fa-arrow-right"></i>
+                          <AppIcon  name="arrow-right" />
                         </span>
                         <input
                           :value="mapping.tag"
@@ -1189,23 +1154,29 @@
                           @input="
                             mapping.tag = normalizeAsciiCommaSeparators(
                               $event.target.value
-                            )
-                          "
+                            )"
                         />
                         <div class="pipeline-branch-mapping-row__action">
+                          <span
+                            v-if="mappingHasLatest(mapping)"
+                            class="inline-flex items-center rounded-md bg-amber-500 px-2 py-0.5 text-xs font-medium text-white"
+                            title="该分支会产出 latest 标签"
+                          >
+                            latest
+                          </span>
                           <Button
                             type="button"
                             variant="destructive" size="sm"
                             @click="removeBranchTagMapping(index)"
                             title="删除"
                           >
-                            <i class="fas fa-trash"></i>
+                            <AppIcon  name="trash" />
                           </Button>
                         </div>
                       </div>
                     </div>
                     <div v-else class="pipeline-webhook-empty">
-                      <i class="fas fa-info-circle"></i> 暂无映射，点击「添加」创建
+                      <AppIcon  name="info-circle" /> 暂无映射，点击「添加」创建
                     </div>
                   </section>
                 </div>
@@ -1221,7 +1192,7 @@
                     <div class="pipeline-webhook-block__head">
                       <div>
                         <h3 class="pipeline-webhook-block__title">
-                          <i class="fas fa-bell"></i> 构建后 Webhook
+                          <AppIcon  name="bell" /> 构建后 Webhook
                         </h3>
                         <p class="pipeline-webhook-block__desc">
                           构建成功完成后回调外部地址。支持变量：{task_id}、{image}、{tag}、{status}、{branch}、{pipeline_id}、{pipeline_name}、{created_at}、{completed_at}
@@ -1234,15 +1205,14 @@
                         @click="addPostBuildWebhook"
                         title="添加 Webhook"
                       >
-                        <i class="fas fa-plus"></i> 添加
+                        <AppIcon  name="plus" /> 添加
                       </Button>
                     </div>
 
                     <div
                       v-if="
                         formData.post_build_webhooks &&
-                        formData.post_build_webhooks.length > 0
-                      "
+                        formData.post_build_webhooks.length > 0"
                       class="pipeline-webhook-block__body"
                     >
                       <div
@@ -1253,12 +1223,12 @@
                         <div class="pipeline-webhook-item__head">
                           <label class="pipeline-webhook-item__title mb-0">
                             <input
-                              class="form-check-input mt-0"
+                              class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0"
                               type="checkbox"
                               :id="`post-webhook-enabled-${index}`"
                               v-model="webhook.enabled"
                             />
-                            <i class="fas fa-bell"></i>
+                            <AppIcon  name="bell" />
                             Webhook {{ index + 1 }}
                           </label>
                           <Button
@@ -1268,18 +1238,18 @@
                             @click="removePostBuildWebhook(index)"
                             title="删除"
                           >
-                            <i class="fas fa-trash"></i>
+                            <AppIcon  name="trash" />
                           </Button>
                         </div>
                         <div class="pipeline-webhook-item__body">
                           <section class="pipeline-webhook-block">
                             <h3 class="pipeline-webhook-block__title">
-                              <i class="fas fa-code-branch"></i> 分支触发策略
+                              <AppIcon  name="code-branch" /> 分支触发策略
                             </h3>
                             <div class="pipeline-webhook-strategy" role="group">
                               <input
                                 type="radio"
-                                class="btn-check"
+                                class="choice-input"
                                 :id="`post-wh-branch-all-${index}`"
                                 value="all"
                                 v-model="webhook.branch_strategy"
@@ -1288,13 +1258,13 @@
                                 class="pipeline-webhook-strategy__option"
                                 :for="`post-wh-branch-all-${index}`"
                               >
-                                <i class="fas fa-code-branch"></i>
+                                <AppIcon  name="code-branch" />
                                 所有分支触发
                                 <small>构建完成后均回调</small>
                               </label>
                               <input
                                 type="radio"
-                                class="btn-check"
+                                class="choice-input"
                                 :id="`post-wh-branch-match-${index}`"
                                 value="filter_match"
                                 v-model="webhook.branch_strategy"
@@ -1303,13 +1273,13 @@
                                 class="pipeline-webhook-strategy__option"
                                 :for="`post-wh-branch-match-${index}`"
                               >
-                                <i class="fas fa-filter"></i>
+                                <AppIcon  name="filter" />
                                 只允许匹配分支
                                 <small>支持 feature/* 通配符</small>
                               </label>
                               <input
                                 type="radio"
-                                class="btn-check"
+                                class="choice-input"
                                 :id="`post-wh-branch-select-${index}`"
                                 value="select_branches"
                                 v-model="webhook.branch_strategy"
@@ -1318,22 +1288,22 @@
                                 class="pipeline-webhook-strategy__option"
                                 :for="`post-wh-branch-select-${index}`"
                               >
-                                <i class="fas fa-check-square"></i>
+                                <AppIcon  name="check-square" />
                                 选择分支触发
                                 <small>仅选中的分支触发</small>
                               </label>
                             </div>
                             <p class="pipeline-webhook-field__hint mt-2 mb-0">
                               <span v-if="webhook.branch_strategy === 'all'">
-                                <i class="fas fa-info-circle"></i>
+                                <AppIcon  name="info-circle" />
                                 任意分支构建成功完成后都会触发此 Webhook
                               </span>
                               <span v-else-if="webhook.branch_strategy === 'filter_match'">
-                                <i class="fas fa-info-circle"></i>
+                                <AppIcon  name="info-circle" />
                                 仅当构建分支与下方匹配模式一致时触发（支持通配符）
                               </span>
                               <span v-else-if="webhook.branch_strategy === 'select_branches'">
-                                <i class="fas fa-info-circle"></i>
+                                <AppIcon  name="info-circle" />
                                 仅当选中分支构建成功完成后触发
                               </span>
                             </p>
@@ -1344,7 +1314,7 @@
                             class="pipeline-webhook-block"
                           >
                             <h3 class="pipeline-webhook-block__title">
-                              <i class="fas fa-filter"></i> 匹配分支模式
+                              <AppIcon  name="filter" /> 匹配分支模式
                               <span class="text-red-500 text-sm font-normal">*</span>
                             </h3>
                             <input
@@ -1357,7 +1327,7 @@
                               @input="onPostBuildWebhookBranchesInput(webhook, $event)"
                             />
                             <p class="pipeline-webhook-field__hint mt-2 mb-0">
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               多个模式用半角逗号分隔，支持通配符（如 feature/*）
                             </p>
                           </section>
@@ -1367,7 +1337,7 @@
                             class="pipeline-webhook-block"
                           >
                             <h3 class="pipeline-webhook-block__title">
-                              <i class="fas fa-list-check"></i> 允许触发的分支
+                              <AppIcon  name="list-check" /> 允许触发的分支
                               <span class="text-red-500 text-sm font-normal">*</span>
                             </h3>
                             <input
@@ -1380,14 +1350,14 @@
                               @input="onPostBuildWebhookBranchesInput(webhook, $event)"
                             />
                             <p class="pipeline-webhook-field__hint mt-2 mb-0">
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               多个分支用半角逗号分隔；仅精确匹配分支名
                             </p>
                           </section>
                           <div class="pipeline-webhook-field">
                             <div class="pipeline-webhook-block__head pipeline-webhook-block__head--tight">
                               <h3 class="pipeline-webhook-block__title mb-0">
-                                <i class="fas fa-link"></i> 回调 URL
+                                <AppIcon  name="link" /> 回调 URL
                                 <span class="text-red-500 text-sm font-normal">*</span>
                               </h3>
                               <Button
@@ -1397,7 +1367,7 @@
                                 title="从部署任务中选择"
                                 @click="loadDeployTasks"
                               >
-                                <i class="fas fa-rocket"></i> 从部署任务选择
+                                <AppIcon  name="rocket" /> 从部署任务选择
                               </Button>
                             </div>
                             <div class="pipeline-webhook-url-row">
@@ -1426,14 +1396,14 @@
                               v-if="webhook.url && webhook.url.includes('/api/webhook/deploy/')"
                               class="pipeline-webhook-field__hint mt-2 mb-0"
                             >
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               已自动填充部署任务 Webhook URL
                             </p>
                           </div>
                           <div class="pipeline-field-grid pipeline-field-grid--3">
                             <div class="pipeline-webhook-field">
                               <label class="pipeline-webhook-field__label">
-                                <i class="fas fa-paper-plane text-blue-600 mr-1"></i>请求方法
+                                <AppIcon  name="paper-plane" class="text-blue-600 mr-1" />请求方法
                               </label>
                               <select
                                 v-model="webhook.method"
@@ -1447,27 +1417,27 @@
                           </div>
                           <div class="pipeline-webhook-field">
                             <label class="pipeline-webhook-field__label">
-                              <i class="fas fa-heading text-blue-600 mr-1"></i>请求头（JSON，可选）
+                              <AppIcon  name="heading" class="text-blue-600 mr-1" />请求头（JSON，可选）
                             </label>
                             <textarea
                               v-model="webhook.headers_json"
                               class="flex min-h-[4rem] w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
                               rows="2"
-                              placeholder='{"Content-Type": "application/json"}'
+                              placeholder='{"Content-Type":"application/json"}'
                             ></textarea>
                           </div>
                           <div class="pipeline-webhook-field">
                             <label class="pipeline-webhook-field__label">
-                              <i class="fas fa-file-code text-blue-600 mr-1"></i>请求体模板
+                              <AppIcon  name="file-code" class="text-blue-600 mr-1" />请求体模板
                             </label>
                             <textarea
                               v-model="webhook.body_template"
                               class="flex min-h-[6rem] w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
                               rows="4"
-                              placeholder='{"task_id": "{task_id}", "status": "{status}"}'
+                              placeholder='{"task_id":"{task_id}","status":"{status}"}'
                             ></textarea>
                             <p class="pipeline-webhook-field__hint mb-0">
-                              <i class="fas fa-info-circle"></i>
+                              <AppIcon  name="info-circle" />
                               支持 {task_id}、{image}、{tag}、{status}、{branch}、{pipeline_id} 等变量
                             </p>
                           </div>
@@ -1475,7 +1445,7 @@
                       </div>
                     </div>
                     <div v-else class="pipeline-webhook-empty">
-                      <i class="fas fa-info-circle"></i> 暂无配置，点击「添加」创建构建后 Webhook
+                      <AppIcon  name="info-circle" /> 暂无配置，点击「添加」创建构建后 Webhook
                     </div>
                   </section>
                 </div>
@@ -1487,35 +1457,35 @@
                   role="tabpanel"
                   id="other-pane"
                 >
-                  <div class="form-check mb-3">
+                  <div class="flex items-center gap-2 mb-3">
                     <input
                       v-model="formData.enabled"
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       id="enabledCheck"
                       checked
                     />
-                    <label class="form-check-label" for="enabledCheck">
+                    <label class="text-sm text-slate-700" for="enabledCheck">
                       启用流水线
                     </label>
                   </div>
                   <div class="mb-3">
-                    <div class="form-check mb-2">
+                    <div class="flex items-center gap-2 mb-2">
                       <input
                         v-model="formData.trigger_schedule"
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         type="checkbox"
                         id="triggerScheduleCheck"
                       />
                       <label
-                        class="form-check-label"
+                        class="text-sm text-slate-700"
                         for="triggerScheduleCheck"
                       >
                         启用定时触发
                       </label>
                     </div>
                     <div v-if="formData.trigger_schedule" class="ml-4">
-                      <label class="form-label small"
+                      <label class="block text-sm font-medium text-slate-700"
                         >Cron 表达式 <span class="text-red-500">*</span></label
                       >
                       <input
@@ -1537,13 +1507,13 @@
                     class="mt-6 rounded-lg border border-red-200 bg-red-50/50 p-4"
                   >
                     <h6 class="mb-2 text-red-700">
-                      <i class="fas fa-exclamation-triangle mr-1"></i> 危险操作
+                      <AppIcon  name="exclamation-triangle" class="mr-1" /> 危险操作
                     </h6>
                     <p class="mb-3 text-sm text-slate-600">
                       删除后将无法恢复，相关构建历史可能一并清理。
                     </p>
                     <Button variant="destructive" size="sm" type="button" @click="deletePipeline">
-                      <i class="fas fa-trash mr-1"></i> 删除流水线
+                      <AppIcon  name="trash" class="mr-1" /> 删除流水线
                     </Button>
                   </div>
                 </div>
@@ -1557,21 +1527,21 @@
       <div class="relative z-10 mx-auto w-full max-w-3xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-archive"></i> 选择资源包
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="archive" /> 选择资源包
             </h5>
             <button
               type="button"
               class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
               @click="showResourcePackageModal = false"
-            ><i class="fas fa-times"></i></button>
+            ><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" style="max-height: 60vh; overflow-y: auto">
             <div
               v-if="resourcePackages.length === 0"
               class="text-center py-4 text-slate-500"
             >
-              <i class="fas fa-inbox fa-2x mb-2"></i>
+              <AppIcon  name="inbox" class="mb-2" />
               <p class="mb-0">暂无资源包</p>
               <small class="text-slate-500">请先在"资源包"标签页上传资源包</small>
             </div>
@@ -1582,48 +1552,46 @@
                 class="pipeline-field"
               >
                 <div
-                  class="card h-full"
+                  class="rounded-lg border border-slate-200 bg-white shadow-sm h-full"
                   :class="{
-                    'border-primary': isResourcePackageSelected(pkg.package_id),
+                    'border-blue-300': isResourcePackageSelected(pkg.package_id),
                   }"
                 >
-                  <div class="card-body">
-                    <div class="form-check">
+                  <div class="p-4">
+                    <div class="flex items-center gap-2">
                       <input
                         type="checkbox"
                         :value="pkg.package_id"
                         :checked="isResourcePackageSelected(pkg.package_id)"
                         @change="toggleResourcePackage(pkg)"
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <label class="form-check-label fw-bold">
+                      <label class="text-sm text-slate-700 font-semibold">
                         {{ pkg.name }}
                       </label>
                     </div>
                     <small class="text-slate-500 block mt-1">{{
-                      pkg.description || "无描述"
+                      pkg.description ||"无描述"
                     }}</small>
                     <div
                       v-if="isResourcePackageSelected(pkg.package_id)"
                       class="mt-2"
                     >
-                      <label class="form-label small">目标路径</label>
+                      <label class="block text-sm font-medium text-slate-700">目标路径</label>
                       <input
                         type="text"
                         :value="
-                          getResourcePackageConfig(pkg.package_id).target_path
-                        "
+                          getResourcePackageConfig(pkg.package_id).target_path"
                         @input="
                           updateResourcePackagePath(
                             pkg.package_id,
                             $event.target.value
-                          )
-                        "
+                          )"
                         class="flex h-9 w-full rounded-md border border-slate-200 px-3 py-1 text-sm"
                         placeholder="resources"
                       />
                       <small class="text-slate-500 block mt-1">
-                        <i class="fas fa-info-circle"></i>
+                        <AppIcon  name="info-circle" />
                         相对路径，如：<code>test/b.txt</code> 或
                         <code>config/app.conf</code>
                       </small>
@@ -1633,7 +1601,7 @@
               </div>
             </div>
           </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="pipeline-dialog-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <Button
               type="button"
               variant="outline" size="sm"
@@ -1654,19 +1622,19 @@
       <div class="relative z-10 mx-auto w-full max-w-3xl">
         <div class="relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl" @click.stop>
           <div class="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h5 class="modal-title">
-              <i class="fas fa-code"></i>
-              {{ editingPipeline ? "编辑" : "查看" }}构建配置JSON
+            <h5 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <AppIcon  name="code" />
+              {{ editingPipeline ?"编辑" :"查看" }}构建配置JSON
             </h5>
             <button
               type="button"
               class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
               @click="closeBuildConfigJsonModal"
-            ><i class="fas fa-times"></i></button>
+            ><AppIcon  name="times" /></button>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div v-if="editingPipeline" class="alert alert-info mb-3">
-              <i class="fas fa-info-circle"></i>
+            <div v-if="editingPipeline" class="rounded-md border px-3 py-2 text-sm border-sky-200 bg-sky-50 text-sky-900 mb-3">
+              <AppIcon  name="info-circle" />
               <strong>提示：</strong>编辑JSON后点击保存，配置将应用到流水线中。
             </div>
             <div class="flex justify-end mb-2">
@@ -1675,7 +1643,7 @@
                 variant="outline" size="sm"
                 @click="copyBuildConfigJson"
               >
-                <i class="fas fa-copy"></i> 复制JSON
+                <AppIcon  name="copy" /> 复制JSON
               </Button>
             </div>
             <div class="pipeline-json-editor">
@@ -1686,12 +1654,12 @@
                 :extensions="jsonEditorExtensions"
               />
             </div>
-            <div v-if="buildConfigJsonError" class="alert alert-danger mt-2">
-              <i class="fas fa-exclamation-circle"></i>
+            <div v-if="buildConfigJsonError" class="rounded-md border px-3 py-2 text-sm border-red-200 bg-red-50 text-red-800 mt-2">
+              <AppIcon  name="exclamation-circle" />
               {{ buildConfigJsonError }}
             </div>
           </div>
-          <div class="pipeline-modal-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="pipeline-dialog-footer flex shrink-0 justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <Button
               type="button"
               variant="outline" size="sm"
@@ -1706,7 +1674,7 @@
               @click="saveBuildConfigJson"
               :disabled="!!buildConfigJsonError"
             >
-              <i class="fas fa-save"></i> 保存并应用
+              <AppIcon  name="save" /> 保存并应用
             </Button>
           </div>
         </div>
@@ -1744,9 +1712,9 @@ const formData = editor.formData;
 watch(
   () => props.section,
   (tab) => {
-    if (tab === "build" && editor.buildConfigJson && editor.buildConfigJsonText) {
+    if (tab ==="build" && editor.buildConfigJson && editor.buildConfigJsonText) {
       editor.buildConfigJsonText.value = editor.buildConfigJson.value;
-      editor.buildConfigJsonError.value = "";
+      editor.buildConfigJsonError.value ="";
     }
   },
   { immediate: true }
@@ -1776,7 +1744,6 @@ const dockerfileEditorExtensions = editor.dockerfileEditorExtensions;
 const resourcePackages = editor.resourcePackages;
 const showResourcePackageModal = editor.showResourcePackageModal;
 const showBuildConfigJsonModal = editor.showBuildConfigJsonModal;
-const isAllBranchesSelected = editor.isAllBranchesSelected;
 const deployTaskList = editor.deployTaskList;
 const onSourceSelected = editor.onSourceSelected;
 const refreshBranches = editor.refreshBranches;
@@ -1810,10 +1777,11 @@ const formatGitUrl = editor.formatGitUrl;
 const regenerateWebhookToken = editor.regenerateWebhookToken;
 const regenerateWebhookSecret = editor.regenerateWebhookSecret;
 const addBranchTagMapping = editor.addBranchTagMapping;
+const addLatestBranchMapping = editor.addLatestBranchMapping;
+const mappingHasLatest = editor.mappingHasLatest;
 const addPostBuildWebhook = editor.addPostBuildWebhook;
 const removePostBuildWebhook = editor.removePostBuildWebhook;
 const removeBranchTagMapping = editor.removeBranchTagMapping;
-const toggleAllBranches = editor.toggleAllBranches;
 const onPostBuildWebhookBranchesInput = editor.onPostBuildWebhookBranchesInput;
 const onDeployTaskSelected = editor.onDeployTaskSelected;
 const closeBuildConfigJsonModal = editor.closeBuildConfigJsonModal;
@@ -1830,7 +1798,7 @@ async function deletePipeline() {
     await goToPipelineList(router);
     toastSuccess("流水线已删除");
   } catch (error) {
-    toastApiError(error, "删除失败");
+    toastApiError(error,"删除失败");
   }
 }
 </script>

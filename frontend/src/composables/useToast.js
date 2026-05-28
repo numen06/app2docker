@@ -8,7 +8,7 @@ const timers = new Map();
 /**
  * @param {{ message: string, variant?: 'success'|'error'|'info', duration?: number }} opts
  */
-export function showToast({ message, variant = "info", duration = 6000 }) {
+export function showToast({ message, variant ="info", duration = 6000 }) {
   const id = ++idSeq;
   const entry = { id, message, variant };
   const next = [...toasts.value, entry];

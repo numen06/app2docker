@@ -2,7 +2,7 @@
   <FormDialog
     :model-value="modelValue"
     :title="dialogTitle"
-    icon="fa-user-shield"
+    icon="user-shield"
     size="md"
     @update:model-value="$emit('update:modelValue', $event)"
   >
@@ -31,35 +31,28 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (v) =>
-      [
-        "pipeline",
-        "git_source",
-        "agent_host",
-        "deploy_config",
-        "resource_package",
-        "registry",
-        "template",
+      ["pipeline","git_source","agent_host","deploy_config","resource_package","registry","template",
       ].includes(v),
   },
-  resourceId: { type: String, default: "" },
-  teamId: { type: String, default: "" },
-  resourceName: { type: String, default: "" },
+  resourceId: { type: String, default:"" },
+  teamId: { type: String, default:"" },
+  resourceName: { type: String, default:"" },
 });
 
 defineEmits(["update:modelValue"]);
 
 const typeLabels = {
-  pipeline: "流水线",
-  git_source: "数据源",
-  agent_host: "主机",
-  deploy_config: "部署配置",
-  resource_package: "资源包",
-  registry: "镜像仓库",
-  template: "模板",
+  pipeline:"流水线",
+  git_source:"数据源",
+  agent_host:"主机",
+  deploy_config:"部署配置",
+  resource_package:"资源包",
+  registry:"镜像仓库",
+  template:"模板",
 };
 
 const dialogTitle = computed(() => {
-  const label = typeLabels[props.resourceType] || "资源";
+  const label = typeLabels[props.resourceType] ||"资源";
   const name = props.resourceName?.trim();
   return name ? `成员授权 · ${label}：${name}` : `成员授权 · ${label}`;
 });

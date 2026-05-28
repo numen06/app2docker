@@ -20,16 +20,16 @@ export function useBuildTaskLogs({ onTaskFinished } = {}) {
       const normalized = { ...task };
       if (!normalized.task_id) normalized.task_id = taskId;
       if (!normalized.image) {
-        normalized.image = normalized.image_name || "未知";
+        normalized.image = normalized.image_name ||"未知";
       }
-      if (!normalized.tag) normalized.tag = "latest";
+      if (!normalized.tag) normalized.tag ="latest";
       return normalized;
     }
     return {
       task_id: taskId,
-      status: "unknown",
-      image: "未知",
-      tag: "latest",
+      status:"unknown",
+      image:"未知",
+      tag:"latest",
     };
   }
 
@@ -62,7 +62,7 @@ export function useBuildTaskLogs({ onTaskFinished } = {}) {
     if (selectedTask.value) {
       selectedTask.value = { ...selectedTask.value, status: newStatus };
     }
-    if (["completed", "failed", "stopped"].includes(newStatus)) {
+    if (["completed","failed","stopped"].includes(newStatus)) {
       onTaskFinished?.();
     }
   }

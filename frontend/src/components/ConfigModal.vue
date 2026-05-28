@@ -2,17 +2,17 @@
   <FormDialog
     :model-value="modelValue"
     title="Docker 配置"
-    icon="fa-cog"
+    icon="cog"
     size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <form class="space-y-6" @submit.prevent="save">
       <div>
         <h4 class="mb-3 flex items-center gap-2 text-sm font-semibold text-blue-600">
-          <i class="fas fa-server"></i> Docker 构建配置
+          <AppIcon  name="server" /> Docker 构建配置
         </h4>
         <Label class="mb-2 block">
-          <i class="fas fa-cogs mr-1"></i> 编译模式 <span class="text-red-600">*</span>
+          <AppIcon  name="cogs" class="mr-1" /> 编译模式 <span class="text-red-600">*</span>
         </Label>
         <AlertBanner
           variant="info"
@@ -61,7 +61,7 @@
             <Label>端口</Label>
             <Input v-model.number="config.remote.port" type="number" :placeholder="buildMode === 'tls' ? '2376' : '2375'" />
             <p class="text-xs text-slate-500">
-              默认端口：{{ buildMode === "tls" ? "2376 (TLS)" : "2375 (TCP)" }}
+              默认端口：{{ buildMode ==="tls" ?"2376 (TLS)" :"2375 (TCP)" }}
             </p>
           </div>
         </div>
@@ -99,8 +99,8 @@
 
       <div class="flex justify-end">
         <Button type="submit" :disabled="saving">
-          <i class="fas fa-save"></i>
-          {{ saving ? "保存中..." : "保存配置" }}
+          <AppIcon  name="save" />
+          {{ saving ?"保存中..." :"保存配置" }}
         </Button>
       </div>
     </form>
@@ -125,19 +125,19 @@ const emit = defineEmits(["update:modelValue"]);
 
 const buildModes = [
   {
-    value: "local",
-    label: '<i class="fas fa-cube text-green-600"></i> 容器内编译',
-    hint: '通过挂载的 docker.sock 连接本地 Docker<br/><span class="text-amber-600"><i class="fas fa-exclamation-triangle"></i> 支持复杂编译流程</span>',
+    value:"local",
+    label: '<AppIcon  name="cube" class="text-green-600" /> 容器内编译',
+    hint: '通过挂载的 docker.sock 连接本地 Docker<br/><span class="text-amber-600"><AppIcon  name="exclamation-triangle" /> 支持复杂编译流程</span>',
   },
   {
-    value: "tcp2375",
-    label: '<i class="fas fa-network-wired text-amber-600"></i> 远程 Docker (TCP)',
-    hint: '通过 TCP 端口连接远程 Docker<br/><span class="text-red-600"><i class="fas fa-shield-alt"></i> 明文传输，不安全</span>',
+    value:"tcp2375",
+    label: '<AppIcon  name="network-wired" class="text-amber-600" /> 远程 Docker (TCP)',
+    hint: '通过 TCP 端口连接远程 Docker<br/><span class="text-red-600"><AppIcon  name="shield-alt" /> 明文传输，不安全</span>',
   },
   {
-    value: "tls",
-    label: '<i class="fas fa-lock text-green-600"></i> 远程 Docker (TLS)',
-    hint: '通过 TLS 加密连接远程 Docker<br/><span class="text-green-600"><i class="fas fa-shield-alt"></i> 安全，推荐生产环境</span>',
+    value:"tls",
+    label: '<AppIcon  name="lock" class="text-green-600" /> 远程 Docker (TLS)',
+    hint: '通过 TLS 加密连接远程 Docker<br/><span class="text-green-600"><AppIcon  name="shield-alt" /> 安全，推荐生产环境</span>',
   },
 ];
 
@@ -145,7 +145,7 @@ const config = ref({
   expose_port: 8080,
   default_push: false,
   use_remote: false,
-  remote: { host: "", port: 2375, use_tls: false, cert_path: "", verify_tls: true },
+  remote: { host:"", port: 2375, use_tls: false, cert_path:"", verify_tls: true },
 });
 
 const buildMode = ref("local");
@@ -161,16 +161,16 @@ async function loadConfig() {
       default_push: docker.default_push === true,
       use_remote: docker.use_remote === true,
       remote: {
-        host: remote.host || "",
+        host: remote.host ||"",
         port: remote.port || 2375,
         use_tls: remote.use_tls === true,
-        cert_path: remote.cert_path || "",
+        cert_path: remote.cert_path ||"",
         verify_tls: remote.verify_tls !== false,
       },
     };
-    if (!config.value.use_remote) buildMode.value = "local";
-    else if (config.value.remote.use_tls) buildMode.value = "tls";
-    else buildMode.value = "tcp2375";
+    if (!config.value.use_remote) buildMode.value ="local";
+    else if (config.value.remote.use_tls) buildMode.value ="tls";
+    else buildMode.value ="tcp2375";
   } catch (error) {
     const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message;
     toastError(`加载配置失败: ${errorMsg}`);
@@ -180,16 +180,16 @@ async function loadConfig() {
 async function save() {
   saving.value = true;
   try {
-    if (buildMode.value === "local") {
+    if (buildMode.value ==="local") {
       config.value.use_remote = false;
     } else {
       config.value.use_remote = true;
-      if (buildMode.value === "tls") {
+      if (buildMode.value ==="tls") {
         config.value.remote.use_tls = true;
         if (!config.value.remote.port || config.value.remote.port === 2375) {
           config.value.remote.port = 2376;
         }
-      } else if (buildMode.value === "tcp2375") {
+      } else if (buildMode.value ==="tcp2375") {
         config.value.remote.use_tls = false;
         if (!config.value.remote.port || config.value.remote.port === 2376) {
           config.value.remote.port = 2375;
@@ -199,20 +199,20 @@ async function save() {
 
     const formData = new FormData();
     formData.append("expose_port", String(config.value.expose_port));
-    formData.append("default_push", config.value.default_push ? "on" : "off");
-    formData.append("use_remote", config.value.use_remote ? "on" : "off");
+    formData.append("default_push", config.value.default_push ?"on" :"off");
+    formData.append("use_remote", config.value.use_remote ?"on" :"off");
     formData.append("remote_host", config.value.remote.host);
     formData.append("remote_port", String(config.value.remote.port));
-    formData.append("remote_use_tls", config.value.remote.use_tls ? "on" : "off");
+    formData.append("remote_use_tls", config.value.remote.use_tls ?"on" :"off");
     formData.append("remote_cert_path", config.value.remote.cert_path);
-    formData.append("remote_verify_tls", config.value.remote.verify_tls ? "on" : "off");
+    formData.append("remote_verify_tls", config.value.remote.verify_tls ?"on" :"off");
 
     await axios.post("/api/save-config", formData);
     await loadConfig();
     toastSuccess("配置保存成功");
     emit("update:modelValue", false);
   } catch (error) {
-    const errorMsg = error.response?.data?.detail || error.response?.data?.error || "保存配置失败";
+    const errorMsg = error.response?.data?.detail || error.response?.data?.error ||"保存配置失败";
     toastInfo(errorMsg);
   } finally {
     saving.value = false;
@@ -220,11 +220,11 @@ async function save() {
 }
 
 watch(buildMode, (newMode) => {
-  if (newMode === "tls") {
+  if (newMode ==="tls") {
     if (!config.value.remote.port || config.value.remote.port === 2375) {
       config.value.remote.port = 2376;
     }
-  } else if (newMode === "tcp2375") {
+  } else if (newMode ==="tcp2375") {
     if (!config.value.remote.port || config.value.remote.port === 2376) {
       config.value.remote.port = 2375;
     }

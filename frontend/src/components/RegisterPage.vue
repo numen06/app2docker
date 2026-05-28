@@ -3,7 +3,7 @@
     <Card class="w-full max-w-md shadow-lg shadow-slate-200/70">
       <CardHeader class="pb-4 text-center">
         <div class="mb-2 flex justify-center">
-          <i class="fas fa-box-open text-4xl text-blue-600"></i>
+          <AppIcon  name="box-open" class="text-4xl text-blue-600" />
         </div>
         <CardTitle class="text-center">创建账号</CardTitle>
         <CardDescription>注册后即可登录控制台（用户名 ≥ 1，密码 ≥ 6 位）</CardDescription>
@@ -72,7 +72,7 @@ const teamStore = useTeamStore();
 
 const loginLink = computed(() => {
   const redirect = parseLoginRedirect(route.query.redirect);
-  if (!redirect) return "/login";
+  if (!redirect) return"/login";
   return `/login?redirect=${encodeURIComponent(redirect)}`;
 });
 
@@ -84,7 +84,7 @@ const error = ref("");
 
 async function submit() {
   if (loading.value) return;
-  error.value = "";
+  error.value ="";
   loading.value = true;
   try {
     const res = await axios.post("/api/register", {
@@ -94,7 +94,7 @@ async function submit() {
     });
     const d = res.data || {};
     if (!d.success || !d.token) {
-      error.value = d.detail || d.error || "注册失败";
+      error.value = d.detail || d.error ||"注册失败";
       loading.value = false;
       return;
     }
@@ -127,9 +127,9 @@ async function submit() {
   } catch (e) {
     const detail = e?.response?.data?.detail;
     error.value =
-      typeof detail === "string"
+      typeof detail ==="string"
         ? detail
-        : e?.response?.data?.error || e?.message || "注册失败，请稍后重试";
+        : e?.response?.data?.error || e?.message ||"注册失败，请稍后重试";
     loading.value = false;
   }
 }

@@ -139,6 +139,26 @@ def task_belongs_to_team(db: Session, task: Task, team_id: str) -> bool:
     return effective == team_id
 
 
+def task_visible_to_user(db: Session, user_id: str, task: Task, team_id: str) -> bool:
+    if not task_belongs_to_team(db, task, team_id):
+        return False
+    member = require_team_member(db, team_id, user_id)
+    if member.role in ("owner", "admin"):
+        return True
+    return getattr(task, "created_by", None) == user_id
+
+
+def export_task_visible_to_user(
+    db: Session, user_id: str, task: ExportTask, team_id: str
+) -> bool:
+    if getattr(task, "team_id", None) != team_id:
+        return False
+    member = require_team_member(db, team_id, user_id)
+    if member.role in ("owner", "admin"):
+        return True
+    return getattr(task, "created_by", None) == user_id
+
+
 def require_task_in_team(db: Session, user_id: str, task_id: str, team_id: str) -> Task:
     resolve_team_scope(db, user_id, team_id)
     task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -146,6 +166,8 @@ def require_task_in_team(db: Session, user_id: str, task_id: str, team_id: str) 
         raise HTTPException(status_code=404, detail="任务不存在")
     if not task_belongs_to_team(db, task, team_id):
         raise HTTPException(status_code=403, detail="无权访问该团队的任务")
+    if not task_visible_to_user(db, user_id, task, team_id):
+        raise HTTPException(status_code=403, detail="无权访问该任务")
     return task
 
 
@@ -160,6 +182,8 @@ def require_export_task_in_team(
         raise HTTPException(status_code=403, detail="无权访问该团队的导出任务")
     if task.team_id is None:
         raise HTTPException(status_code=403, detail="无权访问该团队的导出任务")
+    if not export_task_visible_to_user(db, user_id, task, team_id):
+        raise HTTPException(status_code=403, detail="无权访问该导出任务")
     return task
 
 

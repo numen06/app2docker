@@ -48,12 +48,12 @@ import { computed } from "vue";
 const props = defineProps({
   variant: {
     type: String,
-    default: "dashboard",
-    validator: (v) => ["dashboard", "pipeline", "team", "deploy"].includes(v),
+    default:"dashboard",
+    validator: (v) => ["dashboard","pipeline","team","deploy"].includes(v),
   },
   label: {
     type: String,
-    default: "",
+    default:"",
   },
   compact: {
     type: Boolean,
@@ -62,20 +62,20 @@ const props = defineProps({
 });
 
 const urlPaths = {
-  dashboard: "/app/dashboard",
-  pipeline: "/app/pipeline",
-  team: "/app/team",
-  deploy: "/app/deploy",
+  dashboard:"/app/dashboard",
+  pipeline:"/app/pipeline",
+  team:"/app/team",
+  deploy:"/app/deploy",
 };
 
 const imageMeta = {
-  dashboard: { src: "/landing/dashboard.webp", width: 840, height: 472 },
-  pipeline: { src: "/landing/pipeline.webp", width: 480, height: 270 },
-  team: { src: "/landing/team.webp", width: 480, height: 270 },
-  deploy: { src: "/landing/deploy.webp", width: 480, height: 270 },
+  dashboard: { src:"/landing/dashboard.webp", width: 840, height: 472 },
+  pipeline: { src:"/landing/pipeline.webp", width: 480, height: 270 },
+  team: { src:"/landing/team.webp", width: 480, height: 270 },
+  deploy: { src:"/landing/deploy.webp", width: 480, height: 270 },
 };
 
-const urlPath = computed(() => urlPaths[props.variant] ?? "/app");
+const urlPath = computed(() => urlPaths[props.variant] ??"/app");
 
 const imageSrc = computed(() => imageMeta[props.variant]?.src ?? imageMeta.dashboard.src);
 const imageWidth = computed(() => imageMeta[props.variant]?.width ?? 840);

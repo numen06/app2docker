@@ -63,6 +63,12 @@ from backend.config import (
     save_git_config,
 )
 from backend.utils import get_safe_filename
+from backend.webhook_trigger import (
+    get_branch_mapping_value,
+    matches_any_branch_rule,
+    resolve_branch_tags,
+    resolve_pipeline_webhook_branch,
+)
 from backend.auth import (
     TOKEN_EXPIRE_HOURS,
     authenticate,
@@ -82,6 +88,7 @@ from backend.app_key_manager import (
 )
 from backend.team_permissions import get_user_id_by_username, require_team_member
 from backend.team_scope import (
+    export_task_visible_to_user,
     get_effective_team_id_for_task,
     require_export_task_in_team,
     require_migration_task_in_team,
@@ -93,8 +100,28 @@ from backend.team_scope import (
     resolve_team_scope_from_request,
     resolve_team_scope_from_request_with_fallback,
     task_belongs_to_team,
+    task_visible_to_user,
 )
 import jwt
+
+
+def _usernames_by_id(user_ids):
+    ids = [uid for uid in set(user_ids or []) if uid]
+    if not ids:
+        return {}
+    from backend.database import get_db_session
+    from backend.models import User
+
+    db = get_db_session()
+    try:
+        return {
+            row.user_id: row.username
+            for row in db.query(User.user_id, User.username)
+            .filter(User.user_id.in_(ids))
+            .all()
+        }
+    finally:
+        db.close()
 
 
 def get_current_username(request: Request) -> str:
@@ -1669,6 +1696,45 @@ async def create_registry_entry(
         raise HTTPException(status_code=500, detail=f"创建仓库失败: {str(e)}")
 
 
+@router.post("/registries/demo-public")
+async def create_demo_public_registry(
+    http_request: Request,
+    team_id: Optional[str] = Query(None, description="当前团队 ID"),
+):
+    """幂等创建 DaoCloud 演示公共仓库（Docker Hub / m.daocloud.io）"""
+    try:
+        from backend.registry_manager import ensure_demo_public_registry
+
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, team_id
+            )
+        finally:
+            db.close()
+
+        result = ensure_demo_public_registry(scoped_team_id, user_id)
+        OperationLogger.log(
+            username,
+            "registry_demo_create",
+            {
+                "registry_id": result["registry"].get("registry_id"),
+                "created": result["created"],
+            },
+        )
+        return JSONResponse(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"创建演示公共仓库失败: {str(e)}"
+        )
+
+
 @router.put("/registries/{registry_id}")
 async def update_registry_entry(
     registry_id: str,
@@ -1739,6 +1805,13 @@ class TestRegistryRequest(BaseModel):
     registry: str
     username: str = ""
     password: Optional[str] = None  # 可选，如果不提供则从配置中获取
+
+
+class ValidateRegistryPushRequest(BaseModel):
+    """验证镜像地址是否可推送"""
+
+    image_refs: List[str] = []
+    team_id: Optional[str] = None
 
 
 def _registry_v2_url(registry_host: str) -> str:
@@ -1860,6 +1933,432 @@ def _test_registry_connectivity(registry_host: str) -> dict:
                 "确认本机网络可访问该仓库",
             ],
         }
+
+
+def _registry_v2_base_url(registry_host: str) -> str:
+    url = _registry_v2_url(registry_host)
+    return url[:-4] if url.endswith("/v2/") else url.rstrip("/")
+
+
+def _normalize_registry_host_for_match(value: str) -> str:
+    host = (value or "").strip().lower().rstrip("/")
+    if host.startswith("https://"):
+        host = host[8:]
+    elif host.startswith("http://"):
+        host = host[7:]
+    if host in ("index.docker.io", "registry-1.docker.io"):
+        return "docker.io"
+    return host
+
+
+def _split_push_image_ref(image_ref: str) -> dict:
+    image = validate_and_clean_image_name((image_ref or "").strip())
+    if "@" in image:
+        raise ValueError("推送校验仅支持 tag 格式，不支持 digest 镜像地址")
+
+    last_slash = image.rfind("/")
+    last_colon = image.rfind(":")
+    if last_colon > last_slash:
+        name = image[:last_colon]
+        tag = image[last_colon + 1 :]
+    else:
+        name = image
+        tag = "latest"
+
+    if not tag:
+        raise ValueError("镜像标签不能为空")
+
+    parts = name.split("/")
+    first = parts[0] if parts else ""
+    has_registry = "." in first or ":" in first or first == "localhost"
+    if has_registry:
+        registry = first
+        repository = "/".join(parts[1:])
+    else:
+        registry = "docker.io"
+        repository = name
+
+    if not repository or repository.startswith("/") or repository.endswith("/"):
+        raise ValueError("镜像仓库路径不能为空")
+    if any(not part for part in repository.split("/")):
+        raise ValueError("镜像仓库路径格式不正确")
+    if repository.lower() != repository:
+        raise ValueError("镜像仓库路径必须使用小写字母")
+
+    return {
+        "image": f"{name}:{tag}",
+        "registry": registry,
+        "repository": repository,
+        "tag": tag,
+        "has_registry": has_registry,
+    }
+
+
+def _basic_auth_header(username: str, password: str) -> Optional[str]:
+    if not username or not password:
+        return None
+    import base64
+
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode(
+        "ascii"
+    )
+    return f"Basic {token}"
+
+
+def _parse_www_authenticate(header: str) -> dict:
+    import re
+
+    if not header:
+        return {}
+    scheme, _, rest = header.partition(" ")
+    result = {"scheme": scheme.lower()}
+    for key, value in re.findall(r'(\w+)="([^"]*)"', rest):
+        result[key.lower()] = value
+    return result
+
+
+def _request_bearer_token(
+    challenge: dict,
+    repository: str,
+    username: str,
+    password: str,
+) -> Optional[str]:
+    import urllib.parse
+    import urllib.request
+
+    realm = challenge.get("realm")
+    if not realm:
+        return None
+
+    scope = f"repository:{repository}:push,pull"
+    query = {"scope": scope}
+    if challenge.get("service"):
+        query["service"] = challenge["service"]
+    if username:
+        query["account"] = username
+
+    separator = "&" if "?" in realm else "?"
+    url = f"{realm}{separator}{urllib.parse.urlencode(query)}"
+    req = urllib.request.Request(url, method="GET")
+    auth_header = _basic_auth_header(username, password)
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    req.add_header("Accept", "application/json")
+
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        body = resp.read().decode("utf-8")
+    data = json.loads(body or "{}")
+    return data.get("token") or data.get("access_token")
+
+
+def _make_registry_upload_request(
+    registry_host: str,
+    repository: str,
+    auth_header: Optional[str] = None,
+):
+    import urllib.parse
+    import urllib.request
+
+    base = _registry_v2_base_url(registry_host)
+    repo_path = urllib.parse.quote(repository, safe="/")
+    req = urllib.request.Request(
+        f"{base}/v2/{repo_path}/blobs/uploads/", method="POST"
+    )
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    req.add_header("Content-Length", "0")
+    return req
+
+
+def _cancel_registry_upload(
+    registry_host: str,
+    location: str,
+    auth_header: Optional[str],
+) -> None:
+    if not location:
+        return
+    import urllib.parse
+    import urllib.request
+
+    base = _registry_v2_base_url(registry_host)
+    upload_url = urllib.parse.urljoin(f"{base}/", location)
+    req = urllib.request.Request(upload_url, method="DELETE")
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    try:
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception:
+        pass
+
+
+def _probe_registry_push_permission(
+    registry_host: str,
+    repository: str,
+    username: str,
+    password: str,
+) -> dict:
+    import urllib.error
+    import urllib.request
+
+    auth_header = _basic_auth_header(username, password)
+
+    def handle_success(resp, used_auth_header: Optional[str]) -> dict:
+        location = resp.headers.get("Location", "")
+        _cancel_registry_upload(registry_host, location, used_auth_header)
+        return {
+            "success": True,
+            "message": "镜像地址可推送",
+            "details": f"Registry 接受 repository:{repository}:push,pull 权限探测",
+        }
+
+    try:
+        with urllib.request.urlopen(
+            _make_registry_upload_request(registry_host, repository, auth_header),
+            timeout=15,
+        ) as resp:
+            if 200 <= resp.status < 300:
+                return handle_success(resp, auth_header)
+            return {
+                "success": False,
+                "message": f"仓库响应异常: HTTP {resp.status}",
+                "details": f"{registry_host}/{repository}",
+            }
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            challenge = _parse_www_authenticate(e.headers.get("WWW-Authenticate", ""))
+            if challenge.get("scheme") != "bearer":
+                return {
+                    "success": False,
+                    "message": "认证失败或仓库不支持自动确认推送权限",
+                    "details": f"HTTP 401 {e.headers.get('WWW-Authenticate', '')}",
+                    "suggestions": ["请检查仓库账号密码，或确认 Registry 支持标准 v2 认证挑战"],
+                }
+            try:
+                token = _request_bearer_token(
+                    challenge, repository, username or "", password or ""
+                )
+                if not token:
+                    return {
+                        "success": False,
+                        "message": "未能获取推送权限令牌",
+                        "details": "Token 响应中没有 token",
+                    }
+                bearer_header = f"Bearer {token}"
+                with urllib.request.urlopen(
+                    _make_registry_upload_request(
+                        registry_host, repository, bearer_header
+                    ),
+                    timeout=15,
+                ) as retry_resp:
+                    if 200 <= retry_resp.status < 300:
+                        return handle_success(retry_resp, bearer_header)
+                    return {
+                        "success": False,
+                        "message": f"仓库响应异常: HTTP {retry_resp.status}",
+                        "details": f"{registry_host}/{repository}",
+                    }
+            except urllib.error.HTTPError as token_error:
+                if token_error.code in (401, 403):
+                    return {
+                        "success": False,
+                        "message": "认证失败或没有该镜像命名空间的推送权限",
+                        "details": f"HTTP {token_error.code}",
+                        "suggestions": [
+                            "请检查镜像地址中的命名空间是否归当前账号所有",
+                            "请确认仓库账号或访问令牌包含 push 权限",
+                        ],
+                    }
+                return {
+                    "success": False,
+                    "message": f"推送权限探测失败: HTTP {token_error.code}",
+                    "details": str(token_error),
+                }
+            except Exception as token_error:
+                return {
+                    "success": False,
+                    "message": f"推送权限探测失败: {token_error}",
+                    "details": str(token_error),
+                }
+        if e.code in (403, 405):
+            return {
+                "success": False,
+                "message": "没有该镜像地址的推送权限，或仓库不支持自动确认推送权限",
+                "details": f"HTTP {e.code}",
+                "suggestions": ["请确认目标命名空间可写，并使用支持标准 Registry v2 的地址"],
+            }
+        return {
+            "success": False,
+            "message": f"推送权限探测失败: HTTP {e.code}",
+            "details": str(e),
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"无法连接仓库进行推送权限探测: {e}",
+            "details": f"{registry_host}/{repository}",
+            "suggestions": ["请检查 Registry 地址是否正确，以及服务端网络是否可访问该仓库"],
+        }
+
+
+def _match_registry_config_for_image(parsed: dict, team_id: str, user_id: str) -> dict:
+    target_host = _normalize_registry_host_for_match(parsed["registry"])
+    all_registries = get_all_registries(team_id=team_id, user_id=user_id)
+
+    def matches(reg: dict) -> bool:
+        reg_host = _normalize_registry_host_for_match(reg.get("registry", ""))
+        if reg_host and reg_host == target_host:
+            return True
+        return False
+
+    def prefix_matches(reg: dict) -> bool:
+        reg_prefix = _normalize_registry_host_for_match(reg.get("registry_prefix", ""))
+        image_name = parsed["image"].rsplit(":", 1)[0]
+        if reg_prefix and (
+            image_name == reg_prefix or image_name.startswith(reg_prefix + "/")
+        ):
+            return True
+        return False
+
+    matched = next((reg for reg in all_registries if prefix_matches(reg)), None)
+    if not matched:
+        matched = next((reg for reg in all_registries if matches(reg)), None)
+    if not matched and target_host == "docker.io":
+        matched = get_active_registry(team_id=team_id, user_id=user_id)
+        if matched and _normalize_registry_host_for_match(
+            matched.get("registry", "")
+        ) != "docker.io":
+            matched = None
+
+    if not matched:
+        raise ValueError(
+            f"未找到匹配的镜像仓库配置，请先在当前团队中配置 {parsed['registry']}"
+        )
+
+    reg_key = matched.get("registry_id") or matched.get("name")
+    registry_config = get_registry_by_name(reg_key, team_id=team_id, user_id=user_id)
+    if not registry_config:
+        raise ValueError("当前用户没有访问匹配镜像仓库配置的权限")
+    return registry_config
+
+
+def _validate_push_image_refs(
+    image_refs: List[str], team_id: str, user_id: str
+) -> dict:
+    unique_refs = []
+    for ref in image_refs or []:
+        text = (ref or "").strip()
+        if text and text not in unique_refs:
+            unique_refs.append(text)
+
+    results = []
+    if not unique_refs:
+        return {
+            "success": True,
+            "results": [],
+            "message": "没有需要推送的镜像地址",
+        }
+
+    for image_ref in unique_refs:
+        result = {
+            "success": False,
+            "image": image_ref,
+            "registry": "",
+            "repository": "",
+            "message": "",
+            "details": "",
+            "suggestions": [],
+        }
+        try:
+            parsed = _split_push_image_ref(image_ref)
+            result.update(
+                {
+                    "image": parsed["image"],
+                    "registry": parsed["registry"],
+                    "repository": parsed["repository"],
+                }
+            )
+            registry_config = _match_registry_config_for_image(parsed, team_id, user_id)
+            username = (registry_config.get("username") or "").strip()
+            password = registry_config.get("password") or ""
+            if not username or not password:
+                raise ValueError("匹配的镜像仓库未配置用户名和密码，无法确认推送权限")
+
+            probe = _probe_registry_push_permission(
+                parsed["registry"], parsed["repository"], username, password
+            )
+            result.update(probe)
+        except Exception as e:
+            result["success"] = False
+            result["message"] = f"镜像地址不可推送：{e}"
+            result["details"] = str(e)
+            if not result["suggestions"]:
+                result["suggestions"] = [
+                    "请检查镜像地址、Registry 配置、账号密码和命名空间写权限"
+                ]
+        results.append(result)
+
+    success = all(item.get("success") for item in results)
+    return {
+        "success": success,
+        "results": results,
+        "message": "推送权限校验通过" if success else "存在不可推送的镜像地址",
+    }
+
+
+def _raise_if_push_targets_invalid(
+    image_refs: List[str], team_id: str, username: str
+) -> None:
+    from backend.database import get_db_session
+
+    db = get_db_session()
+    try:
+        user_id = get_user_id_by_username(db, username)
+    finally:
+        db.close()
+
+    result = _validate_push_image_refs(image_refs, team_id, user_id)
+    if result.get("success"):
+        return
+    failed = next(
+        (item for item in result.get("results", []) if not item.get("success")), None
+    )
+    if failed:
+        image = failed.get("image") or "未知镜像"
+        message = failed.get("message") or "无法确认推送权限"
+        raise HTTPException(
+            status_code=400, detail=f"镜像地址 {image} 不可推送：{message}"
+        )
+    raise HTTPException(status_code=400, detail="存在不可推送的镜像地址")
+
+
+@router.post("/registries/validate-push")
+async def validate_registry_push(
+    request: ValidateRegistryPushRequest,
+    http_request: Request,
+):
+    """验证镜像地址是否具备推送权限，不推送真实镜像。"""
+    try:
+        username = require_auth(http_request)
+        user_id = _resolve_user_id(http_request)
+        from backend.database import get_db_session
+
+        db = get_db_session()
+        try:
+            scoped_team_id = resolve_team_scope_from_request_with_fallback(
+                db, username, request.team_id
+            )
+        finally:
+            db.close()
+
+        result = _validate_push_image_refs(
+            request.image_refs or [], scoped_team_id, user_id
+        )
+        status_code = 200 if result.get("success") else 400
+        return JSONResponse(result, status_code=status_code)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"验证推送权限失败: {str(e)}")
 
 
 @router.post("/registries/test")
@@ -2291,6 +2790,7 @@ async def upload_file(
             scoped_team_id = resolve_team_scope_from_request_with_fallback(
                 db, username, effective_team_id
             )
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
 
@@ -2324,6 +2824,11 @@ async def upload_file(
             except json.JSONDecodeError:
                 print(f"⚠️ 资源包配置格式错误，忽略: {resource_package_configs}")
 
+        if push == "on":
+            _raise_if_push_targets_invalid(
+                [f"{imagename}:{tag or 'latest'}"], scoped_team_id, username
+            )
+
         # 调用构建管理器
         manager = BuildManager()
         task_id = manager.start_build(
@@ -2340,6 +2845,7 @@ async def upload_file(
             build_steps=build_steps_dict,  # 传递构建步骤信息
             resource_package_ids=resource_package_configs_list,  # 传递资源包配置
             team_id=scoped_team_id,
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -2822,6 +3328,7 @@ async def build_from_source(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
 
@@ -2844,6 +3351,27 @@ async def build_from_source(
                     service_template_params_dict = json.loads(service_template_params)
                 except json.JSONDecodeError:
                     raise HTTPException(status_code=400, detail="服务模板参数格式错误")
+
+        push_refs = []
+        if push == "on":
+            push_refs.append(f"{imagename}:{tag or 'latest'}")
+        if service_push_config:
+            selected_service_names = set(
+                selected_services or service_push_config.keys()
+            )
+            for service_name, cfg in service_push_config.items():
+                if service_name not in selected_service_names:
+                    continue
+                if isinstance(cfg, dict) and cfg.get("push"):
+                    service_image = (
+                        cfg.get("imageName") or f"{imagename}-{service_name}"
+                    ).strip()
+                    service_tag = (cfg.get("tag") or tag or "latest").strip()
+                    push_refs.append(f"{service_image}:{service_tag}")
+                elif cfg is True:
+                    push_refs.append(f"{imagename}-{service_name}:{tag or 'latest'}")
+        if push_refs:
+            _raise_if_push_targets_invalid(push_refs, scoped_team_id, username)
 
         # 调用构建管理器
         try:
@@ -2884,6 +3412,7 @@ async def build_from_source(
                     resource_package_ids=resource_package_configs
                     or [],  # 传递资源包配置
                     team_id=scoped_team_id,
+                    created_by=user_id,
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")
@@ -2962,11 +3491,15 @@ async def get_build_tasks(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         manager = BuildTaskManager()
         tasks = manager.list_tasks(
-            status=status, task_type=task_type, team_id=scoped_team_id
+            status=status,
+            task_type=task_type,
+            team_id=scoped_team_id,
+            user_id=user_id,
         )
         return JSONResponse({"tasks": tasks})
     except Exception as e:
@@ -2996,6 +3529,7 @@ async def get_all_tasks(
             scoped_team_id = resolve_team_scope_from_request(
                 db_scope, username, team_id
             )
+            user_id = get_user_id_by_username(db_scope, username)
         finally:
             db_scope.close()
 
@@ -3008,7 +3542,10 @@ async def get_all_tasks(
         else:
             build_task_type = task_type if task_type and task_type != "deploy" else None
             build_tasks = build_manager.list_tasks(
-                status=status, task_type=build_task_type, team_id=scoped_team_id
+                status=status,
+                task_type=build_task_type,
+                team_id=scoped_team_id,
+                user_id=user_id,
             )
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
 
@@ -3056,8 +3593,11 @@ async def get_all_tasks(
                         deploy_tasks = [
                             t
                             for t in deploy_tasks
-                            if task_belongs_to_team(db, t, scoped_team_id)
+                            if task_visible_to_user(db, user_id, t, scoped_team_id)
                         ]
+                    creator_names = _usernames_by_id(
+                        [getattr(t, "created_by", None) for t in deploy_tasks]
+                    )
 
                     # 只查询关联到的部署配置（避免全表加载）
                     deploy_config_ids = list({t.deploy_config_id for t in deploy_tasks if t.deploy_config_id})
@@ -3096,6 +3636,11 @@ async def get_all_tasks(
                             # 任务列表「来源」列：与 Task 表一致（Webhook / 手动 + trigger_source）
                             "source": task_obj.source,
                             "trigger_source": task_obj.trigger_source,
+                            "team_id": getattr(task_obj, "team_id", None),
+                            "created_by": getattr(task_obj, "created_by", None),
+                            "created_by_username": creator_names.get(
+                                getattr(task_obj, "created_by", None)
+                            ),
                         }
 
                         # 如果有 deploy_config_id，从配置中获取应用名称
@@ -3133,7 +3678,7 @@ async def get_all_tasks(
         if not task_type or task_type == "export":
             export_manager = ExportTaskManager()
             export_tasks = export_manager.list_tasks(
-                status=status, team_id=scoped_team_id
+                status=status, team_id=scoped_team_id, user_id=user_id
             )
             for task in export_tasks:
                 task["task_category"] = "export"  # 标记为导出任务
@@ -3181,6 +3726,7 @@ async def get_running_tasks(
             scoped_team_id = resolve_team_scope_from_request(
                 db_scope, username, team_id
             )
+            user_id = get_user_id_by_username(db_scope, username)
         finally:
             db_scope.close()
 
@@ -3191,7 +3737,7 @@ async def get_running_tasks(
 
         # 一次查询获取 running 和 pending 状态的构建任务（避免两次全表扫描）
         all_build_tasks = build_manager.list_tasks(
-            status="running,pending", team_id=scoped_team_id
+            status="running,pending", team_id=scoped_team_id, user_id=user_id
         )
         for task in all_build_tasks:
             # 排除部署任务
@@ -3218,8 +3764,11 @@ async def get_running_tasks(
                 running_deploy_tasks = [
                     t
                     for t in running_deploy_tasks
-                    if task_belongs_to_team(db, t, scoped_team_id)
+                    if task_visible_to_user(db, user_id, t, scoped_team_id)
                 ]
+            creator_names = _usernames_by_id(
+                [getattr(t, "created_by", None) for t in running_deploy_tasks]
+            )
 
             # 只查询关联到的部署配置（避免全表加载）
             deploy_config_ids = list({t.deploy_config_id for t in running_deploy_tasks if t.deploy_config_id})
@@ -3245,6 +3794,11 @@ async def get_running_tasks(
                     "deploy_config_id": task_obj.deploy_config_id,
                     "source": task_obj.source,
                     "trigger_source": task_obj.trigger_source,
+                    "team_id": getattr(task_obj, "team_id", None),
+                    "created_by": getattr(task_obj, "created_by", None),
+                    "created_by_username": creator_names.get(
+                        getattr(task_obj, "created_by", None)
+                    ),
                 }
 
                 # 如果有 deploy_config_id，从配置中获取应用名称
@@ -3275,14 +3829,14 @@ async def get_running_tasks(
         # 获取导出任务（running 或 pending）
         export_manager = ExportTaskManager()
         running_export_tasks = export_manager.list_tasks(
-            status="running", team_id=scoped_team_id
+            status="running", team_id=scoped_team_id, user_id=user_id
         )
         for task in running_export_tasks:
             task["task_category"] = "export"
             all_running_tasks.append(task)
 
         pending_export_tasks = export_manager.list_tasks(
-            status="pending", team_id=scoped_team_id
+            status="pending", team_id=scoped_team_id, user_id=user_id
         )
         for task in pending_export_tasks:
             task["task_category"] = "export"
@@ -3375,6 +3929,8 @@ async def get_build_task_logs(
         manager = BuildTaskManager()
         logs = manager.get_logs(task_id)
         return PlainTextResponse(logs)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务日志失败: {str(e)}")
 
@@ -3496,8 +4052,9 @@ async def retry_build_task(
             scoped_team_id = resolve_team_scope_for_existing_resource(
                 db, username, request_team_id, resource_team_id
             )
-            if not task_belongs_to_team(db, task_row, scoped_team_id):
-                raise HTTPException(status_code=403, detail="无权访问该团队的任务")
+            user_id = get_user_id_by_username(db, username)
+            if not task_visible_to_user(db, user_id, task_row, scoped_team_id):
+                raise HTTPException(status_code=403, detail="无权访问该任务")
         finally:
             db.close()
 
@@ -3546,6 +4103,7 @@ async def retry_build_task(
                     "team_id": scoped_team_id or task.get("team_id"),
                 }
             task_config["trigger_source"] = "retry"
+            task_config["created_by"] = task.get("created_by") or user_id
 
         # 使用统一触发函数重新触发任务
         build_manager = BuildManager()
@@ -3636,6 +4194,7 @@ async def cleanup_tasks(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         removed_count = 0
@@ -3650,7 +4209,9 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = build_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3668,7 +4229,7 @@ async def cleanup_tasks(
                 tasks_to_remove = [
                     task["task_id"]
                     for task in build_manager.list_tasks(
-                        status=status, team_id=scoped_team_id
+                        status=status, team_id=scoped_team_id, user_id=user_id
                     )
                 ]
 
@@ -3678,7 +4239,9 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = build_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3700,7 +4263,9 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = export_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -3718,7 +4283,7 @@ async def cleanup_tasks(
                 tasks_to_remove = [
                     task["task_id"]
                     for task in export_manager.list_tasks(
-                        status=status, team_id=scoped_team_id
+                        status=status, team_id=scoped_team_id, user_id=user_id
                     )
                 ]
 
@@ -3728,7 +4293,9 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = export_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4418,6 +4985,7 @@ async def create_export_task(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         if not DOCKER_AVAILABLE:
@@ -4452,6 +5020,7 @@ async def create_export_task(
             registry=registry,
             use_local=use_local,
             team_id=scoped_team_id,
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -4497,10 +5066,13 @@ async def list_export_tasks(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         task_manager = ExportTaskManager()
-        tasks = task_manager.list_tasks(status=status, team_id=scoped_team_id)
+        tasks = task_manager.list_tasks(
+            status=status, team_id=scoped_team_id, user_id=user_id
+        )
         return JSONResponse({"tasks": tasks})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
@@ -4640,7 +5212,7 @@ async def retry_export_task(
         finally:
             db.close()
         task_manager = ExportTaskManager()
-        if task_manager.retry_task(task_id):
+        if task_manager.retry_task(task_id, created_by=user_id):
             OperationLogger.log(username, "retry_export_task", {"task_id": task_id})
             return JSONResponse({"success": True, "message": "任务已重新启动"})
         else:
@@ -6127,6 +6699,7 @@ class CreatePipelineRequest(BaseModel):
     webhook_branch_filter: bool = False
     webhook_use_push_branch: bool = True
     webhook_allowed_branches: Optional[list] = None  # 允许触发的分支列表
+    tag_build_enabled: bool = False
     branch_tag_mapping: Optional[dict] = (
         None  # 分支到标签的映射，如 {"main": "latest", "dev": "dev"}
     )
@@ -6147,6 +6720,8 @@ class RunPipelineRequest(BaseModel):
     """手动触发流水线请求"""
 
     branch: Optional[str] = None  # 指定构建分支（如果提供则覆盖流水线配置）
+    ref_type: Optional[str] = None  # branch / tag
+    ref_name: Optional[str] = None  # 指定构建的分支或标签名称
 
 
 class UpdatePipelineRequest(BaseModel):
@@ -6171,6 +6746,7 @@ class UpdatePipelineRequest(BaseModel):
     webhook_branch_filter: Optional[bool] = None
     webhook_use_push_branch: Optional[bool] = None
     webhook_allowed_branches: Optional[list] = None
+    tag_build_enabled: Optional[bool] = None
     branch_tag_mapping: Optional[dict] = None
     source_id: Optional[str] = None
     selected_services: Optional[list] = None
@@ -6179,6 +6755,26 @@ class UpdatePipelineRequest(BaseModel):
     push_mode: Optional[str] = None
     resource_package_configs: Optional[list] = None
     post_build_webhooks: Optional[list] = None  # 构建完成后触发的webhook列表
+
+
+def _is_valid_docker_tag(tag: str) -> bool:
+    """Validate a Docker image tag without changing the user's Git tag."""
+    import re
+
+    if not isinstance(tag, str):
+        return False
+    return tag == tag.strip() and bool(re.fullmatch(r"[\w][\w.-]{0,127}", tag))
+
+
+def _require_valid_git_tag_for_image(tag: str):
+    if not _is_valid_docker_tag(tag):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Git tag 不能作为 Docker 镜像标签使用。"
+                "Docker tag 必须以字母、数字或下划线开头，且只能包含字母、数字、下划线、点和短横线，长度不超过128。"
+            ),
+        )
 
 
 @router.post("/pipelines")
@@ -6245,6 +6841,7 @@ async def create_pipeline(request: CreatePipelineRequest, http_request: Request)
             webhook_branch_filter=request.webhook_branch_filter,
             webhook_use_push_branch=request.webhook_use_push_branch,
             webhook_allowed_branches=request.webhook_allowed_branches,
+            tag_build_enabled=request.tag_build_enabled,
             branch_tag_mapping=request.branch_tag_mapping,
             source_id=request.source_id,
             selected_services=request.selected_services,
@@ -6360,6 +6957,8 @@ async def create_pipeline_from_json(pipeline_data: dict, http_request: Request):
             cron_expression=pipeline_data.get("cron_expression"),
             webhook_branch_filter=pipeline_data.get("webhook_branch_filter", False),
             webhook_use_push_branch=pipeline_data.get("webhook_use_push_branch", True),
+            webhook_allowed_branches=pipeline_data.get("webhook_allowed_branches"),
+            tag_build_enabled=pipeline_data.get("tag_build_enabled", False),
             branch_tag_mapping=pipeline_data.get("branch_tag_mapping"),
             source_id=pipeline_data.get("source_id"),
             selected_services=pipeline_data.get("selected_services"),
@@ -6808,6 +7407,7 @@ async def update_pipeline(
             webhook_branch_filter=request.webhook_branch_filter,
             webhook_use_push_branch=request.webhook_use_push_branch,
             webhook_allowed_branches=request.webhook_allowed_branches,
+            tag_build_enabled=request.tag_build_enabled,
             branch_tag_mapping=request.branch_tag_mapping,
             source_id=request.source_id,
             selected_services=request.selected_services,
@@ -6964,16 +7564,37 @@ async def run_pipeline(
         # 获取请求中的分支参数（如果提供则覆盖流水线配置）
         # 如果请求体存在且有branch字段，使用请求的分支；否则使用流水线配置的分支
         selected_branch = None
+        final_ref_type = "branch"
+        final_ref_name = None
         if request:
+            requested_ref_type = (getattr(request, "ref_type", None) or "").strip().lower()
+            requested_ref_name = (getattr(request, "ref_name", None) or "").strip()
+            if requested_ref_type:
+                if requested_ref_type not in ("branch", "tag"):
+                    raise HTTPException(status_code=400, detail="ref_type 仅支持 branch 或 tag")
+                final_ref_type = requested_ref_type
+                final_ref_name = requested_ref_name or None
             # 检查请求对象是否有branch属性
             if hasattr(request, "branch"):
                 selected_branch = request.branch
                 # 如果branch是空字符串，也视为有效（表示使用默认分支）
                 if selected_branch == "":
                     selected_branch = None
+            if final_ref_type == "branch" and not final_ref_name:
+                final_ref_name = selected_branch
+        if final_ref_type == "tag":
+            if not pipeline.get("tag_build_enabled", False):
+                raise HTTPException(status_code=403, detail="流水线未启用 Tag 构建")
+            if not final_ref_name:
+                raise HTTPException(status_code=400, detail="Tag 构建必须提供 ref_name")
+            _require_valid_git_tag_for_image(final_ref_name)
+            selected_branch = final_ref_name
         final_branch = (
-            selected_branch if selected_branch is not None else pipeline.get("branch")
+            final_ref_name
+            if final_ref_type == "tag"
+            else selected_branch if selected_branch is not None else pipeline.get("branch")
         )
+        final_ref_name = final_ref_name or final_branch
 
         # 调试日志 - 详细输出
         print(f"🔍 手动触发流水线 {pipeline_id}:")
@@ -6994,27 +7615,18 @@ async def run_pipeline(
             f"   - selected_branch == pipeline.get('branch'): {selected_branch == pipeline.get('branch')}"
         )
         print(f"   - selected_branch is not None: {selected_branch is not None}")
+        print(f"   - final_ref_type: {final_ref_type}")
+        print(f"   - final_ref_name: {final_ref_name}")
 
         # 处理分支标签映射（与webhook使用相同的逻辑）
         branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
         default_tag = pipeline.get("tag", "latest")  # 默认标签
 
         # 获取标签列表（支持单个标签或多个标签）
-        tags = [default_tag]  # 默认只有一个标签
+        tags = [final_ref_name] if final_ref_type == "tag" else [default_tag]  # 默认只有一个标签
 
-        if final_branch and branch_tag_mapping:
-            mapped_tag_value = None
-            # 优先精确匹配
-            if final_branch in branch_tag_mapping:
-                mapped_tag_value = branch_tag_mapping[final_branch]
-            else:
-                # 尝试通配符匹配（如 feature/* -> feature）
-                import fnmatch
-
-                for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(final_branch, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
+        if final_ref_type != "tag" and final_branch and branch_tag_mapping:
+            mapped_tag_value = get_branch_mapping_value(final_branch, branch_tag_mapping)
 
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
@@ -7048,6 +7660,8 @@ async def run_pipeline(
                     branch=final_branch,
                     tag=tag,
                     branch_tag_mapping=branch_tag_mapping,
+                    git_ref_type=final_ref_type,
+                    git_ref_name=final_ref_name,
                 )
                 task_config["username"] = username
                 task_id = build_manager._trigger_task_from_config(task_config)
@@ -7065,6 +7679,8 @@ async def run_pipeline(
                     "task_id": task_ids[0] if task_ids else None,
                     "queue_length": queue_length,
                     "branch": final_branch,
+                    "ref_type": final_ref_type,
+                    "ref_name": final_ref_name,
                     "trigger_source": "manual",
                     "reason": "debounce",
                 },
@@ -7080,6 +7696,8 @@ async def run_pipeline(
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
             else:
@@ -7091,6 +7709,8 @@ async def run_pipeline(
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
 
@@ -7099,21 +7719,10 @@ async def run_pipeline(
         default_tag = pipeline.get("tag", "latest")  # 默认标签
 
         # 获取标签列表（支持单个标签或多个标签）
-        tags = [default_tag]  # 默认只有一个标签
+        tags = [final_ref_name] if final_ref_type == "tag" else [default_tag]  # 默认只有一个标签
 
-        if final_branch and branch_tag_mapping:
-            mapped_tag_value = None
-            # 优先精确匹配
-            if final_branch in branch_tag_mapping:
-                mapped_tag_value = branch_tag_mapping[final_branch]
-            else:
-                # 尝试通配符匹配（如 feature/* -> feature）
-                import fnmatch
-
-                for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(final_branch, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
+        if final_ref_type != "tag" and final_branch and branch_tag_mapping:
+            mapped_tag_value = get_branch_mapping_value(final_branch, branch_tag_mapping)
 
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
@@ -7148,6 +7757,8 @@ async def run_pipeline(
                 branch=final_branch,
                 tag=tag,
                 branch_tag_mapping=branch_tag_mapping,
+                git_ref_type=final_ref_type,
+                git_ref_name=final_ref_name,
             )
             task_config["username"] = username
 
@@ -7183,6 +7794,8 @@ async def run_pipeline(
                 trigger_info={
                     "username": username,
                     "branch": final_branch,
+                    "ref_type": final_ref_type,
+                    "ref_name": final_ref_name,
                 },
             )
 
@@ -7196,6 +7809,8 @@ async def run_pipeline(
                     "task_id": first_task_id,
                     "task_ids": task_ids if len(task_ids) > 1 else None,
                     "branch": final_branch,
+                    "ref_type": final_ref_type,
+                    "ref_name": final_ref_name,
                     "trigger_source": "manual",
                 },
             )
@@ -7212,6 +7827,8 @@ async def run_pipeline(
                         "queue_length": queue_length,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
             else:
@@ -7222,6 +7839,8 @@ async def run_pipeline(
                         "task_id": first_task_id,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
+                        "ref_type": final_ref_type,
+                        "ref_name": final_ref_name,
                     }
                 )
         else:
@@ -7347,6 +7966,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
 
         # 提取分支信息（不同平台格式不同）
         webhook_branch = None
+        webhook_tag = None
 
         # 首先尝试从 ref 字段提取分支（最可靠的方式）
         if "ref" in payload:
@@ -7357,17 +7977,10 @@ async def webhook_trigger(webhook_token: str, request: Request):
             if ref.startswith("refs/heads/"):
                 webhook_branch = ref.replace("refs/heads/", "")
                 print(f"✅ 从 refs/heads/ 提取分支: {webhook_branch}")
-            # 处理标签引用：refs/tags/tag_name（应该忽略）
+            # 处理标签引用：refs/tags/tag_name
             elif ref.startswith("refs/tags/"):
-                print(f"⚠️ 检测到标签推送 (refs/tags/)，忽略此 webhook 触发")
-                return JSONResponse(
-                    {
-                        "message": "标签推送事件，已忽略触发",
-                        "pipeline": pipeline.get("name"),
-                        "ref": ref,
-                        "ignored": True,
-                    }
-                )
+                webhook_tag = ref.replace("refs/tags/", "")
+                print(f"✅ 从 refs/tags/ 提取标签: {webhook_tag}")
             # GitLab: ref = main (可能已经是分支名，不包含 refs/ 前缀)
             elif not ref.startswith("refs/"):
                 webhook_branch = ref
@@ -7399,6 +8012,116 @@ async def webhook_trigger(webhook_token: str, request: Request):
             print(f"⚠️ 未能从 payload 中提取分支信息")
             print(f"   可用的 payload 字段: {list(payload.keys())}")
 
+        if webhook_tag:
+            if not pipeline.get("tag_build_enabled", False):
+                return JSONResponse(
+                    {
+                        "message": "标签推送事件，流水线未启用 Tag 构建，已忽略触发",
+                        "pipeline": pipeline.get("name"),
+                        "ref": payload.get("ref"),
+                        "tag": webhook_tag,
+                        "ignored": True,
+                    }
+                )
+
+            _require_valid_git_tag_for_image(webhook_tag)
+
+            from backend.handlers import pipeline_to_task_config
+
+            build_manager = BuildManager()
+            pipeline_id = pipeline["pipeline_id"]
+            branch = webhook_tag
+            tags = [webhook_tag]
+            task_config = pipeline_to_task_config(
+                pipeline,
+                trigger_source="webhook",
+                branch=branch,
+                tag=webhook_tag,
+                webhook_branch=None,
+                branch_tag_mapping={},
+                git_ref_type="tag",
+                git_ref_name=webhook_tag,
+            )
+            duplicate_result = manager.check_duplicate_task(
+                pipeline_id, task_config, debounce_seconds=3
+            )
+            if duplicate_result == "debounced":
+                return JSONResponse(
+                    {
+                        "message": "触发过于频繁，相同标签的触发已被屏蔽（3秒内）",
+                        "status": "debounced",
+                        "pipeline": pipeline.get("name"),
+                        "tag": webhook_tag,
+                        "ref_type": "tag",
+                        "ref_name": webhook_tag,
+                    }
+                )
+
+            has_same_ref_task = (
+                duplicate_result in ("running_same_config", "queued_same_config")
+                or manager.check_same_branch_task_running_or_queued(pipeline_id, branch)
+            )
+            task_id = build_manager._trigger_task_from_config(task_config)
+            queue_length = manager.get_queue_length(pipeline_id)
+            webhook_info = {
+                "branch": branch,
+                "tag": webhook_tag,
+                "tags": tags,
+                "ref_type": "tag",
+                "ref_name": webhook_tag,
+                "event": request.headers.get("x-gitee-event")
+                or request.headers.get("x-gitlab-event")
+                or request.headers.get("x-github-event", "unknown"),
+                "platform": (
+                    "gitee"
+                    if "x-gitee-event" in request.headers
+                    else ("gitlab" if "x-gitlab-event" in request.headers else "github")
+                ),
+            }
+            if payload.get("repository"):
+                webhook_info["repository"] = payload["repository"].get("name", "")
+
+            manager.record_trigger(
+                pipeline_id,
+                task_id,
+                trigger_source="webhook",
+                trigger_info=webhook_info,
+            )
+            OperationLogger.log(
+                "webhook",
+                "pipeline_trigger",
+                {
+                    "pipeline_id": pipeline_id,
+                    "pipeline_name": pipeline.get("name"),
+                    "task_id": task_id,
+                    "tag": webhook_tag,
+                    "tags": tags,
+                    "branch": branch,
+                    "ref_type": "tag",
+                    "ref_name": webhook_tag,
+                    "trigger_source": "webhook",
+                    "webhook_info": webhook_info,
+                },
+            )
+            return JSONResponse(
+                {
+                    "message": (
+                        "任务已创建并加入队列（相同 Tag 任务正在执行）"
+                        if has_same_ref_task
+                        else "构建任务已启动"
+                    ),
+                    "status": "queued" if has_same_ref_task else "started",
+                    "task_id": task_id,
+                    "queue_length": queue_length,
+                    "pipeline": pipeline.get("name"),
+                    "branch": branch,
+                    "tag": webhook_tag,
+                    "tags": tags,
+                    "ref_type": "tag",
+                    "ref_name": webhook_tag,
+                }
+            )
+
         # 统一分支策略处理（与手动触发保持一致）
         # 支持新的webhook_branch_strategy字段，同时兼容旧的webhook_branch_filter和webhook_use_push_branch字段
         webhook_branch_strategy = pipeline.get("webhook_branch_strategy")
@@ -7406,13 +8129,30 @@ async def webhook_trigger(webhook_token: str, request: Request):
         webhook_branch_filter = pipeline.get("webhook_branch_filter", False)
         webhook_use_push_branch = pipeline.get("webhook_use_push_branch", True)
         configured_branch = pipeline.get("branch")
+        branch_tag_mapping = pipeline.get("branch_tag_mapping", {}) or {}
+        mapped_branch_rules = (
+            list(branch_tag_mapping.keys())
+            if isinstance(branch_tag_mapping, dict)
+            else []
+        )
+        effective_allowed_branches = (
+            webhook_allowed_branches
+            if webhook_allowed_branches and len(webhook_allowed_branches) > 0
+            else mapped_branch_rules
+        )
 
         # 如果没有新策略字段，根据旧字段推断策略
         if not webhook_branch_strategy:
             if webhook_allowed_branches and len(webhook_allowed_branches) > 0:
-                webhook_branch_strategy = "select_branches"
+                webhook_branch_strategy = (
+                    "select_branches"
+                    if webhook_use_push_branch
+                    else "select_configured"
+                )
             elif webhook_branch_filter:
-                webhook_branch_strategy = "filter_match"
+                webhook_branch_strategy = (
+                    "select_branches" if mapped_branch_rules else "filter_match"
+                )
             elif webhook_use_push_branch:
                 webhook_branch_strategy = "use_push"
             else:
@@ -7422,91 +8162,66 @@ async def webhook_trigger(webhook_token: str, request: Request):
         print(f"🔍 Webhook 分支配置:")
         print(f"   - webhook_branch_strategy: {webhook_branch_strategy}")
         print(f"   - webhook_allowed_branches: {webhook_allowed_branches}")
+        print(f"   - branch_tag_mapping_rules: {mapped_branch_rules}")
+        print(f"   - effective_allowed_branches: {effective_allowed_branches}")
         print(f"   - configured_branch: {configured_branch}")
         print(f"   - webhook_branch: {webhook_branch}")
 
-        # 根据分支策略确定使用的分支（统一逻辑）
-        # 重要：对于 webhook 触发，如果成功提取了 webhook_branch，应该优先使用它
-        branch = None
+        branch_resolution = resolve_pipeline_webhook_branch(
+            webhook_branch_strategy,
+            webhook_branch,
+            configured_branch,
+            effective_allowed_branches,
+        )
 
-        if webhook_branch_strategy == "select_branches":
-            # 选择分支触发策略：只允许匹配的分支触发
-            if webhook_branch:
-                if webhook_branch in webhook_allowed_branches:
-                    branch = webhook_branch
-                    print(f"✅ 分支在允许列表中，使用推送分支: {branch}")
-                else:
-                    print(
-                        f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
-                    )
-                    return JSONResponse(
-                        {
-                            "message": f"分支不在允许列表中，已忽略触发（推送分支: {webhook_branch}）",
-                            "pipeline": pipeline.get("name"),
-                            "webhook_branch": webhook_branch,
-                            "allowed_branches": webhook_allowed_branches,
-                            "ignored": True,
-                        }
-                    )
-            else:
-                # Webhook未提供分支信息，使用配置的分支
-                branch = configured_branch
-                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
+        if branch_resolution.get("error"):
+            print(
+                f"❌ {webhook_branch_strategy} 策略要求 webhook 提供分支信息，但提取失败"
+            )
+            return JSONResponse(
+                {
+                    "message": f"无法触发构建：{webhook_branch_strategy} 策略要求 webhook 提供分支信息",
+                    "pipeline": pipeline.get("name"),
+                    "error": branch_resolution["error"],
+                    "strategy": webhook_branch_strategy,
+                },
+                status_code=400,
+            )
+
+        if branch_resolution.get("ignored"):
+            reason_messages = {
+                "branch_not_allowed": "分支不匹配允许规则",
+                "branch_not_matched": "分支不匹配配置分支规则",
+                "not_configured_branch": "推送分支不是配置分支",
+            }
+            ignore_message = reason_messages.get(
+                branch_resolution.get("reason"), "分支不匹配"
+            )
+            print(
+                f"⚠️ {ignore_message}，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}, allowed={webhook_allowed_branches}"
+            )
+            return JSONResponse(
+                {
+                    "message": f"{ignore_message}，已忽略触发（推送分支: {webhook_branch}, 配置分支: {configured_branch}）",
+                    "pipeline": pipeline.get("name"),
+                    "webhook_branch": webhook_branch,
+                    "configured_branch": configured_branch,
+                    "allowed_branches": effective_allowed_branches,
+                    "ignored": True,
+                }
+            )
+
+        branch = branch_resolution.get("branch")
+        if webhook_branch_strategy == "use_configured":
+            print(f"✅ 推送分支匹配配置分支，使用配置分支构建: {branch}")
+        elif webhook_branch_strategy == "select_configured":
+            print(f"✅ 分支匹配允许规则，使用配置分支构建: {branch}")
+        elif webhook_branch_strategy == "select_branches":
+            print(f"✅ 分支匹配允许规则，使用推送分支: {branch}")
         elif webhook_branch_strategy == "filter_match":
-            # 只允许匹配分支触发：检查推送分支是否匹配配置分支
-            if webhook_branch:
-                if webhook_branch == configured_branch:
-                    branch = webhook_branch
-                    print(f"✅ 分支匹配，使用推送分支: {branch}")
-                else:
-                    print(
-                        f"⚠️ 分支不匹配，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}"
-                    )
-                    return JSONResponse(
-                        {
-                            "message": f"分支不匹配，已忽略触发（推送分支: {webhook_branch}, 配置分支: {configured_branch}）",
-                            "pipeline": pipeline.get("name"),
-                            "webhook_branch": webhook_branch,
-                            "configured_branch": configured_branch,
-                            "ignored": True,
-                        }
-                    )
-            else:
-                # Webhook未提供分支信息，使用配置的分支
-                branch = configured_branch
-                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
-        elif webhook_branch_strategy == "use_push":
-            # 使用推送分支构建：必须使用webhook推送的分支
-            if webhook_branch:
-                branch = webhook_branch
-                print(f"✅ 使用推送分支构建: {branch}")
-            else:
-                # Webhook未提供分支信息，对于 use_push 策略应该报错而不是回退
-                print(f"❌ use_push 策略要求 webhook 提供分支信息，但提取失败")
-                return JSONResponse(
-                    {
-                        "message": "无法触发构建：use_push 策略要求 webhook 提供分支信息，但未能从 payload 中提取分支",
-                        "pipeline": pipeline.get("name"),
-                        "error": "missing_webhook_branch",
-                        "strategy": "use_push",
-                    },
-                    status_code=400,
-                )
-        else:  # use_configured
-            # 使用配置分支构建：但如果 webhook 成功提取了分支，优先使用 webhook 分支
-            # 这样可以确保从 test 合并到 master 时，使用的是 master 而不是配置的 test
-            if webhook_branch:
-                branch = webhook_branch
-                print(
-                    f"✅ use_configured 策略：检测到 webhook 分支，优先使用推送分支: {branch}"
-                )
-                print(
-                    f"   配置的分支 ({configured_branch}) 将被忽略，因为 webhook 明确推送到了 {webhook_branch}"
-                )
-            else:
-                # Webhook未提供分支信息，使用配置的分支
-                branch = configured_branch
-                print(f"✅ 使用配置分支构建: {branch}")
+            print(f"✅ 分支匹配配置规则，使用推送分支: {branch}")
+        else:
+            print(f"✅ 使用推送分支构建: {branch}")
 
         # 如果最终没有确定分支，报错
         if not branch:
@@ -7519,10 +8234,6 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 },
                 status_code=400,
             )
-
-        # 根据推送的分支查找对应的标签（分支标签映射应该基于推送的分支，而不是用于构建的分支）
-        branch_tag_mapping = pipeline.get("branch_tag_mapping", {})
-        default_tag = pipeline.get("tag", "latest")  # 默认标签
 
         # 调试信息：输出最终确定的分支（详细总结）
         print(f"📊 分支确定总结:")
@@ -7542,38 +8253,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
         branch_for_tag_mapping = webhook_branch if webhook_branch else branch
 
         # 获取标签列表（支持单个标签或多个标签）
-        tags = [default_tag]  # 默认只有一个标签
-
-        if branch_for_tag_mapping and branch_tag_mapping:
-            mapped_tag_value = None
-            # 优先精确匹配
-            if branch_for_tag_mapping in branch_tag_mapping:
-                mapped_tag_value = branch_tag_mapping[branch_for_tag_mapping]
-            else:
-                # 尝试通配符匹配（如 feature/* -> feature）
-                import fnmatch
-
-                for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(branch_for_tag_mapping, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
-
-            # 处理标签值（支持字符串、数组或逗号分隔的字符串）
-            if mapped_tag_value:
-                if isinstance(mapped_tag_value, list):
-                    # 如果是数组，直接使用
-                    tags = mapped_tag_value
-                elif isinstance(mapped_tag_value, str):
-                    # 如果是字符串，检查是否包含逗号（兼容全角逗号）
-                    normalized = mapped_tag_value.replace("，", ",")
-                    if "," in normalized:
-                        # 逗号分隔的多个标签
-                        tags = [
-                            t.strip() for t in normalized.split(",") if t.strip()
-                        ]
-                    else:
-                        # 单个标签
-                        tags = [normalized]
+        tags = resolve_branch_tags(branch_for_tag_mapping, branch_tag_mapping)
 
         # 为每个标签创建任务
         from backend.handlers import pipeline_to_task_config
@@ -7595,6 +8275,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 tag=first_tag,
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
+                git_ref_type="branch",
+                git_ref_name=branch,
             )
             print(
                 f"🔍 [Webhook触发] 任务配置已生成: pipeline_id={pipeline_id[:8]}..., branch={first_task_config.get('branch')}, tag={first_task_config.get('tag')}"
@@ -7659,6 +8341,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 tag=tag,
                 webhook_branch=webhook_branch,
                 branch_tag_mapping=branch_tag_mapping,
+                git_ref_type="branch",
+                git_ref_name=branch,
             )
             print(
                 f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
@@ -7685,6 +8369,8 @@ async def webhook_trigger(webhook_token: str, request: Request):
         webhook_info = {
             "branch": branch,
             "tags": tags,  # 添加标签列表信息
+            "ref_type": "branch",
+            "ref_name": branch,
             "event": request.headers.get("x-gitee-event")
             or request.headers.get("x-gitlab-event")
             or request.headers.get("x-github-event", "unknown"),
@@ -7934,10 +8620,10 @@ async def deploy_webhook_trigger(webhook_token: str, request: Request):
         if webhook_branch_strategy == "select_branches":
             # 选择分支触发策略：只允许匹配的分支触发
             if webhook_branch:
-                if webhook_branch not in webhook_allowed_branches:
+                if not matches_any_branch_rule(webhook_branch, webhook_allowed_branches):
                     should_trigger = False
                     print(
-                        f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
+                        f"⚠️ 分支不匹配允许规则，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
                     )
         elif webhook_branch_strategy == "filter_match":
             # 只允许匹配分支触发：部署配置没有配置分支，所以这个策略不适用
@@ -10785,6 +11471,11 @@ async def get_deploy_task(request: Request, config_id: str):
             # 如果不是配置，尝试作为执行任务查询
             task = db.query(Task).filter(Task.task_id == config_id, Task.task_type == "deploy").first()
             if task:
+                task_team_id = get_effective_team_id_for_task(db, task)
+                if not task_team_id or not task_visible_to_user(
+                    db, user_id, task, task_team_id
+                ):
+                    raise HTTPException(status_code=403, detail="无权访问该任务")
                 task_config = task.task_config or {}
                 return JSONResponse(
                     {
@@ -10933,7 +11624,10 @@ async def execute_deploy_task(
 
         # 执行部署配置（后台执行，来源为手动）
         result_task_id = build_manager.execute_deploy_task(
-            config_id, target_names=target_names, trigger_source="manual"
+            config_id,
+            target_names=target_names,
+            trigger_source="manual",
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -10992,7 +11686,7 @@ async def retry_deploy_task(
             raise HTTPException(status_code=400, detail="任务正在运行中，无法重试")
 
         # 重试部署任务（在原任务上重试，不创建新任务）
-        if build_manager.retry_deploy_task(task_id):
+        if build_manager.retry_deploy_task(task_id, created_by=user_id):
             OperationLogger.log(username, "retry_deploy_task", {"task_id": task_id})
             return JSONResponse(
                 {

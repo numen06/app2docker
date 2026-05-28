@@ -1,6 +1,6 @@
 <template>
   <div class="image-migration-panel min-w-0">
-    <PageToolbar title="镜像迁移" icon="fa-right-left">
+    <PageToolbar title="镜像迁移" icon="right-left">
       <template #actions>
         <Button
           variant="outline"
@@ -9,11 +9,11 @@
           :disabled="loading"
           @click="loadTasks"
         >
-          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loading }"></i>
+          <AppIcon name="sync-alt" />
           刷新
         </Button>
         <Button size="sm" class="w-full min-h-11 sm:w-auto" @click="openCreateDialog">
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           新建迁移
         </Button>
       </template>
@@ -24,13 +24,13 @@
     </p>
 
     <div v-if="loading && !tasks.length" class="flex justify-center py-12 text-slate-500">
-      <i class="fas fa-spinner fa-spin mr-2"></i> 加载中…
+      <AppIcon  name="spinner" class="mr-2" spin /> 加载中…
     </div>
 
     <EmptyState
       v-else-if="!tasks.length"
       message='暂无迁移任务，点击「新建迁移」创建'
-      icon="fa-right-left"
+      icon="right-left"
     />
 
     <template v-else>
@@ -42,14 +42,14 @@
         >
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0 flex-1 font-medium text-slate-900">
-              {{ task.task_name || "未命名任务" }}
+              {{ task.task_name ||"未命名任务" }}
             </div>
             <Badge v-if="task.status === 'idle'" variant="default" class="shrink-0">空闲</Badge>
             <Badge v-else-if="task.status === 'pending'" class="shrink-0">
-              <i class="fas fa-clock mr-1"></i>排队
+              <AppIcon  name="clock" class="mr-1" />排队
             </Badge>
             <Badge v-else-if="task.status === 'running'" variant="info" class="shrink-0">
-              <i class="fas fa-spinner fa-spin mr-1"></i>迁移中
+              <AppIcon  name="spinner" class="mr-1" spin />迁移中
             </Badge>
             <Badge v-else-if="task.status === 'completed'" variant="success" class="shrink-0">成功</Badge>
             <Badge v-else-if="task.status === 'failed'" variant="danger" class="shrink-0">失败</Badge>
@@ -86,7 +86,7 @@
               :disabled="task.status === 'running' || task.status === 'pending' || executingId === task.task_id"
               @click="executeTask(task)"
             >
-              <i class="fas fa-play mr-1"></i>执行
+              <AppIcon  name="play" class="mr-1" />执行
             </Button>
             <Button
               v-if="task.schedule_cron"
@@ -95,7 +95,7 @@
               class="min-h-11"
               @click="toggleSchedule(task)"
             >
-              <i :class="task.schedule_enabled ? 'fas fa-pause' : 'fas fa-clock'"></i>
+              <AppIcon :name="task.schedule_enabled ? 'pause' : 'clock'" />
             </Button>
             <Button
               v-if="task.status === 'running' || task.status === 'pending'"
@@ -104,7 +104,7 @@
               class="min-h-11"
               @click="stopTask(task)"
             >
-              <i class="fas fa-stop"></i>
+              <AppIcon  name="stop" />
             </Button>
             <Button
               size="sm"
@@ -114,7 +114,7 @@
               title="复制任务"
               @click="openCopyDialog(task)"
             >
-              <i class="fas fa-copy"></i>
+              <AppIcon  name="copy" />
             </Button>
             <Button
               size="sm"
@@ -123,7 +123,7 @@
               :disabled="task.status === 'running'"
               @click="openEditDialog(task)"
             >
-              <i class="fas fa-edit"></i>
+              <AppIcon  name="edit" />
             </Button>
             <Button
               size="sm"
@@ -132,7 +132,7 @@
               :disabled="task.status === 'running'"
               @click="deleteTask(task)"
             >
-              <i class="fas fa-trash"></i>
+              <AppIcon  name="trash" />
             </Button>
           </div>
         </div>
@@ -154,7 +154,7 @@
         </TableHeader>
         <TableBody>
           <TableRow v-for="task in tasks" :key="task.task_id">
-            <TableCell class="font-medium">{{ task.task_name || "-" }}</TableCell>
+            <TableCell class="font-medium">{{ task.task_name ||"-" }}</TableCell>
             <TableCell>
               <code class="text-xs">{{ task.source_image }}</code>
             </TableCell>
@@ -164,10 +164,10 @@
             <TableCell>
               <Badge v-if="task.status === 'idle'" variant="default">空闲</Badge>
               <Badge v-else-if="task.status === 'pending'">
-                <i class="fas fa-clock mr-1"></i>排队中
+                <AppIcon  name="clock" class="mr-1" />排队中
               </Badge>
               <Badge v-else-if="task.status === 'running'" variant="info">
-                <i class="fas fa-spinner fa-spin mr-1"></i>迁移中
+                <AppIcon  name="spinner" class="mr-1" spin />迁移中
               </Badge>
               <Badge v-else-if="task.status === 'completed'" variant="success">成功</Badge>
               <Badge v-else-if="task.status === 'failed'" variant="danger">失败</Badge>
@@ -176,7 +176,7 @@
             </TableCell>
             <TableCell class="text-sm">
               <span v-if="task.schedule_enabled && task.schedule_cron">
-                <i class="fas fa-clock text-blue-500 mr-1"></i>
+                <AppIcon  name="clock" class="text-blue-500 mr-1" />
                 <span>{{ cronPresetLabel(task.schedule_cron) }}</span>
                 <code class="ml-1 text-xs text-slate-500">{{ task.schedule_cron }}</code>
               </span>
@@ -186,7 +186,7 @@
             <TableCell class="text-sm text-slate-500">
               <div v-if="task.last_run_at">{{ formatTime(task.last_run_at) }}</div>
               <div v-if="task.last_run_status" class="text-xs">
-                {{ task.last_run_status === "completed" ? "成功" : task.last_run_status === "failed" ? "失败" : "" }}
+                {{ task.last_run_status ==="completed" ?"成功" : task.last_run_status ==="failed" ?"失败" :"" }}
               </div>
               <span v-if="!task.last_run_at">-</span>
             </TableCell>
@@ -199,7 +199,7 @@
                   title="立即执行"
                   @click="executeTask(task)"
                 >
-                  <i class="fas fa-play"></i>
+                  <AppIcon  name="play" />
                 </Button>
                 <Button
                   v-if="task.schedule_cron"
@@ -208,7 +208,7 @@
                   :title="task.schedule_enabled ? '禁用定时' : '启用定时'"
                   @click="toggleSchedule(task)"
                 >
-                  <i :class="task.schedule_enabled ? 'fas fa-pause' : 'fas fa-clock'"></i>
+                  <AppIcon :name="task.schedule_enabled ? 'pause' : 'clock'" />
                 </Button>
                 <Button
                   v-if="task.status === 'running' || task.status === 'pending'"
@@ -216,7 +216,7 @@
                   variant="outline"
                   @click="stopTask(task)"
                 >
-                  <i class="fas fa-stop"></i>
+                  <AppIcon  name="stop" />
                 </Button>
                 <Button
                   size="sm"
@@ -225,7 +225,7 @@
                   title="复制任务"
                   @click="openCopyDialog(task)"
                 >
-                  <i class="fas fa-copy"></i>
+                  <AppIcon  name="copy" />
                 </Button>
                 <Button
                   size="sm"
@@ -233,7 +233,7 @@
                   :disabled="task.status === 'running'"
                   @click="openEditDialog(task)"
                 >
-                  <i class="fas fa-edit"></i>
+                  <AppIcon  name="edit" />
                 </Button>
                 <Button
                   size="sm"
@@ -241,7 +241,7 @@
                   :disabled="task.status === 'running'"
                   @click="deleteTask(task)"
                 >
-                  <i class="fas fa-trash"></i>
+                  <AppIcon  name="trash" />
                 </Button>
               </div>
               <div
@@ -261,7 +261,7 @@
     <FormDialog
       v-model="showDialog"
       :title="dialogTitle"
-      icon="fa-right-left"
+      icon="right-left"
       size="lg"
     >
       <form class="space-y-4" @submit.prevent="saveTask">
@@ -279,20 +279,20 @@
         <!-- 源仓库 -->
         <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
           <h4 class="text-sm font-semibold text-slate-800">
-            <i class="fas fa-download mr-1 text-blue-600"></i> 源仓库
+            <AppIcon  name="download" class="mr-1 text-blue-600" /> 源仓库
           </h4>
           <div class="space-y-2">
             <Label>镜像仓库 <span class="text-red-600">*</span></Label>
             <NativeSelect v-model="form.source_registry_name" required @change="onSourceRegistryChange">
               <option value="" disabled>请选择源仓库</option>
               <option v-for="reg in registries" :key="reg.registry_id || reg.name" :value="reg.name">
-                {{ reg.name }}{{ reg.active ? " (激活)" : "" }}
+                {{ reg.name }}{{ reg.active ?" (激活)" :"" }}
               </option>
             </NativeSelect>
           </div>
           <div v-if="sourceReg" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
             <span class="text-xs text-slate-500">仓库地址</span>
-            <div class="font-mono text-slate-800">{{ sourceReg.registry || "docker.io" }}</div>
+            <div class="font-mono text-slate-800">{{ sourceReg.registry ||"docker.io" }}</div>
           </div>
           <div class="space-y-2">
             <Label>镜像前缀</Label>
@@ -334,8 +334,8 @@
               :disabled="!canTestSourceImage || testingSource"
               @click="testSourceImage"
             >
-              <i class="fas fa-vial" :class="{ 'fa-spin': testingSource }"></i>
-              {{ testingSource ? "检测中…" : "测试源镜像" }}
+              <AppIcon name="vial" />
+              {{ testingSource ?"检测中…" :"测试源镜像" }}
             </Button>
           </div>
           <AlertBanner
@@ -355,20 +355,20 @@
         <!-- 目标仓库 -->
         <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
           <h4 class="text-sm font-semibold text-slate-800">
-            <i class="fas fa-upload mr-1 text-green-600"></i> 目标仓库
+            <AppIcon  name="upload" class="mr-1 text-green-600" /> 目标仓库
           </h4>
           <div class="space-y-2">
             <Label>镜像仓库 <span class="text-red-600">*</span></Label>
             <NativeSelect v-model="form.target_registry_name" required @change="onTargetRegistryChange">
               <option value="" disabled>请选择目标仓库</option>
               <option v-for="reg in registries" :key="'t-' + (reg.registry_id || reg.name)" :value="reg.name">
-                {{ reg.name }}{{ reg.active ? " (激活)" : "" }}
+                {{ reg.name }}{{ reg.active ?" (激活)" :"" }}
               </option>
             </NativeSelect>
           </div>
           <div v-if="targetReg" class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
             <span class="text-xs text-slate-500">仓库地址</span>
-            <div class="font-mono text-slate-800">{{ targetReg.registry || "docker.io" }}</div>
+            <div class="font-mono text-slate-800">{{ targetReg.registry ||"docker.io" }}</div>
           </div>
           <div class="space-y-2">
             <Label>镜像前缀</Label>
@@ -451,8 +451,8 @@
           :disabled="saving || !registries.length"
           @click="saveTask"
         >
-          <i class="fas fa-save"></i>
-          {{ saving ? "保存中…" : "保存" }}
+          <AppIcon  name="save" />
+          {{ saving ?"保存中…" :"保存" }}
         </Button>
       </template>
     </FormDialog>
@@ -482,16 +482,16 @@ import TableHead from "@/components/ui/table/TableHead.vue";
 import TableCell from "@/components/ui/table/TableCell.vue";
 
 const CRON_PRESETS = [
-  { key: "custom", label: "自定义（手动输入）", cron: "" },
-  { key: "30m", label: "每 30 分钟", cron: "*/30 * * * *" },
-  { key: "1h", label: "每小时", cron: "0 * * * *" },
-  { key: "2h", label: "每 2 小时", cron: "0 */2 * * *" },
-  { key: "6h", label: "每 6 小时", cron: "0 */6 * * *" },
-  { key: "daily0", label: "每天 0:00", cron: "0 0 * * *" },
-  { key: "daily2", label: "每天 2:00", cron: "0 2 * * *" },
-  { key: "daily6", label: "每天 6:00", cron: "0 6 * * *" },
-  { key: "weekly", label: "每周一 0:00", cron: "0 0 * * 1" },
-  { key: "monthly", label: "每月 1 日 0:00", cron: "0 0 1 * *" },
+  { key:"custom", label:"自定义（手动输入）", cron:"" },
+  { key:"30m", label:"每 30 分钟", cron:"*/30 * * * *" },
+  { key:"1h", label:"每小时", cron:"0 * * * *" },
+  { key:"2h", label:"每 2 小时", cron:"0 */2 * * *" },
+  { key:"6h", label:"每 6 小时", cron:"0 */6 * * *" },
+  { key:"daily0", label:"每天 0:00", cron:"0 0 * * *" },
+  { key:"daily2", label:"每天 2:00", cron:"0 2 * * *" },
+  { key:"daily6", label:"每天 6:00", cron:"0 6 * * *" },
+  { key:"weekly", label:"每周一 0:00", cron:"0 0 * * 1" },
+  { key:"monthly", label:"每月 1 日 0:00", cron:"0 0 1 * *" },
 ];
 
 const teamStore = useTeamStore();
@@ -509,16 +509,16 @@ const cronPresetKey = ref("custom");
 let refreshInterval = null;
 
 const emptyForm = () => ({
-  task_name: "",
-  source_registry_name: "",
-  source_image_prefix: "",
-  source_image_path: "",
-  source_tag: "latest",
-  target_registry_name: "",
-  target_image_prefix: "",
-  target_image_path: "",
-  target_tag: "latest",
-  schedule_cron: "",
+  task_name:"",
+  source_registry_name:"",
+  source_image_prefix:"",
+  source_image_path:"",
+  source_tag:"latest",
+  target_registry_name:"",
+  target_image_prefix:"",
+  target_image_path:"",
+  target_tag:"latest",
+  schedule_cron:"",
   schedule_enabled: false,
   execute_now: true,
 });
@@ -533,48 +533,48 @@ const sourceReg = computed(() => findRegistry(form.value.source_registry_name));
 const targetReg = computed(() => findRegistry(form.value.target_registry_name));
 
 const dialogTitle = computed(() => {
-  if (editingTaskId.value) return "编辑迁移任务";
-  if (isCopyDialog.value) return "复制迁移任务";
-  return "新建镜像迁移";
+  if (editingTaskId.value) return"编辑迁移任务";
+  if (isCopyDialog.value) return"复制迁移任务";
+  return"新建镜像迁移";
 });
 
-const sourcePathPlaceholder = computed(() => "myapp/demo");
-const targetPathPlaceholder = computed(() => "myapp/demo");
+const sourcePathPlaceholder = computed(() =>"myapp/demo");
+const targetPathPlaceholder = computed(() =>"myapp/demo");
 
 const sourcePrefixPlaceholder = computed(() => {
   const d = defaultPrefixForRegistry(sourceReg.value);
-  return d || "如：your-namespace 或 registry.example.com/ns";
+  return d ||"如：your-namespace 或 registry.example.com/ns";
 });
 
 const targetPrefixPlaceholder = computed(() => {
   const d = defaultPrefixForRegistry(targetReg.value);
-  return d || "如：your-namespace 或 registry.example.com/ns";
+  return d ||"如：your-namespace 或 registry.example.com/ns";
 });
 
 /** 仓库配置中的默认镜像前缀 */
 function defaultPrefixForRegistry(reg) {
-  if (!reg) return "";
-  const p = (reg.registry_prefix || "").trim();
+  if (!reg) return"";
+  const p = (reg.registry_prefix ||"").trim();
   if (p) return p;
-  const host = (reg.registry || "").trim();
-  if (host && host !== "docker.io") return host;
-  return "";
+  const host = (reg.registry ||"").trim();
+  if (host && host !=="docker.io") return host;
+  return"";
 }
 
 function stripPrefixFromPath(path, prefix) {
-  let p = (path || "").trim();
-  const pre = (prefix || "").trim();
+  let p = (path ||"").trim();
+  const pre = (prefix ||"").trim();
   if (!pre) return p;
-  if (p === pre) return "";
+  if (p === pre) return"";
   if (p.startsWith(`${pre}/`)) return p.slice(pre.length + 1);
-  if (p.startsWith(pre)) return p.slice(pre.length).replace(/^\//, "");
+  if (p.startsWith(pre)) return p.slice(pre.length).replace(/^\//,"");
   return p;
 }
 
 /** 去掉各仓库及当前任务前缀，得到用户应填写的路径 */
-function stripAllRegistryPrefixes(path, taskPrefix = "") {
-  let p = (path || "").trim();
-  if (!p) return "";
+function stripAllRegistryPrefixes(path, taskPrefix ="") {
+  let p = (path ||"").trim();
+  if (!p) return"";
   p = stripPrefixFromPath(p, taskPrefix);
   for (const reg of registries.value) {
     p = stripRegistryPrefix(p, reg);
@@ -583,29 +583,29 @@ function stripAllRegistryPrefixes(path, taskPrefix = "") {
 }
 
 function stripRegistryPrefix(path, reg) {
-  if (!path || !reg) return path || "";
+  if (!path || !reg) return path ||"";
   return stripPrefixFromPath(
     path,
-    (reg.registry_prefix || "").trim() || defaultPrefixForRegistry(reg),
+    (reg.registry_prefix ||"").trim() || defaultPrefixForRegistry(reg),
   );
 }
 
 /** 从完整 repository 路径拆出前缀与镜像路径（编辑任务时用） */
 function splitRepoPathAndPrefix(repoPath, reg) {
-  const path = (repoPath || "").trim();
+  const path = (repoPath ||"").trim();
   if (!path) {
-    return { prefix: defaultPrefixForRegistry(reg), imagePath: "" };
+    return { prefix: defaultPrefixForRegistry(reg), imagePath:"" };
   }
   const candidates = new Set();
   const def = defaultPrefixForRegistry(reg);
   if (def) candidates.add(def);
-  const configured = (reg?.registry_prefix || "").trim();
+  const configured = (reg?.registry_prefix ||"").trim();
   if (configured) candidates.add(configured);
-  const host = (reg?.registry || "").trim();
-  if (host && host !== "docker.io") candidates.add(host);
+  const host = (reg?.registry ||"").trim();
+  if (host && host !=="docker.io") candidates.add(host);
 
   for (const prefix of [...candidates].sort((a, b) => b.length - a.length)) {
-    if (path === prefix) return { prefix, imagePath: "" };
+    if (path === prefix) return { prefix, imagePath:"" };
     if (path.startsWith(`${prefix}/`)) {
       return { prefix, imagePath: path.slice(prefix.length + 1) };
     }
@@ -614,7 +614,7 @@ function splitRepoPathAndPrefix(repoPath, reg) {
   const parts = path.split("/");
   if (
     parts.length >= 2 &&
-    (parts[0].includes(".") || parts[0].includes(":") || parts[0] === "localhost")
+    (parts[0].includes(".") || parts[0].includes(":") || parts[0] ==="localhost")
   ) {
     const prefix = parts.slice(0, -1).join("/");
     return { prefix, imagePath: parts[parts.length - 1] };
@@ -624,7 +624,7 @@ function splitRepoPathAndPrefix(repoPath, reg) {
 
 function resolveImagePrefix(registryName, prefixOverride) {
   const reg = findRegistry(registryName);
-  const custom = (prefixOverride ?? "").trim();
+  const custom = (prefixOverride ??"").trim();
   if (custom) return custom;
   return defaultPrefixForRegistry(reg);
 }
@@ -634,20 +634,20 @@ function buildFullImageRef(registryName, imagePath, tag, prefixOverride) {
   const reg = findRegistry(registryName);
   const prefix = resolveImagePrefix(registryName, prefixOverride);
   const rawPath = stripAllRegistryPrefixes(imagePath, prefix);
-  const t = (tag || "latest").trim() || "latest";
-  if (!rawPath && !prefix && !reg) return "";
+  const t = (tag ||"latest").trim() ||"latest";
+  if (!rawPath && !prefix && !reg) return"";
 
-  const host = (reg?.registry || "").trim();
+  const host = (reg?.registry ||"").trim();
   let repo = rawPath;
   if (prefix) {
-    repo = rawPath ? `${prefix}/${rawPath}`.replace(/\/+/g, "/") : prefix;
-  } else if (host && host !== "docker.io") {
-    repo = rawPath ? `${host}/${rawPath}`.replace(/\/+/g, "/") : host;
+    repo = rawPath ? `${prefix}/${rawPath}`.replace(/\/+/g,"/") : prefix;
+  } else if (host && host !=="docker.io") {
+    repo = rawPath ? `${host}/${rawPath}`.replace(/\/+/g,"/") : host;
   } else {
     repo = rawPath;
   }
 
-  if (!repo) return "";
+  if (!repo) return"";
   const lastColon = repo.lastIndexOf(":");
   if (lastColon > 0 && lastColon < repo.length - 1) {
     const after = repo.substring(lastColon + 1);
@@ -683,18 +683,18 @@ const canTestSourceImage = computed(
 
 function cronPresetLabel(cron) {
   const p = CRON_PRESETS.find((x) => x.cron === cron);
-  return p && p.key !== "custom" ? p.label : cron || "-";
+  return p && p.key !=="custom" ? p.label : cron ||"-";
 }
 
 function matchCronPresetKey(cron) {
-  const c = (cron || "").trim();
+  const c = (cron ||"").trim();
   const found = CRON_PRESETS.find((p) => p.cron === c);
-  return found ? found.key : "custom";
+  return found ? found.key :"custom";
 }
 
 function applyCronPreset() {
   const preset = CRON_PRESETS.find((p) => p.key === cronPresetKey.value);
-  if (preset && preset.key !== "custom") {
+  if (preset && preset.key !=="custom") {
     form.value.schedule_cron = preset.cron;
   }
 }
@@ -707,35 +707,35 @@ watch(
   () => form.value.schedule_enabled,
   (enabled) => {
     if (enabled && !form.value.schedule_cron) {
-      cronPresetKey.value = "daily2";
+      cronPresetKey.value ="daily2";
       applyCronPreset();
     }
   },
 );
 
 function formatTime(iso) {
-  if (!iso) return "-";
+  if (!iso) return"-";
   return new Date(iso).toLocaleString("zh-CN", { hour12: false });
 }
 
 function splitImageRef(fullRef) {
-  const v = (fullRef || "").trim();
-  if (!v) return { path: "", tag: "latest" };
+  const v = (fullRef ||"").trim();
+  if (!v) return { path:"", tag:"latest" };
   const lastColon = v.lastIndexOf(":");
   let path = v;
-  let tag = "latest";
+  let tag ="latest";
   if (lastColon > 0 && lastColon < v.length - 1) {
     const after = v.substring(lastColon + 1);
     if (!after.includes("/")) {
       path = v.substring(0, lastColon);
-      tag = after.trim() || "latest";
+      tag = after.trim() ||"latest";
     }
   }
   return { path, tag };
 }
 
 function applyParsedImageSide(side, inputValue) {
-  if (!inputValue || typeof inputValue !== "string") return;
+  if (!inputValue || typeof inputValue !=="string") return;
   const { path, tag } = splitImageRef(inputValue);
   const regName = form.value[`${side}_registry_name`];
   const reg = findRegistry(regName);
@@ -755,7 +755,7 @@ function onSourceRegistryChange() {
   if (!reg) return;
   form.value.source_image_prefix = defaultPrefixForRegistry(reg);
   if (!form.value.source_image_path) {
-    form.value.source_image_path = "myapp/demo";
+    form.value.source_image_path ="myapp/demo";
   } else {
     form.value.source_image_path = stripPrefixFromPath(
       stripRegistryPrefix(form.value.source_image_path, reg),
@@ -782,7 +782,7 @@ function onTargetRegistryChange() {
       form.value.target_tag = form.value.source_tag;
     }
   } else {
-    form.value.target_image_path = "myapp/demo";
+    form.value.target_image_path ="myapp/demo";
   }
 }
 
@@ -801,7 +801,7 @@ function onSourceImagePaste() {
 function syncTargetFromSource() {
   if (!form.value.target_registry_name) return;
   if (!form.value.target_image_path) {
-    form.value.target_image_path = form.value.source_image_path || "myapp/demo";
+    form.value.target_image_path = form.value.source_image_path ||"myapp/demo";
   }
   if (!form.value.target_image_prefix && form.value.source_image_prefix) {
     form.value.target_image_prefix = form.value.source_image_prefix;
@@ -834,8 +834,7 @@ async function testSourceImage() {
   testingSource.value = true;
   sourceTestResult.value = null;
   try {
-    const res = await axios.post(
-      "/api/migration-tasks/test-source-image",
+    const res = await axios.post("/api/migration-tasks/test-source-image",
       {
         source_registry_name: form.value.source_registry_name,
         source_image,
@@ -845,14 +844,14 @@ async function testSourceImage() {
     const data = res.data || {};
     sourceTestResult.value = {
       success: !!data.success,
-      message: data.message || (data.success ? "源镜像可用" : "检测失败"),
+      message: data.message || (data.success ?"源镜像可用" :"检测失败"),
       suggestions: data.suggestions,
     };
   } catch (error) {
     const errorData = error.response?.data || {};
     sourceTestResult.value = {
       success: false,
-      message: errorData.message || errorData.detail || "检测失败",
+      message: errorData.message || errorData.detail ||"检测失败",
       suggestions: errorData.suggestions,
     };
   } finally {
@@ -879,7 +878,7 @@ async function loadTasks() {
     const res = await axios.get("/api/migration-tasks");
     tasks.value = res.data.tasks || [];
   } catch (e) {
-    toastApiError(e, "加载迁移任务失败");
+    toastApiError(e,"加载迁移任务失败");
   } finally {
     loading.value = false;
   }
@@ -894,7 +893,7 @@ function pickDefaultRegistries() {
 }
 
 function copyTaskName(name) {
-  const base = (name || "迁移任务").trim() || "迁移任务";
+  const base = (name ||"迁移任务").trim() ||"迁移任务";
   if (/\(副本\)\s*$/.test(base)) return base;
   return `${base} (副本)`;
 }
@@ -906,18 +905,18 @@ function buildFormFromTask(task, { forCopy = false } = {}) {
   const tgt = splitImageRef(task.target_image);
   const srcSplit = splitRepoPathAndPrefix(src.path, srcRegObj);
   const tgtSplit = splitRepoPathAndPrefix(tgt.path, tgtRegObj);
-  const rawName = task.task_name || "";
+  const rawName = task.task_name ||"";
   return {
     task_name: forCopy ? copyTaskName(rawName) : rawName,
-    source_registry_name: task.source_registry_name || "",
+    source_registry_name: task.source_registry_name ||"",
     source_image_prefix: srcSplit.prefix,
     source_image_path: srcSplit.imagePath,
     source_tag: src.tag,
-    target_registry_name: task.target_registry_name || "",
+    target_registry_name: task.target_registry_name ||"",
     target_image_prefix: tgtSplit.prefix,
     target_image_path: tgtSplit.imagePath,
     target_tag: tgt.tag,
-    schedule_cron: task.schedule_cron || "",
+    schedule_cron: task.schedule_cron ||"",
     schedule_enabled: !!task.schedule_enabled,
     execute_now: false,
   };
@@ -931,7 +930,7 @@ function openCreateDialog() {
   editingTaskId.value = null;
   isCopyDialog.value = false;
   form.value = emptyForm();
-  cronPresetKey.value = "custom";
+  cronPresetKey.value ="custom";
   sourceTestResult.value = null;
   pickDefaultRegistries();
   showDialog.value = true;
@@ -987,7 +986,7 @@ async function saveTask() {
       source_image,
       target_registry_name: form.value.target_registry_name,
       target_image,
-      schedule_cron: form.value.schedule_enabled ? form.value.schedule_cron.trim() : "",
+      schedule_cron: form.value.schedule_enabled ? form.value.schedule_cron.trim() :"",
       schedule_enabled: form.value.schedule_enabled,
     };
 
@@ -999,11 +998,11 @@ async function saveTask() {
       await axios.post("/api/migration-tasks", payload);
       if (isCopyDialog.value) {
         toastSuccess(
-          form.value.execute_now ? "已复制并开始执行" : "已复制迁移任务",
+          form.value.execute_now ?"已复制并开始执行" :"已复制迁移任务",
         );
       } else {
         toastSuccess(
-          form.value.execute_now ? "迁移任务已创建并开始执行" : "迁移任务已创建",
+          form.value.execute_now ?"迁移任务已创建并开始执行" :"迁移任务已创建",
         );
       }
     }
@@ -1011,7 +1010,7 @@ async function saveTask() {
     isCopyDialog.value = false;
     await loadTasks();
   } catch (e) {
-    toastApiError(e, "保存失败");
+    toastApiError(e,"保存失败");
   } finally {
     saving.value = false;
   }
@@ -1025,7 +1024,7 @@ async function executeTask(task) {
     await loadTasks();
     startPolling();
   } catch (e) {
-    toastApiError(e, "启动失败");
+    toastApiError(e,"启动失败");
   } finally {
     executingId.value = null;
   }
@@ -1037,7 +1036,7 @@ async function stopTask(task) {
     toastSuccess("任务已停止");
     await loadTasks();
   } catch (e) {
-    toastApiError(e, "停止失败");
+    toastApiError(e,"停止失败");
   }
 }
 
@@ -1046,19 +1045,19 @@ async function toggleSchedule(task) {
     await axios.post(`/api/migration-tasks/${task.task_id}/toggle-schedule`, {
       enabled: !task.schedule_enabled,
     });
-    toastSuccess(task.schedule_enabled ? "定时已禁用" : "定时已启用");
+    toastSuccess(task.schedule_enabled ?"定时已禁用" :"定时已启用");
     await loadTasks();
   } catch (e) {
-    toastApiError(e, "操作失败");
+    toastApiError(e,"操作失败");
   }
 }
 
 async function deleteTask(task) {
   const ok = await showConfirm({
-    title: "删除迁移任务",
+    title:"删除迁移任务",
     message: `确定删除「${task.task_name || task.source_image}」？`,
-    confirmText: "删除",
-    variant: "danger",
+    confirmText:"删除",
+    variant:"danger",
   });
   if (!ok) return;
   try {
@@ -1066,7 +1065,7 @@ async function deleteTask(task) {
     toastSuccess("已删除");
     await loadTasks();
   } catch (e) {
-    toastApiError(e, "删除失败");
+    toastApiError(e,"删除失败");
   }
 }
 
@@ -1074,7 +1073,7 @@ function startPolling() {
   if (refreshInterval) return;
   refreshInterval = setInterval(async () => {
     const hasActive = tasks.value.some((t) =>
-      ["running", "pending"].includes(t.status),
+      ["running","pending"].includes(t.status),
     );
     if (!hasActive) {
       clearInterval(refreshInterval);

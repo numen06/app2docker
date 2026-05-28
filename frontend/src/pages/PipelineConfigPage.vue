@@ -3,15 +3,15 @@
     <div class="pipeline-config-toolbar">
       <div class="pipeline-config-toolbar__main">
         <Button type="button" variant="outline" size="sm" class="shrink-0" @click="goBack">
-          <i class="fas fa-arrow-left mr-1"></i> 返回
+          <AppIcon  name="arrow-left" class="mr-1" /> 返回
         </Button>
         <div class="pipeline-config-toolbar__meta min-w-0">
           <p class="pipeline-config-toolbar__name">{{ pageTitle }}</p>
           <p class="pipeline-config-toolbar__hint">编辑配置 · 修改后请点击保存</p>
         </div>
         <div v-if="pipeline" class="flex shrink-0 flex-wrap gap-1">
-          <span v-if="pipeline.enabled" class="badge bg-success">已启用</span>
-          <span v-else class="badge bg-secondary">已禁用</span>
+          <span v-if="pipeline.enabled" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white">已启用</span>
+          <span v-else class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white">已禁用</span>
         </div>
       </div>
       <div v-if="pageState === 'ready'" class="pipeline-config-toolbar__actions">
@@ -21,15 +21,15 @@
           size="sm"
           @click="goToHistory"
         >
-          <i class="fas fa-history mr-1"></i> 历史构建
+          <AppIcon  name="history" class="mr-1" /> 历史构建
         </Button>
         <Button type="button" variant="outline" size="sm" :disabled="saving" @click="goBack">
           取消
         </Button>
         <Button type="button" size="sm" :disabled="saving" @click="onSave">
-          <span v-if="saving" class="fas fa-spinner fa-spin mr-1"></span>
-          <i v-else class="fas fa-save mr-1"></i>
-          {{ saving ? "保存中…" : "保存" }}
+          <AppIcon v-if="saving"  name="spinner" class="mr-1" spin />
+          <AppIcon v-else  name="save" class="mr-1" />
+          {{ saving ?"保存中…" :"保存" }}
         </Button>
       </div>
     </div>
@@ -39,7 +39,7 @@
       class="mb-3 flex items-start justify-between gap-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800"
     >
       <span>
-        <i class="fas fa-check-circle mr-1"></i>
+        <AppIcon  name="check-circle" class="mr-1" />
         流水线已创建，请继续完善 Dockerfile、多服务与 Webhook 等配置。
       </span>
       <button
@@ -48,7 +48,7 @@
         aria-label="关闭提示"
         @click="dismissCreatedBanner"
       >
-        <i class="fas fa-times"></i>
+        <AppIcon  name="times" />
       </button>
     </div>
 
@@ -61,25 +61,25 @@
       class="pipeline-config-body pipeline-config-body--loading"
     >
       <p class="text-slate-500">
-        <i class="fas fa-spinner fa-spin mr-1"></i> 加载配置…
+        <AppIcon  name="spinner" class="mr-1" spin /> 加载配置…
       </p>
     </div>
 
     <div v-else class="pipeline-config-body">
-      <ul class="nav nav-tabs pipeline-config-tabs" role="tablist">
+      <ul class="pipeline-config-tabs" role="tablist">
         <li
           v-for="t in PIPELINE_CONFIG_TABS"
           :key="t.key"
-          class="nav-item"
+          class="pipeline-config-tabs__item"
           role="presentation"
         >
           <button
             type="button"
-            class="nav-link"
-            :class="{ active: activeSection === t.key }"
+            class="pipeline-config-tab"
+            :class="{ 'is-active': activeSection === t.key }"
             @click="setSection(t.key)"
           >
-            <i v-if="t.icon" :class="t.icon" class="mr-1"></i>{{ t.label }}
+            <AppIcon v-if="t.icon" :name="t.icon" class="mr-1" />{{ t.label }}
           </button>
         </li>
       </ul>
@@ -91,9 +91,9 @@
           取消
         </Button>
         <Button type="button" size="sm" :disabled="saving" @click="onSave">
-          <span v-if="saving" class="fas fa-spinner fa-spin mr-1"></span>
-          <i v-else class="fas fa-save mr-1"></i>
-          {{ saving ? "保存中…" : "保存" }}
+          <AppIcon v-if="saving"  name="spinner" class="mr-1" spin />
+          <AppIcon v-else  name="save" class="mr-1" />
+          {{ saving ?"保存中…" :"保存" }}
         </Button>
       </div>
     </div>
@@ -115,29 +115,29 @@ import { goToPipelineList } from "@/utils/pipelineNavigation.js";
 const route = useRoute();
 const router = useRouter();
 
-const pipelineId = computed(() => String(route.params.pipelineId || ""));
+const pipelineId = computed(() => String(route.params.pipelineId ||""));
 
 const pageState = ref("loading");
 const errorMessage = ref("");
 const createdBannerDismissed = ref(false);
 
 const showCreatedBanner = computed(
-  () => route.query.created === "1" && !createdBannerDismissed.value
+  () => route.query.created ==="1" && !createdBannerDismissed.value
 );
 
 const activeSection = computed({
   get() {
     const q = route.query.tab;
-    const raw = typeof q === "string" ? q : "basic";
+    const raw = typeof q ==="string" ? q :"basic";
     return normalizePipelineConfigTab(raw);
   },
   set(tab) {
     const query = { tab: normalizePipelineConfigTab(tab) };
-    if (route.query.created === "1") {
-      query.created = "1";
+    if (route.query.created ==="1") {
+      query.created ="1";
     }
     router.replace({
-      name: "pipeline-detail",
+      name:"pipeline-detail",
       params: { pipelineId: pipelineId.value },
       query,
     });
@@ -152,7 +152,7 @@ const editor = usePipelineEditor({
   onSaved: (id) => {
     if (id) {
       router.replace({
-        name: "pipeline-detail",
+        name:"pipeline-detail",
         params: { pipelineId: id },
         query: { tab: activeSection.value },
       });
@@ -166,7 +166,7 @@ const { saving, loadPipelineForEdit, editingPipeline } = editor;
 
 const pipeline = computed(() => editingPipeline.value);
 
-const pageTitle = computed(() => pipeline.value?.name || "流水线配置");
+const pageTitle = computed(() => pipeline.value?.name ||"流水线配置");
 
 function goBack() {
   goToPipelineList(router);
@@ -175,7 +175,7 @@ function goBack() {
 function goToHistory() {
   if (!pipelineId.value) return;
   router.push({
-    name: "pipeline-history",
+    name:"pipeline-history",
     params: { pipelineId: pipelineId.value },
   });
 }
@@ -184,7 +184,7 @@ function dismissCreatedBanner() {
   createdBannerDismissed.value = true;
   const { created, ...rest } = { ...route.query };
   router.replace({
-    name: "pipeline-detail",
+    name:"pipeline-detail",
     params: { pipelineId: pipelineId.value },
     query: rest,
   });
@@ -196,38 +196,38 @@ async function onSave() {
 
 function syncLegacyTabQuery() {
   const raw = route.query.tab;
-  if (typeof raw !== "string" || !raw) return;
+  if (typeof raw !=="string" || !raw) return;
   const normalized = normalizePipelineConfigTab(raw);
   if (normalized === raw) return;
   setSection(normalized);
 }
 
-async function bootstrap() {
-  pageState.value = "loading";
-  errorMessage.value = "";
+async function loadPage() {
+  pageState.value ="loading";
+  errorMessage.value ="";
   syncLegacyTabQuery();
 
   if (!pipelineId.value) {
-    errorMessage.value = "缺少流水线 ID";
-    pageState.value = "error";
+    errorMessage.value ="缺少流水线 ID";
+    pageState.value ="error";
     return;
   }
 
   const ok = await loadPipelineForEdit(pipelineId.value);
   if (!ok) {
-    errorMessage.value = "无法加载流水线配置";
-    pageState.value = "error";
+    errorMessage.value ="无法加载流水线配置";
+    pageState.value ="error";
     return;
   }
-  pageState.value = "ready";
+  pageState.value ="ready";
 }
 
 onMounted(() => {
-  bootstrap();
+  loadPage();
 });
 
 watch(pipelineId, () => {
-  bootstrap();
+  loadPage();
 });
 
 watch(

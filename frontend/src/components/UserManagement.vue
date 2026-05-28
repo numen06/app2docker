@@ -1,13 +1,13 @@
 <template>
   <div>
-    <PageToolbar title="用户管理" icon="fa-users">
+    <PageToolbar title="用户管理" icon="users">
       <template #actions>
         <Button variant="outline" size="sm" @click="loadUsers" title="刷新">
-          <i class="fas fa-sync-alt"></i>
+          <AppIcon  name="sync-alt" />
           刷新
         </Button>
         <Button size="sm" @click="showCreateModal = true">
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           创建用户
         </Button>
       </template>
@@ -21,18 +21,18 @@
       >
         <div class="min-w-0">
           <div class="font-medium text-slate-900">{{ user.username }}</div>
-          <div class="mt-0.5 truncate text-xs text-slate-500">{{ user.email || "—" }}</div>
+          <div class="mt-0.5 truncate text-xs text-slate-500">{{ user.email ||"—" }}</div>
           <div class="mt-2 flex flex-wrap gap-1">
             <Badge v-for="role in user.roles" :key="role" variant="default">{{ role }}</Badge>
             <Badge :variant="user.enabled ? 'success' : 'danger'">
-              {{ user.enabled ? "启用" : "禁用" }}
+              {{ user.enabled ?"启用" :"禁用" }}
             </Badge>
           </div>
           <p class="mt-1 text-xs text-slate-500">{{ formatDate(user.created_at) }}</p>
         </div>
         <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
           <Button variant="outline" size="sm" title="编辑" @click="editUser(user)">
-            <i class="fas fa-edit"></i>
+            <AppIcon  name="edit" />
           </Button>
           <Button
             variant="outline"
@@ -41,10 +41,10 @@
             :disabled="user.username === 'admin'"
             @click="changePassword(user)"
           >
-            <i class="fas fa-key"></i>
+            <AppIcon  name="key" />
           </Button>
           <Button variant="outline" size="sm" title="API 密钥" @click="openAppKeysModal(user)">
-            <i class="fas fa-fingerprint"></i>
+            <AppIcon  name="fingerprint" />
           </Button>
           <Button
             variant="outline"
@@ -53,7 +53,7 @@
             :disabled="user.username === 'admin'"
             @click="toggleEnable(user)"
           >
-            <i class="fas" :class="user.enabled ? 'fa-ban' : 'fa-check'"></i>
+            <AppIcon :name="user.enabled ? 'ban' : 'check'" />
           </Button>
           <Button
             variant="destructive"
@@ -62,7 +62,7 @@
             :disabled="user.username === currentUsername"
             @click="deleteUser(user)"
           >
-            <i class="fas fa-trash"></i>
+            <AppIcon  name="trash" />
           </Button>
         </div>
       </div>
@@ -84,7 +84,7 @@
           <TableRow v-for="user in users" :key="user.user_id">
             <TableCell class="font-medium text-slate-900">{{ user.username }}</TableCell>
             <TableCell class="max-w-[12rem] truncate text-slate-600" :title="user.email || ''">
-              {{ user.email || "—" }}
+              {{ user.email ||"—" }}
             </TableCell>
             <TableCell>
               <Badge
@@ -98,14 +98,14 @@
             </TableCell>
             <TableCell>
               <Badge :variant="user.enabled ? 'success' : 'danger'">
-                {{ user.enabled ? "启用" : "禁用" }}
+                {{ user.enabled ?"启用" :"禁用" }}
               </Badge>
             </TableCell>
             <TableCell class="whitespace-nowrap text-slate-600">{{ formatDate(user.created_at) }}</TableCell>
             <TableCell class="text-end">
               <div class="flex justify-end gap-1">
                 <Button variant="outline" size="sm" title="编辑" @click="editUser(user)">
-                  <i class="fas fa-edit"></i>
+                  <AppIcon  name="edit" />
                 </Button>
                 <Button
                   variant="outline"
@@ -114,7 +114,7 @@
                   :disabled="user.username === 'admin'"
                   @click="changePassword(user)"
                 >
-                  <i class="fas fa-key"></i>
+                  <AppIcon  name="key" />
                 </Button>
                 <Button
                   variant="outline"
@@ -122,7 +122,7 @@
                   title="管理该用户的 API 密钥"
                   @click="openAppKeysModal(user)"
                 >
-                  <i class="fas fa-fingerprint"></i>
+                  <AppIcon  name="fingerprint" />
                 </Button>
                 <Button
                   variant="outline"
@@ -131,7 +131,7 @@
                   :disabled="user.username === 'admin'"
                   @click="toggleEnable(user)"
                 >
-                  <i class="fas" :class="user.enabled ? 'fa-ban' : 'fa-check'"></i>
+                  <AppIcon :name="user.enabled ? 'ban' : 'check'" />
                 </Button>
                 <Button
                   variant="destructive"
@@ -140,7 +140,7 @@
                   :disabled="user.username === currentUsername"
                   @click="deleteUser(user)"
                 >
-                  <i class="fas fa-trash"></i>
+                  <AppIcon  name="trash" />
                 </Button>
               </div>
             </TableCell>
@@ -160,7 +160,7 @@
     <FormDialog
       :model-value="showCreateModal || showEditModal"
       :title="showCreateModal ? '创建用户' : '编辑用户'"
-      icon="fa-user"
+      icon="user"
       size="md"
       @update:model-value="(v) => !v && closeModal()"
     >
@@ -223,7 +223,7 @@
     <FormDialog
       v-model="showPasswordModal"
       :title="`修改密码 — ${passwordForm.username}`"
-      icon="fa-key"
+      icon="key"
       size="md"
     >
       <form class="space-y-4" @submit.prevent="savePassword">
@@ -248,7 +248,7 @@
     <FormDialog
       v-model="showAppKeysModal"
       :title="appKeysDialogTitle"
-      icon="fa-fingerprint"
+      icon="fingerprint"
       size="xl"
       @update:model-value="(v) => !v && closeAppKeysModal()"
     >
@@ -266,7 +266,7 @@
           :disabled="adminAppKeysLoading"
           @click="adminShowCreateForm = !adminShowCreateForm"
         >
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           创建密钥
         </Button>
       </div>
@@ -291,7 +291,7 @@
             :disabled="adminCreatingAppKey || !adminNewAppKey.name.trim()"
             @click="createAdminAppKey"
           >
-            <i v-if="adminCreatingAppKey" class="fas fa-spinner fa-spin"></i>
+            <AppIcon v-if="adminCreatingAppKey"  name="spinner" spin />
             生成密钥
           </Button>
         </CardContent>
@@ -308,13 +308,13 @@
         v-if="adminAppKeysLoading"
         class="flex items-center gap-2 py-6 text-sm text-slate-500"
       >
-        <i class="fas fa-spinner fa-spin"></i>
+        <AppIcon  name="spinner" spin />
         加载中…
       </div>
       <EmptyState
         v-else-if="adminAppKeys.length === 0"
         message="该用户暂无 API 密钥"
-        icon="fa-fingerprint"
+        icon="fingerprint"
       />
       <Table v-else min-width-class="min-w-[48rem]">
           <TableHeader>
@@ -335,7 +335,7 @@
               </TableCell>
               <TableCell>
                 <Badge :variant="item.enabled ? 'success' : 'default'">
-                  {{ item.enabled ? "启用" : "禁用" }}
+                  {{ item.enabled ?"启用" :"禁用" }}
                 </Badge>
               </TableCell>
               <TableCell class="text-slate-600">{{ formatAppKeyTime(item.last_used_at) }}</TableCell>
@@ -348,7 +348,7 @@
                     type="button"
                     @click="toggleAdminAppKey(item.key_id)"
                   >
-                    {{ item.enabled ? "禁用" : "启用" }}
+                    {{ item.enabled ?"禁用" :"启用" }}
                   </Button>
                   <Button
                     variant="destructive"
@@ -409,18 +409,18 @@ const error = ref("");
 const passwordError = ref("");
 
 const form = ref({
-  user_id: "",
-  username: "",
-  password: "",
-  email: "",
+  user_id:"",
+  username:"",
+  password:"",
+  email:"",
   roles: [],
   enabled: true,
 });
 
 const passwordForm = ref({
-  user_id: "",
-  username: "",
-  newPassword: "",
+  user_id:"",
+  username:"",
+  newPassword:"",
 });
 
 const showAppKeysModal = ref(false);
@@ -431,16 +431,16 @@ const adminAppKeysError = ref("");
 const adminShowCreateForm = ref(false);
 const adminCreatingAppKey = ref(false);
 const adminCreatedAppKey = ref("");
-const adminNewAppKey = ref({ name: "", expiresAt: "" });
+const adminNewAppKey = ref({ name:"", expiresAt:"" });
 
 const appKeysDialogTitle = computed(() =>
   appKeysTargetUser.value
     ? `API 密钥 — ${appKeysTargetUser.value.username}`
-    : "API 密钥"
+    :"API 密钥"
 );
 
 onMounted(async () => {
-  currentUsername.value = getUsername() || "";
+  currentUsername.value = getUsername() ||"";
   await loadUsers();
   await loadRoles();
 });
@@ -468,7 +468,7 @@ async function loadUsers() {
     }
   } catch (err) {
     console.error("加载用户列表失败:", err);
-    toastError("加载用户列表失败: " + (err.response?.data?.detail || err.message));
+    toastError("加载用户列表失败:" + (err.response?.data?.detail || err.message));
     users.value = [];
     totalUsers.value = 0;
     totalPages.value = 0;
@@ -488,8 +488,8 @@ function editUser(user) {
   form.value = {
     user_id: user.user_id,
     username: user.username,
-    password: "",
-    email: user.email || "",
+    password:"",
+    email: user.email ||"",
     roles: [...user.roles],
     enabled: user.enabled,
   };
@@ -497,7 +497,7 @@ function editUser(user) {
 }
 
 function changePassword(user) {
-  if (user.username === "admin") {
+  if (user.username ==="admin") {
     toastError("不能修改超级管理员的密码");
     return;
   }
@@ -505,14 +505,14 @@ function changePassword(user) {
   passwordForm.value = {
     user_id: user.user_id,
     username: user.username,
-    newPassword: "",
+    newPassword:"",
   };
   showPasswordModal.value = true;
-  passwordError.value = "";
+  passwordError.value ="";
 }
 
 async function saveUser() {
-  error.value = "";
+  error.value ="";
 
   try {
     if (showCreateModal.value) {
@@ -537,12 +537,12 @@ async function saveUser() {
     await loadUsers();
   } catch (err) {
     console.error("保存用户失败:", err);
-    error.value = err.response?.data?.detail || err.message || "操作失败";
+    error.value = err.response?.data?.detail || err.message ||"操作失败";
   }
 }
 
 async function savePassword() {
-  passwordError.value = "";
+  passwordError.value ="";
 
   try {
     await axios.put(`/api/users/${passwordForm.value.user_id}/password`, {
@@ -552,17 +552,17 @@ async function savePassword() {
     showPasswordModal.value = false;
   } catch (err) {
     console.error("修改密码失败:", err);
-    passwordError.value = err.response?.data?.detail || err.message || "操作失败";
+    passwordError.value = err.response?.data?.detail || err.message ||"操作失败";
   }
 }
 
 async function toggleEnable(user) {
-  if (user.username === "admin") {
+  if (user.username ==="admin") {
     toastError("不能修改超级管理员的状态");
     return;
   }
 
-  if (!(await showConfirm({ message: `确定要${user.enabled ? "禁用" : "启用"}用户 ${user.username} 吗？`, danger: true }))) {
+  if (!(await showConfirm({ message: `确定要${user.enabled ?"禁用" :"启用"}用户 ${user.username} 吗？`, danger: true }))) {
     return;
   }
 
@@ -571,11 +571,11 @@ async function toggleEnable(user) {
     await axios.put(`/api/users/${user.user_id}/enable`, {
       enabled: newEnabled,
     });
-    toastInfo(`用户已${newEnabled ? "启用" : "禁用"}`);
+    toastInfo(`用户已${newEnabled ?"启用" :"禁用"}`);
     await loadUsers();
   } catch (err) {
     console.error("操作失败:", err);
-    toastError("操作失败: " + (err.response?.data?.detail || err.message));
+    toastError("操作失败:" + (err.response?.data?.detail || err.message));
   }
 }
 
@@ -590,7 +590,7 @@ async function deleteUser(user) {
     await loadUsers();
   } catch (err) {
     console.error("删除用户失败:", err);
-    toastError("删除失败: " + (err.response?.data?.detail || err.message));
+    toastError("删除失败:" + (err.response?.data?.detail || err.message));
   }
 }
 
@@ -598,24 +598,24 @@ function closeModal() {
   showCreateModal.value = false;
   showEditModal.value = false;
   form.value = {
-    user_id: "",
-    username: "",
-    password: "",
-    email: "",
+    user_id:"",
+    username:"",
+    password:"",
+    email:"",
     roles: [],
     enabled: true,
   };
-  error.value = "";
+  error.value ="";
 }
 
 function formatDate(dateString) {
-  if (!dateString) return "—";
+  if (!dateString) return"—";
   const date = new Date(dateString);
   return date.toLocaleString("zh-CN");
 }
 
 function formatAppKeyTime(value) {
-  if (!value) return "—";
+  if (!value) return"—";
   try {
     return new Date(value).toLocaleString("zh-CN");
   } catch {
@@ -628,10 +628,10 @@ function openAppKeysModal(user) {
     user_id: user.user_id,
     username: user.username,
   };
-  adminAppKeysError.value = "";
-  adminCreatedAppKey.value = "";
+  adminAppKeysError.value ="";
+  adminCreatedAppKey.value ="";
   adminShowCreateForm.value = false;
-  adminNewAppKey.value = { name: "", expiresAt: "" };
+  adminNewAppKey.value = { name:"", expiresAt:"" };
   showAppKeysModal.value = true;
   loadAdminAppKeys();
 }
@@ -640,24 +640,24 @@ function closeAppKeysModal() {
   showAppKeysModal.value = false;
   appKeysTargetUser.value = null;
   adminAppKeys.value = [];
-  adminAppKeysError.value = "";
-  adminCreatedAppKey.value = "";
+  adminAppKeysError.value ="";
+  adminCreatedAppKey.value ="";
   adminShowCreateForm.value = false;
-  adminNewAppKey.value = { name: "", expiresAt: "" };
+  adminNewAppKey.value = { name:"", expiresAt:"" };
 }
 
 async function loadAdminAppKeys() {
   const uid = appKeysTargetUser.value?.user_id;
   if (!uid) return;
   adminAppKeysLoading.value = true;
-  adminAppKeysError.value = "";
+  adminAppKeysError.value ="";
   try {
     const res = await axios.get(`/api/users/${uid}/app-keys`);
     adminAppKeys.value = res.data?.app_keys || [];
   } catch (err) {
     console.error("加载用户 API 密钥失败:", err);
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || "加载失败";
+      err.response?.data?.detail || err.message ||"加载失败";
     adminAppKeys.value = [];
   } finally {
     adminAppKeysLoading.value = false;
@@ -668,20 +668,20 @@ async function createAdminAppKey() {
   const uid = appKeysTargetUser.value?.user_id;
   if (!uid || !adminNewAppKey.value.name.trim()) return;
   adminCreatingAppKey.value = true;
-  adminAppKeysError.value = "";
+  adminAppKeysError.value ="";
   try {
     const payload = { name: adminNewAppKey.value.name.trim() };
     if (adminNewAppKey.value.expiresAt) {
       payload.expires_at = new Date(adminNewAppKey.value.expiresAt).toISOString();
     }
     const res = await axios.post(`/api/users/${uid}/app-keys`, payload);
-    adminCreatedAppKey.value = res.data?.app_key || "";
-    adminNewAppKey.value = { name: "", expiresAt: "" };
+    adminCreatedAppKey.value = res.data?.app_key ||"";
+    adminNewAppKey.value = { name:"", expiresAt:"" };
     adminShowCreateForm.value = false;
     await loadAdminAppKeys();
   } catch (err) {
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || "创建失败";
+      err.response?.data?.detail || err.message ||"创建失败";
   } finally {
     adminCreatingAppKey.value = false;
   }
@@ -690,27 +690,27 @@ async function createAdminAppKey() {
 async function toggleAdminAppKey(keyId) {
   const uid = appKeysTargetUser.value?.user_id;
   if (!uid) return;
-  adminAppKeysError.value = "";
+  adminAppKeysError.value ="";
   try {
     await axios.put(`/api/users/${uid}/app-keys/${keyId}/toggle`);
     await loadAdminAppKeys();
   } catch (err) {
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || "操作失败";
+      err.response?.data?.detail || err.message ||"操作失败";
   }
 }
 
 async function removeAdminAppKey(keyId) {
-  if (!(await showConfirm({ message: "确定删除该 API 密钥吗？此操作不可恢复。", danger: true }))) return;
+  if (!(await showConfirm({ message:"确定删除该 API 密钥吗？此操作不可恢复。", danger: true }))) return;
   const uid = appKeysTargetUser.value?.user_id;
   if (!uid) return;
-  adminAppKeysError.value = "";
+  adminAppKeysError.value ="";
   try {
     await axios.delete(`/api/users/${uid}/app-keys/${keyId}`);
     await loadAdminAppKeys();
   } catch (err) {
     adminAppKeysError.value =
-      err.response?.data?.detail || err.message || "删除失败";
+      err.response?.data?.detail || err.message ||"删除失败";
   }
 }
 </script>

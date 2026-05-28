@@ -3,7 +3,7 @@
     <Card class="w-full max-w-md shadow-lg shadow-slate-200/70">
       <CardHeader class="pb-4 text-center">
         <div class="mb-2 flex justify-center">
-          <i class="fas fa-box-open text-4xl text-blue-600"></i>
+          <AppIcon  name="box-open" class="text-4xl text-blue-600" />
         </div>
         <CardTitle class="text-center">App2Docker</CardTitle>
         <CardDescription>Docker 镜像构建平台 · 安全登录</CardDescription>
@@ -11,7 +11,7 @@
       <CardContent>
         <form class="space-y-4" @submit.prevent="handleLogin">
           <div class="space-y-2">
-            <Label for="login-user"><i class="fas fa-user mr-1 text-slate-400"></i>用户名</Label>
+            <Label for="login-user"><AppIcon  name="user" class="mr-1 text-slate-400" />用户名</Label>
             <Input
               id="login-user"
               v-model="username"
@@ -22,7 +22,7 @@
             />
           </div>
           <div class="space-y-2">
-            <Label for="login-pass"><i class="fas fa-lock mr-1 text-slate-400"></i>密码</Label>
+            <Label for="login-pass"><AppIcon  name="lock" class="mr-1 text-slate-400" />密码</Label>
             <Input
               id="login-pass"
               v-model="password"
@@ -54,7 +54,7 @@
           <RouterLink to="/" class="text-slate-500 hover:text-slate-700">← 返回首页</RouterLink>
         </div>
         <div v-if="appVersion" class="border-t border-slate-100 pt-3 text-xs text-slate-500">
-          <i class="fas fa-code-branch mr-1"></i>
+          <AppIcon  name="code-branch" class="mr-1" />
           当前版本 <strong class="text-slate-700">v{{ appVersion }}</strong>
         </div>
         <div class="text-xs">
@@ -98,7 +98,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Label from "@/components/ui/label/Label.vue";
 import UserCenterModal from "@/components/UserCenterModal.vue";
 
-const GITEE_REPO_URL = "https://gitee.com/numen06/app2docker";
+const GITEE_REPO_URL ="https://gitee.com/numen06/app2docker";
 
 const router = useRouter();
 const route = useRoute();
@@ -107,7 +107,7 @@ const teamStore = useTeamStore();
 
 const registerLink = computed(() => {
   const redirect = parseLoginRedirect(route.query.redirect);
-  if (!redirect) return "/register";
+  if (!redirect) return"/register";
   return `/register?redirect=${encodeURIComponent(redirect)}`;
 });
 
@@ -162,7 +162,7 @@ async function finishLogin(token, name) {
 
 async function handleLogin() {
   if (loading.value) return;
-  error.value = "";
+  error.value ="";
   loading.value = true;
   try {
     const res = await axios.post("/api/login", {
@@ -181,7 +181,7 @@ async function handleLogin() {
       await finishLogin(res.data.token, res.data.username);
       loading.value = false;
     } else {
-      error.value = res.data.error || "登录失败";
+      error.value = res.data.error ||"登录失败";
       loading.value = false;
     }
   } catch (err) {
@@ -189,17 +189,16 @@ async function handleLogin() {
     if (err.response) {
       const status = err.response.status;
       if (status === 401) {
-        error.value = "用户名或密码错误";
+        error.value ="用户名或密码错误";
       } else {
         error.value =
           err.response.data?.error ||
-          err.response.data?.detail ||
-          "登录失败，请检查用户名和密码";
+          err.response.data?.detail ||"登录失败，请检查用户名和密码";
       }
     } else if (err.request) {
-      error.value = "网络连接失败，请检查网络设置";
+      error.value ="网络连接失败，请检查网络设置";
     } else {
-      error.value = "登录失败，请稍后重试";
+      error.value ="登录失败，请稍后重试";
     }
     loading.value = false;
   }

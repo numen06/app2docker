@@ -1,24 +1,24 @@
 <template>
   <div class="min-w-0 max-w-full">
-    <PageToolbar title="部署配置管理" icon="fa-rocket">
+    <PageToolbar title="部署配置管理" icon="rocket">
       <template #actions>
         <Button variant="outline" size="sm" @click="showImportModal = true">
-          <i class="fas fa-file-import mr-1"></i>
+          <AppIcon  name="file-import" class="mr-1" />
           <span class="hidden sm:inline">导入配置</span>
           <span class="sm:hidden">导入</span>
         </Button>
         <Button size="sm" @click="openSimpleCreateModal('standard')">
-          <i class="fas fa-plus mr-1"></i>
+          <AppIcon  name="plus" class="mr-1" />
           <span class="hidden sm:inline">新建 SSH/Agent 部署</span>
           <span class="sm:hidden">SSH/Agent</span>
         </Button>
         <Button variant="outline" size="sm" @click="openSimpleCreateModal('portainer')">
-          <i class="fas fa-cubes mr-1"></i>
+          <AppIcon  name="cubes" class="mr-1" />
           <span class="hidden sm:inline">新建 Portainer 部署</span>
           <span class="sm:hidden">Portainer</span>
         </Button>
         <Button variant="secondary" size="sm" @click="showCreateModal = true">
-          <i class="fas fa-code mr-1"></i>
+          <AppIcon  name="code" class="mr-1" />
           <span class="hidden sm:inline">YAML创建</span>
           <span class="sm:hidden">YAML</span>
         </Button>
@@ -36,7 +36,7 @@
     </div>
 
     <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
@@ -52,14 +52,14 @@
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="font-medium text-slate-900">
-                {{ task.app_name || task.config?.app?.name || "-" }}
+                {{ task.app_name || task.config?.app?.name ||"-" }}
               </div>
               <code class="mt-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
                 {{ task.task_id.substring(0, 8) }}
               </code>
             </div>
             <Badge variant="info" class="shrink-0">
-              <i class="fas fa-play-circle mr-1"></i>{{ task.execution_count || 0 }} 次
+              <AppIcon  name="play-circle" class="mr-1" />{{ task.execution_count || 0 }} 次
             </Badge>
           </div>
           <div class="mt-2 flex flex-wrap gap-1">
@@ -68,7 +68,7 @@
               :key="idx"
               variant="default"
             >
-              {{ target.name || target.host_name || "-" }}
+              {{ target.name || target.host_name ||"-" }}
             </Badge>
           </div>
           <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
@@ -76,7 +76,7 @@
             <dd>{{ formatTime(task.created_at) }}</dd>
             <dt>最后触发</dt>
             <dd>
-              {{ formatTime(task.last_executed_at) || "—" }}
+              {{ formatTime(task.last_executed_at) ||"—" }}
               <span v-if="task.status?.trigger_source" class="ml-1 text-slate-500">
                 <span v-if="task.status.trigger_source === 'webhook'">Webhook</span>
                 <span v-else-if="task.status.trigger_source === 'manual'">手动</span>
@@ -87,10 +87,10 @@
           </dl>
           <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
             <Button variant="outline" size="sm" @click="viewTask(task)" title="查看详情">
-              <i class="fas fa-eye"></i>
+              <AppIcon  name="eye" />
             </Button>
             <Button variant="outline" size="sm" @click="executeTask(task)" title="触发部署">
-              <i class="fas fa-play"></i>
+              <AppIcon  name="play" />
               <span class="ml-1">触发</span>
             </Button>
             <Button
@@ -100,7 +100,7 @@
               @click="viewExecutions(task)"
               title="执行历史"
             >
-              <i class="fas fa-history"></i>
+              <AppIcon  name="history" />
             </Button>
             <Button
               v-if="task.webhook_token"
@@ -109,10 +109,10 @@
               @click="showWebhookUrl(task)"
               title="Webhook"
             >
-              <i class="fas fa-link"></i>
+              <AppIcon  name="link" />
             </Button>
             <Button variant="outline" size="sm" @click="editTask(task)" title="编辑">
-              <i class="fas fa-edit"></i>
+              <AppIcon  name="edit" />
             </Button>
             <Button
               variant="outline"
@@ -120,13 +120,13 @@
               title="成员授权"
               @click="openResourcePermission(task)"
             >
-              <i class="fas fa-user-shield"></i>
+              <AppIcon  name="user-shield" />
             </Button>
             <Button variant="outline" size="sm" @click="copyTask(task)" title="复制">
-              <i class="fas fa-copy"></i>
+              <AppIcon  name="copy" />
             </Button>
             <Button variant="destructive" size="sm" @click="deleteTask(task)" title="删除">
-              <i class="fas fa-trash"></i>
+              <AppIcon  name="trash" />
             </Button>
           </div>
         </div>
@@ -150,41 +150,41 @@
           <TableCell>
             <code class="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{{ task.task_id.substring(0, 8) }}</code>
           </TableCell>
-          <TableCell>{{ task.app_name || task.config?.app?.name || "-" }}</TableCell>
+          <TableCell>{{ task.app_name || task.config?.app?.name ||"-" }}</TableCell>
           <TableCell>
             <Badge v-for="(target, idx) in task.config?.targets || []" :key="idx" variant="default" class="mr-1">
-              {{ target.name || target.host_name || "-" }}
+              {{ target.name || target.host_name ||"-" }}
             </Badge>
           </TableCell>
           <TableCell>
             <Badge variant="info" class="mr-1">
-              <i class="fas fa-play-circle mr-1"></i>{{ task.execution_count || 0 }}
+              <AppIcon  name="play-circle" class="mr-1" />{{ task.execution_count || 0 }}
             </Badge>
             <Button v-if="task.execution_count > 0" variant="ghost" size="sm" class="h-auto p-0 text-xs" @click="viewExecutions(task)" title="查看执行历史">
-              <i class="fas fa-external-link-alt"></i>
+              <AppIcon  name="external-link-alt" />
             </Button>
           </TableCell>
           <TableCell class="whitespace-nowrap text-sm text-slate-600">{{ formatTime(task.created_at) }}</TableCell>
           <TableCell>
             <div class="flex flex-col">
-              <span class="text-sm">{{ formatTime(task.last_executed_at) || "-" }}</span>
+              <span class="text-sm">{{ formatTime(task.last_executed_at) ||"-" }}</span>
               <span v-if="task.status?.trigger_source" class="text-xs text-slate-500">
-                <span v-if="task.status.trigger_source === 'webhook'"><i class="fas fa-link text-green-600 mr-1"></i> Webhook</span>
-                <span v-else-if="task.status.trigger_source === 'manual'"><i class="fas fa-user text-blue-600 mr-1"></i> 手动</span>
-                <span v-else-if="task.status.trigger_source === 'cron'"><i class="fas fa-clock text-amber-600 mr-1"></i> 定时</span>
-                <span v-else><i class="fas fa-question-circle text-slate-400 mr-1"></i>{{ task.status.trigger_source }}</span>
+                <span v-if="task.status.trigger_source === 'webhook'"><AppIcon  name="link" class="text-green-600 mr-1" /> Webhook</span>
+                <span v-else-if="task.status.trigger_source === 'manual'"><AppIcon  name="user" class="text-blue-600 mr-1" /> 手动</span>
+                <span v-else-if="task.status.trigger_source === 'cron'"><AppIcon  name="clock" class="text-amber-600 mr-1" /> 定时</span>
+                <span v-else><AppIcon  name="question-circle" class="text-slate-400 mr-1" />{{ task.status.trigger_source }}</span>
               </span>
             </div>
           </TableCell>
           <TableCell>
             <div class="flex flex-wrap gap-1">
-              <Button variant="outline" size="sm" @click="viewTask(task)" title="查看详情"><i class="fas fa-eye"></i></Button>
-              <Button variant="outline" size="sm" @click="executeTask(task)" title="触发部署（将创建新任务）"><i class="fas fa-play"></i> 触发</Button>
-              <Button v-if="task.webhook_token" variant="outline" size="sm" @click="showWebhookUrl(task)" title="查看 Webhook URL"><i class="fas fa-link"></i></Button>
-              <Button variant="outline" size="sm" @click="editTask(task)" title="编辑配置"><i class="fas fa-edit"></i></Button>
-              <Button variant="outline" size="sm" title="成员授权" @click="openResourcePermission(task)"><i class="fas fa-user-shield"></i></Button>
-              <Button variant="outline" size="sm" @click="copyTask(task)" title="复制配置"><i class="fas fa-copy"></i></Button>
-              <Button variant="destructive" size="sm" @click="deleteTask(task)" title="删除配置"><i class="fas fa-trash"></i></Button>
+              <Button variant="outline" size="sm" @click="viewTask(task)" title="查看详情"><AppIcon  name="eye" /></Button>
+              <Button variant="outline" size="sm" @click="executeTask(task)" title="触发部署（将创建新任务）"><AppIcon  name="play" /> 触发</Button>
+              <Button v-if="task.webhook_token" variant="outline" size="sm" @click="showWebhookUrl(task)" title="查看 Webhook URL"><AppIcon  name="link" /></Button>
+              <Button variant="outline" size="sm" @click="editTask(task)" title="编辑配置"><AppIcon  name="edit" /></Button>
+              <Button variant="outline" size="sm" title="成员授权" @click="openResourcePermission(task)"><AppIcon  name="user-shield" /></Button>
+              <Button variant="outline" size="sm" @click="copyTask(task)" title="复制配置"><AppIcon  name="copy" /></Button>
+              <Button variant="destructive" size="sm" @click="deleteTask(task)" title="删除配置"><AppIcon  name="trash" /></Button>
             </div>
           </TableCell>
         </TableRow>
@@ -205,7 +205,7 @@
     <FormDialog
       :model-value="showSimpleCreateModal"
       title="快速创建部署任务"
-      icon="fa-rocket"
+      icon="rocket"
       size="xl"
       @update:model-value="(v) => !v && (closeSimpleCreateModal())"
     >
@@ -226,8 +226,7 @@
               <div
                 v-if="
                   simpleForm.appName &&
-                  isAppNameDuplicate(simpleForm.appName.trim(), null)
-                "
+                  isAppNameDuplicate(simpleForm.appName.trim(), null)"
                 class="mt-1 block text-xs text-red-500"
               >
                 应用名称已存在，请使用其他名称
@@ -246,7 +245,7 @@
                   :key="`top-portainer-${host.host_id}`"
                   :value="host.host_id"
                 >
-                  {{ host.name }} ({{ host.portainer_url || "-" }})
+                  {{ host.name }} ({{ host.portainer_url ||"-" }})
                 </option>
               </NativeSelect>
             </div>
@@ -255,7 +254,7 @@
             <div class="mb-3 rounded-lg border border-slate-200 bg-white">
               <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                 <h6 class="text-sm font-semibold text-slate-900">
-                  <i class="fas fa-cogs mr-2"></i>
+                  <AppIcon  name="cogs" class="mr-2" />
                   部署配置（统一配置，适用于所有目标主机）
                 </h6>
               </div>
@@ -266,14 +265,14 @@
                     <input
                       v-if="canUseCreateChannel('agent')"
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="channel-agent"
                       v-model="simpleForm.deployChannel"
                       value="agent"
                     />
                     <label
                       v-if="canUseCreateChannel('agent')"
-                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="channel-agent"
                     >
                       Agent 发布
@@ -281,14 +280,14 @@
                     <input
                       v-if="canUseCreateChannel('ssh')"
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="channel-ssh"
                       v-model="simpleForm.deployChannel"
                       value="ssh"
                     />
                     <label
                       v-if="canUseCreateChannel('ssh')"
-                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="channel-ssh"
                     >
                       SSH 发布
@@ -296,14 +295,14 @@
                     <input
                       v-if="canUseCreateChannel('portainer')"
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="channel-portainer"
                       v-model="simpleForm.deployChannel"
                       value="portainer"
                     />
                     <label
                       v-if="canUseCreateChannel('portainer')"
-                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="channel-portainer"
                     >
                       Portainer 发布
@@ -316,36 +315,36 @@
                   <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="deploy-run"
                       v-model="simpleForm.deployMode"
                       value="docker_run"
                       checked
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-run">
-                      <i class="fas fa-terminal mr-1"></i> Docker Run
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="deploy-run">
+                      <AppIcon  name="terminal" class="mr-1" /> Docker Run
                     </label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="deploy-compose"
                       v-model="simpleForm.deployMode"
                       value="docker_compose"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-compose">
-                      <i class="fas fa-layer-group mr-1"></i> Docker Compose
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="deploy-compose">
+                      <AppIcon  name="layer-group" class="mr-1" /> Docker Compose
                     </label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="deploy-multi-step"
                       v-model="simpleForm.deployMode"
                       value="multi_step"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="deploy-multi-step">
-                      <i class="fas fa-list-ol mr-1"></i> 多步骤
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="deploy-multi-step">
+                      <AppIcon  name="list-ol" class="mr-1" /> 多步骤
                     </label>
                   </div>
                 </div>
@@ -366,21 +365,20 @@
                 <div
                   v-if="
                     simpleForm.deployMode === 'docker_compose' &&
-                    simpleForm.deployChannel !== 'portainer'
-                  "
+                    simpleForm.deployChannel !== 'portainer'"
                   class="mb-3"
                 >
                   <Label>Compose 部署模式 <span class="text-red-500">*</span></Label>
                   <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="compose-mode-compose"
                       v-model="simpleForm.composeMode"
                       value="docker-compose"
                       :disabled="!isComposeModeSupported('docker-compose')"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       :class="{
                         disabled: !isComposeModeSupported('docker-compose'),
                       }"
@@ -388,21 +386,20 @@
                       :title="
                         !isComposeModeSupported('docker-compose')
                           ? '所选主机不支持 docker-compose 模式'
-                          : ''
-                      "
+                          : ''"
                     >
-                      <i class="fas fa-layer-group mr-1"></i> docker-compose
+                      <AppIcon  name="layer-group" class="mr-1" /> docker-compose
                     </label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="compose-mode-stack"
                       v-model="simpleForm.composeMode"
                       value="docker-stack"
                       :disabled="!isComposeModeSupported('docker-stack')"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       :class="{
                         disabled: !isComposeModeSupported('docker-stack'),
                       }"
@@ -410,20 +407,18 @@
                       :title="
                         !isComposeModeSupported('docker-stack')
                           ? '所选主机不支持 docker stack 模式（需要 Docker Swarm）'
-                          : ''
-                      "
+                          : ''"
                     >
-                      <i class="fas fa-server mr-1"></i> docker stack deploy
+                      <AppIcon  name="server" class="mr-1" /> docker stack deploy
                     </label>
                   </div>
                   <small
                     v-if="
                       !isComposeModeSupported('docker-compose') &&
-                      !isComposeModeSupported('docker-stack')
-                    "
+                      !isComposeModeSupported('docker-stack')"
                     class="text-amber-600 block mt-1"
                   >
-                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    <AppIcon  name="exclamation-triangle" class="mr-1" />
                     所选主机不支持任何 Compose 模式，请选择其他主机或使用 Docker
                     Run 模式
                   </small>
@@ -439,22 +434,22 @@
                     <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="stack-create"
                         v-model="simpleForm.stackStrategy"
                         value="create_new"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="stack-create">
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="stack-create">
                         创建新 Stack
                       </label>
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="stack-update"
                         v-model="simpleForm.stackStrategy"
                         value="update_existing"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="stack-update">
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="stack-update">
                         更新已有 Stack
                       </label>
                     </div>
@@ -469,8 +464,7 @@
                           :disabled="
                             loadingStacks ||
                             !simpleForm.portainerTargetHost ||
-                            availableStacks.length === 0
-                          "
+                            availableStacks.length === 0"
                         >
                           <option :value="null" disabled>请选择 Stack</option>
                           <option
@@ -488,11 +482,11 @@
                           :disabled="loadingStacks"
                           title="刷新 Stack 列表"
                         >
-                          <span
+                          <AppIcon
                             v-if="loadingStacks"
-                            class="fas fa-spinner fa-spin"
-                          ></span>
-                          <i v-else class="fas fa-sync-alt"></i>
+                            
+                           name="spinner" spin />
+                          <AppIcon v-else  name="sync-alt" />
                         </Button>
                       </div>
                       <small class="text-slate-500 block mt-1">
@@ -515,28 +509,28 @@
                   <div class="flex w-full flex-wrap gap-2" role="group">
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="redeploy-strategy-remove"
                       v-model="simpleForm.redeployStrategy"
                       value="remove_and_redeploy"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="redeploy-strategy-remove"
                     >
-                      <i class="fas fa-trash-alt mr-1"></i> 删除后重新部署
+                      <AppIcon  name="trash-alt" class="mr-1" /> 删除后重新部署
                     </label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="redeploy-strategy-update"
                       v-model="simpleForm.redeployStrategy"
                       value="update_existing"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="redeploy-strategy-update"
                     >
-                      <i class="fas fa-sync-alt mr-1"></i> 直接更新
+                      <AppIcon  name="sync-alt" class="mr-1" /> 直接更新
                     </label>
                   </div>
                 </div>
@@ -545,8 +539,7 @@
                 <div
                   v-if="
                     simpleForm.deployMode === 'docker_compose' &&
-                    simpleForm.deployChannel !== 'portainer'
-                  "
+                    simpleForm.deployChannel !== 'portainer'"
                   class="mb-3"
                 >
                   <Label><span v-if="simpleForm.composeMode === 'docker-compose'"
@@ -561,8 +554,7 @@
                     :placeholder="
                       simpleForm.composeMode === 'docker-compose'
                         ? 'up -d'
-                        : '-c docker-compose.yml'
-                    "
+                        : '-c docker-compose.yml'"
                   />
                 </div>
 
@@ -593,7 +585,7 @@
                       variant="outline" size="sm"
                       @click="addStep"
                     >
-                      <i class="fas fa-plus mr-1"></i> 添加步骤
+                      <AppIcon  name="plus" class="mr-1" /> 添加步骤
                     </Button>
                   </div>
 
@@ -601,7 +593,7 @@
                     v-if="simpleForm.steps.length === 0"
                     class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
                   >
-                    <i class="fas fa-info-circle mr-1"></i>
+                    <AppIcon  name="info-circle" class="mr-1" />
                     请至少添加一个部署步骤
                   </div>
 
@@ -610,7 +602,7 @@
                       v-for="(step, index) in simpleForm.steps"
                       :key="index"
                       class="mb-2 rounded-lg border border-slate-200 p-4"
-                      :class="{ 'border-primary': step.name || step.command }"
+                      :class="{ 'border-blue-300': step.name || step.command }"
                     >
                       <div class="p-4">
                         <div
@@ -622,14 +614,14 @@
                               style="min-width: 60px"
                               >步骤 {{ index + 1 }}</span
                             >
-                            <span v-if="step.name" class="text-slate-500 small">{{
+                            <span v-if="step.name" class="text-slate-500 text-sm">{{
                               step.name
                             }}</span>
-                            <span v-else class="text-slate-500 small fst-italic"
+                            <span v-else class="text-slate-500 text-sm fst-italic"
                               >未命名步骤</span
                             >
                           </div>
-                          <div class="btn-group btn-group-sm">
+                          <div class="inline-flex items-stretch text-sm">
                             <Button
                               type="button"
                               variant="outline"
@@ -637,7 +629,7 @@
                               :disabled="index === 0"
                               title="上移"
                             >
-                              <i class="fas fa-arrow-up"></i>
+                              <AppIcon  name="arrow-up" />
                             </Button>
                             <Button
                               type="button"
@@ -646,7 +638,7 @@
                               :disabled="index === simpleForm.steps.length - 1"
                               title="下移"
                             >
-                              <i class="fas fa-arrow-down"></i>
+                              <AppIcon  name="arrow-down" />
                             </Button>
                             <Button
                               type="button"
@@ -654,7 +646,7 @@
                               @click="removeStep(index)"
                               title="删除步骤"
                             >
-                              <i class="fas fa-trash"></i>
+                              <AppIcon  name="trash" />
                             </Button>
                           </div>
                         </div>
@@ -681,15 +673,15 @@
                 </div>
 
                 <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-0">
-                  <div class="form-check form-switch">
+                  <div class="flex items-center gap-2">
                     <input
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       id="redeploySwitch"
                       v-model="simpleForm.redeploy"
                     />
-                    <label class="form-check-label" for="redeploySwitch">
-                      <i class="fas fa-redo mr-1"></i>
+                    <label class="text-sm text-slate-700" for="redeploySwitch">
+                      <AppIcon  name="redo" class="mr-1" />
                       重新发布（如果主机上已存在，先停止并删除）
                     </label>
                   </div>
@@ -698,8 +690,37 @@
             </div>
 
             <!-- 目标主机选择 -->
-            <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3">
+            <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-3 min-w-0">
               <Label>选择目标主机 <span class="text-red-500">*</span></Label>
+              <div
+                v-if="selectedHostEntries('simple').length > 0"
+                class="mb-2 flex flex-wrap items-center gap-2"
+              >
+                <span
+                  v-for="entry in selectedHostEntries('simple')"
+                  :key="entry.id"
+                  class="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-sm text-blue-800"
+                >
+                  <span class="break-all">{{ entry.name }}</span>
+                  <button
+                    type="button"
+                    class="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded text-blue-600 hover:bg-blue-100"
+                    :aria-label="`移除 ${entry.name}`"
+                    @click="removeSelectedHost('simple', entry.id)"
+                  >
+                    <AppIcon  name="times" />
+                  </button>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="w-full sm:w-auto"
+                  @click="clearSelectedHosts('simple')"
+                >
+                  清空
+                </Button>
+              </div>
               <div v-if="false" class="mb-2">
                 <Label class="text-xs">Portainer 目标主机</Label>
                 <NativeSelect
@@ -711,74 +732,74 @@
                     :key="host.host_id"
                     :value="host.host_id"
                   >
-                    {{ host.name }} ({{ host.portainer_url || "-" }})
+                    {{ host.name }} ({{ host.portainer_url ||"-" }})
                   </option>
                 </NativeSelect>
               </div>
 
               <!-- 主机类型筛选和搜索 -->
               <div v-if="simpleForm.deployChannel !== 'portainer'" class="mb-2">
-                <div class="btn-group btn-group-sm mb-2" role="group">
+                <div class="inline-flex items-stretch text-sm mb-2" role="group">
                   <template v-if="simpleForm.deployChannel !== 'portainer'">
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="filter-all"
                       v-model="hostFilter"
                       value="all"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-all"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="filter-all"
                       >全部</label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="filter-agent"
                       v-model="hostFilter"
                       value="agent"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-agent">
-                      <i class="fas fa-network-wired mr-1"></i> Agent
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="filter-agent">
+                      <AppIcon  name="network-wired" class="mr-1" /> Agent
                     </label>
                   </template>
 
                   <input
                     type="radio"
-                    class="btn-check"
+                    class="choice-input"
                     id="filter-portainer"
                     v-model="hostFilter"
                     value="portainer"
                     :disabled="simpleForm.deployChannel !== 'portainer'"
                   />
-                  <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                  <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="filter-portainer"
                     :class="{ disabled: simpleForm.deployChannel !== 'portainer' }"
                   >
-                    <i class="fas fa-server mr-1"></i> Portainer
+                    <AppIcon  name="server" class="mr-1" /> Portainer
                   </label>
 
                   <template v-if="simpleForm.deployChannel !== 'portainer'">
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="filter-ssh"
                       v-model="hostFilter"
                       value="ssh"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="filter-ssh">
-                      <i class="fas fa-terminal mr-1"></i> SSH
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="filter-ssh">
+                      <AppIcon  name="terminal" class="mr-1" /> SSH
                     </label>
                   </template>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="form-check">
+                  <div class="flex items-center gap-2">
                     <input
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       id="filter-online"
                       v-model="filterOnlineOnly"
                     />
-                    <label class="form-check-label" for="filter-online"
+                    <label class="text-sm text-slate-700" for="filter-online"
                       >仅在线</label>
                   </div>
                   <Input
@@ -792,9 +813,9 @@
               <!-- 主机列表（按类型分组） -->
               <div
                 v-if="loadingHosts"
-                class="text-slate-500 small text-center py-3"
+                class="text-slate-500 text-sm text-center py-3"
               >
-                <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
+                <AppIcon  name="spinner" class="mr-2" spin />加载中...
               </div>
               <div
                 v-else
@@ -804,25 +825,25 @@
               >
                 <!-- Agent 主机 -->
                 <div v-if="channelFilteredHostsByType.agent.length > 0" class="mb-3">
-                  <div class="fw-bold text-blue-600 mb-2">
-                    <i class="fas fa-network-wired mr-1"></i> Agent 主机 ({{
+                  <div class="font-semibold text-blue-600 mb-2">
+                    <AppIcon  name="network-wired" class="mr-1" /> Agent 主机 ({{
                       channelFilteredHostsByType.agent.length
                     }})
                   </div>
                   <div
                     v-for="host in channelFilteredHostsByType.agent"
                     :key="host.host_id"
-                    class="form-check ml-3"
+                    class="flex items-center gap-2 ml-3"
                   >
                     <input
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       :id="`host-${host.host_id}`"
-                      :value="host.host_id"
-                      v-model="simpleForm.selectedHosts"
+                      :checked="isHostSelected('simple', host.host_id)"
+                      @change="onHostToggle('simple', host.host_id, $event)"
                     />
                     <label
-                      class="form-check-label"
+                      class="text-sm text-slate-700"
                       :for="`host-${host.host_id}`"
                     >
                       {{ host.name }}
@@ -831,7 +852,7 @@
                       </Badge>
                       <span
                         v-if="host.description"
-                        class="text-slate-500 small ml-1"
+                        class="text-slate-500 text-sm ml-1"
                         >({{ host.description }})</span
                       >
                     </label>
@@ -843,25 +864,25 @@
                   v-if="channelFilteredHostsByType.portainer.length > 0"
                   class="mb-3"
                 >
-                  <div class="fw-bold text-info mb-2">
-                    <i class="fas fa-server mr-1"></i> Portainer 主机 ({{
+                  <div class="font-semibold text-info mb-2">
+                    <AppIcon  name="server" class="mr-1" /> Portainer 主机 ({{
                       channelFilteredHostsByType.portainer.length
                     }})
                   </div>
                   <div
                     v-for="host in channelFilteredHostsByType.portainer"
                     :key="host.host_id"
-                    class="form-check ml-3"
+                    class="flex items-center gap-2 ml-3"
                   >
                     <input
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       :id="`host-${host.host_id}`"
-                      :value="host.host_id"
-                      v-model="simpleForm.selectedHosts"
+                      :checked="isHostSelected('simple', host.host_id)"
+                      @change="onHostToggle('simple', host.host_id, $event)"
                     />
                     <label
-                      class="form-check-label"
+                      class="text-sm text-slate-700"
                       :for="`host-${host.host_id}`"
                     >
                       {{ host.name }}
@@ -870,7 +891,7 @@
                       </Badge>
                       <span
                         v-if="host.portainer_url"
-                        class="text-slate-500 small ml-1"
+                        class="text-slate-500 text-sm ml-1"
                         >({{ host.portainer_url }})</span
                       >
                     </label>
@@ -879,35 +900,35 @@
 
                 <!-- SSH 主机 -->
                 <div v-if="channelFilteredHostsByType.ssh.length > 0" class="mb-3">
-                  <div class="fw-bold text-amber-600 mb-2">
-                    <i class="fas fa-terminal mr-1"></i> SSH 主机 ({{
+                  <div class="font-semibold text-amber-600 mb-2">
+                    <AppIcon  name="terminal" class="mr-1" /> SSH 主机 ({{
                       channelFilteredHostsByType.ssh.length
                     }})
                   </div>
                   <div
                     v-for="host in channelFilteredHostsByType.ssh"
                     :key="host.host_id"
-                    class="form-check ml-3"
+                    class="flex items-center gap-2 ml-3"
                   >
                     <input
-                      class="form-check-input"
+                      class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       :id="`host-${host.host_id}`"
-                      :value="host.host_id"
-                      v-model="simpleForm.selectedHosts"
+                      :checked="isHostSelected('simple', host.host_id)"
+                      @change="onHostToggle('simple', host.host_id, $event)"
                     />
                     <label
-                      class="form-check-label"
+                      class="text-sm text-slate-700"
                       :for="`host-${host.host_id}`"
                     >
                       {{ host.name }}
                       <Badge v-if="host.docker_enabled" variant="info" class="ml-1">Docker</Badge>
                       <span
                         v-if="host.docker_version"
-                        class="text-slate-500 small ml-1"
+                        class="text-slate-500 text-sm ml-1"
                         >({{ host.docker_version }})</span
                       >
-                      <span v-if="host.host" class="text-slate-500 small ml-1"
+                      <span v-if="host.host" class="text-slate-500 text-sm ml-1"
                         >@{{ host.host }}:{{ host.port || 22 }}</span
                       >
                     </label>
@@ -916,28 +937,20 @@
 
                 <div
                   v-if="filteredHosts.length === 0"
-                  class="text-slate-500 small text-center py-3"
+                  class="text-slate-500 text-sm text-center py-3"
                 >
-                  <i class="fas fa-inbox mr-1"></i>
+                  <AppIcon  name="inbox" class="mr-1" />
                   <span v-if="hostSearchKeyword">未找到匹配的主机</span>
                   <span v-else>暂无可用主机，请先在"主机管理"中添加主机</span>
                 </div>
               </div>
 
-              <!-- 已选择的主机统计 -->
-              <div v-if="simpleForm.selectedHosts.length > 0" class="mt-2">
-                <small class="text-slate-500">
-                  已选择
-                  <strong>{{ simpleForm.selectedHosts.length }}</strong> 个主机
-                  <Button
-                    type="button"
-                    variant="ghost" size="sm"
-                    @click="simpleForm.selectedHosts = []"
-                  >
-                    清空
-                  </Button>
-                </small>
-              </div>
+              <p
+                v-if="selectedHostEntries('simple').length > 0"
+                class="mt-2 text-slate-500 text-sm"
+              >
+                已选择 <strong>{{ selectedHostEntries('simple').length }}</strong> 个主机（可在上方标签移除）
+              </p>
             </div>
       <template #footer>
         <Button
@@ -953,7 +966,7 @@
               @click="createSimpleTask"
               :disabled="creating"
             >
-              <i v-if="creating" class="fas fa-spinner fa-spin mr-2"></i>
+              <AppIcon v-if="creating"  name="spinner" class="mr-2" spin />
               创建
             </Button>
       </template>
@@ -961,7 +974,7 @@
     <FormDialog
       :model-value="showCreateModal"
       title="YAML方式创建部署任务"
-      icon="fa-code"
+      icon="code"
       size="lg"
       @update:model-value="(v) => !v && (showCreateModal = false)"
     >
@@ -1006,7 +1019,7 @@
               @click="createTask"
               :disabled="creating"
             >
-              <i v-if="creating" class="fas fa-spinner fa-spin mr-2"></i>
+              <AppIcon v-if="creating"  name="spinner" class="mr-2" spin />
               创建
             </Button>
       </template>
@@ -1014,7 +1027,7 @@
     <FormDialog
       :model-value="showImportModal"
       title="导入部署配置"
-      icon="fa-file-import"
+      icon="file-import"
       size="md"
       @update:model-value="(v) => !v && (showImportModal = false)"
     >
@@ -1040,7 +1053,7 @@
     <FormDialog
       :model-value="showDetailModal && selectedTask"
       :title="'任务详情 - ' + (selectedTask?.task_id?.substring(0, 8) || '')"
-      icon="fa-info-circle"
+      icon="info-circle"
       size="xl"
       @update:model-value="(v) => !v && (showDetailModal = false)"
     >
@@ -1052,7 +1065,7 @@
                   :class="detailTab === 'config' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="detailTab = 'config'"
                 >
-                  <i class="fas fa-cog mr-1"></i> 配置信息
+                  <AppIcon  name="cog" class="mr-1" /> 配置信息
                 </Button>
               <Button
                   type="button"
@@ -1061,7 +1074,7 @@
                   :class="detailTab === 'status' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="detailTab = 'status'"
                 >
-                  <i class="fas fa-tasks mr-1"></i> 执行状态
+                  <AppIcon  name="tasks" class="mr-1" /> 执行状态
                 </Button>
               <Button
                   type="button"
@@ -1070,7 +1083,7 @@
                   :class="detailTab === 'logs' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="detailTab = 'logs'"
                 >
-                  <i class="fas fa-file-alt mr-1"></i> 执行日志
+                  <AppIcon  name="file-alt" class="mr-1" /> 执行日志
                 </Button>
             </div>
 
@@ -1092,13 +1105,13 @@
                 </Badge>
                 <span
                   v-if="selectedTask.created_at"
-                  class="text-slate-500 small ml-3"
+                  class="text-slate-500 text-sm ml-3"
                 >
                   创建时间: {{ formatTime(selectedTask.created_at) }}
                 </span>
                 <span
                   v-if="selectedTask.completed_at"
-                  class="text-slate-500 small ml-3"
+                  class="text-slate-500 text-sm ml-3"
                 >
                   完成时间: {{ formatTime(selectedTask.completed_at) }}
                 </span>
@@ -1121,16 +1134,15 @@
                       v-for="target in selectedTask.config.targets"
                       :key="target.name"
                     >
-                      <td>{{ target.name || target.host_name || "-" }}</td>
+                      <td>{{ target.name || target.host_name ||"-" }}</td>
                       <td>
-                        <Badge variant="info">{{ target.host_type || target.mode || "-" }}</Badge>
+                        <Badge variant="info">{{ target.host_type || target.mode ||"-" }}</Badge>
                       </td>
                       <td>
                         <small class="text-slate-500">{{
                           target.host_name ||
                           target.host ||
-                          target.agent?.name ||
-                          "-"
+                          target.agent?.name ||"-"
                         }}</small>
                       </td>
                     </tr>
@@ -1150,7 +1162,7 @@
                   @click="refreshTask(selectedTask)"
                   title="刷新日志"
                 >
-                  <i class="fas fa-sync-alt mr-1"></i> 刷新
+                  <AppIcon  name="sync-alt" class="mr-1" /> 刷新
                 </Button>
               </div>
 
@@ -1160,8 +1172,7 @@
                   style="
                     max-height: 600px;
                     overflow-y: auto;
-                    font-size: 12px;
-                  "
+                    font-size: 12px;"
                 >
                   <div
                     v-for="(log, idx) in taskLogs"
@@ -1181,7 +1192,7 @@
               </div>
 
               <div v-else class="text-slate-500 text-center py-4">
-                <i class="fas fa-info-circle mr-1"></i>
+                <AppIcon  name="info-circle" class="mr-1" />
                 暂无执行日志
               </div>
             </div>
@@ -1197,28 +1208,28 @@
               variant="outline"
               @click="editTask(selectedTask)"
             >
-              <i class="fas fa-edit mr-1"></i> 编辑
+              <AppIcon  name="edit" class="mr-1" /> 编辑
             </Button>
             <Button
               variant="outline"
               @click="copyTask(selectedTask)"
             >
-              <i class="fas fa-copy mr-1"></i> 复制
+              <AppIcon  name="copy" class="mr-1" /> 复制
             </Button>
             <Button
               variant="default"
               @click="executeTask(selectedTask)"
               :disabled="selectedTask.status === 'running'"
             >
-              <i class="fas fa-play mr-1"></i>
-              {{ selectedTask.status === "running" ? "执行中..." : "执行任务" }}
+              <AppIcon  name="play" class="mr-1" />
+              {{ selectedTask.status ==="running" ?"执行中..." :"执行任务" }}
             </Button>
       </template>
     </FormDialog>
     <FormDialog
       :model-value="showEditModal && editingTask"
       :title="'编辑部署任务 - ' + (editingTask?.task_id?.substring(0, 8) || '')"
-      icon="fa-edit"
+      icon="edit"
       size="xl"
       @update:model-value="(v) => !v && (closeEditModal())"
     >
@@ -1231,7 +1242,7 @@
                   :class="editMode === 'form' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="editMode = 'form'"
                 >
-                  <i class="fas fa-edit mr-1"></i> 表单编辑
+                  <AppIcon  name="edit" class="mr-1" /> 表单编辑
                 </Button>
               <Button
                   type="button"
@@ -1240,7 +1251,7 @@
                   :class="editMode === 'yaml' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="switchToYamlMode"
                 >
-                  <i class="fas fa-code mr-1"></i> YAML编辑
+                  <AppIcon  name="code" class="mr-1" /> YAML编辑
                 </Button>
               <Button
                   type="button"
@@ -1249,7 +1260,7 @@
                   :class="editMode === 'webhook' ? 'border-blue-600 text-blue-600' : 'border-transparent'"
                   @click="editMode = 'webhook'"
                 >
-                  <i class="fas fa-link mr-1"></i> Webhook设置
+                  <AppIcon  name="link" class="mr-1" /> Webhook设置
                 </Button>
             </div>
 
@@ -1274,8 +1285,7 @@
                     checkAppNameDuplicate(
                       editForm.appName.trim(),
                       editingTask?.task_id
-                    )
-                  "
+                    )"
                 />
                 <div
                   v-if="
@@ -1283,8 +1293,7 @@
                     isAppNameDuplicate(
                       editForm.appName.trim(),
                       editingTask?.task_id
-                    )
-                  "
+                    )"
                   class="mt-1 block text-xs text-red-500"
                 >
                   应用名称已存在，请使用其他名称
@@ -1295,7 +1304,7 @@
               <div class="mb-3 rounded-lg border border-slate-200 bg-white">
                 <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
                   <h6 class="text-sm font-semibold text-slate-900">
-                    <i class="fas fa-cogs mr-2"></i>
+                    <AppIcon  name="cogs" class="mr-2" />
                     部署配置（统一配置，适用于所有目标主机）
                   </h6>
                 </div>
@@ -1306,14 +1315,14 @@
                       <input
                         v-if="canUseEditChannel('agent')"
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-channel-agent"
                         v-model="editForm.deployChannel"
                         value="agent"
                       />
                       <label
                         v-if="canUseEditChannel('agent')"
-                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-channel-agent"
                       >
                         Agent 发布
@@ -1321,14 +1330,14 @@
                       <input
                         v-if="canUseEditChannel('ssh')"
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-channel-ssh"
                         v-model="editForm.deployChannel"
                         value="ssh"
                       />
                       <label
                         v-if="canUseEditChannel('ssh')"
-                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-channel-ssh"
                       >
                         SSH 发布
@@ -1336,14 +1345,14 @@
                       <input
                         v-if="canUseEditChannel('portainer')"
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-channel-portainer"
                         v-model="editForm.deployChannel"
                         value="portainer"
                       />
                       <label
                         v-if="canUseEditChannel('portainer')"
-                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                        class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-channel-portainer"
                       >
                         Portainer 发布
@@ -1357,41 +1366,41 @@
                     <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-deploy-run"
                         v-model="editForm.deployMode"
                         value="docker_run"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-deploy-run"
                       >
-                        <i class="fas fa-terminal mr-1"></i> Docker Run
+                        <AppIcon  name="terminal" class="mr-1" /> Docker Run
                       </label>
 
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-deploy-compose"
                         v-model="editForm.deployMode"
                         value="docker_compose"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-deploy-compose"
                       >
-                        <i class="fas fa-layer-group mr-1"></i> Docker Compose
+                        <AppIcon  name="layer-group" class="mr-1" /> Docker Compose
                       </label>
 
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-deploy-multi-step"
                         v-model="editForm.deployMode"
                         value="multi_step"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-deploy-multi-step"
                       >
-                        <i class="fas fa-list-ol mr-1"></i> 多步骤
+                        <AppIcon  name="list-ol" class="mr-1" /> 多步骤
                       </label>
                     </div>
                   </div>
@@ -1411,8 +1420,7 @@
                   <div
                     v-if="
                       editForm.deployMode === 'docker_compose' &&
-                      editForm.deployChannel !== 'portainer'
-                    "
+                      editForm.deployChannel !== 'portainer'"
                     class="mb-3"
                   >
                     <Label>Compose 部署模式
@@ -1420,15 +1428,14 @@
                     <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-compose-mode-compose"
                         v-model="editForm.composeMode"
                         value="docker-compose"
                         :disabled="
-                          !isEditComposeModeSupported('docker-compose')
-                        "
+                          !isEditComposeModeSupported('docker-compose')"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         :class="{
                           disabled:
                             !isEditComposeModeSupported('docker-compose'),
@@ -1437,21 +1444,20 @@
                         :title="
                           !isEditComposeModeSupported('docker-compose')
                             ? '所选主机不支持 docker-compose 模式'
-                            : ''
-                        "
+                            : ''"
                       >
-                        <i class="fas fa-layer-group mr-1"></i> docker-compose
+                        <AppIcon  name="layer-group" class="mr-1" /> docker-compose
                       </label>
 
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-compose-mode-stack"
                         v-model="editForm.composeMode"
                         value="docker-stack"
                         :disabled="!isEditComposeModeSupported('docker-stack')"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         :class="{
                           disabled: !isEditComposeModeSupported('docker-stack'),
                         }"
@@ -1459,20 +1465,18 @@
                         :title="
                           !isEditComposeModeSupported('docker-stack')
                             ? '所选主机不支持 docker stack 模式（需要 Docker Swarm）'
-                            : ''
-                        "
+                            : ''"
                       >
-                        <i class="fas fa-server mr-1"></i> docker stack deploy
+                        <AppIcon  name="server" class="mr-1" /> docker stack deploy
                       </label>
                     </div>
                     <small
                       v-if="
                         !isEditComposeModeSupported('docker-compose') &&
-                        !isEditComposeModeSupported('docker-stack')
-                      "
+                        !isEditComposeModeSupported('docker-stack')"
                       class="text-amber-600 block mt-1"
                     >
-                      <i class="fas fa-exclamation-triangle mr-1"></i>
+                      <AppIcon  name="exclamation-triangle" class="mr-1" />
                       所选主机不支持任何 Compose 模式，请选择其他主机或使用
                       Docker Run 模式
                     </small>
@@ -1485,22 +1489,22 @@
                       <div class="flex w-full flex-wrap gap-2" role="group">
                         <input
                           type="radio"
-                          class="btn-check"
+                          class="choice-input"
                           id="edit-stack-create"
                           v-model="editForm.stackStrategy"
                           value="create_new"
                         />
-                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="edit-stack-create">
+                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="edit-stack-create">
                           创建新 Stack
                         </label>
                         <input
                           type="radio"
-                          class="btn-check"
+                          class="choice-input"
                           id="edit-stack-update"
                           v-model="editForm.stackStrategy"
                           value="update_existing"
                         />
-                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700" for="edit-stack-update">
+                        <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" for="edit-stack-update">
                           更新已有 Stack
                         </label>
                       </div>
@@ -1512,8 +1516,7 @@
                             :disabled="
                               loadingStacks ||
                               !editForm.portainerTargetHost ||
-                              availableStacks.length === 0
-                            "
+                              availableStacks.length === 0"
                           >
                             <option :value="null" disabled>请选择 Stack</option>
                             <option
@@ -1530,11 +1533,11 @@
                             @click="loadAvailableStacksForEdit"
                             :disabled="loadingStacks"
                           >
-                            <span
+                            <AppIcon
                               v-if="loadingStacks"
-                              class="fas fa-spinner fa-spin"
-                            ></span>
-                            <i v-else class="fas fa-sync-alt"></i>
+                              
+                             name="spinner" spin />
+                            <AppIcon v-else  name="sync-alt" />
                           </Button>
                         </div>
                       </div>
@@ -1551,28 +1554,28 @@
                     <div class="flex w-full flex-wrap gap-2" role="group">
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-redeploy-strategy-remove"
                         v-model="editForm.redeployStrategy"
                         value="remove_and_redeploy"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-redeploy-strategy-remove"
                       >
-                        <i class="fas fa-trash-alt mr-1"></i> 删除后重新部署
+                        <AppIcon  name="trash-alt" class="mr-1" /> 删除后重新部署
                       </label>
 
                       <input
                         type="radio"
-                        class="btn-check"
+                        class="choice-input"
                         id="edit-redeploy-strategy-update"
                         v-model="editForm.redeployStrategy"
                         value="update_existing"
                       />
-                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                      <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                         for="edit-redeploy-strategy-update"
                       >
-                        <i class="fas fa-sync-alt mr-1"></i> 直接更新
+                        <AppIcon  name="sync-alt" class="mr-1" /> 直接更新
                       </label>
                     </div>
                     <small
@@ -1581,8 +1584,7 @@
                     >
                       <span
                         v-if="
-                          editForm.redeployStrategy === 'remove_and_redeploy'
-                        "
+                          editForm.redeployStrategy === 'remove_and_redeploy'"
                       >
                         <span v-if="editForm.composeMode === 'docker-compose'"
                           >先执行 docker-compose down，然后重新部署</span
@@ -1604,8 +1606,7 @@
                   <div
                     v-if="
                       editForm.deployMode === 'docker_compose' &&
-                      editForm.deployChannel !== 'portainer'
-                    "
+                      editForm.deployChannel !== 'portainer'"
                     class="mb-3"
                   >
                     <Label><span v-if="editForm.composeMode === 'docker-compose'"
@@ -1620,8 +1621,7 @@
                       :placeholder="
                         editForm.composeMode === 'docker-compose'
                           ? 'up -d'
-                          : '-c docker-compose.yml'
-                      "
+                          : '-c docker-compose.yml'"
                     />
                   </div>
 
@@ -1652,7 +1652,7 @@
                         variant="outline" size="sm"
                         @click="addEditStep"
                       >
-                        <i class="fas fa-plus mr-1"></i> 添加步骤
+                        <AppIcon  name="plus" class="mr-1" /> 添加步骤
                       </Button>
                     </div>
 
@@ -1660,7 +1660,7 @@
                       v-if="editForm.steps.length === 0"
                       class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
                     >
-                      <i class="fas fa-info-circle mr-1"></i>
+                      <AppIcon  name="info-circle" class="mr-1" />
                       请至少添加一个部署步骤
                     </div>
 
@@ -1669,7 +1669,7 @@
                         v-for="(step, index) in editForm.steps"
                         :key="index"
                         class="mb-2 rounded-lg border border-slate-200 p-4"
-                        :class="{ 'border-primary': step.name || step.command }"
+                        :class="{ 'border-blue-300': step.name || step.command }"
                       >
                         <div class="p-4">
                           <div
@@ -1681,14 +1681,14 @@
                                 style="min-width: 60px"
                                 >步骤 {{ index + 1 }}</span
                               >
-                              <span v-if="step.name" class="text-slate-500 small">{{
+                              <span v-if="step.name" class="text-slate-500 text-sm">{{
                                 step.name
                               }}</span>
-                              <span v-else class="text-slate-500 small fst-italic"
+                              <span v-else class="text-slate-500 text-sm fst-italic"
                                 >未命名步骤</span
                               >
                             </div>
-                            <div class="btn-group btn-group-sm">
+                            <div class="inline-flex items-stretch text-sm">
                               <Button
                                 type="button"
                                 variant="outline"
@@ -1696,7 +1696,7 @@
                                 :disabled="index === 0"
                                 title="上移"
                               >
-                                <i class="fas fa-arrow-up"></i>
+                                <AppIcon  name="arrow-up" />
                               </Button>
                               <Button
                                 type="button"
@@ -1705,7 +1705,7 @@
                                 :disabled="index === editForm.steps.length - 1"
                                 title="下移"
                               >
-                                <i class="fas fa-arrow-down"></i>
+                                <AppIcon  name="arrow-down" />
                               </Button>
                               <Button
                                 type="button"
@@ -1713,7 +1713,7 @@
                                 @click="removeEditStep(index)"
                                 title="删除步骤"
                               >
-                                <i class="fas fa-trash"></i>
+                                <AppIcon  name="trash" />
                               </Button>
                             </div>
                           </div>
@@ -1740,15 +1740,15 @@
                   </div>
 
                   <div v-if="editForm.deployChannel !== 'portainer'" class="mb-0">
-                    <div class="form-check form-switch">
+                    <div class="flex items-center gap-2">
                       <input
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         type="checkbox"
                         id="edit-redeploySwitch"
                         v-model="editForm.redeploy"
                       />
-                      <label class="form-check-label" for="edit-redeploySwitch">
-                        <i class="fas fa-redo mr-1"></i>
+                      <label class="text-sm text-slate-700" for="edit-redeploySwitch">
+                        <AppIcon  name="redo" class="mr-1" />
                         重新发布（如果主机上已存在，先停止并删除）
                       </label>
                     </div>
@@ -1757,8 +1757,39 @@
               </div>
 
               <!-- 目标主机选择 -->
-              <div class="mb-3">
+              <div class="mb-3 min-w-0">
                 <Label>选择目标主机 <span class="text-red-500">*</span></Label>
+                <div
+                  v-if="
+                    editForm.deployChannel !== 'portainer' &&
+                    selectedHostEntries('edit').length > 0"
+                  class="mb-2 flex flex-wrap items-center gap-2"
+                >
+                  <span
+                    v-for="entry in selectedHostEntries('edit')"
+                    :key="entry.id"
+                    class="inline-flex max-w-full items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-sm text-blue-800"
+                  >
+                    <span class="break-all">{{ entry.name }}</span>
+                    <button
+                      type="button"
+                      class="inline-flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded text-blue-600 hover:bg-blue-100"
+                      :aria-label="`移除 ${entry.name}`"
+                      @click="removeSelectedHost('edit', entry.id)"
+                    >
+                      <AppIcon  name="times" />
+                    </button>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="w-full sm:w-auto"
+                    @click="clearSelectedHosts('edit')"
+                  >
+                    清空
+                  </Button>
+                </div>
                 <div v-if="editForm.deployChannel === 'portainer'" class="mb-2">
                   <Label class="text-xs">Portainer 目标主机</Label>
                   <NativeSelect
@@ -1770,73 +1801,73 @@
                       :key="host.host_id"
                       :value="host.host_id"
                     >
-                      {{ host.name }} ({{ host.portainer_url || "-" }})
+                      {{ host.name }} ({{ host.portainer_url ||"-" }})
                     </option>
                   </NativeSelect>
                 </div>
 
                 <!-- 主机类型筛选和搜索 -->
                 <div v-if="editForm.deployChannel !== 'portainer'" class="mb-2">
-                  <div class="btn-group btn-group-sm mb-2" role="group">
+                  <div class="inline-flex items-stretch text-sm mb-2" role="group">
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="edit-filter-all"
                       v-model="editHostFilter"
                       value="all"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-all"
                       >全部</label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="edit-filter-agent"
                       v-model="editHostFilter"
                       value="agent"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-agent"
                     >
-                      <i class="fas fa-network-wired mr-1"></i> Agent
+                      <AppIcon  name="network-wired" class="mr-1" /> Agent
                     </label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="edit-filter-portainer"
                       v-model="editHostFilter"
                       value="portainer"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-portainer"
                     >
-                      <i class="fas fa-server mr-1"></i> Portainer
+                      <AppIcon  name="server" class="mr-1" /> Portainer
                     </label>
 
                     <input
                       type="radio"
-                      class="btn-check"
+                      class="choice-input"
                       id="edit-filter-ssh"
                       v-model="editHostFilter"
                       value="ssh"
                     />
-                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    <label class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       for="edit-filter-ssh"
                     >
-                      <i class="fas fa-terminal mr-1"></i> SSH
+                      <AppIcon  name="terminal" class="mr-1" /> SSH
                     </label>
                   </div>
                   <div class="flex items-center gap-2">
-                    <div class="form-check">
+                    <div class="flex items-center gap-2">
                       <input
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         type="checkbox"
                         id="edit-filter-online"
                         v-model="editFilterOnlineOnly"
                       />
-                      <label class="form-check-label" for="edit-filter-online"
+                      <label class="text-sm text-slate-700" for="edit-filter-online"
                         >仅在线</label>
                     </div>
                     <Input
@@ -1850,9 +1881,9 @@
                 <!-- 主机列表（按类型分组） -->
                 <div
                   v-if="loadingHosts"
-                  class="text-slate-500 small text-center py-3"
+                  class="text-slate-500 text-sm text-center py-3"
                 >
-                  <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
+                  <AppIcon  name="spinner" class="mr-2" spin />加载中...
                 </div>
                 <div
                   v-else
@@ -1862,28 +1893,28 @@
                 >
                   <!-- Agent 主机 -->
                   <div
-                    v-if="editFilteredHostsByType.agent.length > 0"
+                    v-if="editChannelFilteredHostsByType.agent.length > 0"
                     class="mb-3"
                   >
-                    <div class="fw-bold text-blue-600 mb-2">
-                      <i class="fas fa-network-wired mr-1"></i> Agent 主机 ({{
-                        editFilteredHostsByType.agent.length
+                    <div class="font-semibold text-blue-600 mb-2">
+                      <AppIcon  name="network-wired" class="mr-1" /> Agent 主机 ({{
+                        editChannelFilteredHostsByType.agent.length
                       }})
                     </div>
                     <div
-                      v-for="host in editFilteredHostsByType.agent"
+                      v-for="host in editChannelFilteredHostsByType.agent"
                       :key="host.host_id"
-                      class="form-check ml-3"
+                      class="flex items-center gap-2 ml-3"
                     >
                       <input
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="host.host_id"
-                        v-model="editForm.selectedHosts"
+                        :checked="isHostSelected('edit', host.host_id)"
+                        @change="onHostToggle('edit', host.host_id, $event)"
                       />
                       <label
-                        class="form-check-label"
+                        class="text-sm text-slate-700"
                         :for="`edit-host-${host.host_id}`"
                       >
                         {{ host.name }}
@@ -1892,7 +1923,7 @@
                         </Badge>
                         <span
                           v-if="host.description"
-                          class="text-slate-500 small ml-1"
+                          class="text-slate-500 text-sm ml-1"
                           >({{ host.description }})</span
                         >
                       </label>
@@ -1901,28 +1932,28 @@
 
                   <!-- Portainer 主机 -->
                   <div
-                    v-if="editFilteredHostsByType.portainer.length > 0"
+                    v-if="editChannelFilteredHostsByType.portainer.length > 0"
                     class="mb-3"
                   >
-                    <div class="fw-bold text-info mb-2">
-                      <i class="fas fa-server mr-1"></i> Portainer 主机 ({{
-                        editFilteredHostsByType.portainer.length
+                    <div class="font-semibold text-info mb-2">
+                      <AppIcon  name="server" class="mr-1" /> Portainer 主机 ({{
+                        editChannelFilteredHostsByType.portainer.length
                       }})
                     </div>
                     <div
-                      v-for="host in editFilteredHostsByType.portainer"
+                      v-for="host in editChannelFilteredHostsByType.portainer"
                       :key="host.host_id"
-                      class="form-check ml-3"
+                      class="flex items-center gap-2 ml-3"
                     >
                       <input
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="host.host_id"
-                        v-model="editForm.selectedHosts"
+                        :checked="isHostSelected('edit', host.host_id)"
+                        @change="onHostToggle('edit', host.host_id, $event)"
                       />
                       <label
-                        class="form-check-label"
+                        class="text-sm text-slate-700"
                         :for="`edit-host-${host.host_id}`"
                       >
                         {{ host.name }}
@@ -1931,7 +1962,7 @@
                         </Badge>
                         <span
                           v-if="host.portainer_url"
-                          class="text-slate-500 small ml-1"
+                          class="text-slate-500 text-sm ml-1"
                           >({{ host.portainer_url }})</span
                         >
                       </label>
@@ -1940,38 +1971,38 @@
 
                   <!-- SSH 主机 -->
                   <div
-                    v-if="editFilteredHostsByType.ssh.length > 0"
+                    v-if="editChannelFilteredHostsByType.ssh.length > 0"
                     class="mb-3"
                   >
-                    <div class="fw-bold text-amber-600 mb-2">
-                      <i class="fas fa-terminal mr-1"></i> SSH 主机 ({{
-                        editFilteredHostsByType.ssh.length
+                    <div class="font-semibold text-amber-600 mb-2">
+                      <AppIcon  name="terminal" class="mr-1" /> SSH 主机 ({{
+                        editChannelFilteredHostsByType.ssh.length
                       }})
                     </div>
                     <div
-                      v-for="host in editFilteredHostsByType.ssh"
+                      v-for="host in editChannelFilteredHostsByType.ssh"
                       :key="host.host_id"
-                      class="form-check ml-3"
+                      class="flex items-center gap-2 ml-3"
                     >
                       <input
-                        class="form-check-input"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         type="checkbox"
                         :id="`edit-host-${host.host_id}`"
-                        :value="host.host_id"
-                        v-model="editForm.selectedHosts"
+                        :checked="isHostSelected('edit', host.host_id)"
+                        @change="onHostToggle('edit', host.host_id, $event)"
                       />
                       <label
-                        class="form-check-label"
+                        class="text-sm text-slate-700"
                         :for="`edit-host-${host.host_id}`"
                       >
                         {{ host.name }}
                         <Badge v-if="host.docker_enabled" variant="info" class="ml-1">Docker</Badge>
                         <span
                           v-if="host.docker_version"
-                          class="text-slate-500 small ml-1"
+                          class="text-slate-500 text-sm ml-1"
                           >({{ host.docker_version }})</span
                         >
-                        <span v-if="host.host" class="text-slate-500 small ml-1"
+                        <span v-if="host.host" class="text-slate-500 text-sm ml-1"
                           >@{{ host.host }}:{{ host.port || 22 }}</span
                         >
                       </label>
@@ -1980,28 +2011,22 @@
 
                   <div
                     v-if="editFilteredHosts.length === 0"
-                    class="text-slate-500 small text-center py-3"
+                    class="text-slate-500 text-sm text-center py-3"
                   >
-                    <i class="fas fa-inbox mr-1"></i>
+                    <AppIcon  name="inbox" class="mr-1" />
                     <span v-if="editHostSearchKeyword">未找到匹配的主机</span>
                     <span v-else>暂无可用主机，请先在"主机管理"中添加主机</span>
                   </div>
                 </div>
 
-                <!-- 已选择的主机统计 -->
-                <div v-if="editForm.selectedHosts.length > 0" class="mt-2">
-                  <small class="text-slate-500">
-                    已选择
-                    <strong>{{ editForm.selectedHosts.length }}</strong> 个主机
-                    <Button
-                      type="button"
-                      variant="ghost" size="sm"
-                      @click="editForm.selectedHosts = []"
-                    >
-                      清空
-                    </Button>
-                  </small>
-                </div>
+                <p
+                  v-if="
+                    editForm.deployChannel !== 'portainer' &&
+                    selectedHostEntries('edit').length > 0"
+                  class="mt-2 text-slate-500 text-sm"
+                >
+                  已选择 <strong>{{ selectedHostEntries('edit').length }}</strong> 个主机（可在上方标签移除）
+                </p>
               </div>
             </div>
 
@@ -2021,7 +2046,7 @@
                     @click="regenerateEditWebhookToken"
                     title="重新生成 Token"
                   >
-                    <i class="fas fa-sync-alt"></i> 重新生成
+                    <AppIcon  name="sync-alt" /> 重新生成
                   </Button>
                 </div>
                 <small class="text-slate-500"
@@ -2042,7 +2067,7 @@
                     @click="regenerateEditWebhookSecret"
                     title="重新生成密钥"
                   >
-                    <i class="fas fa-sync-alt"></i> 重新生成
+                    <AppIcon  name="sync-alt" /> 重新生成
                   </Button>
                 </div>
                 <small class="text-slate-500">用于验证 Webhook 签名（可选）</small>
@@ -2050,78 +2075,78 @@
               <div class="mb-3">
                 <Label><strong>Webhook 分支策略</strong></Label>
                 <div
-                  class="btn-group w-full flex flex-wrap"
+                  class="inline-flex items-stretch w-full flex flex-wrap"
                   role="group"
                   style="gap: 0.25rem"
                 >
                   <input
                     type="radio"
-                    class="btn-check"
+                    class="choice-input"
                     id="edit-strategy-use-push"
                     value="use_push"
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-use-push"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-code-branch block mb-1"></i>
-                    <small class="block fw-bold">使用推送分支</small>
+                    <AppIcon  name="code-branch" class="block mb-1" />
+                    <small class="block font-semibold">使用推送分支</small>
                     <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >所有分支都触发</small
                     >
                   </label>
                   <input
                     type="radio"
-                    class="btn-check"
+                    class="choice-input"
                     id="edit-strategy-filter-match"
                     value="filter_match"
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-filter-match"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-filter block mb-1"></i>
-                    <small class="block fw-bold">只允许匹配分支</small>
+                    <AppIcon  name="filter" class="block mb-1" />
+                    <small class="block font-semibold">只允许匹配分支</small>
                     <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >使用推送分支构建</small
                     >
                   </label>
                   <input
                     type="radio"
-                    class="btn-check"
+                    class="choice-input"
                     id="edit-strategy-use-configured"
                     value="use_configured"
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-use-configured"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-cog block mb-1"></i>
-                    <small class="block fw-bold">使用配置分支</small>
+                    <AppIcon  name="cog" class="block mb-1" />
+                    <small class="block font-semibold">使用配置分支</small>
                     <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >所有分支都触发</small
                     >
                   </label>
                   <input
                     type="radio"
-                    class="btn-check"
+                    class="choice-input"
                     id="edit-strategy-select-branches"
                     value="select_branches"
                     v-model="editForm.webhook_branch_strategy"
                   />
                   <label
-                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700"
+                    class="cursor-pointer rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                     for="edit-strategy-select-branches"
                     style="white-space: normal; padding: 0.5rem"
                   >
-                    <i class="fas fa-check-square block mb-1"></i>
-                    <small class="block fw-bold">选择分支触发</small>
+                    <AppIcon  name="check-square" class="block mb-1" />
+                    <small class="block font-semibold">选择分支触发</small>
                     <small class="text-slate-500 block" style="font-size: 0.7rem"
                       >仅选中的分支触发</small
                     >
@@ -2148,7 +2173,7 @@
                   variant="outline" size="sm"
                   @click="showEditWebhookUrl"
                 >
-                  <i class="fas fa-link mr-1"></i> 查看 Webhook URL
+                  <AppIcon  name="link" class="mr-1" /> 查看 Webhook URL
                 </Button>
               </div>
             </div>
@@ -2198,7 +2223,7 @@
               @click="saveEditTask"
               :disabled="creating"
             >
-              <i v-if="creating" class="fas fa-spinner fa-spin mr-2"></i>
+              <AppIcon v-if="creating"  name="spinner" class="mr-2" spin />
               保存
             </Button>
       </template>
@@ -2206,7 +2231,7 @@
     <FormDialog
       :model-value="showWebhookModal"
       title="Webhook URL"
-      icon="fa-link"
+      icon="link"
       size="md"
       @update:model-value="(v) => !v && (showWebhookModal = false)"
     >
@@ -2223,7 +2248,7 @@
                   variant="outline" size="sm"
                   @click="copyWebhookUrlFromModal"
                 >
-                  <i class="fas fa-copy"></i> 复制
+                  <AppIcon  name="copy" /> 复制
                 </Button>
               </div>
             </div>
@@ -2276,7 +2301,7 @@ import { registerTask } from "@/composables/useTaskCompletionWatcher";
 
 
 export default {
-  name: "DeployTaskManager",
+  name:"DeployTaskManager",
   components: {
     PageToolbar,
     PaginationBar,
@@ -2310,69 +2335,71 @@ export default {
       editingTask: null,
       selectedTask: null,
       taskLogs: [],
-      detailTab: "config",
-      editMode: "form", // 编辑模式：'form', 'yaml', 'webhook'
-      editHostFilter: "all",
+      detailTab:"config",
+      editMode:"form", // 编辑模式：'form', 'yaml', 'webhook'
+      editHostFilter:"all",
       editFilterOnlineOnly: true,
-      editHostSearchKeyword: "",
+      editHostSearchKeyword:"",
+      /** 解析/回填表单时屏蔽 deployChannel 等 watch 清空已选主机 */
+      formHydrating: false,
       showWebhookModal: false, // Webhook URL 模态框显示状态
-      webhookUrl: "", // Webhook URL
+      webhookUrl:"", // Webhook URL
       editForm: {
-        appName: "",
+        appName:"",
         selectedHosts: [],
         portainerTargetHost: null,
-        deployChannel: "agent",
-        deployMode: "docker_run",
-        composeMode: "docker-compose",
-        redeployStrategy: "update_existing",
-        stackStrategy: "create_new",
+        deployChannel:"agent",
+        deployMode:"docker_run",
+        composeMode:"docker-compose",
+        redeployStrategy:"update_existing",
+        stackStrategy:"create_new",
         selectedStackId: null,
-        newStackName: "",
-        runCommand: "",
-        composeCommand: "up -d", // Docker Compose 默认命令
-        composeContent: "",
+        newStackName:"",
+        runCommand:"",
+        composeCommand:"up -d", // Docker Compose 默认命令
+        composeContent:"",
         redeploy: false,
-        webhook_token: "",
-        webhook_secret: "",
-        webhook_branch_strategy: "use_push",
+        webhook_token:"",
+        webhook_secret:"",
+        webhook_branch_strategy:"use_push",
         webhook_allowed_branches: [],
-        webhook_allowed_branches_input: "",
+        webhook_allowed_branches_input:"",
       },
-      taskConfigContent: "",
-      taskRegistry: "",
-      taskTag: "",
+      taskConfigContent:"",
+      taskRegistry:"",
+      taskTag:"",
       creating: false,
       agentHosts: [],
       sshHosts: [],
       loadingHosts: false,
-      hostFilter: "all", // all, agent, portainer, ssh
+      hostFilter:"all", // all, agent, portainer, ssh
       filterOnlineOnly: true,
-      hostSearchKeyword: "",
+      hostSearchKeyword:"",
       simpleForm: {
-        appName: "",
+        appName:"",
         selectedHosts: [],
         portainerTargetHost: null,
-        deployChannel: "agent",
-        imageName: "",
-        containerName: "",
-        deployMode: "docker_run",
-        composeMode: "docker-compose",
-        redeployStrategy: "update_existing",
-        stackStrategy: "create_new",
+        deployChannel:"agent",
+        imageName:"",
+        containerName:"",
+        deployMode:"docker_run",
+        composeMode:"docker-compose",
+        redeployStrategy:"update_existing",
+        stackStrategy:"create_new",
         selectedStackId: null,
-        newStackName: "",
-        composeCommand: "up -d", // Docker Compose 默认命令
-        composeContent: "",
+        newStackName:"",
+        composeCommand:"up -d", // Docker Compose 默认命令
+        composeContent:"",
         ports: ["8000:8000"],
         envVars: [""],
         volumes: [""],
-        restartPolicy: "always",
+        restartPolicy:"always",
       },
       availableStacks: [],
       loadingStacks: false,
       selectedStackDetails: null,
       autoRefreshInterval: null, // 自动刷新定时器
-      taskTypeFilter: "all",
+      taskTypeFilter:"all",
       createTypeLock: null, // standard | portainer
       editTypeLock: null, // standard | portainer
       // 分页相关
@@ -2383,7 +2410,7 @@ export default {
   },
   computed: {
     activeTeamId() {
-      return useTeamStore().activeTeamId || "";
+      return useTeamStore().activeTeamId ||"";
     },
     filteredTasks() {
       return this.tasks;
@@ -2405,10 +2432,10 @@ export default {
       return pages;
     },
     createPortainerHosts() {
-      return (this.agentHosts || []).filter((host) => host.host_type === "portainer");
+      return (this.agentHosts || []).filter((host) => host.host_type ==="portainer");
     },
     editPortainerHosts() {
-      return (this.agentHosts || []).filter((host) => host.host_type === "portainer");
+      return (this.agentHosts || []).filter((host) => host.host_type ==="portainer");
     },
     // 过滤后的主机列表
     filteredHosts() {
@@ -2416,22 +2443,22 @@ export default {
 
       // 合并所有类型的主机
       if (
-        this.hostFilter === "all" ||
-        this.hostFilter === "agent" ||
-        this.hostFilter === "portainer"
+        this.hostFilter ==="all" ||
+        this.hostFilter ==="agent" ||
+        this.hostFilter ==="portainer"
       ) {
         hosts = hosts.concat(this.agentHosts || []);
       }
-      if (this.hostFilter === "all" || this.hostFilter === "ssh") {
+      if (this.hostFilter ==="all" || this.hostFilter ==="ssh") {
         hosts = hosts.concat(this.sshHosts || []);
       }
 
       // 按类型过滤
-      if (this.hostFilter === "agent") {
-        hosts = hosts.filter((h) => h.host_type === "agent");
-      } else if (this.hostFilter === "portainer") {
-        hosts = hosts.filter((h) => h.host_type === "portainer");
-      } else if (this.hostFilter === "ssh") {
+      if (this.hostFilter ==="agent") {
+        hosts = hosts.filter((h) => h.host_type ==="agent");
+      } else if (this.hostFilter ==="portainer") {
+        hosts = hosts.filter((h) => h.host_type ==="portainer");
+      } else if (this.hostFilter ==="ssh") {
         // SSH 主机没有 host_type，通过其他方式识别
         hosts = hosts.filter((h) => !h.host_type);
       }
@@ -2441,7 +2468,7 @@ export default {
         hosts = hosts.filter((h) => {
           if (h.host_type) {
             // Agent 或 Portainer 主机
-            return h.status === "online";
+            return h.status ==="online";
           } else {
             // SSH 主机（总是显示，因为没有状态）
             return true;
@@ -2473,9 +2500,9 @@ export default {
       };
 
       this.filteredHosts.forEach((host) => {
-        if (host.host_type === "agent") {
+        if (host.host_type ==="agent") {
           result.agent.push(host);
-        } else if (host.host_type === "portainer") {
+        } else if (host.host_type ==="portainer") {
           result.portainer.push(host);
         } else {
           result.ssh.push(host);
@@ -2487,10 +2514,10 @@ export default {
     channelFilteredHostsByType() {
       const all = this.filteredHostsByType;
       const channel = this.simpleForm.deployChannel;
-      if (channel === "portainer") {
+      if (channel ==="portainer") {
         return { agent: [], portainer: all.portainer, ssh: [] };
       }
-      if (channel === "ssh") {
+      if (channel ==="ssh") {
         return { agent: [], portainer: [], ssh: all.ssh };
       }
       return { agent: all.agent, portainer: [], ssh: [] };
@@ -2501,22 +2528,22 @@ export default {
 
       // 合并所有类型的主机
       if (
-        this.editHostFilter === "all" ||
-        this.editHostFilter === "agent" ||
-        this.editHostFilter === "portainer"
+        this.editHostFilter ==="all" ||
+        this.editHostFilter ==="agent" ||
+        this.editHostFilter ==="portainer"
       ) {
         hosts = hosts.concat(this.agentHosts || []);
       }
-      if (this.editHostFilter === "all" || this.editHostFilter === "ssh") {
+      if (this.editHostFilter ==="all" || this.editHostFilter ==="ssh") {
         hosts = hosts.concat(this.sshHosts || []);
       }
 
       // 按类型过滤
-      if (this.editHostFilter === "agent") {
-        hosts = hosts.filter((h) => h.host_type === "agent");
-      } else if (this.editHostFilter === "portainer") {
-        hosts = hosts.filter((h) => h.host_type === "portainer");
-      } else if (this.editHostFilter === "ssh") {
+      if (this.editHostFilter ==="agent") {
+        hosts = hosts.filter((h) => h.host_type ==="agent");
+      } else if (this.editHostFilter ==="portainer") {
+        hosts = hosts.filter((h) => h.host_type ==="portainer");
+      } else if (this.editHostFilter ==="ssh") {
         hosts = hosts.filter((h) => !h.host_type);
       }
 
@@ -2524,7 +2551,7 @@ export default {
       if (this.editFilterOnlineOnly) {
         hosts = hosts.filter((h) => {
           if (h.host_type) {
-            return h.status === "online";
+            return h.status ==="online";
           } else {
             return true;
           }
@@ -2544,6 +2571,19 @@ export default {
         );
       }
 
+      // 已选主机始终展示，避免被「仅在线」等筛选项隐藏后无法取消勾选
+      const visibleIds = new Set(hosts.map((h) => String(h.host_id)));
+      const allHosts = [...(this.agentHosts || []), ...(this.sshHosts || [])];
+      for (const hostId of this.editForm.selectedHosts || []) {
+        const id = String(hostId);
+        if (visibleIds.has(id)) continue;
+        const host = allHosts.find((h) => String(h.host_id) === id);
+        if (host) {
+          hosts.push(host);
+          visibleIds.add(id);
+        }
+      }
+
       return hosts;
     },
     // 编辑表单按类型分组的主机
@@ -2555,9 +2595,9 @@ export default {
       };
 
       this.editFilteredHosts.forEach((host) => {
-        if (host.host_type === "agent") {
+        if (host.host_type ==="agent") {
           result.agent.push(host);
-        } else if (host.host_type === "portainer") {
+        } else if (host.host_type ==="portainer") {
           result.portainer.push(host);
         } else {
           result.ssh.push(host);
@@ -2569,51 +2609,83 @@ export default {
     editChannelFilteredHostsByType() {
       const all = this.editFilteredHostsByType;
       const channel = this.editForm.deployChannel;
-      if (channel === "portainer") {
-        return { agent: [], portainer: all.portainer, ssh: [] };
+      const selectedSet = new Set(
+        (this.editForm.selectedHosts || []).map((id) => String(id))
+      );
+      const allHosts = [...(this.agentHosts || []), ...(this.sshHosts || [])];
+
+      const pinSelected = (list, matchFn) => {
+        const inList = new Set(list.map((h) => String(h.host_id)));
+        const pinned = [];
+        for (const id of selectedSet) {
+          if (inList.has(id)) continue;
+          const host = allHosts.find(
+            (h) => String(h.host_id) === id && matchFn(h)
+          );
+          if (host) pinned.push(host);
+        }
+        return pinned.length ? [...pinned, ...list] : list;
+      };
+
+      if (channel ==="portainer") {
+        return {
+          agent: [],
+          portainer: pinSelected(
+            all.portainer,
+            (h) => h.host_type ==="portainer"
+          ),
+          ssh: [],
+        };
       }
-      if (channel === "ssh") {
-        return { agent: [], portainer: [], ssh: all.ssh };
+      if (channel ==="ssh") {
+        return {
+          agent: [],
+          portainer: [],
+          ssh: pinSelected(all.ssh, (h) => !h.host_type),
+        };
       }
-      return { agent: all.agent, portainer: [], ssh: [] };
+      return {
+        agent: pinSelected(all.agent, (h) => h.host_type ==="agent"),
+        portainer: pinSelected(all.portainer, (h) => h.host_type ==="portainer"),
+        ssh: pinSelected(all.ssh, (h) => !h.host_type),
+      };
     },
   },
-  watch: {
-    "simpleForm.deployChannel": {
-      handler(newChannel) {
-        this.simpleForm.selectedHosts = [];
+  watch: {"simpleForm.deployChannel": {
+      handler(newChannel, oldChannel) {
+        if (this.formHydrating) return;
+        if (oldChannel != null && newChannel === oldChannel) return;
+        this.clearSelectedHosts("simple");
         this.simpleForm.portainerTargetHost = null;
-        if (newChannel === "portainer") {
-          this.hostFilter = "portainer";
-          this.simpleForm.deployMode = "docker_compose";
-          this.simpleForm.composeMode = "docker-compose";
-          this.simpleForm.stackStrategy = "create_new";
+        if (newChannel ==="portainer") {
+          this.hostFilter ="portainer";
+          this.simpleForm.deployMode ="docker_compose";
+          this.simpleForm.composeMode ="docker-compose";
+          this.simpleForm.stackStrategy ="create_new";
           this.loadAvailableStacks();
-          if (this.simpleForm.deployMode === "multi_step") {
-            this.simpleForm.deployMode = "docker_run";
+          if (this.simpleForm.deployMode ==="multi_step") {
+            this.simpleForm.deployMode ="docker_run";
           }
         } else {
-          this.hostFilter = "all";
+          this.hostFilter ="all";
         }
       },
-    },
-    "simpleForm.portainerTargetHost": {
+    },"simpleForm.portainerTargetHost": {
       handler(newHostId) {
-        if (this.simpleForm.deployChannel !== "portainer") return;
+        if (this.simpleForm.deployChannel !=="portainer") return;
         if (newHostId) {
-          this.simpleForm.selectedHosts = [newHostId];
+          this.setSelectedHosts("simple", [newHostId]);
           this.loadAvailableStacks();
         } else {
-          this.simpleForm.selectedHosts = [];
+          this.setSelectedHosts("simple", []);
           this.simpleForm.selectedStackId = null;
         }
       },
-    },
-    "simpleForm.selectedStackId": {
+    },"simpleForm.selectedStackId": {
       async handler(newStackId) {
         if (
-          this.simpleForm.deployChannel !== "portainer" ||
-          this.simpleForm.stackStrategy !== "update_existing" ||
+          this.simpleForm.deployChannel !=="portainer" ||
+          this.simpleForm.stackStrategy !=="update_existing" ||
           !newStackId ||
           this.simpleForm.selectedHosts.length !== 1
         ) {
@@ -2621,58 +2693,26 @@ export default {
         }
         await this.loadStackComposeForSimple();
       },
-    },
-    "simpleForm.stackStrategy": {
+    },"simpleForm.stackStrategy": {
       handler(newStrategy) {
-        if (this.simpleForm.deployChannel !== "portainer") return;
-        if (newStrategy === "create_new") {
+        if (this.simpleForm.deployChannel !=="portainer") return;
+        if (newStrategy ==="create_new") {
           this.simpleForm.selectedStackId = null;
-        } else if (newStrategy === "update_existing") {
-          this.simpleForm.newStackName = "";
+        } else if (newStrategy ==="update_existing") {
+          this.simpleForm.newStackName ="";
         }
       },
-    },
-    // 监听简单表单的主机选择变化，自动调整 Compose 模式
-    "simpleForm.selectedHosts": {
-      handler(newHosts) {
-        if (this.simpleForm.deployChannel === "portainer") {
-          this.loadAvailableStacks();
-        }
-        if (
-          this.simpleForm.deployMode === "docker_compose" &&
-          this.simpleForm.deployChannel !== "portainer" &&
-          newHosts.length > 0
-        ) {
-          // 如果当前选择的模式不支持，自动切换到支持的模式
-          if (
-            this.simpleForm.composeMode === "docker-compose" &&
-            !this.isComposeModeSupported("docker-compose")
-          ) {
-            if (this.isComposeModeSupported("docker-stack")) {
-              this.simpleForm.composeMode = "docker-stack";
-            }
-          } else if (
-            this.simpleForm.composeMode === "docker-stack" &&
-            !this.isComposeModeSupported("docker-stack")
-          ) {
-            if (this.isComposeModeSupported("docker-compose")) {
-              this.simpleForm.composeMode = "docker-compose";
-            }
-          }
-        }
-      },
-      deep: true,
     },
     // 监听 simpleForm.composeMode 变化，自动设置默认命令
     "simpleForm.composeMode": {
       handler(newMode, oldMode) {
-        if (newMode !== oldMode && this.simpleForm.deployMode === "docker_compose") {
+        if (newMode !== oldMode && this.simpleForm.deployMode ==="docker_compose") {
           // 如果命令为空，设置默认值
           if (!this.simpleForm.composeCommand.trim()) {
-            if (newMode === "docker-stack") {
-              this.simpleForm.composeCommand = "-c docker-compose.yml";
-            } else if (newMode === "docker-compose") {
-              this.simpleForm.composeCommand = "up -d";
+            if (newMode ==="docker-stack") {
+              this.simpleForm.composeCommand ="-c docker-compose.yml";
+            } else if (newMode ==="docker-compose") {
+              this.simpleForm.composeCommand ="up -d";
             }
           }
         }
@@ -2680,37 +2720,37 @@ export default {
     },
     // 监听编辑表单的主机选择变化，自动调整 Compose 模式
     "editForm.deployChannel": {
-      handler(newChannel) {
-        this.editForm.selectedHosts = [];
+      handler(newChannel, oldChannel) {
+        if (this.formHydrating) return;
+        if (oldChannel != null && newChannel === oldChannel) return;
+        this.clearSelectedHosts("edit");
         this.editForm.portainerTargetHost = null;
-        if (newChannel === "portainer") {
-          this.editHostFilter = "portainer";
-          this.editForm.deployMode = "docker_compose";
-          this.editForm.composeMode = "docker-compose";
-          this.editForm.stackStrategy = "create_new";
+        if (newChannel ==="portainer") {
+          this.editHostFilter ="portainer";
+          this.editForm.deployMode ="docker_compose";
+          this.editForm.composeMode ="docker-compose";
+          this.editForm.stackStrategy ="create_new";
           this.loadAvailableStacksForEdit();
         } else {
-          this.editHostFilter = "all";
+          this.editHostFilter ="all";
         }
       },
-    },
-    "editForm.portainerTargetHost": {
+    },"editForm.portainerTargetHost": {
       handler(newHostId) {
-        if (this.editForm.deployChannel !== "portainer") return;
+        if (this.editForm.deployChannel !=="portainer") return;
         if (newHostId) {
-          this.editForm.selectedHosts = [newHostId];
+          this.setSelectedHosts("edit", [newHostId]);
           this.loadAvailableStacksForEdit();
         } else {
-          this.editForm.selectedHosts = [];
+          this.setSelectedHosts("edit", []);
           this.editForm.selectedStackId = null;
         }
       },
-    },
-    "editForm.selectedStackId": {
+    },"editForm.selectedStackId": {
       async handler(newStackId) {
         if (
-          this.editForm.deployChannel !== "portainer" ||
-          this.editForm.stackStrategy !== "update_existing" ||
+          this.editForm.deployChannel !=="portainer" ||
+          this.editForm.stackStrategy !=="update_existing" ||
           !newStackId ||
           this.editForm.selectedHosts.length !== 1
         ) {
@@ -2718,57 +2758,26 @@ export default {
         }
         await this.loadStackComposeForEdit();
       },
-    },
-    "editForm.stackStrategy": {
+    },"editForm.stackStrategy": {
       handler(newStrategy) {
-        if (this.editForm.deployChannel !== "portainer") return;
-        if (newStrategy === "create_new") {
+        if (this.editForm.deployChannel !=="portainer") return;
+        if (newStrategy ==="create_new") {
           this.editForm.selectedStackId = null;
-        } else if (newStrategy === "update_existing") {
-          this.editForm.newStackName = "";
+        } else if (newStrategy ==="update_existing") {
+          this.editForm.newStackName ="";
         }
       },
-    },
-    "editForm.selectedHosts": {
-      handler(newHosts) {
-        if (this.editForm.deployChannel === "portainer") {
-          this.loadAvailableStacksForEdit();
-        }
-        if (
-          this.editForm.deployMode === "docker_compose" &&
-          this.editForm.deployChannel !== "portainer" &&
-          newHosts.length > 0
-        ) {
-          // 如果当前选择的模式不支持，自动切换到支持的模式
-          if (
-            this.editForm.composeMode === "docker-compose" &&
-            !this.isEditComposeModeSupported("docker-compose")
-          ) {
-            if (this.isEditComposeModeSupported("docker-stack")) {
-              this.editForm.composeMode = "docker-stack";
-            }
-          } else if (
-            this.editForm.composeMode === "docker-stack" &&
-            !this.isEditComposeModeSupported("docker-stack")
-          ) {
-            if (this.isEditComposeModeSupported("docker-compose")) {
-              this.editForm.composeMode = "docker-compose";
-            }
-          }
-        }
-      },
-      deep: true,
     },
     // 监听 editForm.composeMode 变化，自动设置默认命令
     "editForm.composeMode": {
       handler(newMode, oldMode) {
-        if (newMode !== oldMode && this.editForm.deployMode === "docker_compose") {
+        if (newMode !== oldMode && this.editForm.deployMode ==="docker_compose") {
           // 如果命令为空，设置默认值
           if (!this.editForm.composeCommand.trim()) {
-            if (newMode === "docker-stack") {
-              this.editForm.composeCommand = "-c docker-compose.yml";
-            } else if (newMode === "docker-compose") {
-              this.editForm.composeCommand = "up -d";
+            if (newMode ==="docker-stack") {
+              this.editForm.composeCommand ="-c docker-compose.yml";
+            } else if (newMode ==="docker-compose") {
+              this.editForm.composeCommand ="up -d";
             }
           }
         }
@@ -2798,7 +2807,7 @@ export default {
       this.loadTasks(1);
     },
     normalizeCompareValue(value) {
-      return String(value ?? "")
+      return String(value ??"")
         .trim()
         .toLowerCase();
     },
@@ -2811,7 +2820,9 @@ export default {
         const hostById = allHosts.find(
           (h) => String(h.host_id) === String(target.host_id)
         );
-        if (hostById?.host_id) return hostById.host_id;
+        if (hostById?.host_id != null && hostById.host_id !=="") {
+          return String(hostById.host_id);
+        }
       }
 
       // 2) 按 host_name/name/历史 name-deploy 匹配
@@ -2819,12 +2830,12 @@ export default {
       if (target.host_name) candidates.push(target.host_name);
       if (target.name) {
         candidates.push(target.name);
-        candidates.push(String(target.name).replace(/-deploy$/, ""));
+        candidates.push(String(target.name).replace(/-deploy$/,""));
       }
-      if (target.mode === "agent" && target.agent?.name) {
+      if (target.mode ==="agent" && target.agent?.name) {
         candidates.push(target.agent.name);
       }
-      if (target.mode === "ssh" && target.host) {
+      if (target.mode ==="ssh" && target.host) {
         candidates.push(target.host);
       }
 
@@ -2837,16 +2848,123 @@ export default {
         const hostName = this.normalizeCompareValue(h.name);
         return normalizedCandidates.includes(hostName);
       });
-      return host?.host_id || null;
+      const id = host?.host_id;
+      return id != null && id !=="" ? String(id) : null;
+    },
+    normalizeHostId(hostId) {
+      return hostId == null || hostId ==="" ?"" : String(hostId);
+    },
+    getHostForm(formKind) {
+      return formKind ==="edit" ? this.editForm : this.simpleForm;
+    },
+    selectedHostEntries(formKind) {
+      const form = this.getHostForm(formKind);
+      const allHosts = [...(this.agentHosts || []), ...(this.sshHosts || [])];
+      return (form.selectedHosts || [])
+        .map((id) => this.normalizeHostId(id))
+        .filter(Boolean)
+        .map((id) => {
+          const host = allHosts.find((h) => this.normalizeHostId(h.host_id) === id);
+          return {
+            id,
+            name: host?.name || `主机 ${id.slice(0, 8)}…`,
+          };
+        });
+    },
+    isHostSelected(formKind, hostId) {
+      const id = this.normalizeHostId(hostId);
+      return this.getHostForm(formKind).selectedHosts.includes(id);
+    },
+    setSelectedHosts(formKind, hostIds) {
+      const form = this.getHostForm(formKind);
+      form.selectedHosts = [
+        ...new Set((hostIds || []).map((x) => this.normalizeHostId(x)).filter(Boolean)),
+      ];
+    },
+    clearSelectedHosts(formKind) {
+      this.setSelectedHosts(formKind, []);
+      this.syncComposeModeFromHosts(formKind);
+      if (formKind ==="edit" && this.editForm.deployChannel ==="portainer") {
+        this.loadAvailableStacksForEdit();
+      } else if (
+        formKind ==="simple" &&
+        this.simpleForm.deployChannel ==="portainer"
+      ) {
+        this.loadAvailableStacks();
+      }
+    },
+    removeSelectedHost(formKind, hostId) {
+      const id = this.normalizeHostId(hostId);
+      const form = this.getHostForm(formKind);
+      form.selectedHosts = form.selectedHosts.filter((x) => x !== id);
+      this.syncComposeModeFromHosts(formKind);
+      if (formKind ==="edit" && this.editForm.deployChannel ==="portainer") {
+        this.loadAvailableStacksForEdit();
+      } else if (
+        formKind ==="simple" &&
+        this.simpleForm.deployChannel ==="portainer"
+      ) {
+        this.loadAvailableStacks();
+      }
+    },
+    onHostToggle(formKind, hostId, event) {
+      const checked = event.target.checked;
+      const id = this.normalizeHostId(hostId);
+      const form = this.getHostForm(formKind);
+      let next = [...form.selectedHosts];
+      if (checked) {
+        if (!next.includes(id)) next.push(id);
+      } else {
+        next = next.filter((x) => x !== id);
+      }
+      form.selectedHosts = next;
+      this.syncComposeModeFromHosts(formKind);
+      if (formKind ==="edit" && this.editForm.deployChannel ==="portainer") {
+        this.loadAvailableStacksForEdit();
+      } else if (
+        formKind ==="simple" &&
+        this.simpleForm.deployChannel ==="portainer"
+      ) {
+        this.loadAvailableStacks();
+      }
+    },
+    syncComposeModeFromHosts(formKind) {
+      const form = this.getHostForm(formKind);
+      const isSupported =
+        formKind ==="edit"
+          ? (mode) => this.isEditComposeModeSupported(mode)
+          : (mode) => this.isComposeModeSupported(mode);
+      if (
+        form.deployMode !=="docker_compose" ||
+        form.deployChannel ==="portainer" ||
+        form.selectedHosts.length === 0
+      ) {
+        return;
+      }
+      if (
+        form.composeMode ==="docker-compose" &&
+        !isSupported("docker-compose")
+      ) {
+        if (isSupported("docker-stack")) {
+          form.composeMode ="docker-stack";
+        }
+      } else if (
+        form.composeMode ==="docker-stack" &&
+        !isSupported("docker-stack")
+      ) {
+        if (isSupported("docker-compose")) {
+          form.composeMode ="docker-compose";
+        }
+      }
     },
     canUseCreateChannel(channel) {
-      if (this.createTypeLock === "portainer") return channel === "portainer";
-      if (this.createTypeLock === "standard") return channel !== "portainer";
+      if (this.createTypeLock ==="portainer") return channel ==="portainer";
+      if (this.createTypeLock ==="standard") return channel !=="portainer";
       return true;
     },
     canUseEditChannel(channel) {
-      if (this.editTypeLock === "portainer") return channel === "portainer";
-      if (this.editTypeLock === "standard") return channel !== "portainer";
+      if (this.editTypeLock ==="portainer") return channel ==="portainer";
+      if (this.editTypeLock ==="standard") return channel !=="portainer";
       return true;
     },
     closeSimpleCreateModal() {
@@ -2856,6 +2974,9 @@ export default {
     closeEditModal() {
       this.showEditModal = false;
       this.editTypeLock = null;
+      this.formHydrating = false;
+      this.editFilterOnlineOnly = true;
+      this.editHostSearchKeyword ="";
     },
     resolveDeployChannel(task) {
       const deployChannel = task?.config?.deploy?.channel;
@@ -2866,7 +2987,7 @@ export default {
       if (firstTarget?.host_type) {
         return firstTarget.host_type;
       }
-      return "agent";
+      return"agent";
     },
     stopAutoRefresh() {
       // 停止自动刷新（兼容性方法）
@@ -2885,18 +3006,18 @@ export default {
           params: {
             page: this.currentPage,
             page_size: this.pageSize,
-            task_type_filter: this.taskTypeFilter === "all" ? undefined : this.taskTypeFilter,
+            task_type_filter: this.taskTypeFilter ==="all" ? undefined : this.taskTypeFilter,
           },
         });
         this.totalTasks = res.data.total || 0;
         this.tasks = (res.data.tasks || []).map((task) => {
-          const appName = task.app_name || task.config?.app?.name || "";
+          const appName = task.app_name || task.config?.app?.name ||"";
           return {
             ...task,
-            status: task.status?.status || task.status || "pending",
+            status: task.status?.status || task.status ||"pending",
             config: task.config || task.task_config?.config || {},
             config_content:
-              task.config_content || task.task_config?.config_content || "",
+              task.config_content || task.task_config?.config_content ||"",
             execution_count: task.execution_count || 0,
             last_executed_at: task.last_executed_at || null,
             app_name: appName,
@@ -2904,7 +3025,7 @@ export default {
         });
       } catch (error) {
         console.error("加载部署任务失败:", error);
-        toastError("加载部署任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载部署任务失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.loading = false;
       }
@@ -2921,7 +3042,7 @@ export default {
         const appName = config?.app?.name;
         if (appName) {
           if (this.isAppNameDuplicate(appName.trim(), null)) {
-            toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
+            toastError(`应用名称"${appName}" 已存在，请使用其他名称`);
             return;
           }
         }
@@ -2939,13 +3060,13 @@ export default {
         });
         toastSuccess("创建成功");
         this.showCreateModal = false;
-        this.taskConfigContent = "";
-        this.taskRegistry = "";
-        this.taskTag = "";
+        this.taskConfigContent ="";
+        this.taskRegistry ="";
+        this.taskTag ="";
         this.loadTasks();
       } catch (error) {
         console.error("创建部署任务失败:", error);
-        toastError("创建部署任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("创建部署任务失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.creating = false;
       }
@@ -2962,8 +3083,7 @@ export default {
           formData.append("file", file);
 
           await axios.post("/api/deploy-tasks/import", formData, {
-            headers: {
-              "Content-Type": "multipart/form-data",
+            headers: {"Content-Type":"multipart/form-data",
             },
           });
           toastSuccess("导入成功");
@@ -2971,7 +3091,7 @@ export default {
           this.loadTasks();
         } catch (error) {
           console.error("导入部署任务失败:", error);
-          toastError("导入部署任务失败: " +
+          toastError("导入部署任务失败:" +
               (error.response?.data?.detail || error.message));
         }
       };
@@ -2990,7 +3110,7 @@ export default {
         const newTaskId = res.data.task_id;
         if (newTaskId) {
           registerTask(newTaskId, {
-            task_type: "deploy",
+            task_type:"deploy",
             image: task.name || task.config?.name,
           });
         }
@@ -3004,17 +3124,17 @@ export default {
         }
       } catch (error) {
         console.error("触发部署配置失败:", error);
-        toastError("触发部署配置失败: " + (error.response?.data?.detail || error.message));
+        toastError("触发部署配置失败:" + (error.response?.data?.detail || error.message));
       }
     },
     viewExecutions(task) {
       // 跳转到任务管理页面，筛选该配置的任务
       const configId = task.task_id;
       sessionStorage.setItem("deployConfigFilter", configId);
-      window.dispatchEvent(new CustomEvent("navigate", { detail: { tab: "tasks" } }));
+      window.dispatchEvent(new CustomEvent("navigate", { detail: { tab:"tasks" } }));
     },
     async deleteTask(task) {
-      if (!(await showConfirm({ message: "确定要删除此部署配置吗？", danger: true }))) return;
+      if (!(await showConfirm({ message:"确定要删除此部署配置吗？", danger: true }))) return;
 
       try {
         // 注意：task.task_id 实际是 config_id（配置ID），用于删除配置
@@ -3029,7 +3149,7 @@ export default {
         }
       } catch (error) {
         console.error("删除部署任务失败:", error);
-        toastError("删除部署任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("删除部署任务失败:" + (error.response?.data?.detail || error.message));
       }
     },
     async exportTask(task) {
@@ -3037,10 +3157,10 @@ export default {
         const res = await axios.get(
           `/api/deploy-tasks/${task.task_id}/export`,
           {
-            responseType: "blob",
+            responseType:"blob",
           }
         );
-        const blob = new Blob([res.data], { type: "application/x-yaml" });
+        const blob = new Blob([res.data], { type:"application/x-yaml" });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -3051,7 +3171,7 @@ export default {
         window.URL.revokeObjectURL(url);
       } catch (error) {
         console.error("导出部署任务失败:", error);
-        toastError("导出部署任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("导出部署任务失败:" + (error.response?.data?.detail || error.message));
       }
     },
     async viewTask(task) {
@@ -3061,24 +3181,23 @@ export default {
         // 适配新的数据结构
         this.selectedTask = {
           ...taskData,
-          status: taskData.status?.status || taskData.status || "pending",
+          status: taskData.status?.status || taskData.status ||"pending",
           config: taskData.config || taskData.task_config?.config || {},
           config_content:
             taskData.config_content ||
-            taskData.task_config?.config_content ||
-            "",
+            taskData.task_config?.config_content ||"",
           created_at: taskData.created_at || taskData.status?.created_at,
           completed_at: taskData.completed_at || taskData.status?.completed_at,
           error: taskData.error,
         };
-        this.detailTab = "config";
+        this.detailTab ="config";
         this.showDetailModal = true;
 
         // 加载任务日志
         await this.loadTaskLogs(task.task_id);
       } catch (error) {
         console.error("获取任务详情失败:", error);
-        toastError("获取任务详情失败: " + (error.response?.data?.detail || error.message));
+        toastError("获取任务详情失败:" + (error.response?.data?.detail || error.message));
       }
     },
     async loadTaskLogs(taskId) {
@@ -3093,12 +3212,12 @@ export default {
     },
     getStatusBadgeClass(status) {
       const map = {
-        pending: "bg-secondary",
-        running: "bg-primary",
-        completed: "bg-success",
-        failed: "bg-danger",
+        pending:"bg-slate-500 text-white",
+        running:"bg-blue-600 text-white",
+        completed:"bg-green-600 text-white",
+        failed:"bg-red-600 text-white",
       };
-      return map[status] || "bg-secondary";
+      return map[status] ||"bg-slate-500 text-white";
     },
     // 检查主机是否支持指定的 Compose 模式
     isComposeModeSupported(mode) {
@@ -3110,15 +3229,17 @@ export default {
       // 检查所有选中的主机是否都支持该模式
       const allHosts = [...this.agentHosts, ...this.sshHosts];
       return this.simpleForm.selectedHosts.every((hostId) => {
-        const host = allHosts.find((h) => h.host_id === hostId);
+        const host = allHosts.find(
+          (h) => this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
+        );
         if (!host) return false;
 
         const dockerInfo = host.docker_info || {};
 
-        if (mode === "docker-compose") {
+        if (mode ==="docker-compose") {
           // 支持 docker-compose（true）或不明确（null/undefined）都允许
           return dockerInfo.compose_supported !== false;
-        } else if (mode === "docker-stack") {
+        } else if (mode ==="docker-stack") {
           // 必须明确支持 stack（true）
           return dockerInfo.stack_supported === true;
         }
@@ -3136,15 +3257,17 @@ export default {
       // 检查所有选中的主机是否都支持该模式
       const allHosts = [...this.agentHosts, ...this.sshHosts];
       return this.editForm.selectedHosts.every((hostId) => {
-        const host = allHosts.find((h) => h.host_id === hostId);
+        const host = allHosts.find(
+          (h) => this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
+        );
         if (!host) return false;
 
         const dockerInfo = host.docker_info || {};
 
-        if (mode === "docker-compose") {
+        if (mode ==="docker-compose") {
           // 支持 docker-compose（true）或不明确（null/undefined）都允许
           return dockerInfo.compose_supported !== false;
-        } else if (mode === "docker-stack") {
+        } else if (mode ==="docker-stack") {
           // 必须明确支持 stack（true）
           return dockerInfo.stack_supported === true;
         }
@@ -3154,15 +3277,15 @@ export default {
     },
     getStatusText(status) {
       const map = {
-        pending: "待执行",
-        running: "执行中",
-        completed: "已完成",
-        failed: "失败",
+        pending:"待执行",
+        running:"执行中",
+        completed:"已完成",
+        failed:"失败",
       };
-      return map[status] || status || "未知";
+      return map[status] || status ||"未知";
     },
     formatTime(time) {
-      if (!time) return "-";
+      if (!time) return"-";
       return new Date(time).toLocaleString("zh-CN");
     },
     isAppNameDuplicate(appName, excludeTaskId) {
@@ -3204,15 +3327,15 @@ export default {
     },
     async createSimpleTask() {
       if (
-        this.createTypeLock === "portainer" &&
-        this.simpleForm.deployChannel !== "portainer"
+        this.createTypeLock ==="portainer" &&
+        this.simpleForm.deployChannel !=="portainer"
       ) {
         toastError("当前为 Portainer 新建流程，不能切换到 SSH/Agent 类型");
         return;
       }
       if (
-        this.createTypeLock === "standard" &&
-        this.simpleForm.deployChannel === "portainer"
+        this.createTypeLock ==="standard" &&
+        this.simpleForm.deployChannel ==="portainer"
       ) {
         toastError("当前为 SSH/Agent 新建流程，不能切换到 Portainer 类型");
         return;
@@ -3230,7 +3353,7 @@ export default {
         return taskAppName && taskAppName === appName;
       });
       if (existingTask) {
-        toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
+        toastError(`应用名称"${appName}" 已存在，请使用其他名称`);
         return;
       }
       if (this.simpleForm.selectedHosts.length === 0) {
@@ -3238,45 +3361,45 @@ export default {
         return;
       }
       if (
-        this.simpleForm.deployChannel === "portainer" &&
+        this.simpleForm.deployChannel ==="portainer" &&
         this.simpleForm.selectedHosts.length !== 1
       ) {
         toastError("Portainer 发布必须选择一个目标主机");
         return;
       }
       if (
-        this.simpleForm.deployChannel === "portainer" &&
-        this.simpleForm.deployMode === "multi_step"
+        this.simpleForm.deployChannel ==="portainer" &&
+        this.simpleForm.deployMode ==="multi_step"
       ) {
         toastError("Portainer 发布暂不支持多步骤模式");
         return;
       }
       if (
-        this.simpleForm.deployChannel === "portainer" &&
-        this.simpleForm.deployMode !== "docker_compose"
+        this.simpleForm.deployChannel ==="portainer" &&
+        this.simpleForm.deployMode !=="docker_compose"
       ) {
         toastInfo("Portainer 发布仅支持 Docker Compose/Stack");
         return;
       }
       if (
-        this.simpleForm.deployMode === "docker_run" &&
+        this.simpleForm.deployMode ==="docker_run" &&
         !this.simpleForm.runCommand.trim()
       ) {
         toastError("请输入 Docker Run 命令");
         return;
       }
-      if (this.simpleForm.deployMode === "docker_compose") {
+      if (this.simpleForm.deployMode ==="docker_compose") {
         if (
-          this.simpleForm.deployChannel === "portainer" &&
-          this.simpleForm.stackStrategy === "update_existing" &&
+          this.simpleForm.deployChannel ==="portainer" &&
+          this.simpleForm.stackStrategy ==="update_existing" &&
           !this.simpleForm.selectedStackId
         ) {
           toastError("请选择要更新的 Stack");
           return;
         }
         if (
-          this.simpleForm.deployChannel === "portainer" &&
-          this.simpleForm.stackStrategy === "create_new" &&
+          this.simpleForm.deployChannel ==="portainer" &&
+          this.simpleForm.stackStrategy ==="create_new" &&
           !this.simpleForm.newStackName?.trim()
         ) {
           toastError("请输入新 Stack 名称");
@@ -3284,10 +3407,10 @@ export default {
         }
         if (!this.simpleForm.composeCommand.trim()) {
           // 如果命令为空，设置默认值
-          if (this.simpleForm.composeMode === "docker-stack") {
-            this.simpleForm.composeCommand = "-c docker-compose.yml";
+          if (this.simpleForm.composeMode ==="docker-stack") {
+            this.simpleForm.composeCommand ="-c docker-compose.yml";
           } else {
-            this.simpleForm.composeCommand = "up -d";
+            this.simpleForm.composeCommand ="up -d";
           }
         }
         if (!this.simpleForm.composeContent.trim()) {
@@ -3302,18 +3425,19 @@ export default {
       for (const hostId of this.simpleForm.selectedHosts) {
         // 在所有主机列表中查找（包括 Agent、Portainer 和 SSH）
         const host = [...this.agentHosts, ...this.sshHosts].find(
-          (h) => h.host_id === hostId
+          (h) =>
+            this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
         );
         if (!host) continue;
 
         // 确定主机类型
-        let hostType = "agent";
-        if (host.host_type === "portainer") {
-          hostType = "portainer";
-        } else if (host.host_type === "agent") {
-          hostType = "agent";
+        let hostType ="agent";
+        if (host.host_type ==="portainer") {
+          hostType ="portainer";
+        } else if (host.host_type ==="agent") {
+          hostType ="agent";
         } else {
-          hostType = "ssh";
+          hostType ="ssh";
         }
 
         targets.push({
@@ -3326,7 +3450,7 @@ export default {
       // 构建统一的deploy配置
       let deployConfig = {};
 
-      if (this.simpleForm.deployMode === "multi_step") {
+      if (this.simpleForm.deployMode ==="multi_step") {
         // 多步骤模式
         deployConfig = {
           steps: this.simpleForm.steps.map((step) => ({
@@ -3339,20 +3463,20 @@ export default {
         deployConfig = {
           channel: this.simpleForm.deployChannel,
           type:
-            this.simpleForm.deployMode === "docker_compose"
-              ? "docker_compose"
-              : "docker_run",
+            this.simpleForm.deployMode ==="docker_compose"
+              ?"docker_compose"
+              :"docker_run",
           command:
-            this.simpleForm.deployMode === "docker_run"
+            this.simpleForm.deployMode ==="docker_run"
               ? this.simpleForm.runCommand.trim()
               : this.simpleForm.composeCommand.trim(),
         };
 
-        if (this.simpleForm.deployMode === "docker_compose") {
+        if (this.simpleForm.deployMode ==="docker_compose") {
           deployConfig.compose_content = this.simpleForm.composeContent.trim();
           // 添加 compose_mode 和 redeploy_strategy
           if (
-            this.simpleForm.deployChannel !== "portainer" &&
+            this.simpleForm.deployChannel !=="portainer" &&
             this.simpleForm.composeMode
           ) {
             deployConfig.compose_mode = this.simpleForm.composeMode;
@@ -3360,7 +3484,7 @@ export default {
           if (this.simpleForm.redeployStrategy) {
             deployConfig.redeploy_strategy = this.simpleForm.redeployStrategy;
           }
-          if (this.simpleForm.deployChannel === "portainer") {
+          if (this.simpleForm.deployChannel ==="portainer") {
             deployConfig.stack_strategy = this.simpleForm.stackStrategy;
             if (this.simpleForm.selectedStackId) {
               deployConfig.stack_id = this.simpleForm.selectedStackId;
@@ -3377,7 +3501,7 @@ export default {
       }
 
       const yamlConfig = {
-        version: "1.0",
+        version:"1.0",
         app: {
           name: this.simpleForm.appName,
         },
@@ -3405,33 +3529,33 @@ export default {
         this.loadTasks();
       } catch (error) {
         console.error("创建部署任务失败:", error);
-        toastError("创建部署任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("创建部署任务失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.creating = false;
       }
     },
     resetSimpleForm() {
       this.simpleForm = {
-        appName: "",
+        appName:"",
         selectedHosts: [],
         portainerTargetHost: null,
-        deployChannel: "agent",
-        deployMode: "docker_run",
-        composeMode: "docker-compose",
-        redeployStrategy: "update_existing",
-        stackStrategy: "create_new",
+        deployChannel:"agent",
+        deployMode:"docker_run",
+        composeMode:"docker-compose",
+        redeployStrategy:"update_existing",
+        stackStrategy:"create_new",
         selectedStackId: null,
-        newStackName: "",
-        runCommand: "",
-        composeCommand: "up -d", // Docker Compose 默认命令
-        composeContent: "",
+        newStackName:"",
+        runCommand:"",
+        composeCommand:"up -d", // Docker Compose 默认命令
+        composeContent:"",
         redeploy: false,
         steps: [],
       };
     },
     async loadAvailableStacks() {
       if (
-        this.simpleForm.deployChannel !== "portainer" ||
+        this.simpleForm.deployChannel !=="portainer" ||
         this.simpleForm.selectedHosts.length !== 1
       ) {
         this.availableStacks = [];
@@ -3459,12 +3583,12 @@ export default {
           this.simpleForm.composeContent = compose;
         }
       } catch (error) {
-        toastError("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载 Stack 配置失败:" + (error.response?.data?.detail || error.message));
       }
     },
     async loadAvailableStacksForEdit() {
       if (
-        this.editForm.deployChannel !== "portainer" ||
+        this.editForm.deployChannel !=="portainer" ||
         this.editForm.selectedHosts.length !== 1
       ) {
         this.availableStacks = [];
@@ -3492,13 +3616,13 @@ export default {
           this.editForm.composeContent = compose;
         }
       } catch (error) {
-        toastError("加载 Stack 配置失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载 Stack 配置失败:" + (error.response?.data?.detail || error.message));
       }
     },
     addStep() {
       this.simpleForm.steps.push({
-        name: "",
-        command: "",
+        name:"",
+        command:"",
       });
     },
     removeStep(index) {
@@ -3518,8 +3642,8 @@ export default {
     },
     addEditStep() {
       this.editForm.steps.push({
-        name: "",
-        command: "",
+        name:"",
+        command:"",
       });
     },
     async removeEditStep(index) {
@@ -3549,25 +3673,25 @@ export default {
         this.editingTask.registry === undefined ||
         this.editingTask.registry === null
       ) {
-        this.editingTask.registry = "";
+        this.editingTask.registry ="";
       }
       if (this.editingTask.tag === undefined || this.editingTask.tag === null) {
-        this.editingTask.tag = "";
+        this.editingTask.tag ="";
       }
-      this.editMode = "yaml";
+      this.editMode ="yaml";
     },
-    openSimpleCreateModal(createType = "standard") {
+    openSimpleCreateModal(createType ="standard") {
       this.resetSimpleForm();
       this.createTypeLock = createType;
-      if (createType === "portainer") {
-        this.simpleForm.deployChannel = "portainer";
-        this.simpleForm.deployMode = "docker_compose";
-        this.simpleForm.composeMode = "docker-compose";
-        this.simpleForm.stackStrategy = "create_new";
-        this.hostFilter = "portainer";
+      if (createType ==="portainer") {
+        this.simpleForm.deployChannel ="portainer";
+        this.simpleForm.deployMode ="docker_compose";
+        this.simpleForm.composeMode ="docker-compose";
+        this.simpleForm.stackStrategy ="create_new";
+        this.hostFilter ="portainer";
       } else {
-        this.simpleForm.deployChannel = "agent";
-        this.hostFilter = "all";
+        this.simpleForm.deployChannel ="agent";
+        this.hostFilter ="all";
       }
       this.loadAgentHosts();
       this.showSimpleCreateModal = true;
@@ -3581,7 +3705,7 @@ export default {
         this.editTypeLock = null;
         // 编辑时默认不过滤在线状态，避免已绑定离线主机看起来“未反选”
         this.editFilterOnlineOnly = false;
-        this.editHostFilter = "all";
+        this.editHostFilter ="all";
         // 注意：task.task_id 实际是 config_id（配置ID），用于查询和更新配置
         const res = await axios.get(`/api/deploy-tasks/${task.task_id}`);
         const taskData = res.data.task;
@@ -3589,21 +3713,19 @@ export default {
         // 后端返回的数据结构：task.config_content 或 task.task_config.config_content
         const configContent =
           taskData.config_content ||
-          (taskData.task_config && taskData.task_config.config_content) ||
-          "";
+          (taskData.task_config && taskData.task_config.config_content) ||"";
         const taskConfig = taskData.task_config || {};
         this.editingTask = {
           task_id: taskData.task_id,
           config_content: configContent,
           registry:
             (taskData.status && taskData.status.registry) ||
-            taskConfig.registry ||
-            "",
-          tag: (taskData.status && taskData.status.tag) || taskConfig.tag || "",
-          webhook_token: taskData.webhook_token || "",
-          webhook_secret: taskData.webhook_secret || "",
+            taskConfig.registry ||"",
+          tag: (taskData.status && taskData.status.tag) || taskConfig.tag ||"",
+          webhook_token: taskData.webhook_token ||"",
+          webhook_secret: taskData.webhook_secret ||"",
           webhook_branch_strategy:
-            taskData.webhook_branch_strategy || "use_push",
+            taskData.webhook_branch_strategy ||"use_push",
           webhook_allowed_branches: taskData.webhook_allowed_branches || [],
         };
 
@@ -3612,10 +3734,10 @@ export default {
         await this.loadSSHHosts();
 
         // 先保存webhook配置（因为parseYamlToForm会重置editForm）
-        const savedWebhookToken = taskData.webhook_token || "";
-        const savedWebhookSecret = taskData.webhook_secret || "";
+        const savedWebhookToken = taskData.webhook_token ||"";
+        const savedWebhookSecret = taskData.webhook_secret ||"";
         const savedWebhookBranchStrategy =
-          taskData.webhook_branch_strategy || "use_push";
+          taskData.webhook_branch_strategy ||"use_push";
         const savedWebhookAllowedBranches =
           taskData.webhook_allowed_branches || [];
 
@@ -3623,7 +3745,7 @@ export default {
         const config = taskData.config || taskConfig.config || {};
         this.parseYamlToForm(configContent, config);
         this.editTypeLock =
-          this.editForm.deployChannel === "portainer" ? "portainer" : "standard";
+          this.editForm.deployChannel ==="portainer" ?"portainer" :"standard";
 
         // 恢复webhook配置（必须在parseYamlToForm之后）
         this.editForm.webhook_token = savedWebhookToken;
@@ -3635,47 +3757,49 @@ export default {
 
         console.log("加载webhook配置:", {
           webhook_token: savedWebhookToken
-            ? savedWebhookToken.substring(0, 8) + "..."
-            : "(空)",
-          webhook_secret: savedWebhookSecret ? "***" : "(空)",
+            ? savedWebhookToken.substring(0, 8) +"..."
+            :"(空)",
+          webhook_secret: savedWebhookSecret ?"***" :"(空)",
           webhook_branch_strategy: savedWebhookBranchStrategy,
           webhook_allowed_branches: savedWebhookAllowedBranches,
         });
 
         this.showEditModal = true;
-        this.editMode = "form"; // 默认使用表单编辑
+        this.editMode ="form"; // 默认使用表单编辑
         // 如果详情模态框打开，先关闭它
         if (this.showDetailModal) {
           this.showDetailModal = false;
         }
       } catch (error) {
         console.error("获取任务详情失败:", error);
-        toastError("获取任务详情失败: " + (error.response?.data?.detail || error.message));
+        toastError("获取任务详情失败:" + (error.response?.data?.detail || error.message));
       }
     },
     parseYamlToForm(configContent, config) {
+      this.formHydrating = true;
+      try {
       // 重置表单
       this.editForm = {
-        appName: "",
+        appName:"",
         selectedHosts: [],
         portainerTargetHost: null,
-        deployChannel: "agent",
-        deployMode: "docker_run",
-        composeMode: "docker-compose",
-        redeployStrategy: "update_existing",
-        stackStrategy: "create_new",
+        deployChannel:"agent",
+        deployMode:"docker_run",
+        composeMode:"docker-compose",
+        redeployStrategy:"update_existing",
+        stackStrategy:"create_new",
         selectedStackId: null,
-        newStackName: "",
-        runCommand: "",
-        composeCommand: "up -d", // Docker Compose 默认命令
-        composeContent: "",
+        newStackName:"",
+        runCommand:"",
+        composeCommand:"up -d", // Docker Compose 默认命令
+        composeContent:"",
         redeploy: false,
         steps: [],
-        webhook_token: "",
-        webhook_secret: "",
-        webhook_branch_strategy: "use_push",
+        webhook_token:"",
+        webhook_secret:"",
+        webhook_branch_strategy:"use_push",
         webhook_allowed_branches: [],
-        webhook_allowed_branches_input: "",
+        webhook_allowed_branches_input:"",
       };
 
       if (!config) {
@@ -3686,6 +3810,7 @@ export default {
           return;
         }
       }
+      if (!config) return;
 
       // 解析应用名称
       if (config.app && config.app.name) {
@@ -3700,14 +3825,14 @@ export default {
         if (targets.length > 0) {
           const firstTarget = targets[0];
           const dockerConfig = firstTarget.docker || {};
-          const deployMode = dockerConfig.deploy_mode || "docker_run";
+          const deployMode = dockerConfig.deploy_mode ||"docker_run";
           deployConfig = {
             type:
-              deployMode === "docker_compose" ? "docker_compose" : "docker_run",
-            command: dockerConfig.command || "",
+              deployMode ==="docker_compose" ?"docker_compose" :"docker_run",
+            command: dockerConfig.command ||"",
           };
-          if (deployMode === "docker_compose") {
-            deployConfig.compose_content = dockerConfig.compose_content || "";
+          if (deployMode ==="docker_compose") {
+            deployConfig.compose_content = dockerConfig.compose_content ||"";
           }
           if (dockerConfig.redeploy) {
             deployConfig.redeploy = true;
@@ -3720,50 +3845,49 @@ export default {
           (config.targets &&
             config.targets[0] &&
             (config.targets[0].host_type ||
-              (config.targets[0].mode === "ssh" ? "ssh" : "agent"))) ||
-          "agent";
+              (config.targets[0].mode ==="ssh" ?"ssh" :"agent"))) ||"agent";
         this.editForm.deployChannel = deployConfig.channel || targetHostType;
         // 判断是否为多步骤模式
         if (deployConfig.steps && Array.isArray(deployConfig.steps)) {
           // 多步骤模式
-          this.editForm.deployMode = "multi_step";
+          this.editForm.deployMode ="multi_step";
           this.editForm.steps = deployConfig.steps.map((step) => ({
-            name: step.name || "",
-            command: step.command || "",
+            name: step.name ||"",
+            command: step.command ||"",
           }));
         } else {
           // 单命令模式
           this.editForm.deployMode =
-            deployConfig.type === "docker_compose"
-              ? "docker_compose"
-              : "docker_run";
+            deployConfig.type ==="docker_compose"
+              ?"docker_compose"
+              :"docker_run";
           this.editForm.deployChannel = deployConfig.channel || targetHostType;
 
           // 解析部署命令和内容
-          if (this.editForm.deployMode === "docker_run") {
-            this.editForm.runCommand = deployConfig.command || "";
+          if (this.editForm.deployMode ==="docker_run") {
+            this.editForm.runCommand = deployConfig.command ||"";
           } else {
             // 解析 compose_mode 和 redeploy_strategy
             this.editForm.composeMode =
-              deployConfig.compose_mode || "docker-compose";
+              deployConfig.compose_mode ||"docker-compose";
             // 根据 compose_mode 设置默认命令
             if (deployConfig.command) {
               this.editForm.composeCommand = deployConfig.command;
             } else {
               // 设置默认命令
-              if (this.editForm.composeMode === "docker-stack") {
-                this.editForm.composeCommand = "-c docker-compose.yml";
+              if (this.editForm.composeMode ==="docker-stack") {
+                this.editForm.composeCommand ="-c docker-compose.yml";
               } else {
-                this.editForm.composeCommand = "up -d";
+                this.editForm.composeCommand ="up -d";
               }
             }
-            this.editForm.composeContent = deployConfig.compose_content || "";
+            this.editForm.composeContent = deployConfig.compose_content ||"";
             this.editForm.redeployStrategy =
-              deployConfig.redeploy_strategy || "update_existing";
+              deployConfig.redeploy_strategy ||"update_existing";
             this.editForm.stackStrategy =
-              deployConfig.stack_strategy || "create_new";
+              deployConfig.stack_strategy ||"create_new";
             this.editForm.selectedStackId = deployConfig.stack_id || null;
-            this.editForm.newStackName = deployConfig.stack_name || "";
+            this.editForm.newStackName = deployConfig.stack_name ||"";
           }
         }
 
@@ -3775,37 +3899,43 @@ export default {
       const selectedHostIds = [];
       for (const target of targets) {
         const hostId = this.findHostIdFromTarget(target);
-        if (hostId) selectedHostIds.push(hostId);
+        if (hostId) selectedHostIds.push(String(hostId));
       }
-      this.editForm.selectedHosts = selectedHostIds;
+      this.setSelectedHosts("edit", selectedHostIds);
+      this.syncComposeModeFromHosts("edit");
       if (
-        this.editForm.deployChannel === "portainer" &&
+        this.editForm.deployChannel ==="portainer" &&
         this.editForm.selectedHosts.length > 0
       ) {
         this.editForm.portainerTargetHost = this.editForm.selectedHosts[0];
         this.loadAvailableStacksForEdit();
       }
+      } finally {
+        this.$nextTick(() => {
+          this.formHydrating = false;
+        });
+      }
     },
     async saveEditTask() {
       if (
-        this.editTypeLock === "portainer" &&
-        this.editForm.deployChannel !== "portainer"
+        this.editTypeLock ==="portainer" &&
+        this.editForm.deployChannel !=="portainer"
       ) {
         toastError("Portainer 任务不允许切换为 SSH/Agent 类型");
         return;
       }
       if (
-        this.editTypeLock === "standard" &&
-        this.editForm.deployChannel === "portainer"
+        this.editTypeLock ==="standard" &&
+        this.editForm.deployChannel ==="portainer"
       ) {
         toastError("SSH/Agent 任务不允许切换为 Portainer 类型");
         return;
       }
-      let yamlContent = "";
+      let yamlContent ="";
       const registry = this.editingTask.registry || null;
       const tag = this.editingTask.tag || null;
 
-      if (this.editMode === "form") {
+      if (this.editMode ==="form") {
         // 表单模式：验证并转换为YAML
         if (!this.editForm.appName.trim()) {
           toastError("请输入应用名称");
@@ -3815,7 +3945,7 @@ export default {
         // 检查应用名称是否已存在（排除当前任务）
         const appName = this.editForm.appName.trim();
         if (this.isAppNameDuplicate(appName, this.editingTask?.task_id)) {
-          toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
+          toastError(`应用名称"${appName}" 已存在，请使用其他名称`);
           return;
         }
 
@@ -3824,38 +3954,38 @@ export default {
           return;
         }
         if (
-          this.editForm.deployChannel === "portainer" &&
+          this.editForm.deployChannel ==="portainer" &&
           this.editForm.selectedHosts.length !== 1
         ) {
           toastError("Portainer 发布必须选择一个目标主机");
           return;
         }
         if (
-          this.editForm.deployChannel === "portainer" &&
-          this.editForm.deployMode !== "docker_compose"
+          this.editForm.deployChannel ==="portainer" &&
+          this.editForm.deployMode !=="docker_compose"
         ) {
           toastInfo("Portainer 发布仅支持 Docker Compose/Stack");
           return;
         }
         if (
-          this.editForm.deployMode === "docker_run" &&
+          this.editForm.deployMode ==="docker_run" &&
           !this.editForm.runCommand.trim()
         ) {
           toastError("请输入 Docker Run 命令");
           return;
         }
-        if (this.editForm.deployMode === "docker_compose") {
+        if (this.editForm.deployMode ==="docker_compose") {
           if (
-            this.editForm.deployChannel === "portainer" &&
-            this.editForm.stackStrategy === "update_existing" &&
+            this.editForm.deployChannel ==="portainer" &&
+            this.editForm.stackStrategy ==="update_existing" &&
             !this.editForm.selectedStackId
           ) {
             toastError("请选择要更新的 Stack");
             return;
           }
           if (
-            this.editForm.deployChannel === "portainer" &&
-            this.editForm.stackStrategy === "create_new" &&
+            this.editForm.deployChannel ==="portainer" &&
+            this.editForm.stackStrategy ==="create_new" &&
             !this.editForm.newStackName?.trim()
           ) {
             toastError("请输入新 Stack 名称");
@@ -3863,10 +3993,10 @@ export default {
           }
           if (!this.editForm.composeCommand.trim()) {
             // 如果命令为空，设置默认值
-            if (this.editForm.composeMode === "docker-stack") {
-              this.editForm.composeCommand = "-c docker-compose.yml";
+            if (this.editForm.composeMode ==="docker-stack") {
+              this.editForm.composeCommand ="-c docker-compose.yml";
             } else {
-              this.editForm.composeCommand = "up -d";
+              this.editForm.composeCommand ="up -d";
             }
           }
           if (!this.editForm.composeContent.trim()) {
@@ -3874,7 +4004,7 @@ export default {
             return;
           }
         }
-        if (this.editForm.deployMode === "multi_step") {
+        if (this.editForm.deployMode ==="multi_step") {
           if (this.editForm.steps.length === 0) {
             toastError("请至少添加一个部署步骤");
             return;
@@ -3913,7 +4043,7 @@ export default {
             if (
               this.isAppNameDuplicate(appName.trim(), this.editingTask?.task_id)
             ) {
-              toastError(`应用名称 "${appName}" 已存在，请使用其他名称`);
+              toastError(`应用名称"${appName}" 已存在，请使用其他名称`);
               return;
             }
           }
@@ -3923,7 +4053,7 @@ export default {
         }
       }
 
-      if (!(await showConfirm({ message: "确定要保存修改吗？" }))) {
+      if (!(await showConfirm({ message:"确定要保存修改吗？" }))) {
         return;
       }
 
@@ -3932,7 +4062,7 @@ export default {
         // 处理webhook允许的分支列表
         let webhook_allowed_branches = [];
         if (
-          this.editForm.webhook_branch_strategy === "select_branches" &&
+          this.editForm.webhook_branch_strategy ==="select_branches" &&
           this.editForm.webhook_allowed_branches_input
         ) {
           webhook_allowed_branches =
@@ -3949,20 +4079,20 @@ export default {
           this.editForm.webhook_token !== undefined &&
           this.editForm.webhook_token !== null
             ? this.editForm.webhook_token
-            : "";
+            :"";
         const webhookSecret =
           this.editForm.webhook_secret !== undefined &&
           this.editForm.webhook_secret !== null
             ? this.editForm.webhook_secret
-            : "";
+            :"";
         const webhookBranchStrategy =
-          this.editForm.webhook_branch_strategy || "use_push";
+          this.editForm.webhook_branch_strategy ||"use_push";
 
         console.log("保存webhook配置:", {
           webhook_token: webhookToken
-            ? webhookToken.substring(0, 8) + "..."
-            : "(空，将生成)",
-          webhook_secret: webhookSecret ? "***" : "(空)",
+            ? webhookToken.substring(0, 8) +"..."
+            :"(空，将生成)",
+          webhook_secret: webhookSecret ?"***" :"(空)",
           webhook_branch_strategy: webhookBranchStrategy,
           webhook_allowed_branches: webhook_allowed_branches,
         });
@@ -3978,7 +4108,7 @@ export default {
           webhook_allowed_branches:
             webhook_allowed_branches.length > 0
               ? webhook_allowed_branches
-              : webhookBranchStrategy === "select_branches"
+              : webhookBranchStrategy ==="select_branches"
               ? []
               : null,
         });
@@ -3989,7 +4119,7 @@ export default {
         this.loadTasks();
       } catch (error) {
         console.error("保存任务失败:", error);
-        toastError("保存任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("保存任务失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.creating = false;
       }
@@ -3999,18 +4129,19 @@ export default {
       const targets = [];
       for (const hostId of form.selectedHosts) {
         const host = [...this.agentHosts, ...this.sshHosts].find(
-          (h) => h.host_id === hostId
+          (h) =>
+            this.normalizeHostId(h.host_id) === this.normalizeHostId(hostId)
         );
         if (!host) continue;
 
         // 确定主机类型
-        let hostType = "agent";
-        if (host.host_type === "portainer") {
-          hostType = "portainer";
-        } else if (host.host_type === "agent") {
-          hostType = "agent";
+        let hostType ="agent";
+        if (host.host_type ==="portainer") {
+          hostType ="portainer";
+        } else if (host.host_type ==="agent") {
+          hostType ="agent";
         } else {
-          hostType = "ssh";
+          hostType ="ssh";
         }
 
         targets.push({
@@ -4023,7 +4154,7 @@ export default {
       // 构建统一的deploy配置
       let deployConfig = {};
 
-      if (form.deployMode === "multi_step") {
+      if (form.deployMode ==="multi_step") {
         // 多步骤模式
         deployConfig = {
           steps: form.steps.map((step) => ({
@@ -4034,28 +4165,28 @@ export default {
       } else {
         // 单命令模式
         deployConfig = {
-          channel: form.deployChannel || "agent",
+          channel: form.deployChannel ||"agent",
           type:
-            form.deployMode === "docker_compose"
-              ? "docker_compose"
-              : "docker_run",
+            form.deployMode ==="docker_compose"
+              ?"docker_compose"
+              :"docker_run",
           command:
-            form.deployMode === "docker_run"
+            form.deployMode ==="docker_run"
               ? form.runCommand.trim()
               : form.composeCommand.trim(),
         };
 
-        if (form.deployMode === "docker_compose") {
+        if (form.deployMode ==="docker_compose") {
           deployConfig.compose_content = form.composeContent.trim();
           // 添加 compose_mode 和 redeploy_strategy
-          if (form.deployChannel !== "portainer" && form.composeMode) {
+          if (form.deployChannel !=="portainer" && form.composeMode) {
             deployConfig.compose_mode = form.composeMode;
           }
           if (form.redeployStrategy) {
             deployConfig.redeploy_strategy = form.redeployStrategy;
           }
-          if (form.deployChannel === "portainer") {
-            deployConfig.stack_strategy = form.stackStrategy || "create_new";
+          if (form.deployChannel ==="portainer") {
+            deployConfig.stack_strategy = form.stackStrategy ||"create_new";
             if (form.selectedStackId) {
               deployConfig.stack_id = form.selectedStackId;
             }
@@ -4071,7 +4202,7 @@ export default {
       }
 
       const yamlConfig = {
-        version: "1.0",
+        version:"1.0",
         app: {
           name: form.appName,
         },
@@ -4087,7 +4218,7 @@ export default {
     async copyTask(task) {
       // 显示确认提示
       // 尝试多种方式获取应用名称
-      let appName = "未知任务";
+      let appName ="未知任务";
       if (task.app_name) {
         appName = task.app_name;
       } else if (task.config && task.config.app && task.config.app.name) {
@@ -4099,7 +4230,7 @@ export default {
       }
 
       // 显示确认对话框
-      const confirmed = await showConfirm({ message: `确定要克隆部署任务 "${appName}" 吗？\n\n` +
+      const confirmed = await showConfirm({ message: `确定要克隆部署任务"${appName}" 吗？\n\n` +
           `克隆后将创建一个新的任务，使用相同的配置。\n\n` +
           `点击"确定"继续，点击"取消"放弃。` });
 
@@ -4114,23 +4245,21 @@ export default {
         // 创建新任务（使用相同的配置）
         let configContent =
           taskData.config_content ||
-          (taskData.task_config && taskData.task_config.config_content) ||
-          "";
+          (taskData.task_config && taskData.task_config.config_content) ||"";
         const taskConfig = taskData.task_config || {};
         // 部署配置的 app 名全局唯一，克隆时必须改名，否则后端会报「应用名称已存在」
         try {
           const cfg = yaml.load(configContent);
-          if (cfg && typeof cfg === "object") {
+          if (cfg && typeof cfg ==="object") {
             const base =
-              (cfg.app && typeof cfg.app === "object" && cfg.app.name) ||
-              cfg.app_name ||
-              "app";
+              (cfg.app && typeof cfg.app ==="object" && cfg.app.name) ||
+              cfg.app_name ||"app";
             const suffix =
-              typeof crypto !== "undefined" && crypto.randomUUID
-                ? crypto.randomUUID().replace(/-/g, "").slice(0, 8)
+              typeof crypto !=="undefined" && crypto.randomUUID
+                ? crypto.randomUUID().replace(/-/g,"").slice(0, 8)
                 : String(Date.now());
             const newAppName = `${base}-clone-${suffix}`;
-            if (!cfg.app || typeof cfg.app !== "object") {
+            if (!cfg.app || typeof cfg.app !=="object") {
               cfg.app = {};
             }
             cfg.app.name = newAppName;
@@ -4164,7 +4293,7 @@ export default {
         }
       } catch (error) {
         console.error("复制任务失败:", error);
-        toastError("克隆任务失败: " + (error.response?.data?.detail || error.message));
+        toastError("克隆任务失败:" + (error.response?.data?.detail || error.message));
       }
     },
     async refreshTask(task) {
@@ -4177,20 +4306,20 @@ export default {
     },
     formatLogMessage(message) {
       // 格式化日志消息，支持简单的HTML标记
-      if (!message) return "";
+      if (!message) return"";
       // 转义HTML，但保留换行
       return message
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\n/g, "<br>");
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/\n/g,"<br>");
     },
     getLogLineClass(log) {
       // 根据日志消息内容返回样式类
       // log可能是字符串或对象
       const message =
-        typeof log === "string" ? log : log.log_message || log.message || "";
-      if (!message) return "";
+        typeof log ==="string" ? log : log.log_message || log.message ||"";
+      if (!message) return"";
       const msg = message.toLowerCase();
       if (
         msg.includes("错误") ||
@@ -4199,7 +4328,7 @@ export default {
         msg.includes("failed") ||
         msg.includes("❌")
       ) {
-        return "text-danger";
+        return"text-danger";
       }
       if (
         msg.includes("成功") ||
@@ -4208,14 +4337,14 @@ export default {
         msg.includes("completed") ||
         msg.includes("✅")
       ) {
-        return "text-success";
+        return"text-green-600";
       }
       if (
         msg.includes("警告") ||
         msg.includes("warning") ||
         msg.includes("⚠️")
       ) {
-        return "text-warning";
+        return"text-amber-600";
       }
       if (
         msg.includes("信息") ||
@@ -4223,50 +4352,50 @@ export default {
         msg.includes("📦") ||
         msg.includes("🚀")
       ) {
-        return "text-info";
+        return"text-info";
       }
-      return "text-light";
+      return"text-light";
     },
     generateUUID() {
-      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      return"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
         /[xy]/g,
         function (c) {
           const r = (Math.random() * 16) | 0;
-          const v = c === "x" ? r : (r & 0x3) | 0x8;
+          const v = c ==="x" ? r : (r & 0x3) | 0x8;
           return v.toString(16);
         }
       );
     },
     async regenerateEditWebhookToken() {
-      if (await showConfirm({ message: "确定要重新生成 Webhook Token 吗？重新生成后需要更新外部系统的 Webhook URL。" })) {
+      if (await showConfirm({ message:"确定要重新生成 Webhook Token 吗？重新生成后需要更新外部系统的 Webhook URL。" })) {
         this.editForm.webhook_token = this.generateUUID();
       }
     },
     async regenerateEditWebhookSecret() {
-      if (await showConfirm({ message: "确定要重新生成 Webhook Secret 吗？重新生成后需要更新外部系统的 Webhook Secret。" })) {
+      if (await showConfirm({ message:"确定要重新生成 Webhook Secret 吗？重新生成后需要更新外部系统的 Webhook Secret。" })) {
         this.editForm.webhook_secret = this.generateUUID();
       }
     },
     showEditWebhookUrl() {
-      const token = this.editForm.webhook_token || "未设置";
+      const token = this.editForm.webhook_token ||"未设置";
       const baseUrl = window.location.origin
-        .replace(":3000", ":8000")
-        .replace(":5173", ":8000");
+        .replace(":3000",":8000")
+        .replace(":5173",":8000");
       this.webhookUrl =
-        token !== "未设置"
+        token !=="未设置"
           ? `${baseUrl}/api/webhook/deploy/${token}`
-          : "请先设置 Webhook Token";
+          :"请先设置 Webhook Token";
       this.showWebhookModal = true;
     },
     getWebhookUrl(task) {
       const token = task.webhook_token;
-      if (!token) return "";
+      if (!token) return"";
       // 使用后端API的URL（通常是8000端口），而不是前端开发服务器的URL
       // 如果前端和后端在同一域名下，使用window.location.origin
       // 否则需要配置后端URL
       const baseUrl = window.location.origin
-        .replace(":3000", ":8000")
-        .replace(":5173", ":8000");
+        .replace(":3000",":8000")
+        .replace(":5173",":8000");
       return `${baseUrl}/api/webhook/deploy/${token}`;
     },
     showWebhookUrl(task) {

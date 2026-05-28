@@ -3,7 +3,7 @@
     <div class="pipeline-create-toolbar mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex min-w-0 items-center gap-3">
         <Button type="button" variant="outline" size="sm" class="shrink-0" @click="goBack">
-          <i class="fas fa-arrow-left mr-1"></i> 返回
+          <AppIcon  name="arrow-left" class="mr-1" /> 返回
         </Button>
         <div class="min-w-0">
           <h5 class="mb-0 text-lg font-semibold text-slate-800">新建流水线</h5>
@@ -22,21 +22,21 @@
     <div class="step-content rounded-lg border border-slate-200 bg-white">
       <div v-if="currentStep === 1" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-info-circle text-blue-600"></i> 步骤 1：基本信息
+          <AppIcon  name="info-circle" class="text-blue-600" /> 步骤 1：基本信息
         </h5>
         <PipelineFormEditor section="basic" />
       </div>
 
       <div v-else-if="currentStep === 2" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-code-branch text-blue-600"></i> 步骤 2：Git 仓库
+          <AppIcon  name="code-branch" class="text-blue-600" /> 步骤 2：Git 仓库
         </h5>
         <PipelineCreateStepGit />
       </div>
 
       <div v-else-if="currentStep === 3" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-layer-group text-blue-600"></i> 步骤 3：服务模式
+          <AppIcon  name="layer-group" class="text-blue-600" /> 步骤 3：服务模式
         </h5>
         <p class="mb-3 text-sm text-slate-500">
           系统将根据仓库中的 Dockerfile 自动判断单应用或多阶段（多服务）构建。
@@ -46,16 +46,16 @@
 
       <div v-else-if="currentStep === 4" class="step-panel">
         <h5 class="mb-3">
-          <i class="fas fa-check-circle text-green-600"></i> 步骤 4：确认创建
+          <AppIcon  name="check-circle" class="text-green-600" /> 步骤 4：确认创建
         </h5>
         <dl class="pipeline-create-summary grid gap-3 sm:grid-cols-2">
           <div>
             <dt class="text-xs font-medium text-slate-500">流水线名称</dt>
-            <dd class="text-sm text-slate-900">{{ formData.name || "—" }}</dd>
+            <dd class="text-sm text-slate-900">{{ formData.name ||"—" }}</dd>
           </div>
           <div>
             <dt class="text-xs font-medium text-slate-500">描述</dt>
-            <dd class="text-sm text-slate-900">{{ formData.description || "（无）" }}</dd>
+            <dd class="text-sm text-slate-900">{{ formData.description ||"（无）" }}</dd>
           </div>
           <div class="sm:col-span-2">
             <dt class="text-xs font-medium text-slate-500">Git 仓库</dt>
@@ -66,13 +66,19 @@
           <div>
             <dt class="text-xs font-medium text-slate-500">分支</dt>
             <dd class="text-sm text-slate-900">
-              {{ formData.branch || branchesAndTags.default_branch || "默认分支" }}
+              {{ formData.branch || branchesAndTags.default_branch ||"默认分支" }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-slate-500">Tag 构建</dt>
+            <dd class="text-sm text-slate-900">
+              {{ formData.tag_build_enabled ?"已启用" :"未启用" }}
             </dd>
           </div>
           <div>
             <dt class="text-xs font-medium text-slate-500">Dockerfile</dt>
             <dd class="text-sm text-slate-900">
-              {{ formData.dockerfile_name || "Dockerfile" }}
+              {{ formData.dockerfile_name ||"Dockerfile" }}
             </dd>
           </div>
           <div>
@@ -101,7 +107,7 @@
         :disabled="saving || stepTransitioning"
         @click="prevStep"
       >
-        <i class="fas fa-arrow-left mr-1"></i> 上一步
+        <AppIcon  name="arrow-left" class="mr-1" /> 上一步
       </Button>
       <span v-else></span>
 
@@ -112,8 +118,8 @@
         :disabled="!canProceed || stepTransitioning"
         @click="nextStep"
       >
-        <span v-if="stepTransitioning" class="fas fa-spinner fa-spin mr-1"></span>
-        下一步 <i v-if="!stepTransitioning" class="fas fa-arrow-right ml-1"></i>
+        <AppIcon v-if="stepTransitioning"  name="spinner" class="mr-1" spin />
+        下一步 <AppIcon v-if="!stepTransitioning"  name="arrow-right" class="ml-1" />
       </Button>
       <Button
         v-else
@@ -122,9 +128,9 @@
         :disabled="saving"
         @click="onCreate"
       >
-        <span v-if="saving" class="fas fa-spinner fa-spin mr-1"></span>
-        <i v-else class="fas fa-plus mr-1"></i>
-        {{ saving ? "创建中…" : "创建流水线" }}
+        <AppIcon v-if="saving"  name="spinner" class="mr-1" spin />
+        <AppIcon v-else  name="plus" class="mr-1" />
+        {{ saving ?"创建中…" :"创建流水线" }}
       </Button>
     </div>
   </div>
@@ -145,19 +151,19 @@ const currentStep = ref(1);
 const stepTransitioning = ref(false);
 
 const wizardSteps = [
-  { num: 1, label: "基本信息" },
-  { num: 2, label: "Git 仓库" },
-  { num: 3, label: "服务模式" },
-  { num: 4, label: "确认创建" },
+  { num: 1, label:"基本信息" },
+  { num: 2, label:"Git 仓库" },
+  { num: 3, label:"服务模式" },
+  { num: 4, label:"确认创建" },
 ];
 
 const editor = usePipelineEditor({
   onSaved: (pipelineId) => {
     if (!pipelineId) return;
     router.push({
-      name: "pipeline-detail",
+      name:"pipeline-detail",
       params: { pipelineId },
-      query: { created: "1", tab: "basic" },
+      query: { created:"1", tab:"basic" },
     });
   },
 });
@@ -184,14 +190,14 @@ const summaryGitLabel = computed(() => {
     );
     if (src) return `${src.name} (${src.git_url})`;
   }
-  return formData.value.git_url?.trim() || "—";
+  return formData.value.git_url?.trim() ||"—";
 });
 
 const pushModeSummary = computed(() => {
-  if (formData.value.push_mode === "single") {
+  if (formData.value.push_mode ==="single") {
     return services.value.length > 0 && wizardForceSingleMode.value
-      ? "单服务（已忽略 Dockerfile 多阶段解析）"
-      : "单服务 / 单应用";
+      ?"单服务（已忽略 Dockerfile 多阶段解析）"
+      :"单服务 / 单应用";
   }
   return `多服务（${services.value.length} 个阶段）`;
 });
@@ -207,8 +213,8 @@ const canProceedStep2 = computed(
 const canProceedStep3 = computed(
   () =>
     wizardServiceAnalysisDone.value &&
-    (formData.value.push_mode === "single" ||
-      formData.value.push_mode === "multi")
+    (formData.value.push_mode ==="single" ||
+      formData.value.push_mode ==="multi")
 );
 
 const canProceed = computed(() => {

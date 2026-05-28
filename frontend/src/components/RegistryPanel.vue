@@ -1,27 +1,38 @@
 <template>
   <div>
-    <PageToolbar title="镜像仓库配置" icon="fa-box">
+    <PageToolbar title="镜像仓库配置" icon="box">
       <template #actions>
         <Button variant="outline" size="sm" :disabled="loadingRegistries" @click="loadRegistries">
-          <i class="fas fa-sync-alt" :class="{ 'fa-spin': loadingRegistries }"></i>
+          <AppIcon name="sync-alt" />
           刷新
         </Button>
-        <Button size="sm" @click="showCreateRegistryModal">
-          <i class="fas fa-plus"></i>
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-full sm:w-auto"
+          title="添加 Docker Hub 演示源（DaoCloud 加速，无需账号）"
+          :disabled="loadingRegistries || creatingDemoRegistry"
+          @click="createDemoPublicRegistry"
+        >
+          <AppIcon  name="cloud" />
+          新建公共仓库
+        </Button>
+        <Button size="sm" class="w-full sm:w-auto" @click="showCreateRegistryModal">
+          <AppIcon  name="plus" />
           新建仓库
         </Button>
       </template>
     </PageToolbar>
 
     <div v-if="loadingRegistries" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
     <EmptyState
       v-else-if="!registries.length"
       message='暂无镜像仓库，点击「新建仓库」添加'
-      icon="fa-box"
+      icon="box"
     />
 
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -38,7 +49,7 @@
           </div>
           <div class="flex flex-wrap gap-1">
             <Button variant="outline" size="sm" class="flex-1" @click="editRegistry(index)">
-              <i class="fas fa-edit"></i>
+              <AppIcon  name="edit" />
             </Button>
             <Button
               variant="outline"
@@ -47,7 +58,7 @@
               :disabled="testingRegistry === index"
               @click="testRegistryLogin(index)"
             >
-              <i class="fas fa-vial" :class="{ 'fa-spin': testingRegistry === index }"></i>
+              <AppIcon name="vial" />
             </Button>
             <Button
               variant="outline"
@@ -56,7 +67,7 @@
               title="成员授权"
               @click="openResourcePermission(registry)"
             >
-              <i class="fas fa-user-shield"></i>
+              <AppIcon  name="user-shield" />
             </Button>
             <Button
               variant="destructive"
@@ -64,44 +75,44 @@
               class="flex-1"
               @click="removeRegistry(registry)"
             >
-              <i class="fas fa-trash"></i>
+              <AppIcon  name="trash" />
             </Button>
           </div>
         </CardHeader>
         <CardContent class="space-y-3 p-4 text-sm">
           <div class="flex gap-2 text-slate-600">
-            <i class="fas fa-server mt-0.5 w-4 shrink-0 text-slate-400"></i>
+            <AppIcon  name="server" class="mt-0.5 w-4 shrink-0 text-slate-400" />
             <code class="truncate font-mono text-xs text-slate-800" :title="registry.registry">{{
               registry.registry
             }}</code>
           </div>
           <div v-if="registry.registry_prefix" class="flex gap-2 text-slate-600">
-            <i class="fas fa-tag mt-0.5 w-4 shrink-0 text-slate-400"></i>
+            <AppIcon  name="tag" class="mt-0.5 w-4 shrink-0 text-slate-400" />
             <span>前缀：{{ registry.registry_prefix }}</span>
           </div>
           <div class="flex gap-2 text-slate-600">
-            <i class="fas fa-shield-alt mt-0.5 w-4 shrink-0 text-slate-400"></i>
+            <AppIcon  name="shield-alt" class="mt-0.5 w-4 shrink-0 text-slate-400" />
             <span>{{
               !registry.username && !registry.has_password
-                ? "无需认证（公开仓库）"
+                ?"无需认证（公开仓库）"
                 : registry.username && registry.has_password
-                  ? "已配置认证"
-                  : "认证不完整"
+                  ?"已配置认证"
+                  :"认证不完整"
             }}</span>
           </div>
           <div
             v-if="registry.username || registry.has_password"
             class="flex gap-2 text-slate-600"
           >
-            <i class="fas fa-user mt-0.5 w-4 shrink-0 text-slate-400"></i>
-            <span>账号：{{ registry.username || "未设置" }}</span>
+            <AppIcon  name="user" class="mt-0.5 w-4 shrink-0 text-slate-400" />
+            <span>账号：{{ registry.username ||"未设置" }}</span>
           </div>
           <div
             v-if="registry.username || registry.has_password"
             class="flex gap-2 text-slate-600"
           >
-            <i class="fas fa-key mt-0.5 w-4 shrink-0 text-slate-400"></i>
-            <span>密码：{{ registry.has_password ? "已设置" : "未设置" }}</span>
+            <AppIcon  name="key" class="mt-0.5 w-4 shrink-0 text-slate-400" />
+            <span>密码：{{ registry.has_password ?"已设置" :"未设置" }}</span>
           </div>
           <AlertBanner
             v-if="registryTestResult[index]"
@@ -117,7 +128,7 @@
     <FormDialog
       v-model="showRegistryModal"
       :title="editingRegistryId ? '编辑镜像仓库' : '新建镜像仓库'"
-      icon="fa-box"
+      icon="box"
       size="lg"
     >
       <form class="space-y-4" @submit.prevent="saveRegistry">
@@ -152,8 +163,8 @@
               :disabled="testingRegistry === 'current'"
               @click="testCurrentRegistryLogin"
             >
-              <i class="fas fa-vial" :class="{ 'fa-spin': testingRegistry === 'current' }"></i>
-              {{ testingRegistry === "current" ? "测试中…" : "测试" }}
+              <AppIcon name="vial" />
+              {{ testingRegistry ==="current" ?"测试中…" :"测试" }}
             </Button>
           </div>
           <AlertBanner
@@ -187,7 +198,7 @@
           :disabled="!registryForm.name || !registryForm.registry || savingRegistries"
           @click="saveRegistry"
         >
-          <i class="fas fa-save"></i>
+          <AppIcon  name="save" />
           保存
         </Button>
       </template>
@@ -235,17 +246,18 @@ import CardContent from "@/components/ui/card/CardContent.vue";
 
 const registries = ref([]);
 const loadingRegistries = ref(false);
+const creatingDemoRegistry = ref(false);
 const savingRegistries = ref(false);
 const testingRegistry = ref(null);
 const registryTestResult = ref({});
 const showRegistryModal = ref(false);
 const editingRegistryId = ref(null);
 const registryForm = ref({
-  name: "",
-  registry: "",
-  registry_prefix: "",
-  username: "",
-  password: "",
+  name:"",
+  registry:"",
+  registry_prefix:"",
+  username:"",
+  password:"",
   active: false,
 });
 
@@ -262,14 +274,41 @@ async function loadRegistries() {
   }
 }
 
+async function createDemoPublicRegistry() {
+  const teamId = teamStore.activeTeamIdForApi || teamStore.ensureActiveTeam();
+  if (!teamId) {
+    toastError("请先在顶部选择当前团队");
+    return;
+  }
+
+  creatingDemoRegistry.value = true;
+  try {
+    const res = await axios.post("/api/registries/demo-public", null, {
+      params: { team_id: teamId },
+    });
+    await loadRegistries();
+    const msg = res.data?.message ||"";
+    if (res.data?.created) {
+      toastSuccess(msg ||"已创建演示公共仓库");
+    } else {
+      toastInfo(msg ||"演示仓库已存在，未重复创建");
+    }
+  } catch (error) {
+    console.error("创建演示公共仓库失败:", error);
+    toastApiError(error,"创建演示公共仓库失败");
+  } finally {
+    creatingDemoRegistry.value = false;
+  }
+}
+
 function showCreateRegistryModal() {
   editingRegistryId.value = null;
   registryForm.value = {
-    name: "",
-    registry: "docker.io",
-    registry_prefix: "",
-    username: "",
-    password: "",
+    name:"",
+    registry:"docker.io",
+    registry_prefix:"",
+    username:"",
+    password:"",
     active: false,
   };
   registryTestResult.value = {};
@@ -282,9 +321,9 @@ function editRegistry(index) {
   registryForm.value = {
     name: registry.name,
     registry: registry.registry,
-    registry_prefix: registry.registry_prefix || "",
-    username: registry.username || "",
-    password: registry.has_password ? "******" : "",
+    registry_prefix: registry.registry_prefix ||"",
+    username: registry.username ||"",
+    password: registry.has_password ?"******" :"",
     active: registry.active,
   };
   registryTestResult.value = {};
@@ -295,11 +334,11 @@ function closeRegistryModal() {
   showRegistryModal.value = false;
   editingRegistryId.value = null;
   registryForm.value = {
-    name: "",
-    registry: "",
-    registry_prefix: "",
-    username: "",
-    password: "",
+    name:"",
+    registry:"",
+    registry_prefix:"",
+    username:"",
+    password:"",
     active: false,
   };
   registryTestResult.value = {};
@@ -319,18 +358,18 @@ async function saveRegistry() {
 
   savingRegistries.value = true;
   try {
-    const passwordUnchanged = registryForm.value.password === "******";
+    const passwordUnchanged = registryForm.value.password ==="******";
     const payload = {
       name: registryForm.value.name,
       registry: registryForm.value.registry,
-      registry_prefix: registryForm.value.registry_prefix || "",
-      username: registryForm.value.username || "",
+      registry_prefix: registryForm.value.registry_prefix ||"",
+      username: registryForm.value.username ||"",
       active: registryForm.value.active,
     };
     if (!passwordUnchanged && registryForm.value.password) {
       payload.password = registryForm.value.password;
     } else if (!passwordUnchanged) {
-      payload.password = "";
+      payload.password ="";
     }
 
     if (editingRegistryId.value) {
@@ -345,7 +384,7 @@ async function saveRegistry() {
     closeRegistryModal();
   } catch (error) {
     console.error("保存镜像仓库失败:", error);
-    toastApiError(error, "保存镜像仓库失败");
+    toastApiError(error,"保存镜像仓库失败");
   } finally {
     savingRegistries.value = false;
   }
@@ -356,24 +395,24 @@ async function testCurrentRegistryLogin() {
     toastError("请先填写 Registry 地址");
     return;
   }
-  const username = (registryForm.value.username || "").trim();
+  const username = (registryForm.value.username ||"").trim();
   const password = registryForm.value.password;
-  const hasPassword = Boolean(password && password !== "******");
+  const hasPassword = Boolean(password && password !=="******");
   if ((username && !hasPassword) || (!username && hasPassword)) {
     toastInfo("用户名和密码需同时填写，或均留空（公开仓库）");
     return;
   }
   const withAuth = Boolean(username && hasPassword);
 
-  testingRegistry.value = "current";
+  testingRegistry.value ="current";
   registryTestResult.value["current"] = null;
 
   try {
     const payload = {
-      name: registryForm.value.name || "",
-      registry_id: editingRegistryId.value || "",
+      name: registryForm.value.name ||"",
+      registry_id: editingRegistryId.value ||"",
       registry: registryForm.value.registry,
-      username: registryForm.value.username || "",
+      username: registryForm.value.username ||"",
     };
     if (withAuth) {
       payload.password = registryForm.value.password;
@@ -392,7 +431,7 @@ async function testCurrentRegistryLogin() {
     const errorData = error.response?.data || {};
     registryTestResult.value["current"] = {
       success: false,
-      message: errorData.message || errorData.detail || "测试失败",
+      message: errorData.message || errorData.detail ||"测试失败",
       suggestions: errorData.suggestions,
     };
   } finally {
@@ -407,7 +446,7 @@ async function removeRegistry(registry) {
     await axios.delete(`/api/registries/${registry.registry_id}`);
     await loadRegistries();
   } catch (error) {
-    toastApiError(error, "删除失败");
+    toastApiError(error,"删除失败");
   }
 }
 
@@ -427,13 +466,12 @@ async function testRegistryLogin(index) {
 
   try {
     const teamId = teamStore.activeTeamIdForApi || teamStore.ensureActiveTeam();
-    const res = await axios.post(
-      "/api/registries/test",
+    const res = await axios.post("/api/registries/test",
       {
-        name: registry.name || "",
-        registry_id: registry.registry_id || "",
+        name: registry.name ||"",
+        registry_id: registry.registry_id ||"",
         registry: registry.registry,
-        username: registry.username || "",
+        username: registry.username ||"",
       },
       { params: teamId ? { team_id: teamId } : {} },
     );
@@ -446,7 +484,7 @@ async function testRegistryLogin(index) {
     const errorData = error.response?.data || {};
     registryTestResult.value[index] = {
       success: false,
-      message: errorData.message || errorData.detail || "测试失败",
+      message: errorData.message || errorData.detail ||"测试失败",
       suggestions: errorData.suggestions,
     };
   } finally {

@@ -2,7 +2,7 @@
   <div class="animate-in fade-in duration-300">
     <!-- 统计信息栏 -->
     <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
-      <StatCard title="总任务" :value="taskStats.total" icon="fa-tasks" accent="blue">
+      <StatCard title="总任务" :value="taskStats.total" icon="tasks" accent="blue">
         <template #footer>
           <div class="flex flex-wrap gap-1.5">
             <Badge variant="success">{{ taskStats.completed }}</Badge>
@@ -15,7 +15,7 @@
       <StatCard
         title="任务类型"
         :value="taskStats.build + taskStats.export + taskStats.deploy"
-        icon="fa-layer-group"
+        icon="layer-group"
         accent="sky"
       >
         <template #footer>
@@ -27,15 +27,15 @@
         </template>
       </StatCard>
 
-      <StatCard title="目录统计" value="—" icon="fa-folder" accent="slate">
+      <StatCard title="目录统计" value="—" icon="folder" accent="slate">
         <template #footer>
           <div class="space-y-1 text-sm text-slate-600">
             <div class="flex items-center gap-1.5">
-              <i class="fas fa-download text-green-600"></i>
+              <AppIcon  name="download" class="text-green-600" />
               <span>{{ exportDirSize }}</span>
             </div>
             <div class="flex items-center gap-1.5">
-              <i class="fas fa-folder-open text-slate-500"></i>
+              <AppIcon  name="folder-open" class="text-slate-500" />
               <span>{{ buildDirSize }}</span>
             </div>
           </div>
@@ -45,7 +45,7 @@
       <StatCard
         title="成功率"
         :value="taskStats.successRate + '%'"
-        icon="fa-chart-line"
+        icon="chart-line"
         accent="green"
       >
         <template #footer>
@@ -58,7 +58,7 @@
       <StatCard
         title="全局并发"
         :value="queueRunningCount + '/' + maxConcurrentTasks"
-        icon="fa-stream"
+        icon="stream"
         accent="amber"
       >
         <template #footer>
@@ -67,7 +67,7 @@
       </StatCard>
     </div>
 
-    <PageToolbar title="任务管理" icon="fa-tasks">
+    <PageToolbar title="任务管理" icon="tasks">
       <template #actions>
         <div class="flex flex-wrap gap-1 rounded-md border border-slate-200 p-0.5">
           <Button
@@ -148,7 +148,7 @@
         </div>
 
         <Button variant="outline" size="sm" @click="loadTasks">
-          <i class="fas fa-sync-alt"></i>
+          <AppIcon  name="sync-alt" />
           刷新
         </Button>
         <Button
@@ -158,7 +158,7 @@
           title="修改全局最大并发任务数"
           @click="openConcurrentModal"
         >
-          <i class="fas fa-sliders-h"></i>
+          <AppIcon  name="sliders-h" />
           并发设置
         </Button>
 
@@ -171,10 +171,10 @@
             :aria-expanded="cleanupMenuOpen ? 'true' : 'false'"
             @click.stop="toggleCleanupMenu"
           >
-            <i class="fas fa-broom"></i>
+            <AppIcon  name="broom" />
             清理任务
-            <i v-if="cleaning" class="fas fa-spinner fa-spin"></i>
-            <i v-else class="fas fa-chevron-down text-xs opacity-70"></i>
+            <AppIcon v-if="cleaning"  name="spinner" spin />
+            <AppIcon v-else  name="chevron-down" class="text-xs opacity-70" />
           </Button>
           <ul
             ref="cleanupDropdownMenu"
@@ -189,7 +189,7 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-slate-50"
                 @click="cleanupAll"
               >
-                <i class="fas fa-trash-alt w-4"></i>
+                <AppIcon  name="trash-alt" class="w-4" />
                 清理全部（非运行中）
               </button>
             </li>
@@ -200,7 +200,7 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 @click="cleanupByStatus('completed')"
               >
-                <i class="fas fa-check-circle w-4"></i>
+                <AppIcon  name="check-circle" class="w-4" />
                 清理已完成的任务
               </button>
             </li>
@@ -210,7 +210,7 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 @click="cleanupByStatus('failed')"
               >
-                <i class="fas fa-times-circle w-4"></i>
+                <AppIcon  name="times-circle" class="w-4" />
                 清理失败的任务
               </button>
             </li>
@@ -221,7 +221,7 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 @click="cleanupByDays(7)"
               >
-                <i class="fas fa-calendar-alt w-4"></i>
+                <AppIcon  name="calendar-alt" class="w-4" />
                 清理7天前的任务（默认）
               </button>
             </li>
@@ -231,7 +231,7 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 @click="cleanupByDaysPrompt"
               >
-                <i class="fas fa-calendar-alt w-4"></i>
+                <AppIcon  name="calendar-alt" class="w-4" />
                 清理N天前的任务…
               </button>
             </li>
@@ -242,7 +242,7 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 @click="cleanupOrphanDirs"
               >
-                <i class="fas fa-exclamation-triangle w-4"></i>
+                <AppIcon  name="exclamation-triangle" class="w-4" />
                 清理异常目录
               </button>
             </li>
@@ -253,7 +253,7 @@
                 :class="{ 'text-slate-400': buildDirCount === 0 }"
                 @click="cleanupBuildDir"
               >
-                <i class="fas fa-folder-open w-4"></i>
+                <AppIcon  name="folder-open" class="w-4" />
                 清理编译目录（全部）
                 <span v-if="buildDirCount > 0" class="ml-auto text-xs text-slate-400"
                   >({{ buildDirSize }})</span
@@ -268,7 +268,7 @@
                 :class="{ 'text-slate-400': exportDirCount === 0 }"
                 @click="cleanupExportDir"
               >
-                <i class="fas fa-download w-4"></i>
+                <AppIcon  name="download" class="w-4" />
                 清理下载目录（全部）
                 <span v-if="exportDirCount > 0" class="ml-auto text-xs text-slate-400"
                   >({{ exportDirSize }})</span
@@ -282,7 +282,7 @@
                 :class="{ 'text-slate-400': exportDirCount === 0 }"
                 @click="cleanupExportDirDays"
               >
-                <i class="fas fa-calendar-times w-4"></i>
+                <AppIcon  name="calendar-times" class="w-4" />
                 清理N天前的下载文件
               </button>
             </li>
@@ -292,7 +292,7 @@
     </PageToolbar>
 
     <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
@@ -300,7 +300,7 @@
       v-else-if="filtering"
       class="flex items-center justify-center gap-2 py-6 text-sm text-slate-500"
     >
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       筛选中…
     </div>
 
@@ -316,13 +316,13 @@
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div class="flex flex-wrap gap-1">
             <Badge v-if="task.task_category === 'build'" variant="info">
-              <i class="fas fa-hammer mr-1"></i> 构建
+              <AppIcon  name="hammer" class="mr-1" /> 构建
             </Badge>
             <Badge v-else-if="task.task_category === 'deploy'" variant="success">
-              <i class="fas fa-rocket mr-1"></i> 部署
+              <AppIcon  name="rocket" class="mr-1" /> 部署
             </Badge>
             <Badge v-else variant="default">
-              <i class="fas fa-download mr-1"></i> 导出
+              <AppIcon  name="download" class="mr-1" /> 导出
             </Badge>
             <Badge v-if="task.status === 'pending'" variant="default">等待中</Badge>
             <Badge v-else-if="task.status === 'running'" variant="default">进行中</Badge>
@@ -337,12 +337,15 @@
             {{ task.pipeline_name }}
           </template>
           <template v-else>
-            {{ task.image || task.task_type || "未知" }}
+            {{ task.image || task.task_type ||"未知" }}
             <span v-if="task.tag" class="text-slate-500">:{{ task.tag }}</span>
           </template>
         </p>
         <p v-if="task.branch" class="mt-1 text-xs text-slate-500">
-          <i class="fas fa-code-branch mr-1"></i>{{ task.branch }}
+          <AppIcon  name="code-branch" class="mr-1" />{{ task.branch }}
+        </p>
+        <p class="mt-1 text-xs text-slate-500">
+          <AppIcon  name="user" class="mr-1" />负责人：{{ taskCreatorLabel(task) }}
         </p>
         <div class="mt-3 flex flex-wrap gap-1 border-t border-slate-200 pt-3">
           <Button
@@ -352,7 +355,7 @@
             title="查看日志"
             @click="buildTaskLogs.viewLogs(task)"
           >
-            <i class="fas fa-terminal"></i>
+            <AppIcon  name="terminal" />
           </Button>
           <Button
             v-if="task.task_category === 'export' && task.status === 'completed'"
@@ -361,7 +364,7 @@
             :disabled="downloading === task.task_id"
             @click="downloadTask(task)"
           >
-            <i class="fas fa-download"></i>
+            <AppIcon  name="download" />
           </Button>
           <Button
             size="sm"
@@ -369,20 +372,21 @@
             :title="task.status === 'running' || task.status === 'pending' ? '停止' : '删除'"
             @click="task.status === 'running' || task.status === 'pending' ? stopTask(task) : deleteTask(task)"
           >
-            <i :class="task.status === 'running' || task.status === 'pending' ? 'fas fa-stop' : 'fas fa-trash'"></i>
+            <AppIcon :name="task.status === 'running' || task.status === 'pending' ? 'stop' : 'trash'" />
           </Button>
         </div>
       </div>
     </div>
 
     <div class="hidden md:block">
-    <Table min-width-class="min-w-[72rem]">
+    <Table min-width-class="min-w-[78rem]">
       <TableHeader>
         <TableRow>
           <TableHead class="w-[100px]">类型</TableHead>
           <TableHead class="w-[180px]">镜像/任务</TableHead>
           <TableHead class="w-[120px]">分支/Tag</TableHead>
           <TableHead class="hidden w-[90px] xl:table-cell">来源</TableHead>
+          <TableHead class="hidden w-[110px] xl:table-cell">负责人</TableHead>
           <TableHead class="w-[100px]">状态</TableHead>
           <TableHead class="w-[140px]">创建时间</TableHead>
           <TableHead class="hidden w-[90px] lg:table-cell">时长</TableHead>
@@ -394,13 +398,13 @@
         <TableRow v-for="task in paginatedTasks" :key="task.task_id">
           <TableCell>
             <Badge v-if="task.task_category === 'build'" variant="info">
-              <i class="fas fa-hammer mr-1"></i> 构建
+              <AppIcon  name="hammer" class="mr-1" /> 构建
             </Badge>
             <Badge v-else-if="task.task_category === 'deploy'" variant="success">
-              <i class="fas fa-rocket mr-1"></i> 部署
+              <AppIcon  name="rocket" class="mr-1" /> 部署
             </Badge>
             <Badge v-else variant="default">
-              <i class="fas fa-download mr-1"></i> 导出
+              <AppIcon  name="download" class="mr-1" /> 导出
             </Badge>
           </TableCell>
           <TableCell>
@@ -411,11 +415,11 @@
                     v-if="task.source === '流水线' && task.pipeline_name"
                     class="truncate"
                   >
-                    <i class="fas fa-project-diagram mr-1 text-blue-600"></i>
+                    <AppIcon  name="project-diagram" class="mr-1 text-blue-600" />
                     <strong>{{ task.pipeline_name }}</strong>
                   </span>
                   <code v-else class="mb-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs">
-                    {{ task.image || (task.task_type ? task.task_type : "未知") }}
+                    {{ task.image || (task.task_type ? task.task_type :"未知") }}
                   </code>
                 </div>
                 <Badge
@@ -424,7 +428,7 @@
                   class="shrink-0 text-[0.7rem] font-semibold"
                   :title="`多服务构建: ${task.selected_services.join(', ')}`"
                 >
-                  <i class="fas fa-layer-group mr-1"></i>
+                  <AppIcon  name="layer-group" class="mr-1" />
                   {{ task.selected_services.length }} 服务
                 </Badge>
                 <Badge
@@ -432,7 +436,7 @@
                   variant="default"
                   class="shrink-0 text-[0.7rem] font-semibold"
                 >
-                  <i class="fas fa-cube mr-1"></i> 单服务
+                  <AppIcon  name="cube" class="mr-1" /> 单服务
                 </Badge>
               </div>
               <div
@@ -440,7 +444,7 @@
                 class="mt-1"
               >
                 <Badge variant="success" class="text-[0.7rem]">
-                  <i class="fas fa-server mr-1"></i>
+                  <AppIcon  name="server" class="mr-1" />
                   {{ task.task_config.targets.length }} 个目标
                 </Badge>
               </div>
@@ -473,12 +477,12 @@
             <div>
               <div v-if="task.branch" class="mb-1">
                 <Badge variant="default" class="text-[0.75rem]">
-                  <i class="fas fa-code-branch mr-1"></i> {{ task.branch }}
+                  <AppIcon  name="code-branch" class="mr-1" /> {{ task.branch }}
                 </Badge>
               </div>
               <div v-if="task.tag">
                 <Badge variant="info" class="text-[0.75rem]">
-                  <i class="fas fa-tag mr-1"></i> {{ task.tag }}
+                  <AppIcon  name="tag" class="mr-1" /> {{ task.tag }}
                 </Badge>
               </div>
               <span v-if="!task.branch && !task.tag" class="text-sm text-slate-400">-</span>
@@ -489,68 +493,74 @@
               v-if="task.task_category === 'deploy' && (task.trigger_source === 'webhook' || task.source === 'Webhook')"
               variant="success"
             >
-              <i class="fas fa-link mr-1"></i> Webhook
+              <AppIcon  name="link" class="mr-1" /> Webhook
             </Badge>
             <Badge v-else-if="task.task_category === 'deploy'" variant="success">
-              <i class="fas fa-hand-pointer mr-1"></i> 手动
+              <AppIcon  name="hand-pointer" class="mr-1" /> 手动
             </Badge>
             <Badge v-else-if="task.source === '流水线'" variant="default">
-              <i class="fas fa-project-diagram mr-1"></i> 流水线
+              <AppIcon  name="project-diagram" class="mr-1" /> 流水线
             </Badge>
             <Badge v-else-if="task.source === 'Git源码'" variant="info">
-              <i class="fas fa-code-branch mr-1"></i> Git源码
+              <AppIcon  name="code-branch" class="mr-1" /> Git源码
             </Badge>
             <Badge v-else-if="task.source === '文件上传'" variant="success">
-              <i class="fas fa-upload mr-1"></i> 文件上传
+              <AppIcon  name="upload" class="mr-1" /> 文件上传
             </Badge>
             <Badge
               v-else-if="task.source === '镜像构建' || task.source === '分步构建'"
               variant="warning"
             >
-              <i class="fas fa-list-ol mr-1"></i> 镜像构建
+              <AppIcon  name="list-ol" class="mr-1" /> 镜像构建
             </Badge>
             <Badge v-else-if="task.source === '手动部署'" variant="success">
-              <i class="fas fa-rocket mr-1"></i> 手动部署
+              <AppIcon  name="rocket" class="mr-1" /> 手动部署
             </Badge>
             <Badge v-else-if="task.source === 'Webhook'" variant="success">
-              <i class="fas fa-link mr-1"></i> Webhook
+              <AppIcon  name="link" class="mr-1" /> Webhook
             </Badge>
             <Badge v-else-if="task.source === '手动'" variant="success">
-              <i class="fas fa-rocket mr-1"></i> 手动
+              <AppIcon  name="rocket" class="mr-1" /> 手动
             </Badge>
             <Badge v-else variant="default">
-              <i class="fas fa-hammer mr-1"></i> {{ task.source || "手动构建" }}
+              <AppIcon  name="hammer" class="mr-1" /> {{ task.source ||"手动构建" }}
             </Badge>
+          </TableCell>
+          <TableCell class="hidden text-sm text-slate-600 xl:table-cell">
+            <span class="inline-flex max-w-[6.5rem] items-center gap-1 truncate" :title="taskCreatorLabel(task)">
+              <AppIcon :name="task.created_by ? 'user' : 'users'" class="shrink-0 text-slate-400" />
+              <span class="truncate">{{ taskCreatorLabel(task) }}</span>
+            </span>
           </TableCell>
           <TableCell>
             <div class="flex flex-col gap-1">
               <Badge v-if="task.status === 'pending'" variant="default">
-                <i class="fas fa-clock mr-1"></i> 等待中
+                <AppIcon  name="clock" class="mr-1" /> 等待中
               </Badge>
               <Badge v-else-if="task.status === 'running'" variant="default">
-                <i class="fas fa-spinner fa-spin mr-1"></i>
+                <AppIcon  name="spinner" class="mr-1" spin />
                 进行中
               </Badge>
               <Badge v-else-if="task.status === 'stopped'" variant="warning">
-                <i class="fas fa-stop-circle mr-1"></i> 已停止
+                <AppIcon  name="stop-circle" class="mr-1" /> 已停止
               </Badge>
               <Badge v-else-if="task.status === 'completed'" variant="success">
-                <i class="fas fa-check-circle mr-1"></i> 已完成
+                <AppIcon  name="check-circle" class="mr-1" /> 已完成
               </Badge>
               <Badge v-else-if="task.status === 'failed'" variant="danger">
-                <i class="fas fa-times-circle mr-1"></i> 失败
+                <AppIcon  name="times-circle" class="mr-1" /> 失败
               </Badge>
               <small
                 v-if="task.selected_services && task.selected_services.length > 0 && task.status === 'running'"
                 class="text-[0.7rem] text-slate-500"
               >
-                <i class="fas fa-cog fa-spin mr-1"></i> 构建中...
+                <AppIcon  name="cog" class="mr-1" spin /> 构建中...
               </small>
               <small
                 v-else-if="task.selected_services && task.selected_services.length > 0 && task.status === 'completed'"
                 class="text-[0.7rem] text-green-600"
               >
-                <i class="fas fa-check mr-1"></i>
+                <AppIcon  name="check" class="mr-1" />
                 {{ task.selected_services.length }} 个服务已完成
               </small>
             </div>
@@ -558,7 +568,7 @@
           <TableCell class="text-sm text-slate-500">{{ formatTime(task.created_at) }}</TableCell>
           <TableCell class="hidden text-sm lg:table-cell">
             <span v-if="task.status === 'running'" class="text-blue-600">
-              <i class="fas fa-spinner fa-spin mr-1 text-xs"></i>
+              <AppIcon  name="spinner" class="mr-1 text-xs" spin />
               {{ calculateDuration(task.started_at || task.created_at, null) }}
             </span>
             <span
@@ -586,7 +596,7 @@
                   :disabled="buildTaskLogs.isViewingLog(task.task_id)"
                   @click="buildTaskLogs.viewLogs(task)"
                 >
-                  <i class="fas fa-terminal"></i>
+                  <AppIcon  name="terminal" />
                 </Button>
                 <Button
                   v-if="task.source !== '流水线' && !task.pipeline_id"
@@ -595,7 +605,7 @@
                   title="另存为流水线"
                   @click="saveAsPipeline(task)"
                 >
-                  <i class="fas fa-save"></i>
+                  <AppIcon  name="save" />
                 </Button>
                 <Button
                   v-if="task.status === 'completed' || task.status === 'failed' || task.status === 'stopped'"
@@ -605,8 +615,8 @@
                   :disabled="rebuilding === task.task_id"
                   @click="rebuildTask(task)"
                 >
-                  <i class="fas fa-redo"></i>
-                  <i v-if="rebuilding === task.task_id" class="fas fa-spinner fa-spin"></i>
+                  <AppIcon  name="redo" />
+                  <AppIcon v-if="rebuilding === task.task_id"  name="spinner" spin />
                 </Button>
                 <Button
                   variant="outline"
@@ -614,7 +624,7 @@
                   title="查看配置JSON"
                   @click="viewTaskConfig(task)"
                 >
-                  <i class="fas fa-code"></i>
+                  <AppIcon  name="code" />
                 </Button>
               </template>
 
@@ -626,7 +636,7 @@
                   :disabled="buildTaskLogs.isViewingLog(task.task_id)"
                   @click="buildTaskLogs.viewLogs(task)"
                 >
-                  <i class="fas fa-terminal"></i>
+                  <AppIcon  name="terminal" />
                 </Button>
                 <Button
                   v-if="task.status === 'failed' || task.status === 'stopped' || task.status === 'completed'"
@@ -636,8 +646,8 @@
                   :disabled="retryingDeploy === task.task_id"
                   @click="retryDeployTask(task)"
                 >
-                  <i class="fas fa-redo"></i>
-                  <i v-if="retryingDeploy === task.task_id" class="fas fa-spinner fa-spin"></i>
+                  <AppIcon  name="redo" />
+                  <AppIcon v-if="retryingDeploy === task.task_id"  name="spinner" spin />
                 </Button>
                 <Button
                   variant="outline"
@@ -645,7 +655,7 @@
                   title="查看部署配置"
                   @click="viewDeployConfig(task)"
                 >
-                  <i class="fas fa-code"></i>
+                  <AppIcon  name="code" />
                 </Button>
               </template>
 
@@ -657,8 +667,8 @@
                   :disabled="downloading === task.task_id"
                   @click="downloadTask(task)"
                 >
-                  <i class="fas fa-download"></i>
-                  <i v-if="downloading === task.task_id" class="fas fa-spinner fa-spin"></i>
+                  <AppIcon  name="download" />
+                  <AppIcon v-if="downloading === task.task_id"  name="spinner" spin />
                 </Button>
                 <Button
                   v-if="task.status === 'failed' || task.status === 'stopped'"
@@ -668,8 +678,8 @@
                   :disabled="retrying === task.task_id"
                   @click="retryExportTask(task)"
                 >
-                  <i class="fas fa-redo"></i>
-                  <i v-if="retrying === task.task_id" class="fas fa-spinner fa-spin"></i>
+                  <AppIcon  name="redo" />
+                  <AppIcon v-if="retrying === task.task_id"  name="spinner" spin />
                 </Button>
               </template>
 
@@ -680,17 +690,15 @@
                 :disabled="task.status === 'running' || task.status === 'pending' ? stopping === task.task_id : deleting === task.task_id"
                 @click="task.status === 'running' || task.status === 'pending' ? stopTask(task) : deleteTask(task)"
               >
-                <i
-                  :class="task.status === 'running' || task.status === 'pending' ? 'fas fa-stop' : 'fas fa-trash'"
-                ></i>
-                <i
+                <AppIcon :name="task.status === 'running' || task.status === 'pending' ? 'stop' : 'trash'" />
+                <AppIcon
                   v-if="(task.status === 'running' || task.status === 'pending') && stopping === task.task_id"
-                  class="fas fa-spinner fa-spin"
-                ></i>
-                <i
+                  
+                 name="spinner" spin />
+                <AppIcon
                   v-if="task.status !== 'running' && task.status !== 'pending' && deleting === task.task_id"
-                  class="fas fa-spinner fa-spin"
-                ></i>
+                  
+                 name="spinner" spin />
               </Button>
             </div>
           </TableCell>
@@ -719,12 +727,12 @@
     <FormDialog
       v-model="showConfigModal"
       title="任务配置JSON"
-      icon="fa-code"
+      icon="code"
       size="lg"
     >
       <div class="mb-3 flex justify-end">
         <Button variant="outline" size="sm" @click="copyTaskConfigJson">
-          <i class="fas fa-copy"></i>
+          <AppIcon  name="copy" />
           复制JSON
         </Button>
       </div>
@@ -742,7 +750,7 @@
     <FormDialog
       v-model="showSaveAsPipelineModal"
       title="另存为流水线"
-      icon="fa-save"
+      icon="save"
       size="lg"
     >
       <div class="space-y-4">
@@ -769,13 +777,13 @@
           >取消</Button
         >
         <Button type="button" :disabled="saving" @click="savePipelineFromTask">
-          <i v-if="saving" class="fas fa-spinner fa-spin"></i>
-          {{ saving ? "保存中..." : "保存" }}
+          <AppIcon v-if="saving"  name="spinner" spin />
+          {{ saving ?"保存中..." :"保存" }}
         </Button>
       </template>
     </FormDialog>
 
-    <FormDialog v-model="showConcurrentModal" title="并发设置" icon="fa-sliders-h" size="sm">
+    <FormDialog v-model="showConcurrentModal" title="并发设置" icon="sliders-h" size="sm">
       <div class="space-y-2">
         <Label>全局最大并发任务数</Label>
         <Input
@@ -797,7 +805,7 @@
           >取消</Button
         >
         <Button type="button" :disabled="savingSystemSettings" @click="submitConcurrentSetting">
-          <i v-if="savingSystemSettings" class="fas fa-spinner fa-spin"></i>
+          <AppIcon v-if="savingSystemSettings"  name="spinner" spin />
           保存
         </Button>
       </template>
@@ -902,28 +910,28 @@ const cleanupDropdownMenu = ref(null);
 const cleanupMenuOpen = ref(false);
 const cleanupMenuStyle = ref({});
 const pipelineForm = ref({
-  name: "",
-  description: "",
-  git_url: "",
-  branch: "",
-  image_name: "",
-  tag: "",
-  project_type: "",
-  template: "",
+  name:"",
+  description:"",
+  git_url:"",
+  branch:"",
+  image_name:"",
+  tag:"",
+  project_type:"",
+  template:"",
   template_params: {},
-  sub_path: "",
+  sub_path:"",
   use_project_dockerfile: true,
-  dockerfile_name: "Dockerfile",
+  dockerfile_name:"Dockerfile",
   source_id: null,
   push: false,
   selected_services: null,
   service_push_config: null,
   service_template_params: null,
-  push_mode: "multi",
+  push_mode:"multi",
   resource_package_configs: null,
   trigger_webhook: true,
   trigger_schedule: false,
-  cron_expression: "",
+  cron_expression:"",
   webhook_branch_filter: false,
   webhook_use_push_branch: true,
   branch_tag_mapping: null,
@@ -960,30 +968,30 @@ function adjustCleanupMenuPosition() {
   const gap = 8;
   const rect = menu.getBoundingClientRect();
   const style = {
-    maxHeight: "60vh",
-    overflowY: "auto",
+    maxHeight:"60vh",
+    overflowY:"auto",
   };
 
   // 默认右对齐向下展开，超边界时自动纠正
   if (rect.right > window.innerWidth - gap) {
-    style.right = "0";
-    style.left = "auto";
+    style.right ="0";
+    style.left ="auto";
   }
   if (rect.left < gap) {
-    style.left = "0";
-    style.right = "auto";
+    style.left ="0";
+    style.right ="auto";
   }
 
   if (rect.bottom > window.innerHeight - gap) {
-    style.top = "auto";
-    style.bottom = "100%";
-    style.marginBottom = "0.25rem";
-    style.marginTop = "0";
+    style.top ="auto";
+    style.bottom ="100%";
+    style.marginBottom ="0.25rem";
+    style.marginTop ="0";
   } else {
-    style.top = "100%";
-    style.bottom = "auto";
-    style.marginTop = "0.25rem";
-    style.marginBottom = "0";
+    style.top ="100%";
+    style.bottom ="auto";
+    style.marginTop ="0.25rem";
+    style.marginBottom ="0";
   }
 
   cleanupMenuStyle.value = style;
@@ -999,7 +1007,7 @@ function startRefreshInterval() {
 
   // 检查是否有运行中的任务
   const hasRunningTasks = tasks.value.some(
-    (t) => t.status === "running" || t.status === "pending"
+    (t) => t.status ==="running" || t.status ==="pending"
   );
 
   if (hasRunningTasks) {
@@ -1014,6 +1022,12 @@ function startRefreshInterval() {
 const paginatedTasks = computed(() => {
   return tasks.value;
 });
+
+function taskCreatorLabel(task) {
+  if (task?.created_by_username) return task.created_by_username;
+  if (task?.created_by) return task.created_by;
+  return "团队";
+}
 
 // 任务统计信息（基于当前页的任务）
 const taskStats = computed(() => {
@@ -1033,16 +1047,16 @@ const taskStats = computed(() => {
   // 只统计当前页的任务（用于显示当前页的分布情况）
   tasks.value.forEach((task) => {
     // 统计状态
-    const status = task.status || "pending";
+    const status = task.status ||"pending";
     if (stats.hasOwnProperty(status)) {
       stats[status]++;
     }
 
     // 统计类型
-    const category = task.task_category || "build";
-    if (category === "build") stats.build++;
-    else if (category === "export") stats.export++;
-    else if (category === "deploy") stats.deploy++;
+    const category = task.task_category ||"build";
+    if (category ==="build") stats.build++;
+    else if (category ==="export") stats.export++;
+    else if (category ==="deploy") stats.deploy++;
   });
 
   // 计算成功率（已完成任务 / 已完成+失败+停止的任务）
@@ -1093,7 +1107,7 @@ const visiblePages = computed(() => {
   }
 
   return pages.filter(
-    (p) => p !== "..." || pages.indexOf(p) === pages.lastIndexOf(p)
+    (p) => p !=="..." || pages.indexOf(p) === pages.lastIndexOf(p)
   );
 });
 
@@ -1116,24 +1130,24 @@ function resetPage() {
 // 错误弹窗相关函数已移除，错误信息现在显示在日志顶部
 
 function formatTime(isoString) {
-  if (!isoString) return "-";
+  if (!isoString) return"-";
   const date = new Date(isoString);
 
   // 显示完整精确时间（包括年月日时分秒）
   return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit",
+    second:"2-digit",
     hour12: false,
   });
 }
 
 function formatFileSize(bytes) {
-  if (!bytes) return "-";
-  const units = ["B", "KB", "MB", "GB"];
+  if (!bytes) return"-";
+  const units = ["B","KB","MB","GB"];
   let size = bytes;
   let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {
@@ -1144,13 +1158,13 @@ function formatFileSize(bytes) {
 }
 
 function calculateDuration(startTime, endTime) {
-  if (!startTime) return "-";
+  if (!startTime) return"-";
 
   const start = new Date(startTime);
   const end = endTime ? new Date(endTime) : new Date();
 
   const diffMs = end - start;
-  if (diffMs < 0) return "-";
+  if (diffMs < 0) return"-";
 
   const seconds = Math.floor(diffMs / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -1171,12 +1185,12 @@ async function loadBuildDirStats() {
     const res = await axios.get("/api/docker-build/stats");
     if (res.data.success) {
       buildDirSize.value =
-        res.data.total_size_mb > 0 ? `${res.data.total_size_mb} MB` : "0 MB";
+        res.data.total_size_mb > 0 ? `${res.data.total_size_mb} MB` :"0 MB";
       buildDirCount.value = res.data.dir_count || 0;
     }
   } catch (err) {
     console.error("获取编译目录统计失败:", err);
-    buildDirSize.value = "0 MB";
+    buildDirSize.value ="0 MB";
     buildDirCount.value = 0;
   }
 }
@@ -1187,12 +1201,12 @@ async function loadExportDirStats() {
     const res = await axios.get("/api/exports/stats");
     if (res.data.success) {
       exportDirSize.value =
-        res.data.total_size_mb > 0 ? `${res.data.total_size_mb} MB` : "0 MB";
+        res.data.total_size_mb > 0 ? `${res.data.total_size_mb} MB` :"0 MB";
       exportDirCount.value = res.data.file_count || 0;
     }
   } catch (err) {
     console.error("获取下载目录统计失败:", err);
-    exportDirSize.value = "0 MB";
+    exportDirSize.value ="0 MB";
     exportDirCount.value = 0;
   }
 }
@@ -1206,7 +1220,7 @@ async function loadTasks(includeStats = true) {
     tasks.value = [];
     totalTasks.value = 0;
     totalPages.value = 0;
-    error.value = "请先在顶部选择团队";
+    error.value ="请先在顶部选择团队";
     loading.value = false;
     filtering.value = false;
     return;
@@ -1242,7 +1256,7 @@ async function loadTasks(includeStats = true) {
     startRefreshInterval();
   } catch (err) {
     error.value =
-      err.response?.data?.error || err.message || "加载任务列表失败";
+      err.response?.data?.error || err.message ||"加载任务列表失败";
     console.error("加载任务列表失败:", err);
     tasks.value = [];
     totalTasks.value = 0;
@@ -1289,7 +1303,7 @@ async function submitConcurrentSetting() {
     showConcurrentModal.value = false;
   } catch (err) {
     const errorMsg =
-      err.response?.data?.detail || err.message || "更新系统设置失败";
+      err.response?.data?.detail || err.message ||"更新系统设置失败";
     toastInfo(errorMsg);
   } finally {
     savingSystemSettings.value = false;
@@ -1385,13 +1399,13 @@ async function refreshRunningTasks() {
         if (updatedTask.started_at !== undefined) {
           tasks.value[index].started_at = updatedTask.started_at;
         }
-      } else if (task.status === "running" || task.status === "pending") {
+      } else if (task.status ==="running" || task.status ==="pending") {
         fetchTaskTerminalStatus(taskId, index);
       }
     });
 
     const stillRunning = tasks.value.some(
-      (t) => t.status === "running" || t.status === "pending"
+      (t) => t.status ==="running" || t.status ==="pending"
     );
     if (!stillRunning && refreshInterval) {
       clearInterval(refreshInterval);
@@ -1428,7 +1442,7 @@ async function viewTaskConfig(task) {
   } catch (err) {
     console.error("获取任务配置失败:", err);
     const errorMsg =
-      err.response?.data?.detail || err.message || "获取任务配置失败";
+      err.response?.data?.detail || err.message ||"获取任务配置失败";
     toastError(`获取任务配置失败: ${errorMsg}`);
   }
 }
@@ -1468,33 +1482,33 @@ async function saveAsPipeline(task) {
 
     // 填充流水线表单
     pipelineForm.value = {
-      name: `${task.image || "任务"}_${task.tag || "latest"}_${new Date()
+      name: `${task.image ||"任务"}_${task.tag ||"latest"}_${new Date()
         .toISOString()
         .slice(0, 10)}`,
       description: `从任务 ${task.task_id.slice(0, 8)} 创建${
-        task.source === "流水线" ? "（流水线触发）" : ""
+        task.source ==="流水线" ?"（流水线触发）" :""
       }`,
-      git_url: config.git_url || "",
-      branch: config.branch || "",
-      image_name: config.image_name || task.image || "",
-      tag: config.tag || task.tag || "latest",
-      project_type: config.project_type || "jar",
-      template: config.template || "",
+      git_url: config.git_url ||"",
+      branch: config.branch ||"",
+      image_name: config.image_name || task.image ||"",
+      tag: config.tag || task.tag ||"latest",
+      project_type: config.project_type ||"jar",
+      template: config.template ||"",
       template_params: config.template_params || {},
-      sub_path: config.sub_path || "",
+      sub_path: config.sub_path ||"",
       use_project_dockerfile: config.use_project_dockerfile !== false,
-      dockerfile_name: config.dockerfile_name || "Dockerfile",
+      dockerfile_name: config.dockerfile_name ||"Dockerfile",
       source_id: config.source_id || null,
       push: config.should_push || config.push || false,
       selected_services: config.selected_services || null,
       service_push_config: config.service_push_config || null,
       service_template_params: config.service_template_params || null,
-      push_mode: config.push_mode || "multi",
+      push_mode: config.push_mode ||"multi",
       resource_package_configs:
         config.resource_package_configs || config.resource_package_ids || null,
       trigger_webhook: true,
       trigger_schedule: false,
-      cron_expression: "",
+      cron_expression:"",
       webhook_branch_filter: false,
       webhook_use_push_branch: true,
       branch_tag_mapping: null,
@@ -1505,7 +1519,7 @@ async function saveAsPipeline(task) {
   } catch (err) {
     console.error("获取任务配置失败:", err);
     const errorMsg =
-      err.response?.data?.detail || err.message || "获取任务配置失败";
+      err.response?.data?.detail || err.message ||"获取任务配置失败";
     toastError(`获取任务配置失败: ${errorMsg}`);
   }
 }
@@ -1521,7 +1535,7 @@ function downloadTask(task) {
     );
   } catch (err) {
     console.error("下载失败:", err);
-    toastApiError(err, "下载失败");
+    toastApiError(err,"下载失败");
     downloading.value = null;
     return;
   }
@@ -1534,9 +1548,9 @@ async function stopTask(task) {
   if (stopping.value) return;
 
   // 确认对话框
-  const taskName = task.image || task.task_type || "未知任务";
-  const taskTag = task.tag || "latest";
-  if (!(await showConfirm({ message: `确定要停止任务 "${taskName}:${taskTag}" 吗？`, danger: true }))) {
+  const taskName = task.image || task.task_type ||"未知任务";
+  const taskTag = task.tag ||"latest";
+  if (!(await showConfirm({ message: `确定要停止任务"${taskName}:${taskTag}" 吗？`, danger: true }))) {
     return;
   }
 
@@ -1544,9 +1558,9 @@ async function stopTask(task) {
   error.value = null;
 
   try {
-    if (task.task_category === "build") {
+    if (task.task_category ==="build") {
       await axios.post(`/api/build-tasks/${task.task_id}/stop`);
-    } else if (task.task_category === "deploy") {
+    } else if (task.task_category ==="deploy") {
       // 部署任务使用构建任务管理器的stop接口（因为部署任务现在也在BuildTaskManager中）
       await axios.post(`/api/build-tasks/${task.task_id}/stop`);
     } else {
@@ -1560,8 +1574,7 @@ async function stopTask(task) {
     const errorMsg =
       err.response?.data?.detail ||
       err.response?.data?.error ||
-      err.message ||
-      "停止失败";
+      err.message ||"停止失败";
     error.value = `停止任务失败: ${errorMsg}`;
     // 5秒后自动清除错误提示
     setTimeout(() => {
@@ -1575,27 +1588,27 @@ async function stopTask(task) {
 }
 
 async function deleteTask(task) {
-  const taskName = task.image || task.task_type || "未知任务";
-  const taskTag = task.tag || "-";
+  const taskName = task.image || task.task_type ||"未知任务";
+  const taskTag = task.tag ||"-";
   const status = task.status;
 
   // 检查任务状态
-  if (status === "running" || status === "pending") {
+  if (status ==="running" || status ==="pending") {
     toastError(`无法删除任务：只有停止、完成或失败的任务才能删除（当前状态: ${
-        status === "running" ? "进行中" : "等待中"
+        status ==="running" ?"进行中" :"等待中"
       }）\n\n请先停止任务。`);
     return;
   }
 
-  if (!(await showConfirm({ message: `确定要删除任务 "${taskName}:${taskTag}" 吗？`, danger: true }))) {
+  if (!(await showConfirm({ message: `确定要删除任务"${taskName}:${taskTag}" 吗？`, danger: true }))) {
     return;
   }
 
   deleting.value = task.task_id;
   try {
-    if (task.task_category === "build") {
+    if (task.task_category ==="build") {
       await axios.delete(`/api/build-tasks/${task.task_id}`);
-    } else if (task.task_category === "deploy") {
+    } else if (task.task_category ==="deploy") {
       await axios.delete(`/api/deploy-tasks/${task.task_id}`);
     } else {
       await axios.delete(`/api/export-tasks/${task.task_id}`);
@@ -1607,8 +1620,7 @@ async function deleteTask(task) {
     const errorMsg =
       err.response?.data?.detail ||
       err.response?.data?.error ||
-      err.message ||
-      "删除失败";
+      err.message ||"删除失败";
     error.value = `删除任务失败: ${errorMsg}`;
     // 5秒后自动清除错误提示
     setTimeout(() => {
@@ -1639,7 +1651,7 @@ async function cleanupAll() {
     await loadTasks();
   } catch (err) {
     console.error("清理全部任务失败:", err);
-    toastApiError(err, "清理失败");
+    toastApiError(err,"清理失败");
   } finally {
     cleaning.value = false;
   }
@@ -1649,7 +1661,7 @@ async function cleanupByStatus(status) {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  const statusText = status === "completed" ? "已完成" : "失败";
+  const statusText = status ==="completed" ?"已完成" :"失败";
   if (!(await showConfirm({ message: `确定要清理所有${statusText}的任务吗？\n\n清理后的任务无法恢复，请谨慎操作！`, danger: true }))) {
     return;
   }
@@ -1666,7 +1678,7 @@ async function cleanupByStatus(status) {
     await loadTasks();
   } catch (err) {
     console.error("清理任务失败:", err);
-    toastApiError(err, "清理失败");
+    toastApiError(err,"清理失败");
   } finally {
     cleaning.value = false;
   }
@@ -1694,7 +1706,7 @@ async function cleanupByDays(days) {
     await loadTasks();
   } catch (err) {
     console.error("清理任务失败:", err);
-    toastApiError(err, "清理失败");
+    toastApiError(err,"清理失败");
   } finally {
     cleaning.value = false;
   }
@@ -1725,7 +1737,7 @@ async function cleanupOrphanDirs() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (!(await showConfirm({ message: "确定要清理所有异常目录吗？\n\n此操作将删除所有没有对应任务的构建上下文目录，无法恢复，请谨慎操作！", danger: true }))) {
+  if (!(await showConfirm({ message:"确定要清理所有异常目录吗？\n\n此操作将删除所有没有对应任务的构建上下文目录，无法恢复，请谨慎操作！", danger: true }))) {
     return;
   }
 
@@ -1759,8 +1771,8 @@ async function cleanupOrphanDirs() {
         // 刷新统计信息
         await Promise.all([loadBuildDirStats(), loadExportDirStats()]);
       } else {
-        const errorMsg = res.data.message || res.data.detail || "清理失败";
-        toastInfo(typeof errorMsg === "string" ? errorMsg : String(errorMsg));
+        const errorMsg = res.data.message || res.data.detail ||"清理失败";
+        toastInfo(typeof errorMsg ==="string" ? errorMsg : String(errorMsg));
       }
     } else {
       console.warn("响应数据为空");
@@ -1769,23 +1781,23 @@ async function cleanupOrphanDirs() {
     }
   } catch (err) {
     console.error("清理异常目录失败:", err);
-    let errorMsg = "清理失败";
+    let errorMsg ="清理失败";
     if (err.response) {
       if (err.response.data) {
-        if (typeof err.response.data.detail === "string") {
+        if (typeof err.response.data.detail ==="string") {
           errorMsg = err.response.data.detail;
-        } else if (typeof err.response.data.message === "string") {
+        } else if (typeof err.response.data.message ==="string") {
           errorMsg = err.response.data.message;
         } else if (err.response.data.detail) {
           errorMsg = String(err.response.data.detail);
         } else {
           errorMsg = `清理失败: ${err.response.status} ${
-            err.response.statusText || ""
+            err.response.statusText ||""
           }`;
         }
       } else {
         errorMsg = `清理失败: ${err.response.status} ${
-          err.response.statusText || ""
+          err.response.statusText ||""
         }`;
       }
     } else if (err.message) {
@@ -1802,7 +1814,7 @@ async function cleanupBuildDir() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (!(await showConfirm({ message: "确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！", danger: true }))) {
+  if (!(await showConfirm({ message:"确定要清空所有编译目录吗？\n\n此操作将删除所有构建上下文目录，无法恢复，请谨慎操作！", danger: true }))) {
     return;
   }
 
@@ -1839,8 +1851,8 @@ async function cleanupBuildDir() {
         await Promise.all([loadBuildDirStats(), loadExportDirStats()]);
       } else {
         // 失败情况
-        const errorMsg = res.data.message || res.data.detail || "清理失败";
-        toastInfo(typeof errorMsg === "string" ? errorMsg : String(errorMsg));
+        const errorMsg = res.data.message || res.data.detail ||"清理失败";
+        toastInfo(typeof errorMsg ==="string" ? errorMsg : String(errorMsg));
       }
     } else {
       console.warn("响应数据为空");
@@ -1854,23 +1866,23 @@ async function cleanupBuildDir() {
     console.error("错误响应:", err.response);
     console.error("错误数据:", err.response?.data);
 
-    let errorMsg = "清理失败";
+    let errorMsg ="清理失败";
     if (err.response) {
       if (err.response.data) {
-        if (typeof err.response.data.detail === "string") {
+        if (typeof err.response.data.detail ==="string") {
           errorMsg = err.response.data.detail;
-        } else if (typeof err.response.data.message === "string") {
+        } else if (typeof err.response.data.message ==="string") {
           errorMsg = err.response.data.message;
         } else if (err.response.data.detail) {
           errorMsg = String(err.response.data.detail);
         } else {
           errorMsg = `清理失败: ${err.response.status} ${
-            err.response.statusText || ""
+            err.response.statusText ||""
           }`;
         }
       } else {
         errorMsg = `清理失败: ${err.response.status} ${
-          err.response.statusText || ""
+          err.response.statusText ||""
         }`;
       }
     } else if (err.message) {
@@ -1888,7 +1900,7 @@ async function cleanupExportDir() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  if (!(await showConfirm({ message: "确定要清空所有下载文件吗？\n\n此操作将删除所有导出文件，无法恢复，请谨慎操作！", danger: true }))) {
+  if (!(await showConfirm({ message:"确定要清空所有下载文件吗？\n\n此操作将删除所有导出文件，无法恢复，请谨慎操作！", danger: true }))) {
     return;
   }
 
@@ -1908,15 +1920,14 @@ async function cleanupExportDir() {
       toastInfo(message);
       await loadExportDirStats(); // 重新加载统计
     } else {
-      toastError(res.data.message || res.data.detail || "清理失败");
+      toastError(res.data.message || res.data.detail ||"清理失败");
     }
   } catch (err) {
     console.error("清理下载目录失败:", err);
     const errorMsg =
       err.response?.data?.detail ||
       err.response?.data?.message ||
-      err.message ||
-      "清理失败";
+      err.message ||"清理失败";
     toastInfo(errorMsg);
   } finally {
     cleaning.value = false;
@@ -1928,8 +1939,7 @@ async function cleanupExportDirDays() {
   closeCleanupMenu();
   if (cleaning.value) return;
 
-  const days = prompt(
-    "请输入要清理多少天前的文件（例如：7 表示清理7天前的文件）："
+  const days = prompt("请输入要清理多少天前的文件（例如：7 表示清理7天前的文件）："
   );
   if (!days || isNaN(days) || parseInt(days) <= 0) {
     return;
@@ -1956,15 +1966,14 @@ async function cleanupExportDirDays() {
       toastInfo(message);
       await loadExportDirStats(); // 重新加载统计
     } else {
-      toastError(res.data.message || res.data.detail || "清理失败");
+      toastError(res.data.message || res.data.detail ||"清理失败");
     }
   } catch (err) {
     console.error("清理下载目录失败:", err);
     const errorMsg =
       err.response?.data?.detail ||
       err.response?.data?.message ||
-      err.message ||
-      "清理失败";
+      err.message ||"清理失败";
     toastInfo(errorMsg);
   } finally {
     cleaning.value = false;
@@ -2002,13 +2011,13 @@ async function savePipelineFromTask() {
       template_params: pipelineForm.value.template_params,
       sub_path: pipelineForm.value.sub_path,
       use_project_dockerfile: pipelineForm.value.use_project_dockerfile,
-      dockerfile_name: pipelineForm.value.dockerfile_name || "Dockerfile",
+      dockerfile_name: pipelineForm.value.dockerfile_name ||"Dockerfile",
       source_id: pipelineForm.value.source_id || null,
       selected_services: pipelineForm.value.selected_services || null,
       service_push_config: pipelineForm.value.service_push_config || null,
       service_template_params:
         pipelineForm.value.service_template_params || null,
-      push_mode: pipelineForm.value.push_mode || "multi",
+      push_mode: pipelineForm.value.push_mode ||"multi",
       resource_package_configs:
         pipelineForm.value.resource_package_configs || null,
       enabled: pipelineForm.value.enabled,
@@ -2033,7 +2042,7 @@ async function savePipelineFromTask() {
   } catch (err) {
     console.error("保存流水线失败:", err);
     const errorMsg =
-      err.response?.data?.detail || err.message || "保存流水线失败";
+      err.response?.data?.detail || err.message ||"保存流水线失败";
     error.value = `保存流水线失败: ${errorMsg}`;
     toastError(`保存流水线失败: ${errorMsg}`);
   } finally {
@@ -2046,9 +2055,9 @@ async function rebuildTask(task) {
   if (rebuilding.value) return;
 
   // 确认对话框
-  const taskName = task.image || task.task_type || "未知任务";
-  const taskTag = task.tag || "latest";
-  if (!(await showConfirm({ message: `确定要重新构建任务 "${taskName}:${taskTag}" 吗？` }))) {
+  const taskName = task.image || task.task_type ||"未知任务";
+  const taskTag = task.tag ||"latest";
+  if (!(await showConfirm({ message: `确定要重新构建任务"${taskName}:${taskTag}" 吗？` }))) {
     return;
   }
 
@@ -2074,9 +2083,9 @@ async function rebuildTask(task) {
 
     if (res.data && res.data.new_task_id) {
       registerTask(res.data.new_task_id, {
-        task_type: "build",
+        task_type:"build",
         image: task.image,
-        tag: task.tag || "latest",
+        tag: task.tag ||"latest",
       });
       toastSuccess(`任务重试成功！\n新任务 ID: ${res.data.new_task_id}`);
       await loadTasks(); // 刷新任务列表
@@ -2088,8 +2097,7 @@ async function rebuildTask(task) {
     const errorMsg =
       err.response?.data?.detail ||
       err.response?.data?.error ||
-      err.message ||
-      "重新构建失败";
+      err.message ||"重新构建失败";
     error.value = `重新构建失败: ${errorMsg}`;
     toastError(`重新构建失败: ${errorMsg}`);
     // 5秒后自动清除错误提示
@@ -2108,15 +2116,15 @@ async function retryExportTask(task) {
   if (retrying.value) return;
 
   // 检查任务状态，只有失败或停止的任务才能重试
-  if (task.status !== "failed" && task.status !== "stopped") {
+  if (task.status !=="failed" && task.status !=="stopped") {
     toastError(`无法重试：只有失败或停止的任务才能重试（当前状态: ${task.status}）`);
     return;
   }
 
   // 确认对话框
-  const taskName = task.image || "未知任务";
-  const taskTag = task.tag || "latest";
-  if (!(await showConfirm({ message: `确定要重试导出任务 "${taskName}:${taskTag}" 吗？` }))) {
+  const taskName = task.image ||"未知任务";
+  const taskTag = task.tag ||"latest";
+  if (!(await showConfirm({ message: `确定要重试导出任务"${taskName}:${taskTag}" 吗？` }))) {
     return;
   }
 
@@ -2127,8 +2135,8 @@ async function retryExportTask(task) {
     // 从任务信息中提取导出参数
     const config = {
       image: task.image,
-      tag: task.tag || "latest",
-      compress: task.compress || "none",
+      tag: task.tag ||"latest",
+      compress: task.compress ||"none",
       registry: task.registry || null,
       use_local: task.use_local || false,
     };
@@ -2145,23 +2153,22 @@ async function retryExportTask(task) {
 
     if (res.data.success) {
       registerTask(task.task_id, {
-        task_type: "export",
+        task_type:"export",
         image: task.image,
-        tag: task.tag || "latest",
+        tag: task.tag ||"latest",
       });
       toastSuccess(`重试导出任务已启动！\n任务 ID: ${task.task_id}`);
       // 刷新任务列表
       await loadTasks();
     } else {
-      throw new Error(res.data.message || "重试导出失败");
+      throw new Error(res.data.message ||"重试导出失败");
     }
   } catch (err) {
     console.error("重试导出失败:", err);
     const errorMsg =
       err.response?.data?.detail ||
       err.response?.data?.error ||
-      err.message ||
-      "重试导出失败";
+      err.message ||"重试导出失败";
     // 显示错误提示
     toastError(`重试导出失败: ${errorMsg}`);
     error.value = `重试导出失败: ${errorMsg}`;
@@ -2182,9 +2189,9 @@ async function retryDeployTask(task) {
 
   // 检查任务状态，只有失败、停止或已完成的任务才能重试
   if (
-    task.status !== "failed" &&
-    task.status !== "stopped" &&
-    task.status !== "completed"
+    task.status !=="failed" &&
+    task.status !=="stopped" &&
+    task.status !=="completed"
   ) {
     toastSuccess(`无法重试：只有失败、停止或已完成的任务才能重试（当前状态: ${task.status}）`);
     return;
@@ -2192,7 +2199,7 @@ async function retryDeployTask(task) {
 
   // 确认对话框
   const taskName = task.image || task.task_id.substring(0, 8);
-  if (!(await showConfirm({ message: `确定要重试部署任务 "${taskName}" 吗？` }))) {
+  if (!(await showConfirm({ message: `确定要重试部署任务"${taskName}" 吗？` }))) {
     return;
   }
 
@@ -2203,17 +2210,17 @@ async function retryDeployTask(task) {
     const res = await axios.post(`/api/deploy-tasks/${task.task_id}/retry`);
     if (res.data.success) {
       registerTask(task.task_id, {
-        task_type: "deploy",
+        task_type:"deploy",
         image: task.image,
       });
       toastInfo("部署任务已重新启动");
       await loadTasks();
     } else {
-      throw new Error(res.data.message || "重试失败");
+      throw new Error(res.data.message ||"重试失败");
     }
   } catch (err) {
     console.error("重试部署任务失败:", err);
-    const errorMsg = err.response?.data?.detail || err.message || "重试失败";
+    const errorMsg = err.response?.data?.detail || err.message ||"重试失败";
     error.value = `重试部署任务失败: ${errorMsg}`;
     toastError(`重试部署任务失败: ${errorMsg}`);
     // 5秒后自动清除错误提示
@@ -2234,8 +2241,7 @@ async function viewDeployConfig(task) {
     const taskData = res.data.task;
     const configContent =
       taskData.config_content ||
-      (taskData.task_config && taskData.task_config.config_content) ||
-      "";
+      (taskData.task_config && taskData.task_config.config_content) ||"";
 
     taskConfigJson.value = configContent;
     taskConfigJsonText.value = configContent;
@@ -2243,7 +2249,7 @@ async function viewDeployConfig(task) {
   } catch (err) {
     console.error("获取部署配置失败:", err);
     const errorMsg =
-      err.response?.data?.detail || err.message || "获取配置失败";
+      err.response?.data?.detail || err.message ||"获取配置失败";
     toastError(`获取部署配置失败: ${errorMsg}`);
   }
 }
@@ -2258,7 +2264,7 @@ function handleTaskCreated(event) {
   taskCreatedRefreshTimer = setTimeout(async () => {
     taskCreatedRefreshTimer = null;
     currentPage.value = 1;
-    categoryFilter.value = "";
+    categoryFilter.value ="";
     await ensureTeamContextForTasks();
     loadTasks();
   }, 500);
@@ -2292,7 +2298,7 @@ onMounted(async () => {
   const deployConfigId = sessionStorage.getItem("deployConfigFilter");
   if (deployConfigId) {
     deployConfigFilterId.value = deployConfigId;
-    categoryFilter.value = "deploy";
+    categoryFilter.value ="deploy";
     sessionStorage.removeItem("deployConfigFilter");
   }
   if (sessionStorage.getItem("tasksNeedRefresh")) {
@@ -2301,8 +2307,8 @@ onMounted(async () => {
   const highlightId = sessionStorage.getItem("highlightTaskId");
   if (highlightId) {
     sessionStorage.removeItem("highlightTaskId");
-    categoryFilter.value = "";
-    statusFilter.value = "";
+    categoryFilter.value ="";
+    statusFilter.value ="";
   }
   await ensureTeamContextForTasks();
   await loadTasks();

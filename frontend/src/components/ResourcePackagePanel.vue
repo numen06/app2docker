@@ -1,23 +1,23 @@
 <template>
   <div class="resource-package-panel min-w-0">
-    <PageToolbar title="资源包管理" icon="fa-archive">
+    <PageToolbar title="资源包管理" icon="archive">
       <template #actions>
         <Button size="sm" @click="showUploadModal = true">
-          <i class="fas fa-upload"></i>
+          <AppIcon  name="upload" />
           上传资源包
         </Button>
       </template>
     </PageToolbar>
 
     <div v-if="loading" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-      <i class="fas fa-spinner fa-spin"></i>
+      <AppIcon  name="spinner" spin />
       加载中…
     </div>
 
     <EmptyState
       v-else-if="packages.length === 0"
       message='暂无资源包，请点击「上传资源包」添加'
-      icon="fa-archive"
+      icon="archive"
     />
 
     <template v-else>
@@ -30,13 +30,13 @@
           <div class="min-w-0">
             <div class="font-medium text-slate-900">
               {{ pkg.name }}
-              <i
+              <AppIcon
                 v-if="pkg.extracted"
-                class="fas fa-folder-open ml-1 text-sky-600"
+                
                 title="已解压"
-              ></i>
+               name="folder-open" class="ml-1 text-sky-600" />
             </div>
-            <p class="mt-1 text-xs text-slate-600">{{ pkg.description || "无描述" }}</p>
+            <p class="mt-1 text-xs text-slate-600">{{ pkg.description ||"无描述" }}</p>
             <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600">
               <dt>大小</dt>
               <dd>{{ formatBytes(pkg.size) }}</dd>
@@ -52,7 +52,7 @@
               title="编辑"
               @click="editPackage(pkg)"
             >
-              <i class="fas fa-edit"></i>
+              <AppIcon  name="edit" />
             </Button>
             <Button
               variant="outline"
@@ -60,10 +60,10 @@
               title="成员授权"
               @click="openResourcePermission(pkg)"
             >
-              <i class="fas fa-user-shield"></i>
+              <AppIcon  name="user-shield" />
             </Button>
             <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
-              <i class="fas fa-trash"></i>
+              <AppIcon  name="trash" />
             </Button>
           </div>
         </div>
@@ -84,13 +84,13 @@
             <TableRow v-for="pkg in packages" :key="pkg.package_id">
               <TableCell class="font-medium text-slate-900">
                 {{ pkg.name }}
-                <i
+                <AppIcon
                   v-if="pkg.extracted"
-                  class="fas fa-folder-open ml-1 text-sky-600"
+                  
                   title="已解压"
-                ></i>
+                 name="folder-open" class="ml-1 text-sky-600" />
               </TableCell>
-              <TableCell class="text-slate-600">{{ pkg.description || "无描述" }}</TableCell>
+              <TableCell class="text-slate-600">{{ pkg.description ||"无描述" }}</TableCell>
               <TableCell>{{ formatBytes(pkg.size) }}</TableCell>
               <TableCell class="text-slate-600">{{ formatTime(pkg.created_at) }}</TableCell>
               <TableCell class="text-end">
@@ -102,7 +102,7 @@
                     title="编辑"
                     @click="editPackage(pkg)"
                   >
-                    <i class="fas fa-edit"></i>
+                    <AppIcon  name="edit" />
                   </Button>
                   <Button
                     variant="outline"
@@ -110,10 +110,10 @@
                     title="成员授权"
                     @click="openResourcePermission(pkg)"
                   >
-                    <i class="fas fa-user-shield"></i>
+                    <AppIcon  name="user-shield" />
                   </Button>
                   <Button variant="destructive" size="sm" title="删除" @click="deletePackage(pkg)">
-                    <i class="fas fa-trash"></i>
+                    <AppIcon  name="trash" />
                   </Button>
                 </div>
               </TableCell>
@@ -131,7 +131,7 @@
       :resource-name="permissionTarget?.name || ''"
     />
 
-    <FormDialog v-model="showUploadModal" title="上传资源包" icon="fa-upload">
+    <FormDialog v-model="showUploadModal" title="上传资源包" icon="upload">
       <form class="space-y-4" @submit.prevent="uploadPackage">
         <div class="space-y-2">
           <Label>选择文件</Label>
@@ -161,9 +161,9 @@
       <template #footer>
         <Button variant="outline" type="button" @click="showUploadModal = false">取消</Button>
         <Button type="button" :disabled="uploading || !selectedFile" @click="uploadPackage">
-          <i v-if="uploading" class="fas fa-spinner fa-spin"></i>
-          <i v-else class="fas fa-upload"></i>
-          {{ uploading ? "上传中…" : "上传" }}
+          <AppIcon v-if="uploading"  name="spinner" spin />
+          <AppIcon v-else  name="upload" />
+          {{ uploading ?"上传中…" :"上传" }}
         </Button>
       </template>
     </FormDialog>
@@ -171,11 +171,11 @@
     <FormDialog
       v-model="showEditModal"
       :title="`编辑资源包: ${editingPackage?.name || ''}`"
-      icon="fa-edit"
+      icon="edit"
       size="xl"
     >
       <div v-if="loadingContent" class="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
-        <i class="fas fa-spinner fa-spin"></i>
+        <AppIcon  name="spinner" spin />
         加载文件内容…
       </div>
       <div v-else class="resource-package-editor space-y-2">
@@ -193,9 +193,9 @@
       <template #footer>
         <Button variant="outline" type="button" @click="showEditModal = false">取消</Button>
         <Button type="button" :disabled="saving || loadingContent" @click="savePackageContent">
-          <i v-if="saving" class="fas fa-spinner fa-spin"></i>
-          <i v-else class="fas fa-save"></i>
-          {{ saving ? "保存中…" : "保存" }}
+          <AppIcon v-if="saving"  name="spinner" spin />
+          <AppIcon v-else  name="save" />
+          {{ saving ?"保存中…" :"保存" }}
         </Button>
       </template>
     </FormDialog>
@@ -228,7 +228,7 @@ import ResourceMemberPermissionDialog from "@/components/team/ResourceMemberPerm
 import { useTeamStore } from "@/stores/team";
 
 export default {
-  name: "ResourcePackagePanel",
+  name:"ResourcePackagePanel",
   components: {
     Codemirror,
     PageToolbar,
@@ -258,12 +258,12 @@ export default {
       uploading: false,
       selectedFile: null,
       uploadForm: {
-        description: "",
+        description:"",
         extract: true,
       },
       showEditModal: false,
       editingPackage: null,
-      editContent: "",
+      editContent:"",
       loadingContent: false,
       saving: false,
     };
@@ -329,7 +329,7 @@ export default {
         }
       } catch (error) {
         console.error("加载资源包列表失败:", error);
-        toastError("加载资源包列表失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载资源包列表失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.loading = false;
       }
@@ -351,28 +351,28 @@ export default {
         formData.append("extract", this.uploadForm.extract);
 
         const res = await axios.post("/api/resource-packages/upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: {"Content-Type":"multipart/form-data" },
         });
 
         if (res.data.success) {
           toastSuccess("资源包上传成功");
           this.showUploadModal = false;
           this.selectedFile = null;
-          this.uploadForm = { description: "", extract: true };
+          this.uploadForm = { description:"", extract: true };
           if (this.$refs.fileInput) {
-            this.$refs.fileInput.value = "";
+            this.$refs.fileInput.value ="";
           }
           this.loadPackages();
         }
       } catch (error) {
         console.error("上传资源包失败:", error);
-        toastError("上传资源包失败: " + (error.response?.data?.detail || error.message));
+        toastError("上传资源包失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.uploading = false;
       }
     },
     async deletePackage(pkg) {
-      if (!(await showConfirm({ message: `确定要删除资源包 "${pkg.name}" 吗？`, danger: true }))) {
+      if (!(await showConfirm({ message: `确定要删除资源包"${pkg.name}" 吗？`, danger: true }))) {
         return;
       }
 
@@ -384,57 +384,24 @@ export default {
         }
       } catch (error) {
         console.error("删除资源包失败:", error);
-        toastError("删除资源包失败: " + (error.response?.data?.detail || error.message));
+        toastError("删除资源包失败:" + (error.response?.data?.detail || error.message));
       }
     },
     formatBytes(bytes) {
-      if (!bytes) return "0 B";
+      if (!bytes) return"0 B";
       const k = 1024;
-      const sizes = ["B", "KB", "MB", "GB"];
+      const sizes = ["B","KB","MB","GB"];
       const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+      return Math.round((bytes / Math.pow(k, i)) * 100) / 100 +"" + sizes[i];
     },
     formatTime(timeStr) {
-      if (!timeStr) return "-";
+      if (!timeStr) return"-";
       const date = new Date(timeStr);
       return date.toLocaleString("zh-CN");
     },
     isTextFile(filename) {
       if (!filename) return false;
-      const textExtensions = [
-        ".txt",
-        ".json",
-        ".yaml",
-        ".yml",
-        ".xml",
-        ".properties",
-        ".conf",
-        ".config",
-        ".ini",
-        ".env",
-        ".sh",
-        ".bash",
-        ".py",
-        ".js",
-        ".ts",
-        ".java",
-        ".go",
-        ".rs",
-        ".md",
-        ".log",
-        ".sql",
-        ".csv",
-        ".html",
-        ".css",
-        ".scss",
-        ".less",
-        ".vue",
-        ".tsx",
-        ".jsx",
-        ".dockerfile",
-        ".gitignore",
-        ".gitattributes",
-        ".editorconfig",
+      const textExtensions = [".txt",".json",".yaml",".yml",".xml",".properties",".conf",".config",".ini",".env",".sh",".bash",".py",".js",".ts",".java",".go",".rs",".md",".log",".sql",".csv",".html",".css",".scss",".less",".vue",".tsx",".jsx",".dockerfile",".gitignore",".gitattributes",".editorconfig",
       ];
       const filenameLower = filename.toLowerCase();
       return textExtensions.some((ext) => filenameLower.endsWith(ext));
@@ -443,16 +410,16 @@ export default {
       this.editingPackage = pkg;
       this.showEditModal = true;
       this.loadingContent = true;
-      this.editContent = "";
+      this.editContent ="";
 
       try {
         const res = await axios.get(`/api/resource-packages/${pkg.package_id}/content`);
         if (res.data.success) {
-          this.editContent = res.data.content || "";
+          this.editContent = res.data.content ||"";
         }
       } catch (error) {
         console.error("加载资源包内容失败:", error);
-        toastError("加载资源包内容失败: " + (error.response?.data?.detail || error.message));
+        toastError("加载资源包内容失败:" + (error.response?.data?.detail || error.message));
         this.showEditModal = false;
       } finally {
         this.loadingContent = false;
@@ -472,12 +439,12 @@ export default {
           toastSuccess("文件已保存");
           this.showEditModal = false;
           this.editingPackage = null;
-          this.editContent = "";
+          this.editContent ="";
           this.loadPackages();
         }
       } catch (error) {
         console.error("保存资源包内容失败:", error);
-        toastError("保存资源包内容失败: " + (error.response?.data?.detail || error.message));
+        toastError("保存资源包内容失败:" + (error.response?.data?.detail || error.message));
       } finally {
         this.saving = false;
       }

@@ -53,6 +53,7 @@ class Pipeline(Base):
     webhook_branch_filter = Column(Boolean, default=False)
     webhook_use_push_branch = Column(Boolean, default=True)
     webhook_allowed_branches = Column(JSON, default=list)  # 允许触发的分支列表
+    tag_build_enabled = Column(Boolean, default=False)
     branch_tag_mapping = Column(JSON, default=dict)
 
     # 多服务配置
@@ -123,6 +124,7 @@ class Task(Base):
     pipeline_id = Column(String(36), ForeignKey("pipelines.pipeline_id"), nullable=True)
     deploy_config_id = Column(String(36), ForeignKey("deploy_configs.config_id"), nullable=True)  # 关联到部署配置
     team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
 
     # 向后兼容字段（从 task_config 中提取）
     git_url = Column(String(512))
@@ -147,6 +149,7 @@ class Task(Base):
         Index("idx_task_type_status", "task_type", "status"),
         Index("idx_task_type_deploy_config", "task_type", "deploy_config_id"),
         Index("idx_task_team", "team_id"),
+        Index("idx_task_created_by", "created_by"),
     )
 
 
@@ -390,6 +393,7 @@ class ExportTask(Base):
     file_size = Column(Integer)
     source = Column(String(50), default="手动导出")
     team_id = Column(String(36), ForeignKey("teams.team_id"), nullable=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     completed_at = Column(DateTime)
     error = Column(Text)
@@ -398,6 +402,7 @@ class ExportTask(Base):
         Index("idx_export_task_status", "status"),
         Index("idx_export_task_created", "created_at"),
         Index("idx_export_task_team", "team_id"),
+        Index("idx_export_task_created_by", "created_by"),
     )
 
 

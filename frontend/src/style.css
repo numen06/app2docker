@@ -60,3 +60,15 @@ a:hover {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+.choice-input {
+  position: absolute;
+  clip: rect(0, 0, 0, 0);
+  pointer-events: none;
+}
+
+.choice-input:checked + label {
+  border-color: rgb(37 99 235);
+  background-color: rgb(239 246 255);
+  color: rgb(29 78 216);
+}

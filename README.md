@@ -4,15 +4,37 @@
 
 支持 Java（JAR）、Node.js、Python、Go、静态网站等多种应用类型；提供 Web 可视化操作，模板复用，无需从零手写 Dockerfile。
 
-## 界面预览
+## 界面大图
 
-| 仪表盘 | 流水线与构建 |
-|:---:|:---:|
-| ![管理后台 · 仪表盘](docs/dashboard.webp) | ![流水线 · 构建任务](docs/pipeline.webp) |
+### 工作台总览
 
-| 团队协作 | 部署联动 |
-|:---:|:---:|
-| ![团队 · 成员管理](docs/team.webp) | ![部署 · 任务列表](docs/deploy.webp) |
+<img src="docs/dashboard.webp" alt="App2Docker 管理后台仪表盘" width="100%">
+
+### 流水线与构建
+
+<img src="docs/pipeline.webp" alt="App2Docker 流水线与构建任务" width="100%">
+
+### 部署联动
+
+<img src="docs/deploy.webp" alt="App2Docker 部署任务列表" width="100%">
+
+### 团队协作
+
+<img src="docs/team.webp" alt="App2Docker 团队成员管理" width="100%">
+
+## 能做什么
+
+App2Docker 把镜像构建、仓库推送、流水线触发、主机部署和团队权限放在同一个 Web 工作台里。你可以从 Git 或上传文件开始，按向导选择项目类型和 Dockerfile 模板，实时查看构建日志；也可以把配置保存为流水线，通过 Webhook、分支规则或 Cron 定时任务自动触发。
+
+部署侧支持 Agent、SSH、Portainer 等目标连接方式，构建、导出、部署任务统一进入任务中心，便于追踪状态、重试失败任务和审计操作记录。团队功能支持成员邀请、角色权限和资源共享，适合多人协作维护同一批镜像与部署流程。
+
+| 场景 | 能力 |
+| --- | --- |
+| 快速构建 | Java、Node.js、Python、Go、静态网站等应用类型，模板化生成 Dockerfile |
+| 流水线 | GitHub / GitLab / Gitee Webhook、分支映射、Cron 定时构建、构建历史 |
+| 镜像交付 | 多仓库配置、登录测试、推送、导出、迁移 |
+| 部署管理 | Agent / SSH / Portainer 目标主机，docker run / docker compose 部署模式 |
+| 团队权限 | 团队、成员邀请、角色、菜单权限、资源级协作 |
 
 ## 快速开始
 

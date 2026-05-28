@@ -37,7 +37,7 @@
           :disabled="!targetUserId || saving"
           @click="setPermission"
         >
-          {{ saving ? "保存中…" : "设置权限" }}
+          {{ saving ?"保存中…" :"设置权限" }}
         </Button>
       </div>
 
@@ -61,7 +61,7 @@
               :disabled="removingId === row.user_id"
               @click="removePermission(row)"
             >
-              {{ removingId === row.user_id ? "…" : "移除" }}
+              {{ removingId === row.user_id ?"…" :"移除" }}
             </Button>
           </div>
         </li>
@@ -91,13 +91,13 @@ import Label from "@/components/ui/label/Label.vue";
 import NativeSelect from "@/components/ui/select/NativeSelect.vue";
 
 const API_PREFIX = {
-  pipeline: "/api/pipelines",
-  git_source: "/api/git-sources",
-  agent_host: "/api/hosts",
-  deploy_config: "/api/deploy-configs",
-  resource_package: "/api/resource-packages",
-  registry: "/api/registries",
-  template: "/api/templates",
+  pipeline:"/api/pipelines",
+  git_source:"/api/git-sources",
+  agent_host:"/api/hosts",
+  deploy_config:"/api/deploy-configs",
+  resource_package:"/api/resource-packages",
+  registry:"/api/registries",
+  template:"/api/templates",
 };
 
 const props = defineProps({
@@ -105,18 +105,11 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (v) =>
-      [
-        "pipeline",
-        "git_source",
-        "agent_host",
-        "deploy_config",
-        "resource_package",
-        "registry",
-        "template",
+      ["pipeline","git_source","agent_host","deploy_config","resource_package","registry","template",
       ].includes(v),
   },
-  resourceId: { type: String, default: "" },
-  teamId: { type: String, default: "" },
+  resourceId: { type: String, default:"" },
+  teamId: { type: String, default:"" },
 });
 
 const teamStore = useTeamStore();
@@ -130,16 +123,16 @@ const saving = ref(false);
 const removingId = ref("");
 const myPermission = ref(null);
 
-const apiBase = computed(() => API_PREFIX[props.resourceType] || "");
+const apiBase = computed(() => API_PREFIX[props.resourceType] ||"");
 
 const teamMembers = computed(() => teamStore.members || []);
 
 const canManageResource = computed(
-  () => myPermission.value === "admin" || teamStore.canManageTeam
+  () => myPermission.value ==="admin" || teamStore.canManageTeam
 );
 
 function permLabel(p) {
-  const map = { admin: "管理员", edit: "编辑", run: "运行", view: "查看" };
+  const map = { admin:"管理员", edit:"编辑", run:"运行", view:"查看" };
   return map[p] || p;
 }
 
@@ -159,7 +152,7 @@ async function loadMyPermission() {
 }
 
 async function loadMembers() {
-  permError.value = "";
+  permError.value ="";
   resourceMembers.value = [];
   if (!props.resourceId || !apiBase.value) return;
   await loadMyPermission();
@@ -172,7 +165,7 @@ async function loadMembers() {
     resourceMembers.value = Array.isArray(res.data) ? res.data : [];
   } catch (e) {
     permError.value =
-      e?.response?.data?.detail || "无法加载成员权限（需要资源管理员权限）";
+      e?.response?.data?.detail ||"无法加载成员权限（需要资源管理员权限）";
     resourceMembers.value = [];
   } finally {
     permLoading.value = false;
@@ -182,16 +175,16 @@ async function loadMembers() {
 async function setPermission() {
   if (!props.resourceId || !targetUserId.value || !apiBase.value) return;
   saving.value = true;
-  permError.value = "";
+  permError.value ="";
   try {
     await axios.put(
       `${apiBase.value}/${props.resourceId}/members/${targetUserId.value}`,
       { permission: newPermission.value }
     );
     await loadMembers();
-    targetUserId.value = "";
+    targetUserId.value ="";
   } catch (e) {
-    permError.value = e?.response?.data?.detail || "设置失败";
+    permError.value = e?.response?.data?.detail ||"设置失败";
   } finally {
     saving.value = false;
   }
@@ -201,23 +194,23 @@ async function removePermission(row) {
   if (!props.resourceId || !apiBase.value) return;
   if (!(await showConfirm({ message: `确定移除「${row.username}」对该资源的单独权限吗？` }))) return;
   removingId.value = row.user_id;
-  permError.value = "";
+  permError.value ="";
   try {
     await axios.delete(
       `${apiBase.value}/${props.resourceId}/members/${row.user_id}`
     );
     await loadMembers();
   } catch (e) {
-    permError.value = e?.response?.data?.detail || "移除失败";
+    permError.value = e?.response?.data?.detail ||"移除失败";
   } finally {
-    removingId.value = "";
+    removingId.value ="";
   }
 }
 
 watch(
   () => [props.resourceId, props.teamId, props.resourceType],
   ([rid, tid]) => {
-    targetUserId.value = "";
+    targetUserId.value ="";
     if (tid) teamStore.fetchMembers(tid);
     if (rid) loadMembers();
     else {

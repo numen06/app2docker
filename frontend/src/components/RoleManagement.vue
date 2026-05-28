@@ -1,13 +1,13 @@
 <template>
   <div>
-    <PageToolbar title="角色管理" icon="fa-user-shield">
+    <PageToolbar title="角色管理" icon="user-shield">
       <template #actions>
         <Button variant="outline" size="sm" @click="loadRoles">
-          <i class="fas fa-sync-alt"></i>
+          <AppIcon  name="sync-alt" />
           刷新
         </Button>
         <Button size="sm" @click="openCreate">
-          <i class="fas fa-plus"></i>
+          <AppIcon  name="plus" />
           创建角色
         </Button>
       </template>
@@ -26,15 +26,15 @@
             {{ role.name }}
             <Badge v-if="isSystemRole(role.name)" variant="info" class="ml-2">系统角色</Badge>
           </div>
-          <p class="mt-1 text-sm text-slate-600">{{ role.description || "—" }}</p>
+          <p class="mt-1 text-sm text-slate-600">{{ role.description ||"—" }}</p>
           <p class="mt-1 text-xs text-slate-500">权限 {{ role.permissions?.length || 0 }} 项</p>
         </div>
         <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
           <Button variant="outline" size="sm" title="编辑" @click="editRole(role)">
-            <i class="fas fa-edit"></i>
+            <AppIcon  name="edit" />
           </Button>
           <Button variant="outline" size="sm" title="查看权限" @click="viewPermissions(role)">
-            <i class="fas fa-eye"></i>
+            <AppIcon  name="eye" />
           </Button>
           <Button
             v-if="!isSystemRole(role.name)"
@@ -43,7 +43,7 @@
             title="删除"
             @click="deleteRole(role)"
           >
-            <i class="fas fa-trash"></i>
+            <AppIcon  name="trash" />
           </Button>
         </div>
       </div>
@@ -65,17 +65,17 @@
               {{ role.name }}
               <Badge v-if="isSystemRole(role.name)" variant="info" class="ml-2">系统角色</Badge>
             </TableCell>
-            <TableCell class="text-slate-600">{{ role.description || "—" }}</TableCell>
+            <TableCell class="text-slate-600">{{ role.description ||"—" }}</TableCell>
             <TableCell>
               <Badge>{{ role.permissions?.length || 0 }}</Badge>
             </TableCell>
             <TableCell class="text-end">
               <div class="flex justify-end gap-1">
                 <Button variant="outline" size="sm" title="编辑" @click="editRole(role)">
-                  <i class="fas fa-edit"></i>
+                  <AppIcon  name="edit" />
                 </Button>
                 <Button variant="outline" size="sm" title="查看权限" @click="viewPermissions(role)">
-                  <i class="fas fa-eye"></i>
+                  <AppIcon  name="eye" />
                 </Button>
                 <Button
                   v-if="!isSystemRole(role.name)"
@@ -84,7 +84,7 @@
                   title="删除"
                   @click="deleteRole(role)"
                 >
-                  <i class="fas fa-trash"></i>
+                  <AppIcon  name="trash" />
                 </Button>
               </div>
             </TableCell>
@@ -101,14 +101,14 @@
       >
         <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h3 class="text-lg font-semibold text-slate-900">
-            {{ showCreateModal ? "创建角色" : "编辑角色" }}
+            {{ showCreateModal ?"创建角色" :"编辑角色" }}
           </h3>
           <button
             type="button"
             class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
             @click="closeModal"
           >
-            <i class="fas fa-times"></i>
+            <AppIcon  name="times" />
           </button>
         </div>
         <div class="overflow-y-auto px-4 py-4">
@@ -172,7 +172,7 @@
             <AlertBanner :message="error" />
           </form>
         </div>
-        <div class="modal-footer flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
+        <div class="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end flex-col-reverse">
           <Button variant="outline" type="button" class="w-full sm:w-auto" @click="closeModal">取消</Button>
           <Button type="button" class="w-full sm:w-auto" @click="saveRole">保存</Button>
         </div>
@@ -194,7 +194,7 @@
             class="rounded-md p-2 text-slate-500 hover:bg-slate-100"
             @click="showViewModal = false"
           >
-            <i class="fas fa-times"></i>
+            <AppIcon  name="times" />
           </button>
         </div>
         <div class="max-h-[60vh] overflow-y-auto px-4 py-4">
@@ -211,7 +211,7 @@
               <span class="ml-2 text-slate-500">({{ permCode }})</span>
             </li>
           </ul>
-          <EmptyState v-else message="该角色暂无权限" icon="fa-shield-halved" />
+          <EmptyState v-else message="该角色暂无权限" icon="shield-halved" />
         </div>
         <div class="flex justify-end border-t border-slate-200 bg-slate-50 px-4 py-3">
           <Button variant="outline" @click="showViewModal = false">关闭</Button>
@@ -251,9 +251,9 @@ const viewRole = ref({});
 const error = ref("");
 
 const form = ref({
-  role_id: "",
-  name: "",
-  description: "",
+  role_id:"",
+  name:"",
+  description:"",
   permissions: [],
 });
 
@@ -271,7 +271,7 @@ onMounted(async () => {
 
 function openCreate() {
   showCreateModal.value = true;
-  error.value = "";
+  error.value ="";
 }
 
 async function loadRoles() {
@@ -279,7 +279,7 @@ async function loadRoles() {
     const res = await axios.get("/api/roles");
     roles.value = res.data.roles || [];
   } catch (err) {
-    toastError("加载角色列表失败: " + (err.response?.data?.detail || err.message));
+    toastError("加载角色列表失败:" + (err.response?.data?.detail || err.message));
   }
 }
 
@@ -293,18 +293,18 @@ async function loadPermissions() {
 }
 
 function isSystemRole(roleName) {
-  return ["admin", "user", "readonly"].includes(roleName);
+  return ["admin","user","readonly"].includes(roleName);
 }
 
 function editRole(role) {
   form.value = {
     role_id: role.role_id,
     name: role.name,
-    description: role.description || "",
+    description: role.description ||"",
     permissions: [...(role.permissions || [])],
   };
   showEditModal.value = true;
-  error.value = "";
+  error.value ="";
 }
 
 function viewPermissions(role) {
@@ -318,7 +318,7 @@ function getPermissionName(permCode) {
 }
 
 async function saveRole() {
-  error.value = "";
+  error.value ="";
   try {
     if (showCreateModal.value) {
       await axios.post("/api/roles", {
@@ -337,25 +337,25 @@ async function saveRole() {
     closeModal();
     await loadRoles();
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || "操作失败";
+    error.value = err.response?.data?.detail || err.message ||"操作失败";
   }
 }
 
 async function deleteRole(role) {
-  if (!(await showConfirm({ message: `确定要删除角色 "${role.name}" 吗？此操作不可恢复！`, danger: true }))) return;
+  if (!(await showConfirm({ message: `确定要删除角色"${role.name}" 吗？此操作不可恢复！`, danger: true }))) return;
   try {
     await axios.delete(`/api/roles/${role.role_id}`);
     toastSuccess("角色删除成功");
     await loadRoles();
   } catch (err) {
-    toastError("删除失败: " + (err.response?.data?.detail || err.message));
+    toastError("删除失败:" + (err.response?.data?.detail || err.message));
   }
 }
 
 function closeModal() {
   showCreateModal.value = false;
   showEditModal.value = false;
-  form.value = { role_id: "", name: "", description: "", permissions: [] };
-  error.value = "";
+  form.value = { role_id:"", name:"", description:"", permissions: [] };
+  error.value ="";
 }
 </script>

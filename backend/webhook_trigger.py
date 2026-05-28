@@ -3,11 +3,148 @@
 import json
 import logging
 import asyncio
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
 from typing import Dict, Any, List, Optional
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_branch_name(branch: Optional[str]) -> str:
+    """Normalize Git branch refs before matching."""
+    if not branch:
+        return ""
+    branch = str(branch).strip()
+    if branch.startswith("refs/heads/"):
+        return branch[len("refs/heads/") :]
+    return branch
+
+
+def branch_rule_has_wildcard(rule: str) -> bool:
+    return any(token in rule for token in ("*", "?", "["))
+
+
+def matches_branch_rule(branch: Optional[str], rule: Optional[str]) -> bool:
+    """
+    Match a branch against a single rule.
+
+    Plain text is exact-match only. Wildcard matching is enabled only when the
+    rule explicitly contains shell-style wildcard characters.
+    """
+    normalized_branch = normalize_branch_name(branch)
+    normalized_rule = normalize_branch_name(rule)
+    if not normalized_branch or not normalized_rule:
+        return False
+    if normalized_branch == normalized_rule:
+        return True
+    if not branch_rule_has_wildcard(normalized_rule):
+        return False
+    return fnmatchcase(normalized_branch, normalized_rule)
+
+
+def matches_any_branch_rule(branch: Optional[str], rules: Optional[List[str]]) -> bool:
+    if not branch or not rules:
+        return False
+    return any(matches_branch_rule(branch, rule) for rule in rules if rule)
+
+
+def get_branch_mapping_value(branch: Optional[str], mapping: Optional[dict]):
+    """Return mapping value with exact matches taking precedence over wildcard rules."""
+    normalized_branch = normalize_branch_name(branch)
+    if not normalized_branch or not mapping:
+        return None
+
+    normalized_exact_lookup = {}
+    for rule, value in mapping.items():
+        normalized_rule = normalize_branch_name(rule)
+        if normalized_rule and not branch_rule_has_wildcard(normalized_rule):
+            normalized_exact_lookup[normalized_rule] = value
+
+    if normalized_branch in normalized_exact_lookup:
+        return normalized_exact_lookup[normalized_branch]
+
+    for rule, value in mapping.items():
+        if matches_branch_rule(normalized_branch, rule):
+            return value
+
+    return None
+
+
+def normalize_tag_values(tag_value) -> List[str]:
+    if not tag_value:
+        return []
+    if isinstance(tag_value, list):
+        return [str(tag).strip() for tag in tag_value if str(tag).strip()]
+    if isinstance(tag_value, str):
+        normalized = tag_value.replace("，", ",")
+        return [tag.strip() for tag in normalized.split(",") if tag.strip()]
+    return [str(tag_value).strip()] if str(tag_value).strip() else []
+
+
+def resolve_branch_tags(
+    branch: Optional[str],
+    mapping: Optional[dict] = None,
+    default_tag: Optional[str] = None,
+) -> List[str]:
+    """Resolve image tags for a branch. Defaults to the branch name."""
+    mapped_tag_value = get_branch_mapping_value(branch, mapping)
+    mapped_tags = normalize_tag_values(mapped_tag_value)
+    if mapped_tags:
+        return mapped_tags
+
+    fallback = default_tag or normalize_branch_name(branch)
+    return [fallback] if fallback else []
+
+
+def resolve_pipeline_webhook_branch(
+    strategy: str,
+    webhook_branch: Optional[str],
+    configured_branch: Optional[str],
+    allowed_branches: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Resolve whether a pipeline webhook should trigger and which branch to build.
+
+    The result uses:
+    - ok=True with branch when a build should be created.
+    - ignored=True when the webhook is valid but the pushed branch is not allowed.
+    - error when required branch data is missing.
+    """
+    strategy = strategy or "use_push"
+
+    if strategy == "select_branches":
+        if not webhook_branch:
+            return {"ok": False, "error": "missing_webhook_branch"}
+        if matches_any_branch_rule(webhook_branch, allowed_branches):
+            return {"ok": True, "branch": normalize_branch_name(webhook_branch)}
+        return {"ok": False, "ignored": True, "reason": "branch_not_allowed"}
+
+    if strategy == "select_configured":
+        if not webhook_branch:
+            return {"ok": False, "error": "missing_webhook_branch"}
+        if matches_any_branch_rule(webhook_branch, allowed_branches):
+            return {"ok": True, "branch": normalize_branch_name(configured_branch)}
+        return {"ok": False, "ignored": True, "reason": "branch_not_allowed"}
+
+    if strategy == "filter_match":
+        if not webhook_branch:
+            return {"ok": False, "error": "missing_webhook_branch"}
+        if matches_branch_rule(webhook_branch, configured_branch):
+            return {"ok": True, "branch": normalize_branch_name(webhook_branch)}
+        return {"ok": False, "ignored": True, "reason": "branch_not_matched"}
+
+    if strategy == "use_configured":
+        if not webhook_branch:
+            return {"ok": False, "error": "missing_webhook_branch"}
+        if normalize_branch_name(webhook_branch) == normalize_branch_name(
+            configured_branch
+        ):
+            return {"ok": True, "branch": normalize_branch_name(configured_branch)}
+        return {"ok": False, "ignored": True, "reason": "not_configured_branch"}
+
+    if not webhook_branch:
+        return {"ok": False, "error": "missing_webhook_branch"}
+    return {"ok": True, "branch": normalize_branch_name(webhook_branch)}
 
 
 async def trigger_webhook(
@@ -128,12 +265,4 @@ def match_branch(
     if not allowed_branches:
         return False
 
-    if strategy == "select_branches":
-        return branch in allowed_branches
-
-    # filter_match: 支持通配符匹配 (如 feature/*, release/*)
-    for pattern in allowed_branches:
-        if fnmatch(branch, pattern):
-            return True
-
-    return False
+    return matches_any_branch_rule(branch, allowed_branches)

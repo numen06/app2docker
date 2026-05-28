@@ -3,20 +3,20 @@
     <div class="pipeline-config-toolbar">
       <div class="pipeline-config-toolbar__main">
         <Button type="button" variant="outline" size="sm" class="shrink-0" @click="goBack">
-          <i class="fas fa-arrow-left mr-1"></i> 返回
+          <AppIcon  name="arrow-left" class="mr-1" /> 返回
         </Button>
         <div class="pipeline-config-toolbar__meta min-w-0">
           <p class="pipeline-config-toolbar__name">{{ pageTitle }}</p>
           <p class="pipeline-config-toolbar__hint">构建任务记录与日志</p>
         </div>
         <div v-if="pipeline" class="flex shrink-0 flex-wrap gap-1">
-          <span v-if="pipeline.enabled" class="badge bg-success">已启用</span>
-          <span v-else class="badge bg-secondary">已禁用</span>
+          <span v-if="pipeline.enabled" class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-green-600 text-white">已启用</span>
+          <span v-else class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-slate-500 text-white">已禁用</span>
         </div>
       </div>
       <div v-if="pageState === 'ready'" class="pipeline-config-toolbar__actions">
         <Button type="button" variant="outline" size="sm" @click="goToConfig">
-          <i class="fas fa-cog mr-1"></i> 配置流水线
+          <AppIcon  name="cog" class="mr-1" /> 配置流水线
         </Button>
       </div>
     </div>
@@ -33,7 +33,7 @@
       class="pipeline-config-body pipeline-config-body--loading"
     >
       <p class="text-slate-500">
-        <i class="fas fa-spinner fa-spin mr-1"></i> 加载中…
+        <AppIcon  name="spinner" class="mr-1" spin /> 加载中…
       </p>
     </div>
 
@@ -58,7 +58,7 @@ import { useBuildTaskLogs } from "@/composables/useBuildTaskLogs";
 const route = useRoute();
 const router = useRouter();
 
-const pipelineId = computed(() => String(route.params.pipelineId || ""));
+const pipelineId = computed(() => String(route.params.pipelineId ||""));
 const pipeline = ref(null);
 const pageState = ref("loading");
 const errorMessage = ref("");
@@ -67,14 +67,14 @@ const buildTaskLogs = useBuildTaskLogs();
 
 const pageTitle = computed(() => {
   const name = pipeline.value?.name;
-  return name ? `历史构建 · ${name}` : "历史构建";
+  return name ? `历史构建 · ${name}` :"历史构建";
 });
 
 provide(PIPELINE_DETAIL_KEY, {
   pipeline,
-  loading: computed(() => pageState.value === "loading"),
+  loading: computed(() => pageState.value ==="loading"),
   error: errorMessage,
-  refresh: bootstrap,
+  refresh: loadPage,
   setTab: () => {},
   viewTaskLogs: buildTaskLogs.viewTaskLogs,
   viewingLogs: buildTaskLogs.viewingLogs,
@@ -87,39 +87,39 @@ function goBack() {
 function goToConfig() {
   if (!pipelineId.value) return;
   router.push({
-    name: "pipeline-detail",
+    name:"pipeline-detail",
     params: { pipelineId: pipelineId.value },
-    query: { tab: "basic" },
+    query: { tab:"basic" },
   });
 }
 
-async function bootstrap() {
-  pageState.value = "loading";
-  errorMessage.value = "";
+async function loadPage() {
+  pageState.value ="loading";
+  errorMessage.value ="";
 
   if (!pipelineId.value) {
-    errorMessage.value = "缺少流水线 ID";
-    pageState.value = "error";
+    errorMessage.value ="缺少流水线 ID";
+    pageState.value ="error";
     return;
   }
 
   try {
     const res = await axios.get(`/api/pipelines/${pipelineId.value}`);
     pipeline.value = res.data;
-    pageState.value = "ready";
+    pageState.value ="ready";
   } catch (e) {
     errorMessage.value =
-      e.response?.data?.detail || e.response?.data?.message || "无法加载流水线";
+      e.response?.data?.detail || e.response?.data?.message ||"无法加载流水线";
     pipeline.value = null;
-    pageState.value = "error";
+    pageState.value ="error";
   }
 }
 
 onMounted(() => {
-  bootstrap();
+  loadPage();
 });
 
 watch(pipelineId, () => {
-  bootstrap();
+  loadPage();
 });
 </script>

@@ -18,10 +18,10 @@
               :aria-label="isMobile ? (sidebarOpen ? '关闭菜单' : '打开菜单') : '展开或收起侧边栏'"
               @click="toggleSidebar"
             >
-              <i class="fas fa-bars"></i>
+              <AppIcon  name="bars" />
             </button>
             <span class="mb-0 flex items-center gap-2 font-semibold text-slate-900">
-              <i class="fas fa-box-open text-blue-600"></i>
+              <AppIcon  name="box-open" class="text-blue-600" />
               <span class="hidden sm:inline">App2Docker</span>
             </span>
           </div>
@@ -41,18 +41,17 @@
                 :title="activeTeamMenuTitle"
                 @click.stop="toggleTeamMenu"
               >
-                <i
-                  :class="teamRoleIconClass(activeMembership?.role)"
-                  class="shrink-0 text-xs"
-                  aria-hidden="true"
-                ></i>
+                <AppIcon
+                  :name="teamRoleIcon(activeMembership?.role)"
+                  :class="['shrink-0 text-xs', teamRoleIconClass(activeMembership?.role)]"
+                />
                 <span class="min-w-0 flex-1 truncate text-left">{{
                   activeTeamDisplayName
                 }}</span>
-                <i
-                  class="fas fa-chevron-down shrink-0 text-[10px] text-slate-400"
+                <AppIcon
+                  
                   aria-hidden="true"
-                ></i>
+                 name="chevron-down" class="shrink-0 text-[10px] text-slate-400" />
               </button>
               <ul
                 v-show="teamMenuOpen"
@@ -62,25 +61,22 @@
                   <button
                     type="button"
                     class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    :class="
-                      m.team.team_id === teamStore.activeTeamId
+                    :class="m.team.team_id === teamStore.activeTeamId
                         ? 'bg-blue-50 text-blue-800'
-                        : ''
-                    "
+                        : ''"
                     :title="teamOptionTitle(m)"
                     @click="selectTeam(m.team.team_id)"
                   >
-                    <i
-                      :class="teamRoleIconClass(m.role)"
-                      class="shrink-0 text-xs"
-                      aria-hidden="true"
-                    ></i>
+                    <AppIcon
+                      :name="teamRoleIcon(m.role)"
+                      :class="['shrink-0 text-xs', teamRoleIconClass(m.role)]"
+                    />
                     <span class="min-w-0 flex-1 truncate">{{ m.team.name }}</span>
-                    <i
+                    <AppIcon
                       v-if="m.team.team_id === teamStore.activeTeamId"
-                      class="fas fa-check shrink-0 text-xs text-blue-600"
+                      
                       aria-hidden="true"
-                    ></i>
+                     name="check" class="shrink-0 text-xs text-blue-600" />
                   </button>
                 </li>
               </ul>
@@ -90,7 +86,7 @@
               to="/onboarding"
               class="admin-topbar-control hidden rounded-lg border border-dashed border-slate-300 px-2.5 text-xs text-slate-600 hover:bg-slate-50 sm:inline-flex"
             >
-              <i class="fas fa-plus mr-1"></i>创建/加入团队
+              <AppIcon  name="plus" class="mr-1" />创建/加入团队
             </RouterLink>
 
             <!-- 运行任务：下拉菜单 -->
@@ -100,12 +96,12 @@
               class="relative"
             >
               <button
-                class="admin-topbar-control inline-flex items-center rounded-lg bg-amber-100 px-2.5 text-sm text-amber-900 hover:bg-amber-200 dropdown-toggle"
+                class="admin-topbar-control inline-flex items-center rounded-lg bg-amber-100 px-2.5 text-sm text-amber-900 hover:bg-amber-200"
                 type="button"
                 :aria-expanded="runningTasksMenuOpen ? 'true' : 'false'"
                 @click.stop="toggleRunningTasksMenu"
               >
-                <i class="fas fa-spinner fa-spin"></i>
+                <AppIcon  name="spinner" spin />
                 <span class="ms-1 hidden md:inline">运行任务</span>
                 <span class="ms-1 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ runningTasksCount }}</span>
               </button>
@@ -120,7 +116,7 @@
                   class="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-3 py-2"
                 >
                   <span class="text-xs font-semibold text-amber-950">
-                    <i class="fas fa-spinner fa-spin text-amber-600 me-1"></i>
+                    <AppIcon  name="spinner" class="text-amber-600 me-1" spin />
                     正在运行 ({{ runningTasksCount }})
                   </span>
                 </div>
@@ -132,7 +128,7 @@
                   >
                     <div class="flex items-start gap-2">
                       <code class="text-xs">{{
-                        task.task_id?.substring(0, 8) || "-"
+                        task.task_id?.substring(0, 8) ||"-"
                       }}</code>
                       <span
                         class="rounded px-2 py-0.5 text-[11px] font-medium text-white"
@@ -145,7 +141,7 @@
                       v-if="task.image || task.task_name"
                       class="mt-1 text-xs text-slate-500"
                     >
-                      {{ task.image || task.task_name || "-" }}
+                      {{ task.image || task.task_name ||"-" }}
                       <span v-if="task.tag" class="ms-1">:{{ task.tag }}</span>
                     </div>
                   </div>
@@ -161,7 +157,7 @@
                       class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                       @click="goToRunningTasks"
                     >
-                      <i class="fas fa-arrow-right"></i> 查看详情
+                      <AppIcon  name="arrow-right" /> 查看详情
                     </button>
                   </div>
                 </div>
@@ -174,7 +170,7 @@
               title="暂无运行中的任务"
               disabled
             >
-              <i class="fas fa-check-circle"></i>
+              <AppIcon  name="check-circle" />
               <span class="ms-1 hidden md:inline">运行任务</span>
               <span class="ms-1 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">0</span>
             </button>
@@ -187,7 +183,7 @@
                 :aria-expanded="userMenuOpen ? 'true' : 'false'"
                 @click.stop="toggleUserMenu"
               >
-                <i class="fas fa-user-circle"></i>
+                <AppIcon  name="user-circle" />
                 <span class="ms-1 hidden max-w-32 truncate md:inline">{{
                   username
                 }}</span>
@@ -204,7 +200,7 @@
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                     @click="openUserCenter('password')"
                   >
-                    <i class="fas fa-user w-4 text-slate-400"></i>用户中心
+                    <AppIcon  name="user" class="w-4 text-slate-400" />用户中心
                   </button>
                 </li>
                 <li>
@@ -213,7 +209,7 @@
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                     @click="openUserCenter('appkeys')"
                   >
-                    <i class="fas fa-key w-4 text-slate-400"></i>APPKEY管理
+                    <AppIcon  name="key" class="w-4 text-slate-400" />APPKEY管理
                   </button>
                 </li>
                 <li>
@@ -222,10 +218,9 @@
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                     @click="
                       goTab('logs');
-                      closeUserMenu();
-                    "
+                      closeUserMenu();"
                   >
-                    <i class="fas fa-history w-4 text-slate-400"></i>操作日志
+                    <AppIcon  name="history" class="w-4 text-slate-400" />操作日志
                   </button>
                 </li>
                 <li>
@@ -234,10 +229,9 @@
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                     @click="
                       showConfig = true;
-                      closeUserMenu();
-                    "
+                      closeUserMenu();"
                   >
-                    <i class="fas fa-cog w-4 text-slate-400"></i>配置
+                    <AppIcon  name="cog" class="w-4 text-slate-400" />配置
                   </button>
                 </li>
                 <li class="my-1 border-t border-slate-100"></li>
@@ -247,7 +241,7 @@
                     class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
                     @click="handleLogout"
                   >
-                    <i class="fas fa-sign-out-alt w-4"></i>登出
+                    <AppIcon  name="log-out" class="w-4" />登出
                   </button>
                 </li>
               </ul>
@@ -283,7 +277,7 @@
               title="首页"
               @click="goTab('dashboard')"
             >
-              <i class="fas fa-house fa-fw text-slate-500 group-hover:text-slate-700"></i>
+              <AppIcon  name="house" class="text-slate-500 group-hover:text-slate-700" />
               <span class="truncate">首页</span>
             </button>
             <button
@@ -293,7 +287,7 @@
               title="我的团队"
               @click="goTab('team')"
             >
-              <i class="fas fa-people-group fa-fw text-slate-500 group-hover:text-slate-700"></i>
+              <AppIcon  name="people-group" class="text-slate-500 group-hover:text-slate-700" />
               <span class="truncate">我的团队</span>
             </button>
             <div
@@ -313,15 +307,15 @@
                 :aria-expanded="isGroupExpanded(group.id)"
                 @click="toggleGroup(group.id)"
               >
-                <i :class="['fa-fw', 'fas', group.icon, 'text-slate-400']"></i>
+                <AppIcon :name="group.icon" class="text-slate-400" />
                 <span class="grow text-start truncate">{{
                   group.label
                 }}</span>
-                <i
-                  class="fas fa-chevron-down text-[10px] text-slate-400 transition-transform duration-200"
+                <AppIcon
+                  
                   :class="isGroupExpanded(group.id) ? 'rotate-180' : ''"
                   aria-hidden="true"
-                ></i>
+                 name="chevron-down" class="text-[10px] text-slate-400 transition-transform duration-200" />
               </button>
               <div
                 v-show="isGroupExpanded(group.id)"
@@ -336,14 +330,10 @@
                   :title="child.label"
                   @click="goTab(child.id)"
                 >
-                  <i
-                    :class="[
-                      'fa-fw',
-                      child.iconPrefix || 'fas',
-                      child.icon,
-                      sidebarActiveTab === child.id ? 'text-blue-600' : 'text-slate-400',
-                    ]"
-                  ></i>
+                  <AppIcon
+                    :name="child.icon"
+                    :class="sidebarActiveTab === child.id ? 'text-blue-600' : 'text-slate-400'"
+                  />
                   <span class="truncate">{{ child.label }}</span>
                 </button>
               </div>
@@ -356,8 +346,8 @@
               title="版本与更新"
               @click="openVersionModal"
             >
-              <i class="fas fa-tag me-1"></i>
-              <span>v{{ appVersion || "…" }}</span>
+              <AppIcon  name="tag" class="me-1" />
+              <span>v{{ appVersion ||"…" }}</span>
               <span
                 v-if="updateStatus.hasUpdate"
                 class="absolute inset-e-2 top-1/2 inline-flex h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500"
@@ -381,7 +371,7 @@
               title="首页"
               @click="goTab('dashboard')"
             >
-              <i class="fas fa-house fa-fw"></i>
+              <AppIcon  name="house" />
             </button>
             <button
               type="button"
@@ -390,7 +380,7 @@
               title="我的团队"
               @click="goTab('team')"
             >
-              <i class="fas fa-people-group fa-fw"></i>
+              <AppIcon  name="people-group" />
             </button>
             <div
               v-if="hasPermission('menu.dashboard') && visibleSidebarGroups.length"
@@ -410,7 +400,7 @@
                 :title="group.label"
                 @click.stop="toggleSidebarFlyout(group.id)"
               >
-                <i :class="['fa-fw', 'fas', group.icon]"></i>
+                <AppIcon :name="group.icon" />
               </button>
               <ul
                 v-show="flyoutOpenGroupId === group.id"
@@ -425,9 +415,7 @@
                     :class="sidebarActiveTab === child.id ? 'bg-blue-50 text-blue-700' : ''"
                     @click="selectFlyoutTab(group.id, child.id)"
                   >
-                    <i
-                      :class="[child.iconPrefix || 'fas', child.icon, 'w-4 text-slate-400']"
-                    ></i>
+                    <AppIcon :name="child.icon" class="w-4 text-slate-400" />
                     {{ child.label }}
                   </button>
                 </li>
@@ -441,7 +429,7 @@
               title="版本与更新"
               @click="openVersionModal"
             >
-              <i class="fas fa-tag"></i>
+              <AppIcon  name="tag" />
             </button>
             <span
               v-if="updateStatus.hasUpdate"
@@ -463,8 +451,7 @@
             <div class="admin-content-panel__body" :key="panelContentKey">
             <DashboardPanel
               v-if="
-                activeTab === 'dashboard' && hasPermission('menu.dashboard')
-              "
+                activeTab === 'dashboard' && hasPermission('menu.dashboard')"
               @navigate="handleNavigate"
             />
             <StepBuildPanel
@@ -496,13 +483,11 @@
               v-if="
                 activeTab === 'pipeline' &&
                 !isPipelinePipelineSubRoute &&
-                hasPermission('menu.pipeline')
-              "
+                hasPermission('menu.pipeline')"
             />
             <DataSourcePanel
               v-if="
-                activeTab === 'datasource' && hasPermission('menu.datasource')
-              "
+                activeTab === 'datasource' && hasPermission('menu.datasource')"
             />
             <RegistryPanel
               v-if="activeTab === 'registry' && hasPermission('menu.registry')"
@@ -513,8 +498,7 @@
             <ResourcePackagePanel
               v-if="
                 activeTab === 'resource-package' &&
-                hasPermission('menu.resource-package')
-              "
+                hasPermission('menu.resource-package')"
             />
             <UnifiedHostManager
               v-if="activeTab === 'host' && hasPermission('menu.host')"
@@ -547,7 +531,7 @@
               <div class="admin-footer__row">
                 <span class="admin-footer__meta">
                   当前版本
-                  <strong class="admin-footer__strong">v{{ appVersion || "…" }}</strong>
+                  <strong class="admin-footer__strong">v{{ appVersion ||"…" }}</strong>
                 </span>
                 <span class="admin-footer__sep" aria-hidden="true">·</span>
                 <button
@@ -559,7 +543,7 @@
                 </button>
               </div>
               <div class="admin-footer__row">
-                <i class="fas fa-code-branch admin-footer__icon" aria-hidden="true"></i>
+                <AppIcon  aria-hidden="true" name="code-branch" class="admin-footer__icon" />
                 <span class="admin-footer__label">Gitee</span>
                 <a
                   :href="GITEE_REPO_URL"
@@ -577,19 +561,19 @@
       <FormDialog
         v-model="versionDialogOpen"
         title="版本与更新"
-        icon="fa-code-branch"
+        icon="code-branch"
         size="lg"
       >
         <div>
           <div v-if="checkLoading" class="py-6 text-center text-sm text-slate-500">
-            <i class="fas fa-spinner fa-spin mr-2"></i>正在检查…
+            <AppIcon  name="spinner" class="mr-2" spin />正在检查…
           </div>
           <template v-else>
             <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-[auto_1fr]">
               <dt class="font-medium text-slate-600">当前版本</dt>
               <dd>{{ displayCurrentVersion }}</dd>
               <dt class="font-medium text-slate-600">Gitee 最新</dt>
-              <dd>{{ updateStatus.latestVersion || "—" }}</dd>
+              <dd>{{ updateStatus.latestVersion ||"—" }}</dd>
               <template v-if="updateStatus.releaseName">
                 <dt class="font-medium text-slate-600">Release</dt>
                 <dd>{{ updateStatus.releaseName }}</dd>
@@ -599,7 +583,7 @@
               v-if="!updateStatus.checkSuccess"
               class="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
             >
-              {{ updateStatus.checkMessage || "检查更新失败" }}
+              {{ updateStatus.checkMessage ||"检查更新失败" }}
             </div>
             <div
               v-else-if="updateStatus.hasUpdate"
@@ -657,7 +641,7 @@
             :disabled="checkLoading"
             @click="refreshVersionCheck"
           >
-            <i class="fas fa-sync-alt" :class="{ 'fa-spin': checkLoading }"></i>
+            <AppIcon name="sync-alt" />
             重新检查
           </button>
           <button
@@ -689,7 +673,7 @@
           role="status"
         >
           <div class="flex items-start gap-2">
-            <i class="fas fa-bell mt-0.5 text-blue-600"></i>
+            <AppIcon  name="bell" class="mt-0.5 text-blue-600" />
             <div class="flex-1 text-sm text-slate-800">{{ updateSnackMessage }}</div>
             <button
               type="button"
@@ -697,7 +681,7 @@
               aria-label="关闭"
               @click="dismissUpdateSnack"
             >
-              <i class="fas fa-times"></i>
+              <AppIcon  name="times" />
             </button>
           </div>
         </div>
@@ -709,7 +693,7 @@
 import { showConfirm } from "@/composables/useConfirm";
 
 import axios from "axios";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import FormDialog from "@/components/ui/dialog/FormDialog.vue";
 import ToastHost from "@/components/ui/ToastHost.vue";
@@ -720,177 +704,173 @@ import { useTeamStore } from "@/stores/team";
 import { useModalEscape } from "@/composables/useModalEscape";
 import { getToken, getUsername, logout } from "@/utils/auth";
 
-import ApiDocsPanel from "@/components/ApiDocsPanel.vue";
-import BuildConfigEditor from "@/components/BuildConfigEditor.vue";
 import ConfigModal from "@/components/ConfigModal.vue";
-import DashboardPanel from "@/components/DashboardPanel.vue";
-import DataSourcePanel from "@/components/DataSourcePanel.vue";
-import DeployTaskManager from "@/components/DeployTaskManager.vue";
-import DockerManager from "@/components/DockerManager.vue";
-import ExportPanel from "@/components/ExportPanel.vue";
-import ImageMigrationPanel from "@/components/ImageMigrationPanel.vue";
-import OperationLogs from "@/components/OperationLogs.vue";
-import PipelinePanel from "@/components/PipelinePanel.vue";
-import PipelineConfigPage from "@/pages/PipelineConfigPage.vue";
-import PipelineCreatePage from "@/pages/PipelineCreatePage.vue";
-import PipelineHistoryPage from "@/pages/PipelineHistoryPage.vue";
-import RegistryPanel from "@/components/RegistryPanel.vue";
-import ResourcePackagePanel from "@/components/ResourcePackagePanel.vue";
-import RoleManagement from "@/components/RoleManagement.vue";
-import StepBuildPanel from "@/components/StepBuildPanel.vue";
-import TaskManager from "@/components/TaskManager.vue";
-import TemplatePanel from "@/components/TemplatePanel.vue";
-import TeamSettings from "@/components/team/TeamSettings.vue";
-import UnifiedHostManager from "@/components/UnifiedHostManager.vue";
 import UserCenterModal from "@/components/UserCenterModal.vue";
-import UserManagement from "@/components/UserManagement.vue";
-import TeamManagement from "@/components/TeamManagement.vue";
 import { clearPermissionsCache, getUserPermissions } from "@/utils/permissions";
+
+const ApiDocsPanel = defineAsyncComponent(() => import("@/components/ApiDocsPanel.vue"));
+const BuildConfigEditor = defineAsyncComponent(() => import("@/components/BuildConfigEditor.vue"));
+const DashboardPanel = defineAsyncComponent(() => import("@/components/DashboardPanel.vue"));
+const DataSourcePanel = defineAsyncComponent(() => import("@/components/DataSourcePanel.vue"));
+const DeployTaskManager = defineAsyncComponent(() => import("@/components/DeployTaskManager.vue"));
+const DockerManager = defineAsyncComponent(() => import("@/components/DockerManager.vue"));
+const ExportPanel = defineAsyncComponent(() => import("@/components/ExportPanel.vue"));
+const ImageMigrationPanel = defineAsyncComponent(() => import("@/components/ImageMigrationPanel.vue"));
+const OperationLogs = defineAsyncComponent(() => import("@/components/OperationLogs.vue"));
+const PipelinePanel = defineAsyncComponent(() => import("@/components/PipelinePanel.vue"));
+const PipelineConfigPage = defineAsyncComponent(() => import("@/pages/PipelineConfigPage.vue"));
+const PipelineCreatePage = defineAsyncComponent(() => import("@/pages/PipelineCreatePage.vue"));
+const PipelineHistoryPage = defineAsyncComponent(() => import("@/pages/PipelineHistoryPage.vue"));
+const RegistryPanel = defineAsyncComponent(() => import("@/components/RegistryPanel.vue"));
+const ResourcePackagePanel = defineAsyncComponent(() => import("@/components/ResourcePackagePanel.vue"));
+const RoleManagement = defineAsyncComponent(() => import("@/components/RoleManagement.vue"));
+const StepBuildPanel = defineAsyncComponent(() => import("@/components/StepBuildPanel.vue"));
+const TaskManager = defineAsyncComponent(() => import("@/components/TaskManager.vue"));
+const TemplatePanel = defineAsyncComponent(() => import("@/components/TemplatePanel.vue"));
+const TeamManagement = defineAsyncComponent(() => import("@/components/TeamManagement.vue"));
+const TeamSettings = defineAsyncComponent(() => import("@/components/team/TeamSettings.vue"));
+const UnifiedHostManager = defineAsyncComponent(() => import("@/components/UnifiedHostManager.vue"));
+const UserManagement = defineAsyncComponent(() => import("@/components/UserManagement.vue"));
 
 /** 侧边栏二级分组（仪表盘单独「首页」一级入口，其余为分组 + 二级菜单） */
 const SIDEBAR_GROUPS = [
   {
-    id: "cicd",
-    label: "构建与交付",
-    icon: "fa-gears",
+    id:"cicd",
+    label:"构建与交付",
+    icon:"gears",
     children: [
       {
-        id: "step-build",
-        perm: "menu.build",
-        label: "镜像构建",
-        icon: "fa-list-ol",
+        id:"step-build",
+        perm:"menu.build",
+        label:"镜像构建",
+        icon:"list-ol",
       },
       {
-        id: "export",
-        perm: "menu.export",
-        label: "导出镜像",
-        icon: "fa-file-export",
+        id:"export",
+        perm:"menu.export",
+        label:"导出镜像",
+        icon:"file-export",
       },
       {
-        id: "image-migration",
-        perm: "menu.migration",
-        label: "镜像迁移",
-        icon: "fa-right-left",
+        id:"image-migration",
+        perm:"menu.migration",
+        label:"镜像迁移",
+        icon:"right-left",
       },
       {
-        id: "tasks",
-        perm: "menu.tasks",
-        label: "任务管理",
-        icon: "fa-list-check",
+        id:"tasks",
+        perm:"menu.tasks",
+        label:"任务管理",
+        icon:"list-check",
       },
       {
-        id: "pipeline",
-        perm: "menu.pipeline",
-        label: "流水线",
-        icon: "fa-project-diagram",
+        id:"pipeline",
+        perm:"menu.pipeline",
+        label:"流水线",
+        icon:"project-diagram",
       },
     ],
   },
   {
-    id: "resources",
-    label: "资源与模板",
-    icon: "fa-folder-tree",
+    id:"resources",
+    label:"资源与模板",
+    icon:"folder-tree",
     children: [
       {
-        id: "datasource",
-        perm: "menu.datasource",
-        label: "数据源",
-        icon: "fa-database",
+        id:"datasource",
+        perm:"menu.datasource",
+        label:"数据源",
+        icon:"database",
       },
       {
-        id: "registry",
-        perm: "menu.registry",
-        label: "镜像仓库",
-        icon: "fa-box",
+        id:"registry",
+        perm:"menu.registry",
+        label:"镜像仓库",
+        icon:"box",
       },
       {
-        id: "template",
-        perm: "menu.template",
-        label: "模板管理",
-        icon: "fa-layer-group",
+        id:"template",
+        perm:"menu.template",
+        label:"模板管理",
+        icon:"layer-group",
       },
       {
-        id: "resource-package",
-        perm: "menu.resource-package",
-        label: "资源包",
-        icon: "fa-archive",
+        id:"resource-package",
+        perm:"menu.resource-package",
+        label:"资源包",
+        icon:"archive",
       },
     ],
   },
   {
-    id: "runtime",
-    label: "运行与部署",
-    icon: "fa-network-wired",
+    id:"runtime",
+    label:"运行与部署",
+    icon:"network-wired",
     children: [
-      { id: "host", perm: "menu.host", label: "主机管理", icon: "fa-server" },
+      { id:"host", perm:"menu.host", label:"主机管理", icon:"server" },
       {
-        id: "docker",
-        perm: "menu.docker",
-        label: "Docker 管理",
-        icon: "fa-docker",
-        iconPrefix: "fab",
+        id:"docker",
+        perm:"menu.docker",
+        label:"Docker 管理",
+        icon:"docker",
+        iconPrefix:"",
       },
       {
-        id: "deploy",
-        perm: "menu.deploy",
-        label: "部署管理",
-        icon: "fa-rocket",
+        id:"deploy",
+        perm:"menu.deploy",
+        label:"部署管理",
+        icon:"rocket",
       },
     ],
   },
   {
-    id: "system",
-    label: "系统与安全",
-    icon: "fa-shield-halved",
+    id:"system",
+    label:"系统与安全",
+    icon:"shield-halved",
     children: [
       {
-        id: "users",
-        perm: "menu.users",
-        label: "用户管理",
-        icon: "fa-users",
+        id:"users",
+        perm:"menu.users",
+        label:"用户管理",
+        icon:"users",
       },
       {
-        id: "teams",
-        perm: "menu.users",
-        label: "团队管理",
-        icon: "fa-people-group",
+        id:"teams",
+        perm:"menu.users",
+        label:"团队管理",
+        icon:"people-group",
       },
       {
-        id: "roles",
-        perm: "menu.users",
-        label: "角色管理",
-        icon: "fa-user-shield",
+        id:"roles",
+        perm:"menu.users",
+        label:"角色管理",
+        icon:"user-shield",
       },
-      { id: "logs", perm: null, label: "操作日志", icon: "fa-history" },
-      { id: "api-docs", perm: null, label: "接口说明", icon: "fa-book" },
+      { id:"logs", perm: null, label:"操作日志", icon:"history" },
+      { id:"api-docs", perm: null, label:"接口说明", icon:"book" },
     ],
   },
 ];
 
 const PAGE_TITLES = {
-  dashboard: "仪表盘",
-  "step-build": "镜像构建",
-  export: "导出镜像",
-  "image-migration": "镜像迁移",
-  tasks: "任务管理",
-  pipeline: "流水线",
-  datasource: "数据源",
-  registry: "镜像仓库",
-  template: "模板管理",
-  "resource-package": "资源包",
-  host: "主机管理",
-  docker: "Docker 管理",
-  deploy: "部署管理",
-  users: "用户管理",
-  teams: "团队管理",
-  roles: "角色管理",
-  logs: "操作日志",
-  "api-docs": "接口说明",
-  "build-config-editor": "构建配置",
-  team: "我的团队",
+  dashboard:"仪表盘","step-build":"镜像构建",
+  export:"导出镜像","image-migration":"镜像迁移",
+  tasks:"任务管理",
+  pipeline:"流水线",
+  datasource:"数据源",
+  registry:"镜像仓库",
+  template:"模板管理","resource-package":"资源包",
+  host:"主机管理",
+  docker:"Docker 管理",
+  deploy:"部署管理",
+  users:"用户管理",
+  teams:"团队管理",
+  roles:"角色管理",
+  logs:"操作日志","api-docs":"接口说明","build-config-editor":"构建配置",
+  team:"我的团队",
 };
 
-const SIDEBAR_STORAGE_KEY = "app2docker-admin-sidebar-collapsed";
+const SIDEBAR_STORAGE_KEY ="app2docker-admin-sidebar-collapsed";
 
 const route = useRoute();
 const router = useRouter();
@@ -899,15 +879,15 @@ const teamStore = useTeamStore();
 
 const teamSwitching = ref(false);
 
-const ACTIVE_TAB_STORAGE_KEY = "app2docker-active-tab";
+const ACTIVE_TAB_STORAGE_KEY ="app2docker-active-tab";
 
-const username = computed(() => authStore.username || getUsername() || "User");
+const username = computed(() => authStore.username || getUsername() ||"User");
 
-const isPipelineCreateRoute = computed(() => route.name === "pipeline-create");
+const isPipelineCreateRoute = computed(() => route.name ==="pipeline-create");
 
-const isPipelineDetailRoute = computed(() => route.name === "pipeline-detail");
+const isPipelineDetailRoute = computed(() => route.name ==="pipeline-detail");
 
-const isPipelineHistoryRoute = computed(() => route.name === "pipeline-history");
+const isPipelineHistoryRoute = computed(() => route.name ==="pipeline-history");
 
 const isPipelinePipelineSubRoute = computed(
   () =>
@@ -918,25 +898,25 @@ const isPipelinePipelineSubRoute = computed(
 
 const activeTab = computed(() => {
   if (isPipelinePipelineSubRoute.value) {
-    return "";
+    return"";
   }
   const p = route.params.tab;
-  return typeof p === "string" && p.length ? p : "dashboard";
+  return typeof p ==="string" && p.length ? p :"dashboard";
 });
 
 const sidebarActiveTab = computed(() => {
-  if (isPipelinePipelineSubRoute.value) return "pipeline";
+  if (isPipelinePipelineSubRoute.value) return"pipeline";
   return activeTab.value;
 });
 
 // 勿将 activeTeamId 编入 key：403 时拦截器可能短暂清空团队导致整页反复重挂载；切换团队由 team-context-changed 刷新数据
 const panelContentKey = computed(
-  () => route.fullPath || `/app/${activeTab.value || "dashboard"}`
+  () => route.fullPath || `/app/${activeTab.value ||"dashboard"}`
 );
 
 const MOBILE_BREAKPOINT = 768;
 const isMobile = ref(
-  typeof window !== "undefined" ? window.innerWidth < MOBILE_BREAKPOINT : false
+  typeof window !=="undefined" ? window.innerWidth < MOBILE_BREAKPOINT : false
 );
 const sidebarOpen = ref(false);
 
@@ -992,12 +972,12 @@ const buildConfigToEdit = ref({});
 const permissionsLoaded = ref(false);
 const userPermissions = ref(new Set());
 const globalPermissions = ref(new Set());
-const SYSTEM_TABS = new Set(["users", "teams", "roles"]);
+const SYSTEM_TABS = new Set(["users","teams","roles"]);
 let runningTasksTimer = null;
 
 const sidebarCollapsed = ref(
-  typeof localStorage !== "undefined" &&
-    localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1"
+  typeof localStorage !=="undefined" &&
+    localStorage.getItem(SIDEBAR_STORAGE_KEY) ==="1"
 );
 
 function toggleSidebar() {
@@ -1009,7 +989,7 @@ function toggleSidebar() {
   try {
     localStorage.setItem(
       SIDEBAR_STORAGE_KEY,
-      sidebarCollapsed.value ? "1" : "0"
+      sidebarCollapsed.value ?"1" :"0"
     );
   } catch {
     /* ignore */
@@ -1018,14 +998,14 @@ function toggleSidebar() {
 
 const visibleSidebarGroups = computed(() =>
   SIDEBAR_GROUPS.map((g) => {
-    if (g.id === "system" && !authStore.isGlobalAdmin) {
+    if (g.id ==="system" && !authStore.isGlobalAdmin) {
       return { ...g, children: [] };
     }
     return {
       ...g,
       children: g.children.filter((c) => {
-        if (g.id === "system") {
-          if (c.perm === "menu.users") {
+        if (g.id ==="system") {
+          if (c.perm ==="menu.users") {
             return globalPermissions.value.has("menu.users");
           }
           if (!c.perm) return true;
@@ -1091,13 +1071,13 @@ watch(
 );
 
 const pageTitle = computed(() => {
-  if (route.name === "pipeline-create") return "新建流水线";
-  if (route.name === "pipeline-detail") return "流水线配置";
-  if (route.name === "pipeline-history") return "历史构建";
-  return PAGE_TITLES[activeTab.value] || "App2Docker";
+  if (route.name ==="pipeline-create") return"新建流水线";
+  if (route.name ==="pipeline-detail") return"流水线配置";
+  if (route.name ==="pipeline-history") return"历史构建";
+  return PAGE_TITLES[activeTab.value] ||"App2Docker";
 });
 
-const GITEE_REPO_URL = "https://gitee.com/numen06/app2docker";
+const GITEE_REPO_URL ="https://gitee.com/numen06/app2docker";
 
 const appVersion = ref("");
 const checkLoading = ref(false);
@@ -1115,11 +1095,11 @@ const updateStatus = ref({
   currentVersion: null,
   releaseBody: null,
   checkSuccess: true,
-  checkMessage: "",
+  checkMessage:"",
 });
 
 const displayCurrentVersion = computed(() => {
-  return updateStatus.value.currentVersion || appVersion.value || "—";
+  return updateStatus.value.currentVersion || appVersion.value ||"—";
 });
 
 async function loadSystemVersion() {
@@ -1142,13 +1122,13 @@ function dismissUpdateSnack() {
 }
 
 function showUpdateToastOnce(resData) {
-  const key = `update-notified-${resData.latest_version || "unknown"}`;
+  const key = `update-notified-${resData.latest_version ||"unknown"}`;
   if (sessionStorage.getItem(key)) return;
-  sessionStorage.setItem(key, "1");
+  sessionStorage.setItem(key,"1");
   const summary = resData.release_body_summary
     ? `\n${resData.release_body_summary}`
-    : "";
-  updateSnackMessage.value = `当前 ${resData.current_version || "-"}，最新 ${resData.latest_version || "-"}${summary}`;
+    :"";
+  updateSnackMessage.value = `当前 ${resData.current_version ||"-"}，最新 ${resData.latest_version ||"-"}${summary}`;
   updateSnackVisible.value = true;
   if (updateSnackTimer) clearTimeout(updateSnackTimer);
   updateSnackTimer = setTimeout(() => {
@@ -1173,7 +1153,7 @@ async function loadUpdateCheck(options = {}) {
       currentVersion: d.current_version || null,
       releaseBody: d.release_body || null,
       checkSuccess: !!d.success,
-      checkMessage: d.message || "",
+      checkMessage: d.message ||"",
     };
     if (d.success && d.has_update) {
       showUpdateToastOnce(d);
@@ -1182,12 +1162,11 @@ async function loadUpdateCheck(options = {}) {
     console.error("检查系统更新失败:", e);
     const detail =
       e?.response?.data?.detail ||
-      e?.message ||
-      "网络错误，检查更新失败";
+      e?.message ||"网络错误，检查更新失败";
     updateStatus.value = {
       ...updateStatus.value,
       checkSuccess: false,
-      checkMessage: typeof detail === "string" ? detail : "检查更新失败",
+      checkMessage: typeof detail ==="string" ? detail :"检查更新失败",
     };
   } finally {
     if (showLoading) checkLoading.value = false;
@@ -1206,7 +1185,7 @@ function refreshVersionCheck() {
 function openReleaseUrl() {
   const url =
     updateStatus.value.releaseUrl || `${GITEE_REPO_URL}/releases`;
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.open(url,"_blank","noopener,noreferrer");
 }
 
 function hasPermission(permissionCode) {
@@ -1259,16 +1238,20 @@ function handleNavigate(tab, params) {
 }
 
 function teamRoleLabel(role) {
-  const map = { owner: "所有者", admin: "管理员", member: "成员" };
+  const map = { owner:"所有者", admin:"管理员", member:"成员" };
   return map[role] || role;
 }
 
 /** 管理者（所有者/管理员）与成员用不同图标 */
+function teamRoleIcon(role) {
+  return role ==="owner" || role ==="admin" ? "user-shield" : "user";
+}
+
 function teamRoleIconClass(role) {
-  if (role === "owner" || role === "admin") {
-    return "fas fa-user-shield text-blue-600";
+  if (role ==="owner" || role ==="admin") {
+    return"text-blue-600";
   }
-  return "fas fa-user text-slate-500";
+  return"text-slate-500";
 }
 
 const activeMembership = computed(() =>
@@ -1276,17 +1259,17 @@ const activeMembership = computed(() =>
 );
 
 const activeTeamDisplayName = computed(
-  () => activeMembership.value?.team?.name || "选择团队"
+  () => activeMembership.value?.team?.name ||"选择团队"
 );
 
 const activeTeamMenuTitle = computed(() => {
   const m = activeMembership.value;
-  if (!m?.team?.name) return "切换当前团队";
+  if (!m?.team?.name) return"切换当前团队";
   return `${m.team.name} · ${teamRoleLabel(m.role)}`;
 });
 
 function teamOptionTitle(m) {
-  return `${m.team?.name || ""} · ${teamRoleLabel(m.role)}`;
+  return `${m.team?.name ||""} · ${teamRoleLabel(m.role)}`;
 }
 
 function closeTeamMenu() {
@@ -1318,8 +1301,8 @@ async function selectTeam(nextId) {
   }
 }
 
-function openUserCenter(tab = "password") {
-  userCenterInitialTab.value = tab === "appkeys" ? "appkeys" : "password";
+function openUserCenter(tab ="password") {
+  userCenterInitialTab.value = tab ==="appkeys" ?"appkeys" :"password";
   showUserCenter.value = true;
   closeUserMenu();
 }
@@ -1331,18 +1314,18 @@ function adjustRunningTasksMenuPosition() {
   const rect = menu.getBoundingClientRect();
   const style = {};
   if (rect.right > window.innerWidth - gap) {
-    style.right = "0";
-    style.left = "auto";
+    style.right ="0";
+    style.left ="auto";
   }
   if (rect.left < gap) {
-    style.left = "0";
-    style.right = "auto";
+    style.left ="0";
+    style.right ="auto";
   }
   if (rect.bottom > window.innerHeight - gap) {
-    style.top = "100%";
-    style.bottom = "auto";
-    style.maxHeight = "60vh";
-    style.overflowY = "auto";
+    style.top ="100%";
+    style.bottom ="auto";
+    style.maxHeight ="60vh";
+    style.overflowY ="auto";
   }
   runningTasksMenuStyle.value = style;
 }
@@ -1363,8 +1346,8 @@ function adjustUserMenuPosition() {
   const rect = menu.getBoundingClientRect();
   const style = {
     zIndex: 1050,
-    maxHeight: "min(60vh, calc(100vh - 16px))",
-    overflowY: "auto",
+    maxHeight:"min(60vh, calc(100vh - 16px))",
+    overflowY:"auto",
   };
 
   let tx = 0;
@@ -1379,10 +1362,10 @@ function adjustUserMenuPosition() {
   }
 
   if (rect.bottom > window.innerHeight - gap) {
-    style.top = "auto";
-    style.bottom = "100%";
-    style.marginBottom = "0.25rem";
-    style.marginTop = "0";
+    style.top ="auto";
+    style.bottom ="100%";
+    style.marginBottom ="0.25rem";
+    style.marginTop ="0";
   }
 
   userMenuStyle.value = style;
@@ -1446,7 +1429,7 @@ function toggleUserMenu() {
 
 function goToRunningTasks() {
   closeRunningTasksMenu();
-  handleNavigate("tasks", { status: "running" });
+  handleNavigate("tasks", { status:"running" });
 }
 
 async function updateRunningTasksCount() {
@@ -1462,7 +1445,7 @@ async function updateRunningTasksCount() {
       params: { team_id: teamId },
     });
     const tasks = (res.data.tasks || [])
-      .filter((t) => t.status === "running" || t.status === "pending")
+      .filter((t) => t.status ==="running" || t.status ==="pending")
       .sort((a, b) => {
         const timeA = new Date(a.created_at || 0).getTime();
         const timeB = new Date(b.created_at || 0).getTime();
@@ -1479,7 +1462,7 @@ let globalTaskCreatedDebounce = null;
 
 function handleGlobalTaskCreated() {
   try {
-    sessionStorage.setItem("tasksNeedRefresh", "1");
+    sessionStorage.setItem("tasksNeedRefresh","1");
   } catch {
     /* ignore */
   }
@@ -1492,20 +1475,20 @@ function handleGlobalTaskCreated() {
 
 function getTaskTypeLabel(type) {
   const map = {
-    build: "构建",
-    export: "导出",
-    deploy: "部署",
+    build:"构建",
+    export:"导出",
+    deploy:"部署",
   };
   return map[type] || type;
 }
 
 function getTaskTypeBadge(type) {
   const map = {
-    build: "bg-blue-600",
-    export: "bg-cyan-600",
-    deploy: "bg-emerald-600",
+    build:"bg-blue-600",
+    export:"bg-cyan-600",
+    deploy:"bg-emerald-600",
   };
-  return map[type] || "bg-slate-500";
+  return map[type] ||"bg-slate-500";
 }
 
 function startRunningTasksTimer() {
@@ -1526,7 +1509,7 @@ function stopRunningTasksTimer() {
 }
 
 async function handleLogout() {
-  if (!(await showConfirm({ message: "确定要退出登录吗？", danger: true }))) return;
+  if (!(await showConfirm({ message:"确定要退出登录吗？", danger: true }))) return;
   await logout();
   authStore.clearSession();
   teamStore.reset();
@@ -1577,7 +1560,7 @@ onMounted(async () => {
     await authStore.fetchMe().catch(() => {});
     await teamStore.fetchTeams().catch(() => {});
     const qTeam = route.query.team_id;
-    if (typeof qTeam === "string" && qTeam) {
+    if (typeof qTeam ==="string" && qTeam) {
       const ok = teamStore.memberships.some((m) => m.team?.team_id === qTeam);
       if (ok) await teamStore.setCurrentTeam(qTeam);
     }
@@ -1715,8 +1698,8 @@ watch(runningTasksCount, () => {
   overflow: visible;
 }
 
-/* Bootstrap 宽表：移动端横向滚动 */
-.admin-content-panel__body .table-responsive {
+/* 宽表格在移动端横向滚动 */
+.admin-content-panel__body .table-scroll {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -1724,8 +1707,7 @@ watch(runningTasksCount, () => {
   -webkit-overflow-scrolling: touch;
 }
 
-.admin-content-panel__body .table-responsive > table,
-.admin-content-panel__body .table-responsive > .table {
+.admin-content-panel__body .table-scroll > table {
   min-width: 36rem;
   margin-bottom: 0;
 }
