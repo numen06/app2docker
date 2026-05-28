@@ -344,6 +344,9 @@
         <p v-if="task.branch" class="mt-1 text-xs text-slate-500">
           <AppIcon  name="code-branch" class="mr-1" />{{ task.branch }}
         </p>
+        <p class="mt-1 text-xs text-slate-500">
+          <AppIcon  name="user" class="mr-1" />负责人：{{ taskCreatorLabel(task) }}
+        </p>
         <div class="mt-3 flex flex-wrap gap-1 border-t border-slate-200 pt-3">
           <Button
             v-if="task.task_category === 'build' || task.task_category === 'deploy'"
@@ -376,13 +379,14 @@
     </div>
 
     <div class="hidden md:block">
-    <Table min-width-class="min-w-[72rem]">
+    <Table min-width-class="min-w-[78rem]">
       <TableHeader>
         <TableRow>
           <TableHead class="w-[100px]">类型</TableHead>
           <TableHead class="w-[180px]">镜像/任务</TableHead>
           <TableHead class="w-[120px]">分支/Tag</TableHead>
           <TableHead class="hidden w-[90px] xl:table-cell">来源</TableHead>
+          <TableHead class="hidden w-[110px] xl:table-cell">负责人</TableHead>
           <TableHead class="w-[100px]">状态</TableHead>
           <TableHead class="w-[140px]">创建时间</TableHead>
           <TableHead class="hidden w-[90px] lg:table-cell">时长</TableHead>
@@ -521,6 +525,12 @@
             <Badge v-else variant="default">
               <AppIcon  name="hammer" class="mr-1" /> {{ task.source ||"手动构建" }}
             </Badge>
+          </TableCell>
+          <TableCell class="hidden text-sm text-slate-600 xl:table-cell">
+            <span class="inline-flex max-w-[6.5rem] items-center gap-1 truncate" :title="taskCreatorLabel(task)">
+              <AppIcon :name="task.created_by ? 'user' : 'users'" class="shrink-0 text-slate-400" />
+              <span class="truncate">{{ taskCreatorLabel(task) }}</span>
+            </span>
           </TableCell>
           <TableCell>
             <div class="flex flex-col gap-1">
@@ -1012,6 +1022,12 @@ function startRefreshInterval() {
 const paginatedTasks = computed(() => {
   return tasks.value;
 });
+
+function taskCreatorLabel(task) {
+  if (task?.created_by_username) return task.created_by_username;
+  if (task?.created_by) return task.created_by;
+  return "团队";
+}
 
 // 任务统计信息（基于当前页的任务）
 const taskStats = computed(() => {

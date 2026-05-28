@@ -87,6 +87,7 @@ from backend.app_key_manager import (
 )
 from backend.team_permissions import get_user_id_by_username, require_team_member
 from backend.team_scope import (
+    export_task_visible_to_user,
     get_effective_team_id_for_task,
     require_export_task_in_team,
     require_migration_task_in_team,
@@ -98,8 +99,28 @@ from backend.team_scope import (
     resolve_team_scope_from_request,
     resolve_team_scope_from_request_with_fallback,
     task_belongs_to_team,
+    task_visible_to_user,
 )
 import jwt
+
+
+def _usernames_by_id(user_ids):
+    ids = [uid for uid in set(user_ids or []) if uid]
+    if not ids:
+        return {}
+    from backend.database import get_db_session
+    from backend.models import User
+
+    db = get_db_session()
+    try:
+        return {
+            row.user_id: row.username
+            for row in db.query(User.user_id, User.username)
+            .filter(User.user_id.in_(ids))
+            .all()
+        }
+    finally:
+        db.close()
 
 
 def get_current_username(request: Request) -> str:
@@ -2768,6 +2789,7 @@ async def upload_file(
             scoped_team_id = resolve_team_scope_from_request_with_fallback(
                 db, username, effective_team_id
             )
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
 
@@ -2822,6 +2844,7 @@ async def upload_file(
             build_steps=build_steps_dict,  # 传递构建步骤信息
             resource_package_ids=resource_package_configs_list,  # 传递资源包配置
             team_id=scoped_team_id,
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -3304,6 +3327,7 @@ async def build_from_source(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
 
@@ -3387,6 +3411,7 @@ async def build_from_source(
                     resource_package_ids=resource_package_configs
                     or [],  # 传递资源包配置
                     team_id=scoped_team_id,
+                    created_by=user_id,
                 )
                 if not task_id:
                     raise RuntimeError("任务创建失败：未返回 task_id")
@@ -3465,11 +3490,15 @@ async def get_build_tasks(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         manager = BuildTaskManager()
         tasks = manager.list_tasks(
-            status=status, task_type=task_type, team_id=scoped_team_id
+            status=status,
+            task_type=task_type,
+            team_id=scoped_team_id,
+            user_id=user_id,
         )
         return JSONResponse({"tasks": tasks})
     except Exception as e:
@@ -3499,6 +3528,7 @@ async def get_all_tasks(
             scoped_team_id = resolve_team_scope_from_request(
                 db_scope, username, team_id
             )
+            user_id = get_user_id_by_username(db_scope, username)
         finally:
             db_scope.close()
 
@@ -3511,7 +3541,10 @@ async def get_all_tasks(
         else:
             build_task_type = task_type if task_type and task_type != "deploy" else None
             build_tasks = build_manager.list_tasks(
-                status=status, task_type=build_task_type, team_id=scoped_team_id
+                status=status,
+                task_type=build_task_type,
+                team_id=scoped_team_id,
+                user_id=user_id,
             )
             build_tasks = [t for t in build_tasks if t.get("task_type") != "deploy"]
 
@@ -3559,8 +3592,11 @@ async def get_all_tasks(
                         deploy_tasks = [
                             t
                             for t in deploy_tasks
-                            if task_belongs_to_team(db, t, scoped_team_id)
+                            if task_visible_to_user(db, user_id, t, scoped_team_id)
                         ]
+                    creator_names = _usernames_by_id(
+                        [getattr(t, "created_by", None) for t in deploy_tasks]
+                    )
 
                     # 只查询关联到的部署配置（避免全表加载）
                     deploy_config_ids = list({t.deploy_config_id for t in deploy_tasks if t.deploy_config_id})
@@ -3599,6 +3635,11 @@ async def get_all_tasks(
                             # 任务列表「来源」列：与 Task 表一致（Webhook / 手动 + trigger_source）
                             "source": task_obj.source,
                             "trigger_source": task_obj.trigger_source,
+                            "team_id": getattr(task_obj, "team_id", None),
+                            "created_by": getattr(task_obj, "created_by", None),
+                            "created_by_username": creator_names.get(
+                                getattr(task_obj, "created_by", None)
+                            ),
                         }
 
                         # 如果有 deploy_config_id，从配置中获取应用名称
@@ -3636,7 +3677,7 @@ async def get_all_tasks(
         if not task_type or task_type == "export":
             export_manager = ExportTaskManager()
             export_tasks = export_manager.list_tasks(
-                status=status, team_id=scoped_team_id
+                status=status, team_id=scoped_team_id, user_id=user_id
             )
             for task in export_tasks:
                 task["task_category"] = "export"  # 标记为导出任务
@@ -3684,6 +3725,7 @@ async def get_running_tasks(
             scoped_team_id = resolve_team_scope_from_request(
                 db_scope, username, team_id
             )
+            user_id = get_user_id_by_username(db_scope, username)
         finally:
             db_scope.close()
 
@@ -3694,7 +3736,7 @@ async def get_running_tasks(
 
         # 一次查询获取 running 和 pending 状态的构建任务（避免两次全表扫描）
         all_build_tasks = build_manager.list_tasks(
-            status="running,pending", team_id=scoped_team_id
+            status="running,pending", team_id=scoped_team_id, user_id=user_id
         )
         for task in all_build_tasks:
             # 排除部署任务
@@ -3721,8 +3763,11 @@ async def get_running_tasks(
                 running_deploy_tasks = [
                     t
                     for t in running_deploy_tasks
-                    if task_belongs_to_team(db, t, scoped_team_id)
+                    if task_visible_to_user(db, user_id, t, scoped_team_id)
                 ]
+            creator_names = _usernames_by_id(
+                [getattr(t, "created_by", None) for t in running_deploy_tasks]
+            )
 
             # 只查询关联到的部署配置（避免全表加载）
             deploy_config_ids = list({t.deploy_config_id for t in running_deploy_tasks if t.deploy_config_id})
@@ -3748,6 +3793,11 @@ async def get_running_tasks(
                     "deploy_config_id": task_obj.deploy_config_id,
                     "source": task_obj.source,
                     "trigger_source": task_obj.trigger_source,
+                    "team_id": getattr(task_obj, "team_id", None),
+                    "created_by": getattr(task_obj, "created_by", None),
+                    "created_by_username": creator_names.get(
+                        getattr(task_obj, "created_by", None)
+                    ),
                 }
 
                 # 如果有 deploy_config_id，从配置中获取应用名称
@@ -3778,14 +3828,14 @@ async def get_running_tasks(
         # 获取导出任务（running 或 pending）
         export_manager = ExportTaskManager()
         running_export_tasks = export_manager.list_tasks(
-            status="running", team_id=scoped_team_id
+            status="running", team_id=scoped_team_id, user_id=user_id
         )
         for task in running_export_tasks:
             task["task_category"] = "export"
             all_running_tasks.append(task)
 
         pending_export_tasks = export_manager.list_tasks(
-            status="pending", team_id=scoped_team_id
+            status="pending", team_id=scoped_team_id, user_id=user_id
         )
         for task in pending_export_tasks:
             task["task_category"] = "export"
@@ -3878,6 +3928,8 @@ async def get_build_task_logs(
         manager = BuildTaskManager()
         logs = manager.get_logs(task_id)
         return PlainTextResponse(logs)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务日志失败: {str(e)}")
 
@@ -3999,8 +4051,9 @@ async def retry_build_task(
             scoped_team_id = resolve_team_scope_for_existing_resource(
                 db, username, request_team_id, resource_team_id
             )
-            if not task_belongs_to_team(db, task_row, scoped_team_id):
-                raise HTTPException(status_code=403, detail="无权访问该团队的任务")
+            user_id = get_user_id_by_username(db, username)
+            if not task_visible_to_user(db, user_id, task_row, scoped_team_id):
+                raise HTTPException(status_code=403, detail="无权访问该任务")
         finally:
             db.close()
 
@@ -4049,6 +4102,7 @@ async def retry_build_task(
                     "team_id": scoped_team_id or task.get("team_id"),
                 }
             task_config["trigger_source"] = "retry"
+            task_config["created_by"] = task.get("created_by") or user_id
 
         # 使用统一触发函数重新触发任务
         build_manager = BuildManager()
@@ -4139,6 +4193,7 @@ async def cleanup_tasks(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         removed_count = 0
@@ -4153,7 +4208,9 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = build_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4171,7 +4228,7 @@ async def cleanup_tasks(
                 tasks_to_remove = [
                     task["task_id"]
                     for task in build_manager.list_tasks(
-                        status=status, team_id=scoped_team_id
+                        status=status, team_id=scoped_team_id, user_id=user_id
                     )
                 ]
 
@@ -4181,7 +4238,9 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = build_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = build_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4203,7 +4262,9 @@ async def cleanup_tasks(
                 cutoff_time = datetime.now() - timedelta(days=days)
 
                 # 获取所有任务
-                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = export_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4221,7 +4282,7 @@ async def cleanup_tasks(
                 tasks_to_remove = [
                     task["task_id"]
                     for task in export_manager.list_tasks(
-                        status=status, team_id=scoped_team_id
+                        status=status, team_id=scoped_team_id, user_id=user_id
                     )
                 ]
 
@@ -4231,7 +4292,9 @@ async def cleanup_tasks(
                     removed_count += 1
             elif not days and not status:
                 # 清理全部（只清理非运行中的任务）
-                all_tasks = export_manager.list_tasks(team_id=scoped_team_id)
+                all_tasks = export_manager.list_tasks(
+                    team_id=scoped_team_id, user_id=user_id
+                )
                 tasks_to_remove = [
                     task["task_id"]
                     for task in all_tasks
@@ -4921,6 +4984,7 @@ async def create_export_task(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         if not DOCKER_AVAILABLE:
@@ -4955,6 +5019,7 @@ async def create_export_task(
             registry=registry,
             use_local=use_local,
             team_id=scoped_team_id,
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -5000,10 +5065,13 @@ async def list_export_tasks(
         db = get_db_session()
         try:
             scoped_team_id = resolve_team_scope_from_request(db, username, team_id)
+            user_id = get_user_id_by_username(db, username)
         finally:
             db.close()
         task_manager = ExportTaskManager()
-        tasks = task_manager.list_tasks(status=status, team_id=scoped_team_id)
+        tasks = task_manager.list_tasks(
+            status=status, team_id=scoped_team_id, user_id=user_id
+        )
         return JSONResponse({"tasks": tasks})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
@@ -5143,7 +5211,7 @@ async def retry_export_task(
         finally:
             db.close()
         task_manager = ExportTaskManager()
-        if task_manager.retry_task(task_id):
+        if task_manager.retry_task(task_id, created_by=user_id):
             OperationLogger.log(username, "retry_export_task", {"task_id": task_id})
             return JSONResponse({"success": True, "message": "任务已重新启动"})
         else:
@@ -11407,6 +11475,11 @@ async def get_deploy_task(request: Request, config_id: str):
             # 如果不是配置，尝试作为执行任务查询
             task = db.query(Task).filter(Task.task_id == config_id, Task.task_type == "deploy").first()
             if task:
+                task_team_id = get_effective_team_id_for_task(db, task)
+                if not task_team_id or not task_visible_to_user(
+                    db, user_id, task, task_team_id
+                ):
+                    raise HTTPException(status_code=403, detail="无权访问该任务")
                 task_config = task.task_config or {}
                 return JSONResponse(
                     {
@@ -11555,7 +11628,10 @@ async def execute_deploy_task(
 
         # 执行部署配置（后台执行，来源为手动）
         result_task_id = build_manager.execute_deploy_task(
-            config_id, target_names=target_names, trigger_source="manual"
+            config_id,
+            target_names=target_names,
+            trigger_source="manual",
+            created_by=user_id,
         )
 
         # 记录操作日志
@@ -11614,7 +11690,7 @@ async def retry_deploy_task(
             raise HTTPException(status_code=400, detail="任务正在运行中，无法重试")
 
         # 重试部署任务（在原任务上重试，不创建新任务）
-        if build_manager.retry_deploy_task(task_id):
+        if build_manager.retry_deploy_task(task_id, created_by=user_id):
             OperationLogger.log(username, "retry_deploy_task", {"task_id": task_id})
             return JSONResponse(
                 {

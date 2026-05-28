@@ -172,6 +172,7 @@ def _run_init_db_migrations():
 
     # 迁移：任务/导出/主机/资源包/操作日志 team_id
     migrate_add_team_id_to_misc_tables()
+    migrate_backfill_task_created_by()
 
     # 迁移：无 team_id 的文件上传构建任务，从操作日志/用户团队推断
     migrate_backfill_orphan_upload_build_tasks()
@@ -1680,7 +1681,9 @@ def migrate_add_team_id_to_misc_tables():
         cursor = conn.cursor()
         columns = [
             ("tasks", "team_id", "team_id VARCHAR(36)"),
+            ("tasks", "created_by", "created_by VARCHAR(36)"),
             ("export_tasks", "team_id", "team_id VARCHAR(36)"),
+            ("export_tasks", "created_by", "created_by VARCHAR(36)"),
             ("hosts", "team_id", "team_id VARCHAR(36)"),
             ("hosts", "created_by", "created_by VARCHAR(36)"),
             ("resource_packages", "team_id", "team_id VARCHAR(36)"),
@@ -1694,11 +1697,73 @@ def migrate_add_team_id_to_misc_tables():
             )
             if cursor.fetchone():
                 _add_column_if_missing(cursor, table, col, ddl)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_task_created_by ON tasks(created_by)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_export_task_created_by ON export_tasks(created_by)"
+        )
         conn.commit()
         conn.close()
         print("✅ 杂项表 team_id 字段迁移完成")
     except Exception as e:
         print(f"⚠️ 杂项表 team_id 迁移失败: {e}")
+
+
+def migrate_backfill_task_created_by():
+    """Backfill task creators from operation logs where possible."""
+    if not os.path.exists(DB_FILE):
+        return
+
+    from backend.models import ExportTask, OperationLog, Task, User
+
+    db = get_db_session()
+    try:
+        logs = (
+            db.query(OperationLog)
+            .filter(OperationLog.username.isnot(None))
+            .order_by(OperationLog.timestamp.desc())
+            .all()
+        )
+        username_to_id = {
+            u.username: u.user_id
+            for u in db.query(User.user_id, User.username).all()
+            if u.username
+        }
+        task_user = {}
+        for log in logs:
+            details = log.details if isinstance(log.details, dict) else {}
+            task_id = details.get("task_id") or details.get("new_task_id")
+            user_id = username_to_id.get(log.username)
+            if task_id and user_id and task_id not in task_user:
+                task_user[task_id] = user_id
+
+        updated = 0
+        for row in db.query(Task).filter(Task.created_by.is_(None)).all():
+            cfg = row.task_config if isinstance(row.task_config, dict) else {}
+            creator = cfg.get("created_by") or cfg.get("user_id") or task_user.get(
+                row.task_id
+            )
+            if creator:
+                row.created_by = creator
+                if isinstance(cfg, dict):
+                    row.task_config = {**cfg, "created_by": creator}
+                updated += 1
+
+        for row in db.query(ExportTask).filter(ExportTask.created_by.is_(None)).all():
+            creator = task_user.get(row.task_id)
+            if creator:
+                row.created_by = creator
+                updated += 1
+
+        if updated:
+            db.commit()
+            print(f"Backfilled created_by for {updated} task records")
+    except Exception as e:
+        db.rollback()
+        print(f"Failed to backfill task created_by: {e}")
+    finally:
+        db.close()
 
 
 def migrate_backfill_orphan_upload_build_tasks():

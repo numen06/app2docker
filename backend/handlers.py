@@ -76,6 +76,25 @@ def natural_sort_key(s):
     ]
 
 
+def _usernames_by_id(user_ids):
+    ids = [uid for uid in set(user_ids or []) if uid]
+    if not ids:
+        return {}
+    from backend.database import get_db_session
+    from backend.models import User
+
+    db = get_db_session()
+    try:
+        return {
+            row.user_id: row.username
+            for row in db.query(User.user_id, User.username)
+            .filter(User.user_id.in_(ids))
+            .all()
+        }
+    finally:
+        db.close()
+
+
 def validate_and_clean_image_name(image_name: str) -> str:
     """
     验证和清理镜像名称
@@ -1546,6 +1565,7 @@ class BuildManager:
         build_steps: dict = None,  # 构建步骤信息
         resource_package_ids: list = None,  # 资源包ID列表
         team_id: str = None,
+        created_by: str = None,
     ):
         # 创建任务
         task_id = self.task_manager.create_task(
@@ -1562,6 +1582,7 @@ class BuildManager:
             build_steps=build_steps or {},  # 传递构建步骤信息
             resource_package_ids=resource_package_ids or [],  # 传递资源包配置
             team_id=team_id,
+            created_by=created_by,
         )
 
         upload_path = self._save_upload_staging(task_id, file_data, original_filename)
@@ -2455,6 +2476,7 @@ class BuildManager:
             resource_package_ids=resource_package_ids,
             trigger_source=trigger_source,
             team_id=task_config.get("team_id"),
+            created_by=task_config.get("created_by"),
             git_ref_type=git_ref_type,
             git_ref_name=git_ref_name,
         )
@@ -2539,6 +2561,7 @@ class BuildManager:
         resource_package_ids: list = None,  # 资源包ID列表或配置列表
         trigger_source: str = "manual",  # 触发来源
         team_id: str = None,
+        created_by: str = None,
         git_ref_type: str = "branch",
         git_ref_name: str = None,
     ):
@@ -2571,6 +2594,7 @@ class BuildManager:
                 resource_package_ids=resource_package_ids or [],  # 传递资源包ID列表
                 trigger_source=trigger_source,  # 传递触发来源
                 team_id=team_id,
+                created_by=created_by,
                 git_ref_type=git_ref_type,
                 git_ref_name=git_ref_name or branch,
             )
@@ -5127,6 +5151,7 @@ class BuildTaskManager:
 
             db = get_db_session()
             try:
+                created_by = serializable_kwargs.get("created_by")
                 resolved_team_id = infer_team_id_for_new_task(
                     db,
                     team_id=serializable_kwargs.get("team_id"),
@@ -5136,6 +5161,8 @@ class BuildTaskManager:
                 )
                 if task_config and isinstance(task_config, dict) and resolved_team_id:
                     task_config = {**task_config, "team_id": resolved_team_id}
+                if task_config and isinstance(task_config, dict) and created_by:
+                    task_config = {**task_config, "created_by": created_by}
 
                 task_obj = Task(
                     task_id=task_id,
@@ -5147,6 +5174,7 @@ class BuildTaskManager:
                     task_config=task_config,
                     source=source,
                     team_id=resolved_team_id,
+                    created_by=created_by,
                     pipeline_id=serializable_kwargs.get("pipeline_id"),
                     git_url=serializable_kwargs.get("git_url"),
                     branch=serializable_kwargs.get("branch"),
@@ -5182,7 +5210,9 @@ class BuildTaskManager:
             print(f"错误堆栈:\n{error_trace}")
             raise
 
-    def _to_dict(self, task: "Task", include_logs: bool = False) -> dict:
+    def _to_dict(
+        self, task: "Task", include_logs: bool = False, creator_username: str = None
+    ) -> dict:
         """将数据库模型转换为字典"""
         if not task:
             return {}
@@ -5228,6 +5258,8 @@ class BuildTaskManager:
             "dockerfile_name": task.dockerfile_name,
             "trigger_source": task.trigger_source,
             "team_id": getattr(task, "team_id", None),
+            "created_by": getattr(task, "created_by", None),
+            "created_by_username": creator_username,
         }
 
     def get_task(self, task_id: str) -> dict:
@@ -5250,19 +5282,26 @@ class BuildTaskManager:
             )
             log_messages = [log.log_message for log in logs]
 
-            result = self._to_dict(task)
+            creator_username = _usernames_by_id([getattr(task, "created_by", None)]).get(
+                getattr(task, "created_by", None)
+            )
+            result = self._to_dict(task, creator_username=creator_username)
             result["logs"] = log_messages  # 覆盖 _to_dict 中的空日志列表
             return result
         finally:
             db.close()
 
     def list_tasks(
-        self, status: str = None, task_type: str = None, team_id: str = None
+        self,
+        status: str = None,
+        task_type: str = None,
+        team_id: str = None,
+        user_id: str = None,
     ) -> list:
         """列出所有任务（可选按团队过滤）"""
         from backend.database import get_db_session
         from backend.models import Task
-        from backend.team_scope import task_belongs_to_team
+        from backend.team_scope import task_belongs_to_team, task_visible_to_user
 
         db = get_db_session()
         try:
@@ -5278,8 +5317,20 @@ class BuildTaskManager:
                 query = query.filter(Task.task_type == task_type)
             tasks = query.order_by(Task.created_at.desc()).all()
             if team_id:
-                tasks = [t for t in tasks if task_belongs_to_team(db, t, team_id)]
-            return [self._to_dict(t) for t in tasks]
+                if user_id:
+                    tasks = [
+                        t for t in tasks if task_visible_to_user(db, user_id, t, team_id)
+                    ]
+                else:
+                    tasks = [t for t in tasks if task_belongs_to_team(db, t, team_id)]
+            usernames = _usernames_by_id([getattr(t, "created_by", None) for t in tasks])
+            return [
+                self._to_dict(
+                    t,
+                    creator_username=usernames.get(getattr(t, "created_by", None)),
+                )
+                for t in tasks
+            ]
         finally:
             db.close()
 
@@ -5870,6 +5921,8 @@ class BuildTaskManager:
                         "targets": config.get("targets", []),
                         "target_names": target_names,
                     }
+                    if created_by:
+                        task_config["created_by"] = created_by
 
                     task_obj = Task(
                         task_id=task_id,
@@ -5881,6 +5934,7 @@ class BuildTaskManager:
                         task_config=task_config,
                         source=source or ("Webhook" if trigger_source == "webhook" else "手动"),
                         team_id=deploy_config.team_id or team_id,
+                        created_by=created_by,
                         pipeline_id=None,
                         git_url=None,
                         branch=None,
@@ -6089,6 +6143,7 @@ class BuildTaskManager:
         config_id: str,
         target_names: Optional[List[str]] = None,
         trigger_source: str = "manual",
+        created_by: Optional[str] = None,
     ) -> str:
         """
         执行部署配置（基于 DeployConfig 创建执行任务）
@@ -6127,6 +6182,7 @@ class BuildTaskManager:
                 source_config_id=config_id,  # 关联到配置
                 trigger_source=trigger_source,
                 source=("Webhook" if trigger_source == "webhook" else "手动"),
+                created_by=created_by,
             )
 
             # 重新查询配置对象（因为 create_deploy_task 创建了自己的会话并关闭了）
@@ -6377,7 +6433,7 @@ class BuildTaskManager:
             self.update_task_status(task_id, "failed", error=str(e))
             self.add_log(task_id, f"❌ 部署任务执行失败: {str(e)}\n")
 
-    def retry_deploy_task(self, task_id: str) -> bool:
+    def retry_deploy_task(self, task_id: str, created_by: str = None) -> bool:
         """
         重试失败或停止的部署任务（在原任务上重试，不创建新任务）
 
@@ -6426,6 +6482,8 @@ class BuildTaskManager:
             task.error = None
             task.completed_at = None
             task.started_at = None  # 重置开始时间，重试时重新计时
+            if not getattr(task, "created_by", None) and created_by:
+                task.created_by = created_by
             db.commit()
 
             print(f"🔄 重试部署任务: {task_id[:8]}（在原任务上重试）")
@@ -6795,6 +6853,7 @@ class ExportTaskManager:
         registry: str = None,
         use_local: bool = False,
         team_id: str = None,
+        created_by: str = None,
     ) -> str:
         """创建导出任务"""
         from backend.database import get_db_session
@@ -6816,6 +6875,7 @@ class ExportTaskManager:
                 status="pending",
                 source="手动导出",
                 team_id=team_id,
+                created_by=created_by,
                 created_at=created_at,
             )
 
@@ -7152,7 +7212,7 @@ class ExportTaskManager:
             traceback.print_exc()
             self._update_task_status(task_id, "failed", error=error_msg)
 
-    def _to_dict(self, task: "ExportTask") -> dict:
+    def _to_dict(self, task: "ExportTask", creator_username: str = None) -> dict:
         """将数据库模型转换为字典"""
         if not task:
             return {}
@@ -7175,6 +7235,8 @@ class ExportTaskManager:
             ),
             "error": task.error,
             "team_id": getattr(task, "team_id", None),
+            "created_by": getattr(task, "created_by", None),
+            "created_by_username": creator_username,
         }
 
     def get_task(self, task_id: str) -> dict:
@@ -7185,14 +7247,20 @@ class ExportTaskManager:
         db = get_db_session()
         try:
             task = db.query(ExportTask).filter(ExportTask.task_id == task_id).first()
-            return self._to_dict(task)
+            creator_username = _usernames_by_id([getattr(task, "created_by", None)]).get(
+                getattr(task, "created_by", None)
+            )
+            return self._to_dict(task, creator_username=creator_username)
         finally:
             db.close()
 
-    def list_tasks(self, status: str = None, team_id: str = None) -> list:
+    def list_tasks(
+        self, status: str = None, team_id: str = None, user_id: str = None
+    ) -> list:
         """列出所有任务（可选按团队过滤）"""
         from backend.database import get_db_session
         from backend.models import ExportTask
+        from backend.team_scope import export_task_visible_to_user
 
         db = get_db_session()
         try:
@@ -7202,7 +7270,20 @@ class ExportTaskManager:
             if team_id:
                 query = query.filter(ExportTask.team_id == team_id)
             tasks = query.order_by(ExportTask.created_at.desc()).all()
-            return [self._to_dict(t) for t in tasks]
+            if team_id and user_id:
+                tasks = [
+                    t
+                    for t in tasks
+                    if export_task_visible_to_user(db, user_id, t, team_id)
+                ]
+            usernames = _usernames_by_id([getattr(t, "created_by", None) for t in tasks])
+            return [
+                self._to_dict(
+                    t,
+                    creator_username=usernames.get(getattr(t, "created_by", None)),
+                )
+                for t in tasks
+            ]
         finally:
             db.close()
 
@@ -7257,7 +7338,7 @@ class ExportTaskManager:
         finally:
             db.close()
 
-    def retry_task(self, task_id: str) -> bool:
+    def retry_task(self, task_id: str, created_by: str = None) -> bool:
         """重试失败或停止的任务（确保是导出任务）"""
         from backend.database import get_db_session
         from backend.models import ExportTask
@@ -7295,6 +7376,8 @@ class ExportTaskManager:
             task.status = "pending"
             task.error = None
             task.completed_at = None
+            if not getattr(task, "created_by", None) and created_by:
+                task.created_by = created_by
             # 保留原有的 file_path 和 file_size，但会在新任务完成时更新
 
             db.commit()
