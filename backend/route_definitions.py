@@ -7784,6 +7784,13 @@ async def run_pipeline(
         # 如果创建了多个任务，只绑定第一个任务
         if task_ids:
             first_task_id = task_ids[0]
+            task_statuses = {
+                tid: (build_manager.task_manager.get_task(tid) or {}).get("status")
+                for tid in task_ids
+            }
+            queued_task_ids = [
+                tid for tid, status in task_statuses.items() if status == "pending"
+            ]
 
             # 记录触发并绑定任务（手动触发）
             manager.record_trigger(
@@ -7801,7 +7808,7 @@ async def run_pipeline(
             # 记录操作日志
             OperationLogger.log(
                 username,
-                "pipeline_run" if len(task_ids) == 1 else "pipeline_run_queued",
+                "pipeline_run_queued" if queued_task_ids else "pipeline_run",
                 {
                     "pipeline_id": pipeline_id,
                     "pipeline_name": pipeline.get("name"),
@@ -7815,12 +7822,17 @@ async def run_pipeline(
             )
 
             queue_length = manager.get_queue_length(pipeline_id)
+            response_status = "queued" if queued_task_ids else "running"
 
             if len(task_ids) > 1:
                 return JSONResponse(
                     {
-                        "message": f"构建任务已启动（共 {len(task_ids)} 个任务）",
-                        "status": "running",
+                        "message": (
+                            f"已创建 {len(task_ids)} 个任务，{len(queued_task_ids)} 个待执行"
+                            if queued_task_ids
+                            else f"构建任务已启动（共 {len(task_ids)} 个任务）"
+                        ),
+                        "status": response_status,
                         "task_id": first_task_id,
                         "task_ids": task_ids,
                         "queue_length": queue_length,
@@ -7833,8 +7845,12 @@ async def run_pipeline(
             else:
                 return JSONResponse(
                     {
-                        "message": "构建任务已启动",
-                        "status": "running",
+                        "message": (
+                            "任务已创建并进入队列"
+                            if queued_task_ids
+                            else "构建任务已启动"
+                        ),
+                        "status": response_status,
                         "task_id": first_task_id,
                         "pipeline": pipeline.get("name"),
                         "branch": final_branch,
@@ -8056,11 +8072,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     }
                 )
 
-            has_same_ref_task = (
-                duplicate_result in ("running_same_config", "queued_same_config")
-                or manager.check_same_branch_task_running_or_queued(pipeline_id, branch)
-            )
             task_id = build_manager._trigger_task_from_config(task_config)
+            task_snapshot = build_manager.task_manager.get_task(task_id)
+            is_queued = task_snapshot.get("status") == "pending"
             queue_length = manager.get_queue_length(pipeline_id)
             webhook_info = {
                 "branch": branch,
@@ -8105,11 +8119,11 @@ async def webhook_trigger(webhook_token: str, request: Request):
             return JSONResponse(
                 {
                     "message": (
-                        "任务已创建并加入队列（相同 Tag 任务正在执行）"
-                        if has_same_ref_task
+                        "任务已创建并进入队列"
+                        if is_queued
                         else "构建任务已启动"
                     ),
-                    "status": "queued" if has_same_ref_task else "started",
+                    "status": "queued" if is_queued else "started",
                     "task_id": task_id,
                     "queue_length": queue_length,
                     "pipeline": pipeline.get("name"),
@@ -8313,17 +8327,12 @@ async def webhook_trigger(webhook_token: str, request: Request):
         else:
             webhook_force_queue = False
 
-        # 基于分支的任务创建逻辑：相同分支需要排队，不同分支可以并发
+        # 基于统一队列创建任务；同流水线串行由调度器保证
         print(
-            f"🔍 [Webhook触发] 开始基于分支的任务创建: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
+            f"🔍 [Webhook触发] 开始创建流水线任务: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
         )
-        
-        # 检查是否有相同分支的任务在运行或排队
-        has_same_branch_task = (
-            webhook_force_queue
-            or manager.check_same_branch_task_running_or_queued(pipeline_id, branch)
-        )
-        
+
+        all_task_ids = []
         queued_task_ids = []
         started_task_ids = []
         
@@ -8347,21 +8356,19 @@ async def webhook_trigger(webhook_token: str, request: Request):
                 f"🔍 pipeline_to_task_config 返回的 task_config.branch: {task_config.get('branch')}"
             )
             
-            # 创建任务（_trigger_task_from_config 会创建 pending 状态的任务）
+            # 创建任务：先落库为 pending，再由统一调度器决定是否启动
             task_id = build_manager._trigger_task_from_config(task_config)
-            
-            # 根据是否有相同分支的任务来决定是否立即启动
-            if has_same_branch_task:
-                # 有相同分支的任务在运行或排队，新任务加入队列（保持 pending 状态）
-                queued_task_ids.append(task_id)
-                print(
-                    f"✅ [任务创建] 已创建排队任务: task_id={task_id[:8]}..., branch={branch}, tag={tag}"
-                )
-            else:
-                # 没有相同分支的任务，立即启动（任务会自动从 pending 转为 running）
+            all_task_ids.append(task_id)
+            task_snapshot = build_manager.task_manager.get_task(task_id)
+            if task_snapshot.get("status") == "running":
                 started_task_ids.append(task_id)
                 print(
                     f"✅ [任务创建] 已创建并启动任务: task_id={task_id[:8]}..., branch={branch}, tag={tag}"
+                )
+            else:
+                queued_task_ids.append(task_id)
+                print(
+                    f"✅ [任务创建] 已创建排队任务: task_id={task_id[:8]}..., branch={branch}, tag={tag}"
                 )
         
         # 提取 webhook 相关信息
@@ -8395,7 +8402,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
         # 根据任务状态返回不同的响应
         if queued_task_ids:
             # 有排队任务
-            task_id = queued_task_ids[0]
+            task_id = all_task_ids[0] if all_task_ids else queued_task_ids[0]
             queue_length = manager.get_queue_length(pipeline_id)
             
             # 记录触发并绑定任务（webhook 触发，只绑定第一个任务）
@@ -8414,7 +8421,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
                     "pipeline_id": pipeline["pipeline_id"],
                     "pipeline_name": pipeline.get("name"),
                     "task_id": task_id,
-                    "task_ids": queued_task_ids if len(queued_task_ids) > 1 else None,
+                    "task_ids": all_task_ids if len(all_task_ids) > 1 else None,
                     "tags": tags,
                     "branch": branch,
                     "trigger_source": "webhook",
@@ -8424,7 +8431,7 @@ async def webhook_trigger(webhook_token: str, request: Request):
             
             if len(tags) > 1:
                 print(
-                    f"🔔 Webhook 触发，已创建 {len(queued_task_ids)} 个任务并加入队列: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
+                    f"🔔 Webhook 触发，已创建 {len(all_task_ids)} 个任务，{len(queued_task_ids)} 个待执行: pipeline={pipeline.get('name')}, branch={branch}, tags={tags}"
                 )
             else:
                 print(
@@ -8434,13 +8441,13 @@ async def webhook_trigger(webhook_token: str, request: Request):
             return JSONResponse(
                 {
                     "message": (
-                        f"已创建 {len(queued_task_ids)} 个任务并加入队列（相同分支任务正在执行）"
+                        f"已创建 {len(all_task_ids)} 个任务，{len(queued_task_ids)} 个待执行"
                         if len(tags) > 1
-                        else "任务已创建并加入队列（相同分支任务正在执行）"
+                        else "任务已创建并进入队列"
                     ),
                     "status": "queued",
                     "task_id": task_id,
-                    "task_ids": queued_task_ids if len(queued_task_ids) > 1 else None,
+                    "task_ids": all_task_ids if len(all_task_ids) > 1 else None,
                     "queue_length": queue_length,
                     "pipeline": pipeline.get("name"),
                     "branch": branch,

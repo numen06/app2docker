@@ -1142,41 +1142,30 @@ class PipelineManager:
             db.close()
 
     def get_queue_length(self, pipeline_id: str) -> int:
-        """获取队列长度（从实际任务列表中统计）"""
+        """获取队列长度（pending 任务表为准，task_queue 仅兼容旧数据读取）。"""
+        db = get_db_session()
         try:
-            from backend.handlers import BuildManager
+            from backend.models import Task
 
-            build_manager = BuildManager()
-            pending_tasks = build_manager.task_manager.list_tasks(status="pending")
-
-            current_task_id = self.get_pipeline_running_task(pipeline_id)
-
-            queue_count = 0
-            for task in pending_tasks:
-                task_config = task.get("task_config", {})
-                task_pipeline_id = task_config.get("pipeline_id")
-                task_id = task.get("task_id")
-
-                if task_pipeline_id == pipeline_id and task_id != current_task_id:
-                    queue_count += 1
-
-            return queue_count
+            return (
+                db.query(Task)
+                .filter(Task.status == "pending", Task.pipeline_id == pipeline_id)
+                .count()
+            )
         except Exception as e:
             print(f"⚠️ 获取队列长度失败: {e}")
             import traceback
 
             traceback.print_exc()
             # 回退到使用字段的方式
-            db = get_db_session()
-            try:
-                pipeline = (
-                    db.query(Pipeline)
-                    .filter(Pipeline.pipeline_id == pipeline_id)
-                    .first()
-                )
-                return len(pipeline.task_queue or []) if pipeline else 0
-            finally:
-                db.close()
+            pipeline = (
+                db.query(Pipeline)
+                .filter(Pipeline.pipeline_id == pipeline_id)
+                .first()
+            )
+            return len(pipeline.task_queue or []) if pipeline else 0
+        finally:
+            db.close()
 
     def get_next_queued_task(self, pipeline_id: str) -> Optional[dict]:
         """获取队列中的下一个任务配置"""

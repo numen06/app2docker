@@ -26,6 +26,7 @@
           <span>成员 {{ team.member_count }}</span>
           <span>所有者 {{ team.owner_username ||"—" }}</span>
           <span>保留 {{ team.task_cleanup_days }} 天</span>
+          <span>并发 {{ team.max_concurrent_tasks ?? 10 }}</span>
         </div>
         <p class="mt-1 text-xs text-slate-500">{{ formatDate(team.created_at) }}</p>
         <div class="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
@@ -55,13 +56,14 @@
             <TableHead>所有者</TableHead>
             <TableHead>创建人</TableHead>
             <TableHead>任务保留</TableHead>
+            <TableHead>最大并发</TableHead>
             <TableHead>创建时间</TableHead>
             <TableHead class="text-end">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableRow v-if="teams.length === 0">
-            <TableCell colspan="8" class="text-center text-slate-500">暂无团队</TableCell>
+            <TableCell colspan="9" class="text-center text-slate-500">暂无团队</TableCell>
           </TableRow>
           <TableRow v-for="team in teams" :key="team.team_id">
             <TableCell class="font-medium text-slate-900">{{ team.name }}</TableCell>
@@ -70,6 +72,7 @@
             <TableCell>{{ team.owner_username ||"—" }}</TableCell>
             <TableCell>{{ team.created_by_username ||"—" }}</TableCell>
             <TableCell>{{ team.task_cleanup_days }} 天</TableCell>
+            <TableCell>{{ team.max_concurrent_tasks ?? 10 }}</TableCell>
             <TableCell class="text-slate-600">{{ formatDate(team.created_at) }}</TableCell>
             <TableCell class="text-end">
               <div class="flex justify-end gap-1">
@@ -174,6 +177,18 @@
           <p class="text-xs text-slate-500">1–365 天</p>
         </div>
 
+        <div class="space-y-2">
+          <Label>最大并发任务数 <span class="text-red-500">*</span></Label>
+          <Input
+            v-model.number="form.max_concurrent_tasks"
+            type="number"
+            min="1"
+            max="10"
+            required
+          />
+          <p class="text-xs text-slate-500">1–10，默认 10</p>
+        </div>
+
         <div v-if="showCreateModal" class="space-y-2">
           <Label>所有者 <span class="text-red-500">*</span></Label>
           <NativeSelect v-model="form.owner_user_id" required class="w-full">
@@ -238,6 +253,7 @@ const form = ref({
   name:"",
   description:"",
   task_cleanup_days: 7,
+  max_concurrent_tasks: 10,
   owner_user_id:"",
 });
 
@@ -294,6 +310,7 @@ function openCreate() {
     name:"",
     description:"",
     task_cleanup_days: 7,
+    max_concurrent_tasks: 10,
     owner_user_id: userOptions.value[0]?.user_id ||"",
   };
   error.value ="";
@@ -307,6 +324,7 @@ function editTeam(team) {
     name: team.name,
     description: team.description ||"",
     task_cleanup_days: team.task_cleanup_days ?? 7,
+    max_concurrent_tasks: team.max_concurrent_tasks ?? 10,
     owner_user_id:"",
   };
   error.value ="";
@@ -327,6 +345,11 @@ async function saveTeam() {
     error.value ="任务保留天数须在 1–365 之间";
     return;
   }
+  const maxTasks = parseInt(form.value.max_concurrent_tasks, 10);
+  if (isNaN(maxTasks) || maxTasks < 1 || maxTasks > 10) {
+    error.value ="最大并发任务数须在 1–10 之间";
+    return;
+  }
   try {
     if (showCreateModal.value) {
       if (!form.value.owner_user_id) {
@@ -338,6 +361,7 @@ async function saveTeam() {
         description: form.value.description ||"",
         owner_user_id: form.value.owner_user_id,
         task_cleanup_days: days,
+        max_concurrent_tasks: maxTasks,
       });
       toastSuccess("团队创建成功");
       currentPage.value = 1;
@@ -346,6 +370,7 @@ async function saveTeam() {
         name: form.value.name.trim(),
         description: form.value.description ||"",
         task_cleanup_days: days,
+        max_concurrent_tasks: maxTasks,
       });
       toastSuccess("团队更新成功");
     }

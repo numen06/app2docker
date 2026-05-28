@@ -121,10 +121,37 @@ class GlobalTaskQueueManager:
         finally:
             db.close()
 
-    def start_if_slot_available(self, starter, team_id: str | None = None) -> bool:
-        """如果团队并发槽位可用则执行 starter（内部加锁，防止并发抢占）。"""
+    def get_pipeline_running_count(self, pipeline_id: str | None = None) -> int:
+        if not pipeline_id:
+            return 0
+        db = get_db_session()
+        try:
+            return (
+                db.query(Task)
+                .filter(Task.status == "running", Task.pipeline_id == pipeline_id)
+                .count()
+            )
+        finally:
+            db.close()
+
+    def can_start(
+        self, team_id: str | None = None, pipeline_id: str | None = None
+    ) -> bool:
+        if self.get_running_count(team_id) >= self.get_max_concurrent(team_id):
+            return False
+        if pipeline_id and self.get_pipeline_running_count(pipeline_id) > 0:
+            return False
+        return True
+
+    def start_if_slot_available(
+        self,
+        starter,
+        team_id: str | None = None,
+        pipeline_id: str | None = None,
+    ) -> bool:
+        """如果团队并发和流水线串行约束允许，则执行 starter。"""
         with self._lock:
-            if self.get_running_count(team_id) >= self.get_max_concurrent(team_id):
+            if not self.can_start(team_id=team_id, pipeline_id=pipeline_id):
                 return False
             starter()
             return True

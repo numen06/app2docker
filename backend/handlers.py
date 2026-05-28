@@ -1596,15 +1596,7 @@ class BuildManager:
             },
         )
 
-        queue_manager = GlobalTaskQueueManager()
-        started = queue_manager.start_if_slot_available(
-            lambda: self._start_build_upload_thread(task_id),
-            team_id=team_id,
-        )
-        if started:
-            print(f"✅ 文件上传构建已启动: task_id={task_id}")
-        else:
-            print(f"⏳ 文件上传构建进入全局队列等待: task_id={task_id}")
+        _process_global_queued_tasks()
         return task_id
 
     def _build_task(
@@ -2609,38 +2601,7 @@ class BuildManager:
             raise RuntimeError(f"创建构建任务失败: {str(e)}")
 
         try:
-            queue_manager = GlobalTaskQueueManager()
-            started = queue_manager.start_if_slot_available(
-                lambda: self._start_build_from_source_thread(
-                    task_id,
-                    {
-                        "git_url": git_url,
-                        "image_name": image_name,
-                        "tag": tag,
-                        "branch": branch,
-                        "project_type": project_type,
-                        "template": selected_template,
-                        "template_params": template_params or {},
-                        "should_push": should_push,
-                        "sub_path": sub_path,
-                        "use_project_dockerfile": use_project_dockerfile,
-                        "dockerfile_name": dockerfile_name,
-                        "source_id": source_id,
-                        "selected_services": selected_services,
-                        "service_push_config": service_push_config,
-                        "service_template_params": service_template_params or {},
-                        "push_mode": push_mode,
-                        "resource_package_ids": resource_package_ids or [],
-                        "git_ref_type": git_ref_type,
-                        "git_ref_name": git_ref_name or branch,
-                    },
-                ),
-                team_id=team_id,
-            )
-            if started:
-                print(f"✅ 构建线程已启动: task_id={task_id}")
-            else:
-                print(f"⏳ 构建任务进入全局队列等待: task_id={task_id}")
+            _process_global_queued_tasks()
         except Exception as e:
             import traceback
 
@@ -4420,6 +4381,7 @@ def _process_global_queued_tasks():
                         task.task_id,
                         task.created_at or datetime.max,
                         task.team_id,
+                        task.pipeline_id,
                     )
                 )
             for export in pending_exports:
@@ -4429,6 +4391,7 @@ def _process_global_queued_tasks():
                         export.task_id,
                         export.created_at or datetime.max,
                         export.team_id,
+                        None,
                     )
                 )
             for migration in pending_migrations:
@@ -4438,6 +4401,7 @@ def _process_global_queued_tasks():
                         migration.task_id,
                         migration.updated_at or datetime.max,
                         migration.team_id,
+                        None,
                     )
                 )
             if candidates:
@@ -4448,7 +4412,13 @@ def _process_global_queued_tasks():
         if not candidates:
             return
 
-        for candidate_kind, candidate_id, _, candidate_team_id in candidates:
+        for (
+            candidate_kind,
+            candidate_id,
+            _,
+            candidate_team_id,
+            candidate_pipeline_id,
+        ) in candidates:
 
             def _starter():
                 nonlocal started
@@ -4462,7 +4432,9 @@ def _process_global_queued_tasks():
                     started = MigrationTaskManager().start_pending_task(candidate_id)
 
             can_start = queue_manager.start_if_slot_available(
-                _starter, team_id=candidate_team_id
+                _starter,
+                team_id=candidate_team_id,
+                pipeline_id=candidate_pipeline_id,
             )
             if can_start and started:
                 break
@@ -4472,101 +4444,8 @@ def _process_global_queued_tasks():
 
 
 def _process_next_queued_task(pipeline_manager, pipeline_id: str):
-    """处理队列中的下一个任务（相同流水线）- 从实际任务列表中获取
-
-    Args:
-        pipeline_manager: PipelineManager 实例
-        pipeline_id: 流水线 ID
-    """
-    try:
-        # 检查当前是否还有运行中的任务（防止并发问题）
-        current_task_id = pipeline_manager.get_pipeline_running_task(pipeline_id)
-        if current_task_id:
-            # 检查任务是否真的在运行
-            build_manager = BuildManager()
-            task = build_manager.task_manager.get_task(current_task_id)
-            if task and task.get("status") in ["pending", "running"]:
-                # 还有任务在运行，不处理队列
-                return
-            else:
-                # 任务已完成或不存在，解绑
-                pipeline_manager.unbind_task(pipeline_id)
-
-        # 从实际任务列表中获取下一个 pending 任务
-        build_manager = BuildManager()
-        pending_tasks = build_manager.task_manager.list_tasks(status="pending")
-
-        # 找到属于该流水线的最早创建的 pending 任务
-        next_task = None
-        for task in pending_tasks:
-            task_config = task.get("task_config", {})
-            task_pipeline_id = task_config.get("pipeline_id")
-            if task_pipeline_id == pipeline_id:
-                # 按创建时间排序，找到最早的任务
-                if next_task is None or task.get("created_at", "") < next_task.get(
-                    "created_at", ""
-                ):
-                    next_task = task
-
-        if not next_task:
-            # 没有 pending 任务，检查是否还有 task_queue 中的任务（向后兼容）
-            queued_task = pipeline_manager.get_next_queued_task(pipeline_id)
-            if queued_task:
-                # 从 task_queue 中创建任务（向后兼容）
-                task_config = queued_task.get("task_config", {})
-                task_config["pipeline_id"] = pipeline_id
-                task_id = build_manager._trigger_task_from_config(task_config)
-                pipeline_manager.remove_queued_task(
-                    pipeline_id, queued_task.get("queue_id")
-                )
-                pipeline_manager.record_trigger(
-                    pipeline_id,
-                    task_id,
-                    trigger_source=task_config.get("trigger_source", "manual"),
-                    trigger_info={
-                        "username": task_config.get("username", "system"),
-                        "branch": task_config.get("branch"),
-                        "from_queue": True,
-                    },
-                )
-                print(
-                    f"✅ 队列任务已启动（从task_queue）: 流水线 {pipeline_id[:8]}, 任务 {task_id[:8]}"
-                )
-            return
-
-        # 找到下一个 pending 任务，开始执行（受全局并发限制）
-        task_id = next_task.get("task_id")
-        task_config = next_task.get("task_config", {})
-
-        started = GlobalTaskQueueManager().start_if_slot_available(
-            lambda: build_manager.task_manager.start_pending_task(task_id),
-            team_id=next_task.get("team_id") or task_config.get("team_id"),
-        )
-        if not started:
-            print(
-                f"⏳ 流水线 {pipeline_id[:8]} 下一个任务因全局并发限制继续等待: {task_id[:8]}"
-            )
-            return
-
-        # 已启动后再绑定任务到流水线
-        pipeline_manager.record_trigger(
-            pipeline_id,
-            task_id,
-            trigger_source=task_config.get("trigger_source", "manual"),
-            trigger_info={
-                "username": task_config.get("username", "system"),
-                "branch": task_config.get("branch"),
-                "from_queue": True,  # 标记来自队列
-            },
-        )
-
-        print(f"✅ 队列任务已启动: 流水线 {pipeline_id[:8]}, 任务 {task_id[:8]}")
-
-    except Exception as e:
-        print(f"⚠️ 处理队列任务失败: {e}")
-        import traceback
-
-        traceback.print_exc()
+    """兼容旧调用；新调度统一由 _process_global_queued_tasks 处理。"""
+    _process_global_queued_tasks()
 
 
 # ============ 任务配置JSON结构辅助函数 ============
@@ -5534,10 +5413,7 @@ class BuildTaskManager:
                             f"ℹ️ 任务 {task_id[:8]} 未关联流水线，跳过构建后webhook触发"
                         )
 
-                    # 处理队列中的下一个任务（相同流水线）
-                    if pipeline_id:
-                        _process_next_queued_task(pipeline_manager, pipeline_id)
-                    # 处理全局队列中的下一个任务（跨流水线、跨任务类型）
+                    # 处理统一队列中的后续任务
                     _process_global_queued_tasks()
                 except Exception as e:
                     print(f"⚠️ 解绑流水线失败: {e}")
@@ -5595,7 +5471,6 @@ class BuildTaskManager:
                     pipeline_id = pipeline_manager.find_pipeline_by_task(task_id)
                     if pipeline_id:
                         pipeline_manager.unbind_task(pipeline_id)
-                        _process_next_queued_task(pipeline_manager, pipeline_id)
                     _process_global_queued_tasks()
                 except Exception as e:
                     print(f"⚠️ 停止任务后处理队列失败: {e}")
@@ -6221,13 +6096,7 @@ class BuildTaskManager:
         finally:
             db.close()
 
-        queue_manager = GlobalTaskQueueManager()
-        started = queue_manager.start_if_slot_available(
-            lambda: self.start_pending_task(new_task_id),
-            team_id=getattr(deploy_config, "team_id", None),
-        )
-        if not started:
-            print(f"⏳ 部署任务进入全局队列等待: task_id={new_task_id[:8]}")
+        _process_global_queued_tasks()
 
         return new_task_id
 
@@ -6501,14 +6370,8 @@ class BuildTaskManager:
 
             print(f"🔄 重试部署任务: {task_id[:8]}（在原任务上重试）")
 
-            # 由全局并发队列决定立即执行或排队
-            queue_manager = GlobalTaskQueueManager()
-            started = queue_manager.start_if_slot_available(
-                lambda: self.start_pending_task(task_id),
-                team_id=getattr(task, "team_id", None),
-            )
-            if not started:
-                print(f"⏳ 重试部署任务进入全局队列等待: task_id={task_id[:8]}")
+            # 由统一队列调度器决定立即执行或排队
+            _process_global_queued_tasks()
 
             return True
         except Exception as e:
@@ -6896,14 +6759,8 @@ class ExportTaskManager:
             db.add(task_obj)
             db.commit()
 
-            # 通过全局并发控制决定立即启动或进入排队
-            queue_manager = GlobalTaskQueueManager()
-            started = queue_manager.start_if_slot_available(
-                lambda: self.start_pending_task(task_id),
-                team_id=team_id,
-            )
-            if not started:
-                print(f"⏳ 导出任务进入全局队列等待: task_id={task_id[:8]}")
+            # 通过统一队列调度器决定立即启动或进入排队
+            _process_global_queued_tasks()
 
             return task_id
         except Exception as e:
@@ -7397,15 +7254,9 @@ class ExportTaskManager:
 
             db.commit()
 
-            # 全局并发控制：立即执行或排队
+            # 统一队列调度：立即执行或排队
             print(f"🔄 重新启动导出任务: {task_id[:8]}, image={task.image}:{task.tag}")
-            queue_manager = GlobalTaskQueueManager()
-            started = queue_manager.start_if_slot_available(
-                lambda: self.start_pending_task(task_id),
-                team_id=getattr(task, "team_id", None),
-            )
-            if not started:
-                print(f"⏳ 重试导出任务进入全局队列等待: task_id={task_id[:8]}")
+            _process_global_queued_tasks()
 
             print(f"✅ 导出任务 {task_id[:8]} 已重新启动")
             return True
