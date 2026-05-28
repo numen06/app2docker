@@ -446,16 +446,40 @@ const directIcons = {
 function toPascalCase(value) {
   return String(value ||"")
     .replace(/^icon-/,"")
+    .replace(/^fa-/,"")
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join("");
 }
 
+function normalizeIconName(value) {
+  const tokens = String(value ||"")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter(
+      (token) =>
+        ![
+          "fa",
+          "fas",
+          "far",
+          "fab",
+          "fal",
+          "fad",
+          "fa-solid",
+          "fa-regular",
+          "fa-brands",
+        ].includes(token)
+    );
+
+  return (tokens.pop() ||"").replace(/^icon-/,"").replace(/^fa-/,"");
+}
+
 const resolvedIcon = computed(() => {
   const raw = String(props.name ||"").trim();
   if (!raw) return null;
-  const normalized = raw.trim().split(/\s+/).pop();
+  const normalized = normalizeIconName(raw);
   return aliases[normalized] || aliases[raw] || directIcons[toPascalCase(normalized)] || Circle;
 });
 </script>

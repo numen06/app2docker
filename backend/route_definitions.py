@@ -63,6 +63,11 @@ from backend.config import (
     save_git_config,
 )
 from backend.utils import get_safe_filename
+from backend.webhook_trigger import (
+    get_branch_mapping_value,
+    matches_any_branch_rule,
+    resolve_pipeline_webhook_branch,
+)
 from backend.auth import (
     TOKEN_EXPIRE_HOURS,
     authenticate,
@@ -7093,18 +7098,7 @@ async def run_pipeline(
         tags = [final_ref_name] if final_ref_type == "tag" else [default_tag]  # 默认只有一个标签
 
         if final_ref_type != "tag" and final_branch and branch_tag_mapping:
-            mapped_tag_value = None
-            # 优先精确匹配
-            if final_branch in branch_tag_mapping:
-                mapped_tag_value = branch_tag_mapping[final_branch]
-            else:
-                # 尝试通配符匹配（如 feature/* -> feature）
-                import fnmatch
-
-                for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(final_branch, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
+            mapped_tag_value = get_branch_mapping_value(final_branch, branch_tag_mapping)
 
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
@@ -7200,18 +7194,7 @@ async def run_pipeline(
         tags = [final_ref_name] if final_ref_type == "tag" else [default_tag]  # 默认只有一个标签
 
         if final_ref_type != "tag" and final_branch and branch_tag_mapping:
-            mapped_tag_value = None
-            # 优先精确匹配
-            if final_branch in branch_tag_mapping:
-                mapped_tag_value = branch_tag_mapping[final_branch]
-            else:
-                # 尝试通配符匹配（如 feature/* -> feature）
-                import fnmatch
-
-                for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(final_branch, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
+            mapped_tag_value = get_branch_mapping_value(final_branch, branch_tag_mapping)
 
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
@@ -7637,88 +7620,59 @@ async def webhook_trigger(webhook_token: str, request: Request):
         print(f"   - configured_branch: {configured_branch}")
         print(f"   - webhook_branch: {webhook_branch}")
 
-        # 根据分支策略确定使用的分支（统一逻辑）
-        # 重要：对于 webhook 触发，如果成功提取了 webhook_branch，应该优先使用它
-        branch = None
+        branch_resolution = resolve_pipeline_webhook_branch(
+            webhook_branch_strategy,
+            webhook_branch,
+            configured_branch,
+            webhook_allowed_branches,
+        )
 
-        if webhook_branch_strategy == "select_branches":
-            # 选择分支触发策略：只允许匹配的分支触发
-            if webhook_branch:
-                if webhook_branch in webhook_allowed_branches:
-                    branch = webhook_branch
-                    print(f"✅ 分支在允许列表中，使用推送分支: {branch}")
-                else:
-                    print(
-                        f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
-                    )
-                    return JSONResponse(
-                        {
-                            "message": f"分支不在允许列表中，已忽略触发（推送分支: {webhook_branch}）",
-                            "pipeline": pipeline.get("name"),
-                            "webhook_branch": webhook_branch,
-                            "allowed_branches": webhook_allowed_branches,
-                            "ignored": True,
-                        }
-                    )
-            else:
-                # Webhook未提供分支信息，使用配置的分支
-                branch = configured_branch
-                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
+        if branch_resolution.get("error"):
+            print(
+                f"❌ {webhook_branch_strategy} 策略要求 webhook 提供分支信息，但提取失败"
+            )
+            return JSONResponse(
+                {
+                    "message": f"无法触发构建：{webhook_branch_strategy} 策略要求 webhook 提供分支信息",
+                    "pipeline": pipeline.get("name"),
+                    "error": branch_resolution["error"],
+                    "strategy": webhook_branch_strategy,
+                },
+                status_code=400,
+            )
+
+        if branch_resolution.get("ignored"):
+            reason_messages = {
+                "branch_not_allowed": "分支不匹配允许规则",
+                "branch_not_matched": "分支不匹配配置分支规则",
+                "not_configured_branch": "推送分支不是配置分支",
+            }
+            ignore_message = reason_messages.get(
+                branch_resolution.get("reason"), "分支不匹配"
+            )
+            print(
+                f"⚠️ {ignore_message}，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}, allowed={webhook_allowed_branches}"
+            )
+            return JSONResponse(
+                {
+                    "message": f"{ignore_message}，已忽略触发（推送分支: {webhook_branch}, 配置分支: {configured_branch}）",
+                    "pipeline": pipeline.get("name"),
+                    "webhook_branch": webhook_branch,
+                    "configured_branch": configured_branch,
+                    "allowed_branches": webhook_allowed_branches,
+                    "ignored": True,
+                }
+            )
+
+        branch = branch_resolution.get("branch")
+        if webhook_branch_strategy == "use_configured":
+            print(f"✅ 推送分支匹配配置分支，使用配置分支构建: {branch}")
+        elif webhook_branch_strategy == "select_branches":
+            print(f"✅ 分支匹配允许规则，使用推送分支: {branch}")
         elif webhook_branch_strategy == "filter_match":
-            # 只允许匹配分支触发：检查推送分支是否匹配配置分支
-            if webhook_branch:
-                if webhook_branch == configured_branch:
-                    branch = webhook_branch
-                    print(f"✅ 分支匹配，使用推送分支: {branch}")
-                else:
-                    print(
-                        f"⚠️ 分支不匹配，忽略触发: webhook_branch={webhook_branch}, configured={configured_branch}"
-                    )
-                    return JSONResponse(
-                        {
-                            "message": f"分支不匹配，已忽略触发（推送分支: {webhook_branch}, 配置分支: {configured_branch}）",
-                            "pipeline": pipeline.get("name"),
-                            "webhook_branch": webhook_branch,
-                            "configured_branch": configured_branch,
-                            "ignored": True,
-                        }
-                    )
-            else:
-                # Webhook未提供分支信息，使用配置的分支
-                branch = configured_branch
-                print(f"⚠️ Webhook未提供分支信息，使用配置分支: {branch}")
-        elif webhook_branch_strategy == "use_push":
-            # 使用推送分支构建：必须使用webhook推送的分支
-            if webhook_branch:
-                branch = webhook_branch
-                print(f"✅ 使用推送分支构建: {branch}")
-            else:
-                # Webhook未提供分支信息，对于 use_push 策略应该报错而不是回退
-                print(f"❌ use_push 策略要求 webhook 提供分支信息，但提取失败")
-                return JSONResponse(
-                    {
-                        "message": "无法触发构建：use_push 策略要求 webhook 提供分支信息，但未能从 payload 中提取分支",
-                        "pipeline": pipeline.get("name"),
-                        "error": "missing_webhook_branch",
-                        "strategy": "use_push",
-                    },
-                    status_code=400,
-                )
-        else:  # use_configured
-            # 使用配置分支构建：但如果 webhook 成功提取了分支，优先使用 webhook 分支
-            # 这样可以确保从 test 合并到 master 时，使用的是 master 而不是配置的 test
-            if webhook_branch:
-                branch = webhook_branch
-                print(
-                    f"✅ use_configured 策略：检测到 webhook 分支，优先使用推送分支: {branch}"
-                )
-                print(
-                    f"   配置的分支 ({configured_branch}) 将被忽略，因为 webhook 明确推送到了 {webhook_branch}"
-                )
-            else:
-                # Webhook未提供分支信息，使用配置的分支
-                branch = configured_branch
-                print(f"✅ 使用配置分支构建: {branch}")
+            print(f"✅ 分支匹配配置规则，使用推送分支: {branch}")
+        else:
+            print(f"✅ 使用推送分支构建: {branch}")
 
         # 如果最终没有确定分支，报错
         if not branch:
@@ -7757,18 +7711,9 @@ async def webhook_trigger(webhook_token: str, request: Request):
         tags = [default_tag]  # 默认只有一个标签
 
         if branch_for_tag_mapping and branch_tag_mapping:
-            mapped_tag_value = None
-            # 优先精确匹配
-            if branch_for_tag_mapping in branch_tag_mapping:
-                mapped_tag_value = branch_tag_mapping[branch_for_tag_mapping]
-            else:
-                # 尝试通配符匹配（如 feature/* -> feature）
-                import fnmatch
-
-                for pattern, mapped_tag in branch_tag_mapping.items():
-                    if fnmatch.fnmatch(branch_for_tag_mapping, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
+            mapped_tag_value = get_branch_mapping_value(
+                branch_for_tag_mapping, branch_tag_mapping
+            )
 
             # 处理标签值（支持字符串、数组或逗号分隔的字符串）
             if mapped_tag_value:
@@ -8152,10 +8097,10 @@ async def deploy_webhook_trigger(webhook_token: str, request: Request):
         if webhook_branch_strategy == "select_branches":
             # 选择分支触发策略：只允许匹配的分支触发
             if webhook_branch:
-                if webhook_branch not in webhook_allowed_branches:
+                if not matches_any_branch_rule(webhook_branch, webhook_allowed_branches):
                     should_trigger = False
                     print(
-                        f"⚠️ 分支不在允许列表中，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
+                        f"⚠️ 分支不匹配允许规则，忽略触发: webhook_branch={webhook_branch}, allowed={webhook_allowed_branches}"
                     )
         elif webhook_branch_strategy == "filter_match":
             # 只允许匹配分支触发：部署配置没有配置分支，所以这个策略不适用

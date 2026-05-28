@@ -318,23 +318,21 @@
       <div v-show="activeTab === 'containers'" class="p-4 p-0">
         <!-- 搜索和操作栏 -->
         <div
-          class="flex justify-between items-center p-2 border-b border-slate-200 bg-slate-50"
+          class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 p-3 lg:flex-row lg:items-center lg:justify-between"
         >
-          <div class="flex gap-2 items-center flex-1">
-            <div class="flex w-full text-sm" style="max-width: 300px">
-              <span class="inline-flex items-center border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500"
-                ><AppIcon name="search" /></span>
+          <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+            <div class="relative w-full sm:max-w-xs">
+              <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                class="h-9 w-full rounded-md border border-slate-200 bg-white py-1 pl-9 pr-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
                 v-model="containerSearch"
                 placeholder="搜索容器名称/镜像..."
                 @input="filterContainers"
               />
             </div>
             <select
-              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 "
-              style="width: auto"
+              class="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               v-model="containerStatusFilter"
               @change="filterContainers"
             >
@@ -343,27 +341,28 @@
               <option value="exited">已停止</option>
               <option value="paused">已暂停</option>
             </select>
-            <small v-if="containerLastSync" class="text-slate-500">
+            <small v-if="containerLastSync" class="whitespace-nowrap text-slate-500">
               <AppIcon  name="clock" /> {{ formatTime(containerLastSync) }}
             </small>
           </div>
-          <div class="flex gap-1">
-            <button
-              class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 min-h-9 py-1.5 text-xs border border-amber-400 bg-amber-400 text-slate-900 hover:bg-amber-500"
+          <div class="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
               @click="pruneContainers"
               :disabled="loadingContainers"
               title="清理已停止的容器"
             >
               <AppIcon  name="broom" /> 清理
-            </button>
-            <button
-              class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 min-h-9 py-1.5 text-xs border border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
+            </Button>
+            <Button
+              size="sm"
               @click="loadContainers(true)"
               :disabled="loadingContainers"
             >
               <AppIcon
                name="sync-alt" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -384,181 +383,85 @@
           }}
         </div>
 
-        <div v-else class="table-scroll overflow-x-auto">
-          <table class="docker-table mb-0">
-            <thead class="bg-slate-50">
-              <tr>
-                <th>容器名称</th>
-                <th>镜像</th>
-                <th>状态</th>
-                <th>端口</th>
-                <th>创建时间</th>
-                <th class="text-end">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in containers" :key="c.id">
-                <td>
-                  <code class="text-sm">{{ c.name }}</code>
-                </td>
-                <td
-                  class="text-sm text-slate-500 truncate"
-                  style="max-width: 200px"
-                  :title="c.image"
-                >
+        <Table v-else min-width-class="min-w-[58rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>容器名称</TableHead>
+              <TableHead>镜像</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>端口</TableHead>
+              <TableHead>创建时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="c in containers" :key="c.id">
+              <TableCell>
+                <code class="text-sm text-slate-900">{{ c.name }}</code>
+              </TableCell>
+              <TableCell class="max-w-xs">
+                <div class="truncate text-sm text-slate-500" :title="c.image">
                   {{ c.image }}
-                </td>
-                <td>
-                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium" :class="getStatusBadge(c.state)">{{
-                    c.status
-                  }}</span>
-                </td>
-                <td class="text-sm">{{ c.ports ||"-" }}</td>
-                <td class="text-sm">{{ formatTime(c.created) }}</td>
-                <td class="text-end">
-                  <div class="inline-flex items-stretch text-sm">
-                    <button
-                      v-if="c.state !== 'running'"
-                      class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 border border-green-300 text-green-700 hover:bg-green-50"
-                      @click="startContainer(c)"
-                      title="启动"
-                    >
-                      <AppIcon  name="play" />
-                    </button>
-                    <button
-                      v-if="c.state === 'running'"
-                      class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 border border-amber-300 text-amber-800 hover:bg-amber-50"
-                      @click="stopContainer(c, false)"
-                      title="停止"
-                    >
-                      <AppIcon  name="stop" />
-                    </button>
-                    <button
-                      v-if="c.state === 'running'"
-                      class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 border border-red-300 text-red-700 hover:bg-red-50"
-                      @click="stopContainer(c, true)"
-                      title="强制停止"
-                    >
-                      <AppIcon  name="power-off" />
-                    </button>
-                    <button
-                      v-if="c.state === 'running'"
-                      class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 border border-sky-300 text-sky-700 hover:bg-sky-50"
-                      @click="restartContainer(c)"
-                      title="重启"
-                    >
-                      <AppIcon  name="redo" />
-                    </button>
-                    <button
-                      class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 border border-red-300 text-red-700 hover:bg-red-50"
-                      @click="removeContainer(c)"
-                      title="删除"
-                    >
-                      <AppIcon  name="trash" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge :variant="getStatusBadgeVariant(c.state)">{{ c.status }}</Badge>
+              </TableCell>
+              <TableCell class="text-sm text-slate-600">{{ c.ports ||"-" }}</TableCell>
+              <TableCell class="whitespace-nowrap text-sm text-slate-500">{{ formatTime(c.created) }}</TableCell>
+              <TableCell class="text-end">
+                <div class="flex flex-wrap justify-end gap-1">
+                  <Button v-if="c.state !== 'running'" variant="outline" size="sm" class="text-green-700" @click="startContainer(c)" title="启动">
+                    <AppIcon name="play" />
+                  </Button>
+                  <Button v-if="c.state === 'running'" variant="outline" size="sm" class="text-amber-800" @click="stopContainer(c, false)" title="停止">
+                    <AppIcon name="stop" />
+                  </Button>
+                  <Button v-if="c.state === 'running'" variant="outline" size="sm" class="text-red-700" @click="stopContainer(c, true)" title="强制停止">
+                    <AppIcon name="power-off" />
+                  </Button>
+                  <Button v-if="c.state === 'running'" variant="outline" size="sm" class="text-sky-700" @click="restartContainer(c)" title="重启">
+                    <AppIcon name="redo" />
+                  </Button>
+                  <Button variant="outline" size="sm" class="text-red-700" @click="removeContainer(c)" title="删除">
+                    <AppIcon name="trash" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
         <!-- 容器分页 -->
-        <div
+        <PaginationBar
           v-if="containerTotalPages > 1"
-          class="flex justify-between items-center p-2 border-t border-slate-200"
-        >
-          <div class="text-slate-500 text-sm">
-            显示第
-            {{
-              containerTotal > 0
-                ? (containerPage - 1) * containerPageSize + 1
-                : 0
-            }}
-            -
-            {{ Math.min(containerPage * containerPageSize, containerTotal) }}
-            条，共 {{ containerTotal }} 条
-          </div>
-          <nav>
-            <ul class="docker-pager mb-0">
-              <li class="docker-pager-item" :class="{ 'is-disabled': containerPage === 1 }">
-                <button
-                  class="docker-pager-button"
-                  @click="changeContainerPage(1)"
-                  :disabled="containerPage === 1"
-                >
-                  <AppIcon  name="angle-double-left" />
-                </button>
-              </li>
-              <li class="docker-pager-item" :class="{ 'is-disabled': containerPage === 1 }">
-                <button
-                  class="docker-pager-button"
-                  @click="changeContainerPage(containerPage - 1)"
-                  :disabled="containerPage === 1"
-                >
-                  <AppIcon  name="angle-left" />
-                </button>
-              </li>
-              <li
-                v-for="page in visibleContainerPages"
-                :key="page"
-                class="docker-pager-item"
-                :class="{ 'is-active': containerPage === page }"
-              >
-                <button class="docker-pager-button" @click="changeContainerPage(page)">
-                  {{ page }}
-                </button>
-              </li>
-              <li
-                class="docker-pager-item"
-                :class="{ 'is-disabled': containerPage === containerTotalPages }"
-              >
-                <button
-                  class="docker-pager-button"
-                  @click="changeContainerPage(containerPage + 1)"
-                  :disabled="containerPage === containerTotalPages"
-                >
-                  <AppIcon  name="angle-right" />
-                </button>
-              </li>
-              <li
-                class="docker-pager-item"
-                :class="{ 'is-disabled': containerPage === containerTotalPages }"
-              >
-                <button
-                  class="docker-pager-button"
-                  @click="changeContainerPage(containerTotalPages)"
-                  :disabled="containerPage === containerTotalPages"
-                >
-                  <AppIcon  name="angle-double-right" />
-                </button>
-              </li>
-            </ul>
-          </nav>
-        </div>
+          v-model:page="containerPage"
+          class="border-t border-slate-200 px-3 pb-3"
+          :page-size="containerPageSize"
+          :total="containerTotal"
+          :total-pages="containerTotalPages"
+          @update:page="changeContainerPage"
+        />
       </div>
 
       <!-- 镜像 Tab -->
       <div v-show="activeTab === 'images'" class="p-4 p-0">
         <!-- 搜索和操作栏 -->
         <div
-          class="flex justify-between items-center p-2 border-b border-slate-200 bg-slate-50"
+          class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 p-3 lg:flex-row lg:items-center lg:justify-between"
         >
-          <div class="flex gap-2 items-center flex-1">
-            <div class="flex w-full text-sm" style="max-width: 300px">
-              <span class="inline-flex items-center border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500"
-                ><AppIcon name="search" /></span>
+          <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+            <div class="relative w-full sm:max-w-xs">
+              <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                class="h-9 w-full rounded-md border border-slate-200 bg-white py-1 pl-9 pr-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
                 v-model="imageSearch"
                 placeholder="搜索镜像名称/标签..."
                 @input="filterImages"
               />
             </div>
             <select
-              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 "
-              style="width: auto"
+              class="h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               v-model="imageTagFilter"
               @change="filterImages"
             >
@@ -566,27 +469,28 @@
               <option value="latest">latest</option>
               <option value="none">&lt;none&gt;</option>
             </select>
-            <small v-if="imageLastSync" class="text-slate-500">
+            <small v-if="imageLastSync" class="whitespace-nowrap text-slate-500">
               <AppIcon  name="clock" /> {{ formatTime(imageLastSync) }}
             </small>
           </div>
-          <div class="flex gap-1">
-            <button
-              class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 min-h-9 py-1.5 text-xs border border-amber-400 bg-amber-400 text-slate-900 hover:bg-amber-500"
+          <div class="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
               @click="pruneImages"
               :disabled="loadingImages"
               title="清理未使用镜像"
             >
               <AppIcon  name="broom" /> 清理
-            </button>
-            <button
-              class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 min-h-9 py-1.5 text-xs border border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
+            </Button>
+            <Button
+              size="sm"
               @click="loadImages(true)"
               :disabled="loadingImages"
             >
               <AppIcon
                name="sync-alt" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -603,119 +507,48 @@
           {{ imageSearch || imageTagFilter ?"未找到匹配的镜像" :"暂无镜像" }}
         </div>
 
-        <div v-else class="table-scroll overflow-x-auto">
-          <table class="docker-table mb-0">
-            <thead class="bg-slate-50">
-              <tr>
-                <th>镜像名称</th>
-                <th>标签</th>
-                <th>镜像ID</th>
-                <th>大小</th>
-                <th>创建时间</th>
-                <th class="text-end">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="img in images" :key="img.id + img.tag">
-                <td>
-                  <code class="text-sm text-primary">{{
-                    img.repository ||"&lt;none&gt;"
-                  }}</code>
-                </td>
-                <td>
-                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-sky-500 text-white">{{
-                    img.tag ||"&lt;none&gt;"
-                  }}</span>
-                </td>
-                <td>
-                  <small class="text-slate-500 font-monospace">{{
-                    img.id ? img.id.substring(7, 19) :"-"
-                  }}</small>
-                </td>
-                <td class="text-sm">{{ formatBytes(img.size) }}</td>
-                <td class="text-sm">{{ formatTime(img.created) }}</td>
-                <td class="text-end">
-                  <button
-                    class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 min-h-9 py-1.5 text-xs border border-red-300 text-red-700 hover:bg-red-50"
-                    @click="deleteImage(img)"
-                    title="删除镜像"
-                  >
-                    <AppIcon  name="trash" />
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+        <Table v-else min-width-class="min-w-[58rem]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>镜像名称</TableHead>
+              <TableHead>标签</TableHead>
+              <TableHead>镜像 ID</TableHead>
+              <TableHead>大小</TableHead>
+              <TableHead>创建时间</TableHead>
+              <TableHead class="text-end">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="img in images" :key="img.id + img.tag">
+              <TableCell>
+                <code class="text-sm text-slate-900">{{ img.repository ||"&lt;none&gt;" }}</code>
+              </TableCell>
+              <TableCell>
+                <Badge variant="info">{{ img.tag ||"&lt;none&gt;" }}</Badge>
+              </TableCell>
+              <TableCell>
+                <code class="text-xs text-slate-500">{{ img.id ? img.id.substring(7, 19) :"-" }}</code>
+              </TableCell>
+              <TableCell class="whitespace-nowrap text-sm text-slate-600">{{ formatBytes(img.size) }}</TableCell>
+              <TableCell class="whitespace-nowrap text-sm text-slate-500">{{ formatTime(img.created) }}</TableCell>
+              <TableCell class="text-end">
+                <Button variant="outline" size="sm" class="text-red-700" @click="deleteImage(img)" title="删除镜像">
+                  <AppIcon name="trash" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
         <!-- 镜像分页 -->
-        <div
+        <PaginationBar
           v-if="imageTotalPages > 1"
-          class="flex justify-between items-center p-2 border-t border-slate-200"
-        >
-          <div class="text-slate-500 text-sm">
-            显示第
-            {{ imageTotal > 0 ? (imagePage - 1) * imagePageSize + 1 : 0 }} -
-            {{ Math.min(imagePage * imagePageSize, imageTotal) }}
-            条，共 {{ imageTotal }} 条
-          </div>
-          <nav>
-            <ul class="docker-pager mb-0">
-              <li class="docker-pager-item" :class="{ 'is-disabled': imagePage === 1 }">
-                <button
-                  class="docker-pager-button"
-                  @click="changeImagePage(1)"
-                  :disabled="imagePage === 1"
-                >
-                  <AppIcon  name="angle-double-left" />
-                </button>
-              </li>
-              <li class="docker-pager-item" :class="{ 'is-disabled': imagePage === 1 }">
-                <button
-                  class="docker-pager-button"
-                  @click="changeImagePage(imagePage - 1)"
-                  :disabled="imagePage === 1"
-                >
-                  <AppIcon  name="angle-left" />
-                </button>
-              </li>
-              <li
-                v-for="page in visibleImagePages"
-                :key="page"
-                class="docker-pager-item"
-                :class="{ 'is-active': imagePage === page }"
-              >
-                <button class="docker-pager-button" @click="changeImagePage(page)">
-                  {{ page }}
-                </button>
-              </li>
-              <li
-                class="docker-pager-item"
-                :class="{ 'is-disabled': imagePage === imageTotalPages }"
-              >
-                <button
-                  class="docker-pager-button"
-                  @click="changeImagePage(imagePage + 1)"
-                  :disabled="imagePage === imageTotalPages"
-                >
-                  <AppIcon  name="angle-right" />
-                </button>
-              </li>
-              <li
-                class="docker-pager-item"
-                :class="{ 'is-disabled': imagePage === imageTotalPages }"
-              >
-                <button
-                  class="docker-pager-button"
-                  @click="changeImagePage(imageTotalPages)"
-                  :disabled="imagePage === imageTotalPages"
-                >
-                  <AppIcon  name="angle-double-right" />
-                </button>
-              </li>
-            </ul>
-          </nav>
-        </div>
+          v-model:page="imagePage"
+          class="border-t border-slate-200 px-3 pb-3"
+          :page-size="imagePageSize"
+          :total="imageTotal"
+          :total-pages="imageTotalPages"
+          @update:page="changeImagePage"
+        />
       </div>
     </div>
   </div>
@@ -724,9 +557,20 @@
 <script setup>
 import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
 import { showConfirm } from "@/composables/useConfirm";
+import { Badge } from "@/components/ui/badge";
+import Button from "@/components/ui/button/Button.vue";
+import PaginationBar from "@/components/ui/PaginationBar.vue";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 import axios from "axios";
-import { computed, onMounted, ref, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 
 // === Tab 控制 ===
 const activeTab = ref("containers");
@@ -783,39 +627,6 @@ const containerTotal = ref(0);
 const containerTotalPages = ref(0);
 const containerSearch = ref("");
 const containerStatusFilter = ref("");
-
-// 容器可见页码列表
-const visibleContainerPages = computed(() => {
-  const total = containerTotalPages.value;
-  const current = containerPage.value;
-  const pages = [];
-
-  if (total <= 7) {
-    for (let i = 1; i <= total; i++) {
-      pages.push(i);
-    }
-  } else {
-    if (current <= 4) {
-      for (let i = 1; i <= 5; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    } else if (current >= total - 3) {
-      pages.push(1);
-      pages.push("...");
-      for (let i = total - 4; i <= total; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      pages.push("...");
-      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    }
-  }
-
-  return pages.filter(
-    (p) => p !=="..." || pages.indexOf(p) === pages.lastIndexOf(p)
-  );
-});
 
 // 切换容器页码
 function changeContainerPage(page) {
@@ -926,39 +737,6 @@ const imageTotalPages = ref(0);
 const imageSearch = ref("");
 const imageTagFilter = ref("");
 
-// 镜像可见页码列表
-const visibleImagePages = computed(() => {
-  const total = imageTotalPages.value;
-  const current = imagePage.value;
-  const pages = [];
-
-  if (total <= 7) {
-    for (let i = 1; i <= total; i++) {
-      pages.push(i);
-    }
-  } else {
-    if (current <= 4) {
-      for (let i = 1; i <= 5; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    } else if (current >= total - 3) {
-      pages.push(1);
-      pages.push("...");
-      for (let i = total - 4; i <= total; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      pages.push("...");
-      for (let i = current - 1; i <= current + 1; i++) pages.push(i);
-      pages.push("...");
-      pages.push(total);
-    }
-  }
-
-  return pages.filter(
-    (p) => p !=="..." || pages.indexOf(p) === pages.lastIndexOf(p)
-  );
-});
-
 // 切换镜像页码
 function changeImagePage(page) {
   if (page < 1 || page > imageTotalPages.value || page === imagePage.value)
@@ -1064,14 +842,14 @@ function getBuilderLabel(type) {
   return { local:"本地", remote:"远程", mock:"模拟" }[type] ||"未知";
 }
 
-function getStatusBadge(state) {
+function getStatusBadgeVariant(state) {
   return (
     {
-      running:"bg-green-600 text-white",
-      exited:"bg-slate-500 text-white",
-      paused:"bg-amber-400 text-slate-900",
-      created:"bg-sky-500 text-white",
-    }[state] ||"bg-slate-500 text-white"
+      running:"success",
+      exited:"default",
+      paused:"warning",
+      created:"info",
+    }[state] ||"default"
   );
 }
 
@@ -1208,45 +986,4 @@ onMounted(() => {
   border-top: 1px solid rgb(226 232 240);
 }
 
-/* 分页样式优化 */
-.docker-pager {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0;
-  list-style: none;
-}
-
-.docker-pager-button {
-  display: inline-flex;
-  min-height: 2.25rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgb(226 232 240);
-  border-radius: 0.375rem;
-  padding: 0.375rem 0.625rem;
-  background: #fff;
-  color: rgb(51 65 85);
-  font-size: 0.875rem;
-  min-width: 38px;
-  text-align: center;
-}
-
-.docker-pager-button:hover {
-  background: rgb(248 250 252);
-}
-
-.docker-pager-item.is-disabled .docker-pager-button,
-.docker-pager-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.docker-pager-item.is-active .docker-pager-button {
-  border-color: rgb(37 99 235);
-  background: rgb(37 99 235);
-  color: #fff;
-  font-weight: 600;
-}
 </style>

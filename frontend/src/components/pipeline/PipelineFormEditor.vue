@@ -199,6 +199,24 @@
                             placeholder="留空表示根目录"
                           />
                         </div>
+                        <div class="pipeline-field pipeline-field--full">
+                          <div class="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                            <input
+                              v-model="formData.tag_build_enabled"
+                              class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              type="checkbox"
+                              id="gitTagBuildEnabled"
+                            />
+                            <div>
+                              <label class="text-sm font-medium text-slate-700" for="gitTagBuildEnabled">
+                                启用 Tag 构建
+                              </label>
+                              <p class="mb-0 text-xs leading-5 text-slate-500">
+                                开启后，手动触发可选择 Git tag，Webhook 收到 refs/tags/* 时按 tag 名称构建镜像标签。
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -971,27 +989,8 @@
                   </section>
 
                   <section class="pipeline-webhook-block">
-                    <div class="flex items-start gap-2">
-                      <input
-                        v-model="formData.tag_build_enabled"
-                        class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        type="checkbox"
-                        id="tagBuildEnabled"
-                      />
-                      <div>
-                        <label class="text-sm font-medium text-slate-700" for="tagBuildEnabled">
-                          启用 Tag 构建
-                        </label>
-                        <p class="pipeline-webhook-field__hint mb-0">
-                          开启后，手动触发可选择 Git tag，Webhook 收到 refs/tags/* 时按 tag 名称构建镜像标签。
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section class="pipeline-webhook-block">
                     <h3 class="pipeline-webhook-block__title">
-                      <AppIcon  name="code-branch" /> 分支触发策略
+                      <AppIcon  name="filter" /> 触发条件
                     </h3>
                     <div class="pipeline-webhook-strategy" role="group">
                       <input
@@ -1003,8 +1002,8 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-use-push">
                         <AppIcon  name="code-branch" />
-                        使用推送分支
-                        <small>所有分支都触发</small>
+                        任意分支推送触发
+                        <small>编译推送分支</small>
                       </label>
 
                       <input
@@ -1016,8 +1015,8 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-filter-match">
                         <AppIcon  name="filter" />
-                        只允许匹配分支
-                        <small>使用推送分支构建</small>
+                        仅配置分支规则触发
+                        <small>编译推送分支</small>
                       </label>
 
                       <input
@@ -1029,8 +1028,8 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-use-configured">
                         <AppIcon  name="cog" />
-                        使用配置分支
-                        <small>所有分支都触发</small>
+                        仅配置分支触发
+                        <small>编译配置分支</small>
                       </label>
 
                       <input
@@ -1042,8 +1041,8 @@
                       />
                       <label class="pipeline-webhook-strategy__option" for="strategy-select-branches">
                         <AppIcon  name="check-square" />
-                        选择分支触发
-                        <small>仅选中的分支触发</small>
+                        仅匹配允许规则触发
+                        <small>编译推送分支</small>
                       </label>
                     </div>
                     <p class="pipeline-webhook-field__hint mt-2 mb-0">
@@ -1051,27 +1050,41 @@
                         v-if="formData.webhook_branch_strategy === 'use_push'"
                       >
                         <AppIcon  name="info-circle" />
-                        任何分支推送都会触发，使用推送的分支进行构建
+                        任意分支推送触发，编译推送分支。
                       </span>
                       <span
                         v-else-if="
                           formData.webhook_branch_strategy === 'filter_match'"
                       >
                         <AppIcon  name="info-circle" />
-                        只有推送的分支与上方配置的分支一致时才会触发，使用推送的分支构建
+                        只有推送分支匹配 Git 配置中的分支规则时触发，编译推送分支。
                       </span>
                       <span
                         v-else-if="
                           formData.webhook_branch_strategy === 'select_branches'"
                       >
                         <AppIcon  name="info-circle" />
-                        只有选中的分支推送时才会触发，使用推送的分支进行构建
+                        只有推送分支匹配下方允许规则时触发，编译推送分支。
                       </span>
                       <span v-else>
                         <AppIcon  name="info-circle" />
-                        任何分支推送都会触发，但使用配置的分支进行构建
+                        只有推送分支等于 Git 配置分支时触发，编译配置分支。
                       </span>
                     </p>
+                  </section>
+
+                  <section class="pipeline-webhook-block">
+                    <h3 class="pipeline-webhook-block__title">
+                      <AppIcon  name="cog" /> 编译目标
+                    </h3>
+                    <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <span v-if="formData.webhook_branch_strategy === 'use_configured'">
+                        编译配置分支：{{ formData.branch || branchesAndTags.default_branch || "默认分支" }}
+                      </span>
+                      <span v-else>
+                        编译 Webhook 推送分支。
+                      </span>
+                    </div>
                   </section>
 
                   <section
@@ -1079,7 +1092,7 @@
                     class="pipeline-webhook-block"
                   >
                     <h3 class="pipeline-webhook-block__title">
-                      <AppIcon  name="list-check" /> 允许触发的分支
+                      <AppIcon  name="list-check" /> 允许触发的分支规则
                       <span class="text-red-500 text-sm font-normal">*</span>
                     </h3>
                     <div
@@ -1131,8 +1144,17 @@
                         </label>
                       </div>
                     </div>
+                    <div class="pipeline-webhook-field mt-3">
+                      <label class="pipeline-webhook-field__label">手动分支规则</label>
+                      <textarea
+                        v-model="webhookAllowedBranchesText"
+                        rows="4"
+                        class="flex w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-sm"
+                        placeholder="dev&#10;release/*&#10;feature/*"
+                      ></textarea>
+                    </div>
                     <p class="pipeline-webhook-field__hint mt-2 mb-0">
-                      只有选中的分支推送时才会触发构建；未选择任何分支则不会触发。
+                      普通文本精确匹配：dev 只匹配 dev。显式通配符才模糊匹配：dev* 可匹配 dev1/dev2，release/* 可匹配 release/1.0。不使用包含匹配。
                     </p>
                   </section>
 
@@ -1770,6 +1792,7 @@ const resourcePackages = editor.resourcePackages;
 const showResourcePackageModal = editor.showResourcePackageModal;
 const showBuildConfigJsonModal = editor.showBuildConfigJsonModal;
 const isAllBranchesSelected = editor.isAllBranchesSelected;
+const webhookAllowedBranchesText = editor.webhookAllowedBranchesText;
 const deployTaskList = editor.deployTaskList;
 const onSourceSelected = editor.onSourceSelected;
 const refreshBranches = editor.refreshBranches;

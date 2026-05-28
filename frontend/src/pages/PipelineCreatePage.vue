@@ -70,6 +70,12 @@
             </dd>
           </div>
           <div>
+            <dt class="text-xs font-medium text-slate-500">Tag 构建</dt>
+            <dd class="text-sm text-slate-900">
+              {{ formData.tag_build_enabled ?"已启用" :"未启用" }}
+            </dd>
+          </div>
+          <div>
             <dt class="text-xs font-medium text-slate-500">Dockerfile</dt>
             <dd class="text-sm text-slate-900">
               {{ formData.dockerfile_name ||"Dockerfile" }}

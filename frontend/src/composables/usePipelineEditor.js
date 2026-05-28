@@ -870,16 +870,42 @@ function removeBranchTagMapping(index) {
   formData.value.branch_tag_mapping.splice(index, 1);
 }
 
+function splitBranchRules(value) {
+  if (!value) return [];
+  return String(value)
+    .split(/[\n,，]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function uniqueBranchRules(rules) {
+  return [...new Set((rules || []).map((item) => String(item).trim()).filter(Boolean))];
+}
+
+const webhookAllowedBranchesText = computed({
+  get() {
+    return (formData.value.webhook_allowed_branches || []).join("\n");
+  },
+  set(value) {
+    formData.value.webhook_allowed_branches = uniqueBranchRules(splitBranchRules(value));
+  },
+});
+
 // 全选/取消全选分支
 function toggleAllBranches(event) {
+  const branches = branchesAndTags.value.branches || [];
+  const selected = formData.value.webhook_allowed_branches || [];
+  const customRules = selected.filter((rule) => !branches.includes(rule));
+
   if (event.target.checked) {
-    // 全选：添加所有分支
-    formData.value.webhook_allowed_branches = [
-      ...(branchesAndTags.value.branches || []),
-    ];
+    // 全选：添加所有已加载分支，同时保留手动通配规则
+    formData.value.webhook_allowed_branches = uniqueBranchRules([
+      ...customRules,
+      ...branches,
+    ]);
   } else {
-    // 取消全选：清空选择
-    formData.value.webhook_allowed_branches = [];
+    // 取消全选：移除已加载分支，同时保留手动通配规则
+    formData.value.webhook_allowed_branches = customRules;
   }
 }
 
@@ -888,10 +914,7 @@ const isAllBranchesSelected = computed(() => {
   const branches = branchesAndTags.value.branches || [];
   if (branches.length === 0) return false;
   const selected = formData.value.webhook_allowed_branches || [];
-  return (
-    branches.length === selected.length &&
-    branches.every((branch) => selected.includes(branch))
-  );
+  return branches.every((branch) => selected.includes(branch));
 });
 
 // 根据旧配置获取新的分支策略
@@ -1304,6 +1327,7 @@ async function createPipelineMinimal() {
       tag:"latest",
       push: false,
       enabled: true,
+      tag_build_enabled: !!formData.value.tag_build_enabled,
       webhook_branch_filter: false,
       webhook_use_push_branch: true,
       cron_expression: null,
@@ -2733,6 +2757,7 @@ function generateUUID() {
     filteredTemplates,
     buildConfigJson,
     isAllBranchesSelected,
+    webhookAllowedBranchesText,
     initCreateForm,
     applyPipelineToForm,
     loadPipelineForEdit,

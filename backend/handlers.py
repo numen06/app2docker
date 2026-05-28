@@ -30,6 +30,7 @@ from backend.config import (
 from backend.utils import generate_image_name, get_safe_filename
 from backend.auth import authenticate, verify_token, require_auth
 from backend.task_queue_manager import GlobalTaskQueueManager
+from backend.webhook_trigger import get_branch_mapping_value
 
 # 目录配置
 UPLOAD_DIR = "data/uploads"
@@ -4791,17 +4792,7 @@ def pipeline_to_task_config(
         print(f"   - mapping: {mapping}")
         print(f"   - 当前final_tag: {final_tag}")
         if branch_for_mapping and mapping:
-            mapped_tag_value = None
-            if branch_for_mapping in mapping:
-                mapped_tag_value = mapping[branch_for_mapping]
-            else:
-                # 尝试通配符匹配
-                import fnmatch
-
-                for pattern, mapped_tag in mapping.items():
-                    if fnmatch.fnmatch(branch_for_mapping, pattern):
-                        mapped_tag_value = mapped_tag
-                        break
+            mapped_tag_value = get_branch_mapping_value(branch_for_mapping, mapping)
 
             if mapped_tag_value:
                 # 处理标签值（支持字符串、数组或逗号分隔的字符串）

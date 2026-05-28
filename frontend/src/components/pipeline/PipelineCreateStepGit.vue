@@ -106,6 +106,24 @@
               <span v-else>请先填写 Git 信息</span>
             </small>
           </div>
+          <div class="pipeline-field pipeline-field--full">
+            <div class="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                v-model="formData.tag_build_enabled"
+                class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                type="checkbox"
+                id="createGitTagBuildEnabled"
+              />
+              <div>
+                <label class="text-sm font-medium text-slate-700" for="createGitTagBuildEnabled">
+                  启用 Tag 构建
+                </label>
+                <p class="mb-0 text-xs leading-5 text-slate-500">
+                  开启后，手动触发可选择 Git tag，Webhook 收到 refs/tags/* 时按 tag 名称构建镜像标签。
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
