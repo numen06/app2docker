@@ -86,14 +86,17 @@ const emit = defineEmits(["update:currentStep","step-click"]);
 
 const gridStyle = computed(() => {
   const parts = [];
+  const connector = "var(--steps-effective-connector-width, var(--steps-connector-width))";
   for (let i = 0; i < props.steps.length; i++) {
     parts.push("minmax(5rem, 1fr)");
     if (i < props.steps.length - 1) {
-      parts.push(props.connectorWidth);
+      parts.push(connector);
     }
   }
   return {
-    gridTemplateColumns: parts.join(""),
+    "--steps-connector-width": props.connectorWidth,
+    "--steps-mobile-connector-width": props.mobileConnectorWidth,
+    gridTemplateColumns: parts.join(" "),
   };
 });
 

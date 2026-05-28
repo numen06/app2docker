@@ -10,6 +10,7 @@
 .steps-indicator__grid {
   display: grid;
   grid-template-rows: 2.25rem auto;
+  --steps-effective-connector-width: var(--steps-connector-width, 3.75rem);
   row-gap: 0.5rem;
   justify-content: center;
   align-items: center;
@@ -162,6 +163,7 @@
 
   .steps-indicator__grid {
     grid-template-rows: 32px auto;
+    --steps-effective-connector-width: var(--steps-mobile-connector-width, 1.25rem);
     row-gap: 6px;
     width: max-content;
     min-width: 100%;
