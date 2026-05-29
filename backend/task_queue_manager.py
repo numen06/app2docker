@@ -2,7 +2,7 @@ import threading
 from datetime import datetime
 
 from backend.database import get_db_session
-from backend.models import ExportTask, SystemSetting, Task
+from backend.models import ExportTask, MigrationTask, SystemSetting, Task, Team
 
 
 class GlobalTaskQueueManager:
@@ -38,30 +38,43 @@ class GlobalTaskQueueManager:
             self._get_or_create_setting(
                 db,
                 "max_concurrent_tasks",
-                "15",
-                "系统全局最大并发任务数（运行中）",
+                "10",
+                "系统默认最大并发任务数（运行中）",
             )
         finally:
             db.close()
 
-    def get_max_concurrent(self) -> int:
+    def get_max_concurrent(self, team_id: str | None = None) -> int:
         db = get_db_session()
         try:
+            if team_id:
+                team = db.query(Team).filter(Team.team_id == team_id).first()
+                if team and team.max_concurrent_tasks is not None:
+                    return min(10, max(1, int(team.max_concurrent_tasks)))
+                return 10
             setting = self._get_or_create_setting(
-                db, "max_concurrent_tasks", "15", "系统全局最大并发任务数（运行中）"
+                db, "max_concurrent_tasks", "10", "系统默认最大并发任务数（运行中）"
             )
             try:
                 value = int(setting.setting_value)
             except (TypeError, ValueError):
-                value = 15
-            return max(1, value)
+                value = 10
+            return min(10, max(1, value))
         finally:
             db.close()
 
-    def set_max_concurrent(self, value: int) -> int:
-        safe_value = max(1, int(value))
+    def set_max_concurrent(self, value: int, team_id: str | None = None) -> int:
+        safe_value = min(10, max(1, int(value)))
         db = get_db_session()
         try:
+            if team_id:
+                team = db.query(Team).filter(Team.team_id == team_id).first()
+                if not team:
+                    return safe_value
+                team.max_concurrent_tasks = safe_value
+                team.updated_at = datetime.now()
+                db.commit()
+                return safe_value
             setting = self._get_or_create_setting(
                 db, "max_concurrent_tasks", str(safe_value)
             )
@@ -72,37 +85,73 @@ class GlobalTaskQueueManager:
         finally:
             db.close()
 
-    def get_running_count(self) -> int:
+    def get_running_count(self, team_id: str | None = None) -> int:
         db = get_db_session()
         try:
-            running_tasks = db.query(Task).filter(Task.status == "running").count()
-            running_exports = (
-                db.query(ExportTask).filter(ExportTask.status == "running").count()
+            task_q = db.query(Task).filter(Task.status == "running")
+            export_q = db.query(ExportTask).filter(ExportTask.status == "running")
+            migration_q = db.query(MigrationTask).filter(
+                MigrationTask.status == "running"
             )
-            return running_tasks + running_exports
+            if team_id:
+                task_q = task_q.filter(Task.team_id == team_id)
+                export_q = export_q.filter(ExportTask.team_id == team_id)
+                migration_q = migration_q.filter(MigrationTask.team_id == team_id)
+            return task_q.count() + export_q.count() + migration_q.count()
         finally:
             db.close()
 
-    def get_pending_count(self) -> int:
+    def get_pending_count(self, team_id: str | None = None) -> int:
         db = get_db_session()
         try:
-            pending_tasks = (
+            task_q = (
                 db.query(Task)
                 .filter(Task.status == "pending")
                 .filter(Task.task_type.in_(["build", "build_from_source", "deploy"]))
-                .count()
             )
-            pending_exports = (
-                db.query(ExportTask).filter(ExportTask.status == "pending").count()
+            export_q = db.query(ExportTask).filter(ExportTask.status == "pending")
+            migration_q = db.query(MigrationTask).filter(
+                MigrationTask.status == "pending"
             )
-            return pending_tasks + pending_exports
+            if team_id:
+                task_q = task_q.filter(Task.team_id == team_id)
+                export_q = export_q.filter(ExportTask.team_id == team_id)
+                migration_q = migration_q.filter(MigrationTask.team_id == team_id)
+            return task_q.count() + export_q.count() + migration_q.count()
         finally:
             db.close()
 
-    def start_if_slot_available(self, starter) -> bool:
-        """如果有并发槽位则执行 starter（内部加锁，防止并发抢占）。"""
+    def get_pipeline_running_count(self, pipeline_id: str | None = None) -> int:
+        if not pipeline_id:
+            return 0
+        db = get_db_session()
+        try:
+            return (
+                db.query(Task)
+                .filter(Task.status == "running", Task.pipeline_id == pipeline_id)
+                .count()
+            )
+        finally:
+            db.close()
+
+    def can_start(
+        self, team_id: str | None = None, pipeline_id: str | None = None
+    ) -> bool:
+        if self.get_running_count(team_id) >= self.get_max_concurrent(team_id):
+            return False
+        if pipeline_id and self.get_pipeline_running_count(pipeline_id) > 0:
+            return False
+        return True
+
+    def start_if_slot_available(
+        self,
+        starter,
+        team_id: str | None = None,
+        pipeline_id: str | None = None,
+    ) -> bool:
+        """如果团队并发和流水线串行约束允许，则执行 starter。"""
         with self._lock:
-            if self.get_running_count() >= self.get_max_concurrent():
+            if not self.can_start(team_id=team_id, pipeline_id=pipeline_id):
                 return False
             starter()
             return True

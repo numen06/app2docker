@@ -863,12 +863,7 @@ class MigrationTaskManager:
         finally:
             db.close()
 
-        queue_manager = GlobalTaskQueueManager()
-        started = queue_manager.start_if_slot_available(
-            lambda: self.start_pending_task(task_id)
-        )
-        if not started:
-            print(f"⏳ 镜像迁移任务进入全局队列: {task_id[:8]} ({trigger_source})")
+        _process_global_queued_tasks()
         return True
 
     def start_pending_task(self, task_id: str) -> bool:

@@ -63,12 +63,14 @@ class AdminTeamCreate(BaseModel):
     description: str = ""
     owner_user_id: str = Field(..., min_length=1)
     task_cleanup_days: int = Field(default=7, ge=1, le=365)
+    max_concurrent_tasks: int = Field(default=10, ge=1, le=10)
 
 
 class AdminTeamUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     task_cleanup_days: Optional[int] = Field(None, ge=1, le=365)
+    max_concurrent_tasks: Optional[int] = Field(None, ge=1, le=10)
 
 
 @router.get("")
@@ -122,6 +124,7 @@ def create_team(
         description=body.description or "",
         created_by=admin_user_id,
         task_cleanup_days=body.task_cleanup_days,
+        max_concurrent_tasks=body.max_concurrent_tasks,
     )
     db.add(team)
     db.flush()
@@ -176,6 +179,8 @@ def update_team(
         team.description = body.description
     if body.task_cleanup_days is not None:
         team.task_cleanup_days = body.task_cleanup_days
+    if body.max_concurrent_tasks is not None:
+        team.max_concurrent_tasks = body.max_concurrent_tasks
     team.updated_at = datetime.now()
     db.commit()
     db.refresh(team)

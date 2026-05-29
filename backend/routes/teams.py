@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
@@ -129,10 +129,14 @@ class MenuPermissionsOut(BaseModel):
 
 class TeamSettingsOut(BaseModel):
     task_cleanup_days: int = Field(default=7, ge=1, le=365)
+    max_concurrent_tasks: int = Field(default=10, ge=1, le=10)
+    running_count: int = 0
+    pending_count: int = 0
 
 
 class TeamSettingsUpdate(BaseModel):
-    task_cleanup_days: int = Field(..., ge=1, le=365)
+    task_cleanup_days: Optional[int] = Field(None, ge=1, le=365)
+    max_concurrent_tasks: Optional[int] = Field(None, ge=1, le=10)
 
 
 def _team_to_out(t: Team) -> TeamOut:
@@ -146,6 +150,22 @@ def _team_to_out(t: Team) -> TeamOut:
         created_by=d["created_by"],
         created_at=t.created_at,
         updated_at=t.updated_at,
+    )
+
+
+def _team_settings_to_out(team: Team) -> TeamSettingsOut:
+    from backend.task_queue_manager import GlobalTaskQueueManager
+
+    queue_manager = GlobalTaskQueueManager()
+    days = team.task_cleanup_days if team.task_cleanup_days is not None else 7
+    max_tasks = (
+        team.max_concurrent_tasks if team.max_concurrent_tasks is not None else 10
+    )
+    return TeamSettingsOut(
+        task_cleanup_days=max(1, int(days)),
+        max_concurrent_tasks=min(10, max(1, int(max_tasks))),
+        running_count=queue_manager.get_running_count(team.team_id),
+        pending_count=queue_manager.get_pending_count(team.team_id),
     )
 
 
@@ -624,8 +644,7 @@ def get_team_settings(
     team = db.query(Team).filter(Team.team_id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
-    days = team.task_cleanup_days if team.task_cleanup_days is not None else 7
-    return TeamSettingsOut(task_cleanup_days=max(1, int(days)))
+    return _team_settings_to_out(team)
 
 
 @router.put("/{team_id}/settings", response_model=TeamSettingsOut)
@@ -641,8 +660,13 @@ def update_team_settings(
     team = db.query(Team).filter(Team.team_id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
-    team.task_cleanup_days = body.task_cleanup_days
+    if body.task_cleanup_days is None and body.max_concurrent_tasks is None:
+        raise HTTPException(status_code=400, detail="没有需要更新的设置")
+    if body.task_cleanup_days is not None:
+        team.task_cleanup_days = body.task_cleanup_days
+    if body.max_concurrent_tasks is not None:
+        team.max_concurrent_tasks = body.max_concurrent_tasks
     team.updated_at = datetime.now()
     db.commit()
     db.refresh(team)
-    return TeamSettingsOut(task_cleanup_days=team.task_cleanup_days)
+    return _team_settings_to_out(team)

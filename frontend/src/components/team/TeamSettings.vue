@@ -36,8 +36,8 @@
 
       <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h3 class="mb-4 font-semibold text-slate-900">任务设置</h3>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div class="grow space-y-2">
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="space-y-2">
             <Label for="task-cleanup-days">任务保留天数</Label>
             <Input
               id="task-cleanup-days"
@@ -51,12 +51,28 @@
               超过该天数的已完成任务将被自动清理，默认 7 天。
             </p>
           </div>
+          <div class="space-y-2">
+            <Label for="team-max-concurrent-tasks">最大并发任务数</Label>
+            <Input
+              id="team-max-concurrent-tasks"
+              v-model.number="maxConcurrentTasks"
+              type="number"
+              min="1"
+              max="10"
+              :disabled="!teamStore.canManageTeam"
+            />
+            <p class="text-xs text-slate-500">
+              当前团队同时运行的任务上限，默认 10，最高 10。
+            </p>
+          </div>
+        </div>
+        <div class="mt-4 flex justify-end">
           <Button
             type="button"
-            :disabled="!teamStore.canManageTeam || savingCleanupDays"
-            @click="saveTaskCleanupDays"
+            :disabled="!teamStore.canManageTeam || savingTaskSettings"
+            @click="saveTaskSettings"
           >
-            {{ savingCleanupDays ?"保存中…" :"保存" }}
+            {{ savingTaskSettings ?"保存中…" :"保存" }}
           </Button>
         </div>
         <p v-if="!teamStore.canManageTeam" class="mt-2 text-xs text-slate-500">
@@ -195,7 +211,7 @@
 </template>
 
 <script setup>
-import { toastSuccess, toastError, toastInfo, toastApiError } from "@/utils/notify";
+import { toastError } from "@/utils/notify";
 import { showConfirm } from "@/composables/useConfirm";
 
 import axios from "axios";
@@ -221,8 +237,9 @@ const router = useRouter();
 
 const teamName = ref("");
 const taskCleanupDays = ref(7);
+const maxConcurrentTasks = ref(10);
 const savingName = ref(false);
-const savingCleanupDays = ref(false);
+const savingTaskSettings = ref(false);
 const inviteOpen = ref(false);
 const memberListRef = ref(null);
 const teamMembers = ref([]);
@@ -324,8 +341,10 @@ async function loadTeamSettings(teamId) {
   try {
     const res = await axios.get(`/api/teams/${teamId}/settings`);
     taskCleanupDays.value = res.data?.task_cleanup_days ?? 7;
+    maxConcurrentTasks.value = res.data?.max_concurrent_tasks ?? 10;
   } catch {
     taskCleanupDays.value = 7;
+    maxConcurrentTasks.value = 10;
   }
 }
 
@@ -362,7 +381,7 @@ async function saveTeamName() {
   }
 }
 
-async function saveTaskCleanupDays() {
+async function saveTaskSettings() {
   const id = teamStore.activeTeamId;
   if (!id || !teamStore.canManageTeam) return;
   const days = parseInt(taskCleanupDays.value, 10);
@@ -370,15 +389,24 @@ async function saveTaskCleanupDays() {
     toastError("请输入 1–365 之间的有效天数");
     return;
   }
-  savingCleanupDays.value = true;
+  const maxTasks = parseInt(maxConcurrentTasks.value, 10);
+  if (isNaN(maxTasks) || maxTasks < 1 || maxTasks > 10) {
+    toastError("请输入 1–10 之间的最大并发任务数");
+    return;
+  }
+  savingTaskSettings.value = true;
   try {
-    await axios.put(`/api/teams/${id}/settings`, { task_cleanup_days: days });
+    await axios.put(`/api/teams/${id}/settings`, {
+      task_cleanup_days: days,
+      max_concurrent_tasks: maxTasks,
+    });
     taskCleanupDays.value = days;
+    maxConcurrentTasks.value = maxTasks;
   } catch (e) {
     const detail = e?.response?.data?.detail;
     toastError(typeof detail ==="string" ? detail :"保存失败");
   } finally {
-    savingCleanupDays.value = false;
+    savingTaskSettings.value = false;
   }
 }
 

@@ -56,7 +56,7 @@
       </StatCard>
 
       <StatCard
-        title="全局并发"
+        title="团队并发"
         :value="queueRunningCount + '/' + maxConcurrentTasks"
         icon="stream"
         accent="amber"
@@ -151,18 +151,7 @@
           <AppIcon  name="sync-alt" />
           刷新
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          :disabled="savingSystemSettings"
-          title="修改全局最大并发任务数"
-          @click="openConcurrentModal"
-        >
-          <AppIcon  name="sliders-h" />
-          并发设置
-        </Button>
-
-        <div class="relative" ref="cleanupDropdownWrap">
+        <div v-if="teamStore.canManageTeam" class="relative" ref="cleanupDropdownWrap">
           <Button
             variant="outline"
             size="sm"
@@ -783,33 +772,6 @@
       </template>
     </FormDialog>
 
-    <FormDialog v-model="showConcurrentModal" title="并发设置" icon="sliders-h" size="sm">
-      <div class="space-y-2">
-        <Label>全局最大并发任务数</Label>
-        <Input
-          v-model="concurrentInput"
-          type="number"
-          min="1"
-          step="1"
-          :disabled="savingSystemSettings"
-          @keydown.enter="submitConcurrentSetting"
-        />
-        <p class="text-xs text-slate-500">当前值：{{ maxConcurrentTasks }}</p>
-      </div>
-      <template #footer>
-        <Button
-          variant="outline"
-          type="button"
-          :disabled="savingSystemSettings"
-          @click="closeConcurrentModal"
-          >取消</Button
-        >
-        <Button type="button" :disabled="savingSystemSettings" @click="submitConcurrentSetting">
-          <AppIcon v-if="savingSystemSettings"  name="spinner" spin />
-          保存
-        </Button>
-      </template>
-    </FormDialog>
   </div>
 
 </template>
@@ -894,12 +856,9 @@ const saving = ref(false); // 保存中状态
 const showConfigModal = ref(false); // 任务配置JSON模态框
 const taskConfigJson = ref(""); // 任务配置JSON
 const taskConfigJsonText = ref(""); // JSON文本内容（用于CodeMirror）
-const maxConcurrentTasks = ref(15);
+const maxConcurrentTasks = ref(10);
 const queueRunningCount = ref(0);
 const queuePendingCount = ref(0);
-const savingSystemSettings = ref(false);
-const showConcurrentModal = ref(false);
-const concurrentInput = ref("");
 
 // CodeMirror 扩展配置（JSON模式，使用JavaScript模式）
 const jsonEditorExtensions = [StreamLanguage.define(javascript), oneDark];
@@ -1268,45 +1227,20 @@ async function loadTasks(includeStats = true) {
 }
 
 async function loadSystemQueueSettings() {
+  const teamId = teamStore.activeTeamIdForApi;
+  if (!teamId) {
+    maxConcurrentTasks.value = 10;
+    queueRunningCount.value = 0;
+    queuePendingCount.value = 0;
+    return;
+  }
   try {
-    const res = await axios.get("/api/system-settings");
-    maxConcurrentTasks.value = res.data.max_concurrent_tasks || 15;
+    const res = await axios.get(`/api/teams/${teamId}/settings`);
+    maxConcurrentTasks.value = res.data.max_concurrent_tasks || 10;
     queueRunningCount.value = res.data.running_count || 0;
     queuePendingCount.value = res.data.pending_count || 0;
   } catch (err) {
-    console.error("获取系统并发设置失败:", err);
-  }
-}
-
-function openConcurrentModal() {
-  concurrentInput.value = String(maxConcurrentTasks.value || 15);
-  showConcurrentModal.value = true;
-}
-
-function closeConcurrentModal() {
-  if (savingSystemSettings.value) return;
-  showConcurrentModal.value = false;
-}
-
-async function submitConcurrentSetting() {
-  if (savingSystemSettings.value) return;
-  const value = Number(concurrentInput.value);
-  if (!Number.isInteger(value) || value < 1) {
-    toastError("请输入大于等于 1 的整数");
-    return;
-  }
-  savingSystemSettings.value = true;
-  try {
-    await axios.put("/api/system-settings", { max_concurrent_tasks: value });
-    await loadSystemQueueSettings();
-    await loadTasks(false);
-    showConcurrentModal.value = false;
-  } catch (err) {
-    const errorMsg =
-      err.response?.data?.detail || err.message ||"更新系统设置失败";
-    toastInfo(errorMsg);
-  } finally {
-    savingSystemSettings.value = false;
+    console.error("获取团队并发设置失败:", err);
   }
 }
 
@@ -1645,7 +1579,7 @@ async function cleanupAll() {
   error.value = null;
 
   try {
-    const res = await axios.post("/api/tasks/cleanup", {});
+    const res = await axios.post("/api/tasks/cleanup", cleanupPayload());
 
     toastSuccess(`成功清理 ${res.data.removed_count} 个任务`);
     await loadTasks();
@@ -1670,9 +1604,7 @@ async function cleanupByStatus(status) {
   error.value = null;
 
   try {
-    const res = await axios.post("/api/tasks/cleanup", {
-      status: status,
-    });
+    const res = await axios.post("/api/tasks/cleanup", cleanupPayload({ status }));
 
     toastSuccess(`成功清理 ${res.data.removed_count} 个任务`);
     await loadTasks();
@@ -1686,6 +1618,14 @@ async function cleanupByStatus(status) {
 
 const DEFAULT_CLEANUP_DAYS = 7;
 
+function cleanupPayload(extra = {}) {
+  const teamId = teamStore.activeTeamIdForApi;
+  if (!teamId) {
+    throw new Error("请先选择团队");
+  }
+  return { team_id: teamId, ...extra };
+}
+
 async function cleanupByDays(days) {
   closeCleanupMenu();
   if (cleaning.value) return;
@@ -1698,9 +1638,7 @@ async function cleanupByDays(days) {
   error.value = null;
 
   try {
-    const res = await axios.post("/api/tasks/cleanup", {
-      days: days,
-    });
+    const res = await axios.post("/api/tasks/cleanup", cleanupPayload({ days }));
 
     toastSuccess(`成功清理 ${res.data.removed_count} 个任务`);
     await loadTasks();
