@@ -28,6 +28,20 @@ class FakePortainerClient(PortainerClient):
                 },
             }
         ]
+        self.compose_containers = [
+            {
+                "Id": "ctr1",
+                "Names": ["/demo_web_1"],
+                "Image": "repo/app:latest",
+                "Labels": {
+                    "com.docker.compose.project": "demo",
+                    "com.docker.compose.service": "web",
+                    "com.docker.compose.config-hash": "abc",
+                    "com.docker.compose.oneoff": "False",
+                    "app2docker.deploy.revision": "task-1",
+                },
+            }
+        ]
 
     def _request(self, method, endpoint, **kwargs):
         self.calls.append((method, endpoint, kwargs))
@@ -48,6 +62,11 @@ class FakePortainerClient(PortainerClient):
             return {}
         if method == "GET" and endpoint == "/endpoints/7/docker/services":
             return list(self.services)
+        if method == "GET" and endpoint == "/endpoints/7/docker/containers/json":
+            filters = kwargs.get("params", {}).get("filters")
+            if filters and "com.docker.compose.project=demo" in filters:
+                return list(self.compose_containers)
+            return []
         raise AssertionError(f"Unexpected request: {method} {endpoint}")
 
 
@@ -110,6 +129,10 @@ services:
             "task-1",
         )
         self.assertEqual(
+            parsed["services"]["latest"]["labels"]["app2docker.deploy.revision"],
+            "task-1",
+        )
+        self.assertEqual(
             parsed["services"]["implicit"]["deploy"]["labels"][
                 "app2docker.deploy.revision"
             ],
@@ -157,6 +180,29 @@ services:
 
         self.assertFalse(result["success"])
         self.assertEqual(result["missing_revision_count"], 1)
+
+    def test_get_stack_services_falls_back_to_compose_containers(self):
+        client = FakePortainerClient()
+        client.services = []
+
+        workloads = client.get_stack_services("demo")
+
+        self.assertEqual(len(workloads), 1)
+        self.assertEqual(workloads[0]["workload_kind"], "compose")
+        self.assertEqual(workloads[0]["Spec"]["Name"], "web")
+
+    def test_verify_stack_services_accepts_compose_containers(self):
+        client = FakePortainerClient()
+        client.services = []
+
+        result = client.verify_stack_services(
+            "demo", expected_revision="task-1", min_revision_services=1
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["workload_kind"], "compose")
+        self.assertEqual(result["service_count"], 1)
+        self.assertEqual(result["matching_revision_services"], 1)
 
 
 if __name__ == "__main__":

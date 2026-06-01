@@ -3,6 +3,7 @@
 Portainer API 客户端
 用于连接 Portainer 和 Portainer Agent，执行部署操作
 """
+import re
 import requests
 import logging
 import time
@@ -516,17 +517,9 @@ class PortainerClient:
             if not isinstance(deploy, dict):
                 deploy = {}
                 service["deploy"] = deploy
-            labels = deploy.get("labels")
-            if labels is None:
-                deploy["labels"] = {label_key: label_value}
-            elif isinstance(labels, dict):
-                labels[label_key] = label_value
-            elif isinstance(labels, list):
-                prefix = f"{label_key}="
-                labels[:] = [item for item in labels if not str(item).startswith(prefix)]
-                labels.append(f"{prefix}{label_value}")
-            else:
-                deploy["labels"] = {label_key: label_value}
+            cls._set_compose_label_mapping(deploy, "labels", label_key, label_value)
+            # Swarm 用 deploy.labels；standalone Compose 用 service.labels
+            cls._set_compose_label_mapping(service, "labels", label_key, label_value)
             injected = True
             service_count += 1
 
@@ -715,13 +708,111 @@ class PortainerClient:
                 "message": f"部署失败: {str(e)}"
             }
     
-    def get_stack_services(self, stack_name: str) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _set_compose_label_mapping(
+        target: Dict[str, Any], field: str, label_key: str, label_value: str
+    ) -> None:
+        labels = target.get(field)
+        if labels is None:
+            target[field] = {label_key: label_value}
+        elif isinstance(labels, dict):
+            labels[label_key] = label_value
+        elif isinstance(labels, list):
+            prefix = f"{label_key}="
+            labels[:] = [item for item in labels if not str(item).startswith(prefix)]
+            labels.append(f"{prefix}{label_value}")
+        else:
+            target[field] = {label_key: label_value}
+
+    @staticmethod
+    def _compose_project_name_candidates(stack_name: str) -> List[str]:
+        raw = (stack_name or "").strip()
+        if not raw:
+            return []
+        candidates: List[str] = []
+        seen = set()
+
+        def add(name: str) -> None:
+            name = (name or "").strip()
+            if name and name not in seen:
+                seen.add(name)
+                candidates.append(name)
+
+        add(raw)
+        add(raw.lower())
+        normalized = re.sub(r"[^a-z0-9-]+", "-", raw.lower()).strip("-")
+        add(normalized)
+        add(re.sub(r"[^a-z0-9]+", "", raw.lower()))
+        return candidates
+
+    def get_swarm_stack_services(self, stack_name: str) -> List[Dict[str, Any]]:
         filters = {"label": [f"com.docker.stack.namespace={stack_name}"]}
         return self._request(
             "GET",
             f"/endpoints/{self.endpoint_id}/docker/services",
             params={"filters": json.dumps(filters)},
         )
+
+    def get_stack_compose_containers(self, stack_name: str) -> List[Dict[str, Any]]:
+        """Portainer standalone Compose Stack 下的容器（非 Swarm service）。"""
+        for project in self._compose_project_name_candidates(stack_name):
+            filters = {"label": [f"com.docker.compose.project={project}"]}
+            containers = self._request(
+                "GET",
+                f"/endpoints/{self.endpoint_id}/docker/containers/json",
+                params={"all": True, "filters": json.dumps(filters)},
+            )
+            if not isinstance(containers, list):
+                continue
+            running = []
+            for container in containers:
+                labels = container.get("Labels") or {}
+                if labels.get("com.docker.compose.oneoff", "").lower() == "true":
+                    continue
+                if not labels.get("com.docker.compose.config-hash"):
+                    continue
+                running.append(container)
+            if running:
+                return running
+        return []
+
+    @staticmethod
+    def _compose_containers_as_workloads(
+        containers: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        workloads: List[Dict[str, Any]] = []
+        for container in containers:
+            labels = container.get("Labels") or {}
+            service_name = labels.get("com.docker.compose.service")
+            if not service_name:
+                names = container.get("Names") or []
+                service_name = names[0].lstrip("/") if names else "unknown"
+            workloads.append(
+                {
+                    "ID": container.get("Id"),
+                    "workload_kind": "compose",
+                    "Spec": {
+                        "Name": service_name,
+                        "Labels": labels,
+                        "TaskTemplate": {
+                            "ContainerSpec": {
+                                "Image": container.get("Image") or ""
+                            }
+                        },
+                    },
+                }
+            )
+        return workloads
+
+    def get_stack_services(self, stack_name: str) -> List[Dict[str, Any]]:
+        """返回 Stack 关联工作负载：优先 Swarm service，否则 Compose 容器。"""
+        swarm_services = self.get_swarm_stack_services(stack_name)
+        if swarm_services:
+            for service in swarm_services:
+                service["workload_kind"] = "swarm"
+            return swarm_services
+        compose_containers = self.get_stack_compose_containers(stack_name)
+        return self._compose_containers_as_workloads(compose_containers)
 
     def verify_stack_services(
         self,
@@ -743,10 +834,14 @@ class PortainerClient:
             return {
                 "success": False,
                 "checked": True,
-                "message": f"No services found for Stack: {stack_name}",
+                "message": (
+                    f"No services/containers found for Stack: {stack_name} "
+                    "(checked Swarm namespace and Compose project labels)"
+                ),
                 "service_count": 0,
             }
 
+        workload_kind = services[0].get("workload_kind") or "swarm"
         images: List[str] = []
         mismatched_revision_services: List[str] = []
         matching_revision_services = 0
@@ -768,16 +863,34 @@ class PortainerClient:
                     )
 
         missing_revision_count = max(0, min_revision_services - matching_revision_services)
+        # standalone Compose 历史上只注入 deploy.labels，运行态可能没有 revision 标签
+        if (
+            expected_revision
+            and min_revision_services > 0
+            and matching_revision_services == 0
+            and workload_kind == "compose"
+            and images
+        ):
+            missing_revision_count = 0
+            logger.info(
+                "Compose Stack %s has %s container(s) but no revision labels; "
+                "accepting image-based verification",
+                stack_name,
+                len(services),
+            )
+
         success = not mismatched_revision_services and missing_revision_count == 0
+        kind_label = "container(s)" if workload_kind == "compose" else "service(s)"
         return {
             "success": success,
             "checked": True,
             "message": (
-                f"Verified {len(services)} service(s) for Stack: {stack_name}"
+                f"Verified {len(services)} {kind_label} for Stack: {stack_name}"
                 if success
                 else "Some Stack services did not receive the expected deploy revision"
             ),
             "service_count": len(services),
+            "workload_kind": workload_kind,
             "images": images,
             "matching_revision_services": matching_revision_services,
             "missing_revision_count": missing_revision_count,
