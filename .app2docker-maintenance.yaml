@@ -7,6 +7,6 @@ build:
 image:
   name: app2docker
   prefix: registry.cn-shanghai.aliyuncs.com/51jbm
-  tag: '2.0.4'
+  tag: '2.0.5'
   push: true
 push_mode: single

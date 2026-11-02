@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 import pytest
-from backend.release_policy import validate_release, claim_release
+from backend.release_policy import validate_release, claim_release, recorded_policy
 from backend.app2docker_config import resolve_variables
 
 
@@ -14,6 +14,10 @@ def test_formal_release_policy_and_durable_claim(tmp_path):
         with pytest.raises(ValueError):validate_release(policy,**{**args,**change})
     db=tmp_path/'claims.db'
     claim_release(db,proof,git_url='https://host/repo.git',task_id='first')
+    recovered=recorded_policy(db,'https://host/repo',None)
+    assert recovered['enabled'] and recovered['mainline']=='py-7.3'
+    assert recorded_policy(db,'https://host/repo.git',{'enabled':False,'mainline':'py-7.3','platform':'jbm'})['enabled']
+    with pytest.raises(ValueError):recorded_policy(db,'https://host/repo.git',{'enabled':True,'mainline':'dev','platform':'jbm'})
     claim_release(db,proof,git_url='https://host/repo.git',task_id='first')
     with pytest.raises(ValueError,match='已占用'):
         claim_release(db,proof,git_url='https://host/repo.git',task_id='second')

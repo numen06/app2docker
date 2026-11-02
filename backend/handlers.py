@@ -3258,14 +3258,14 @@ class BuildManager:
                     push_mode = merged["push_mode"]
 
                 # A profile cannot bypass the repository's common release policy.
-                from backend.release_policy import validate_release, claim_release
+                from backend.release_policy import validate_release, claim_release, recorded_policy
                 from backend.database import DB_FILE
                 common_path = os.path.join(actual_clone_dir, '.app2docker.yaml')
                 common_config = {}
                 if os.path.isfile(common_path):
                     with open(common_path, encoding='utf-8') as common_file:
                         common_config = parse_config(common_file.read())
-                policy = common_config.get('release') or yaml_config.get('release')
+                policy = recorded_policy(DB_FILE, git_url, common_config.get('release') or yaml_config.get('release'))
                 output_images = []
                 if selected_services and push_mode == 'multi':
                     for service in selected_services:
@@ -3337,6 +3337,13 @@ class BuildManager:
                         f"未找到 profile={resolved_profile} 对应的配置文件，"
                         "且未提供 template 等构建参数"
                     )
+
+            if not config_path:
+                from backend.release_policy import recorded_policy
+                from backend.database import DB_FILE
+                registered = recorded_policy(DB_FILE, git_url)
+                if registered and (should_push or any(isinstance(v, dict) and v.get('push') for v in (service_push_config or {}).values())):
+                    raise ValueError('已登记主线规则的仓库不能从缺少正式配置的历史引用发布')
 
             # 如果指定了子目录，使用子目录作为构建上下文
             source_dir = actual_clone_dir

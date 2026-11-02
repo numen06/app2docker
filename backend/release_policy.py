@@ -11,6 +11,33 @@ import sqlite3
 from urllib.parse import urlsplit, urlunsplit
 
 
+def repository_identity(git_url):
+    parsed = urlsplit(git_url)
+    path = parsed.path.rstrip('/').removesuffix('.git')
+    if parsed.hostname in {'gitee.com','github.com'}:
+        path = path.lower()
+    return urlunsplit((parsed.scheme, parsed.hostname or '', path, '', ''))
+
+
+def recorded_policy(db_file, git_url, proposed=None):
+    """A legacy ref cannot remove rules already recorded for this repository."""
+    with sqlite3.connect(str(db_file), timeout=30) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='formal_release_claims'").fetchone():
+            return proposed
+        rows = {(platform,mainline) for repository,platform,mainline in db.execute(
+            'SELECT DISTINCT repository,platform,mainline FROM formal_release_claims').fetchall()
+            if repository_identity(repository)==repository_identity(git_url)}
+    if not rows:
+        return proposed
+    if len(rows)!=1:
+        raise ValueError('仓库已有多条发布主线，请先由管理员核对版本迁移')
+    platform,mainline=next(iter(rows))
+    if proposed and (proposed.get('mainline')!=mainline or proposed.get('platform')!=platform):
+        raise ValueError('仓库主线规则与持久发布台账不一致')
+    return {**(proposed or {}), 'enabled':True, 'mainline':mainline, 'platform':platform,
+            'version_file':'VERSION', 'timezone':'Asia/Shanghai', 'immutable':True, 'require_git_tag':True}
+
+
 def validate_release(policy, *, source_dir, source_mode, branch, git_tag, commit, images, build_args=None, dockerfile_name=None):
     if not policy or not policy.get('enabled'):
         return None
@@ -56,8 +83,7 @@ def validate_release(policy, *, source_dir, source_mode, branch, git_tag, commit
 def claim_release(db_file, proof, *, git_url, task_id):
     if not proof:
         return
-    parsed = urlsplit(git_url)
-    repository = urlunsplit((parsed.scheme, parsed.hostname or '', parsed.path.rstrip('/'), '', ''))
+    repository = repository_identity(git_url)
     with sqlite3.connect(str(db_file), timeout=30) as db:
         db.execute('BEGIN IMMEDIATE')
         db.execute('''CREATE TABLE IF NOT EXISTS formal_release_claims (
