@@ -3257,6 +3257,39 @@ class BuildManager:
                 if merged.get("push_mode"):
                     push_mode = merged["push_mode"]
 
+                # A profile cannot bypass the repository's common release policy.
+                from backend.release_policy import validate_release, claim_release
+                from backend.database import DB_FILE
+                common_path = os.path.join(actual_clone_dir, '.app2docker.yaml')
+                common_config = {}
+                if os.path.isfile(common_path):
+                    with open(common_path, encoding='utf-8') as common_file:
+                        common_config = parse_config(common_file.read())
+                policy = common_config.get('release') or yaml_config.get('release')
+                output_images = []
+                if selected_services and push_mode == 'multi':
+                    for service in selected_services:
+                        service_config = (service_push_config or {}).get(service, {})
+                        if isinstance(service_config, dict) and service_config.get('push'):
+                            output_images.append(service_config.get('imageName', image_name + '-' + service) + ':' + service_config.get('tag', tag))
+                elif should_push:
+                    output_images.append(image_name + ':' + tag)
+                proof = validate_release(policy, source_dir=actual_clone_dir, source_mode=source_mode,
+                    branch=actual_branch or branch, git_tag=profile_tag_name, commit=commit_hash,
+                    images=output_images) if output_images else None
+                if proof:
+                    remote_head = subprocess.run(['git', '-C', actual_clone_dir, 'ls-remote', 'origin',
+                        'refs/heads/' + proof['mainline']], capture_output=True, text=True, timeout=60)
+                    if remote_head.returncode or not remote_head.stdout.strip() or remote_head.stdout.split()[0] != commit_hash:
+                        raise ValueError('冻结提交与远端主线不一致，请重新核对主线版本')
+                claim_release(DB_FILE, proof, git_url=git_url, task_id=task_id)
+                if proof:
+                    build_args['JBM_COMMIT'] = commit_hash
+                    build_args['SOURCE_REVISION'] = commit_hash
+                    build_args['RELEASE_VERSION'] = proof['version']
+                    self._sync_resolved_source_config(task_id, {'release_proof': proof})
+                    log('✅ 正式发布规则校验及不可变版本占用完成: ' + proof['version'] + '\n')
+
                 resolved_task_updates = {
                     "image_name": image_name,
                     "tag": tag,

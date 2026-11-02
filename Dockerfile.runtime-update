@@ -1,0 +1,5 @@
+# Preserve the deployed frontend, native tools, dependencies and runtime config.
+ARG BASE_IMAGE=registry.cn-shanghai.aliyuncs.com/51jbm/app2docker@sha256:4f69228a9ea7260ecc6b0a246f37c7d6698d05a17641fe48691902e1534ef031
+FROM ${BASE_IMAGE} AS app2docker
+COPY backend /app/backend
+RUN python -m compileall -q /app/backend

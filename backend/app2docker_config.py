@@ -79,6 +79,7 @@ def resolve_variables(value: Any, context: dict) -> Any:
         "{profile}": str(context.get("profile") or ""),
         "{date}": datetime.now().strftime("%Y%m%d"),
         "{commit}": str(context.get("commit") or "")[:7],
+        "{full_commit}": str(context.get("commit") or ""),
         "{timestamp}": str(int(datetime.now().timestamp())),
     }
     for key, repl in replacements.items():
