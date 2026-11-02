@@ -18,3 +18,17 @@ def test_formal_release_policy_and_durable_claim(tmp_path):
     with pytest.raises(ValueError,match='已占用'):
         claim_release(db,proof,git_url='https://host/repo.git',task_id='second')
     assert resolve_variables('{full_commit}',{'commit':'b'*40})=='b'*40
+
+
+def test_component_catalog_blocks_wrong_image_or_build_stage(tmp_path):
+    import json
+    (tmp_path/'VERSION').write_text('py-7.3-20261102.2')
+    (tmp_path/'deploy').mkdir()
+    (tmp_path/'deploy/release-catalog.json').write_text(json.dumps({'platform':'jbm','mainline':'py-7.3','components':{
+        'job':{'image':'registry/jbm-job','target':'job','dockerfile':'Dockerfile.app2docker'}}}))
+    args=dict(source_dir=tmp_path,source_mode='git',branch='py-7.3',git_tag='py-7.3-20261102.2',commit='c'*40,
+              images=['registry/jbm-job:py-7.3-20261102.2'],build_args={'RELEASE_TARGET':'job'},dockerfile_name='Dockerfile.app2docker')
+    policy={'enabled':True,'mainline':'py-7.3','platform':'jbm'}
+    assert validate_release(policy,**args)['components']==['job']
+    for change in [dict(build_args={'RELEASE_TARGET':'web'}),dict(dockerfile_name='Dockerfile'),dict(images=['registry/other:py-7.3-20261102.2'])]:
+        with pytest.raises(ValueError):validate_release(policy,**{**args,**change})

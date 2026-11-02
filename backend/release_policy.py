@@ -4,13 +4,14 @@ Claims live in the existing durable App2Docker database. Failed builds retain
 their claim: retries require a new release number, never an overwritten image.
 """
 from datetime import datetime
+import json
 from pathlib import Path
 import re
 import sqlite3
 from urllib.parse import urlsplit, urlunsplit
 
 
-def validate_release(policy, *, source_dir, source_mode, branch, git_tag, commit, images):
+def validate_release(policy, *, source_dir, source_mode, branch, git_tag, commit, images, build_args=None, dockerfile_name=None):
     if not policy or not policy.get('enabled'):
         return None
     mainline = policy['mainline']
@@ -30,9 +31,26 @@ def validate_release(policy, *, source_dir, source_mode, branch, git_tag, commit
         raise ValueError('必须使用与 VERSION 同名的冻结 Git 标签构建')
     if not images or any(image.rsplit(':', 1)[-1] != version or '@' in image for image in images):
         raise ValueError('所有输出镜像必须使用 VERSION 中的同一正式版本')
+    catalog_file = (Path(source_dir) / policy.get('catalog_file', 'deploy/release-catalog.json')).resolve()
+    if not catalog_file.is_relative_to(Path(source_dir).resolve()):
+        raise ValueError('发布目录路径不能超出仓库')
+    components = []
+    if catalog_file.is_file():
+        catalog = json.loads(catalog_file.read_text(encoding='utf-8'))
+        if catalog['platform'] != policy['platform'] or catalog['mainline'] != mainline:
+            raise ValueError('发布目录与 App2Docker 主线规则不一致')
+        for image in images:
+            repository = image.rsplit(':', 1)[0]
+            matches = [(name,row) for name,row in catalog['components'].items() if row['image']==repository]
+            if len(matches)!=1:
+                raise ValueError('镜像不属于本平台发布目录：' + repository)
+            name,row = matches[0]
+            if (build_args or {}).get('RELEASE_TARGET') != row['target'] or dockerfile_name != row['dockerfile']:
+                raise ValueError('镜像、Dockerfile 与运行目标不匹配：' + name)
+            components.append(name)
     return {'platform': policy['platform'], 'mainline': mainline, 'version': version,
             'date': match.group(1), 'sequence': int(match.group(2)), 'commit': commit,
-            'images': images, 'immutable': True}
+            'images': images, 'components': components, 'immutable': True}
 
 
 def claim_release(db_file, proof, *, git_url, task_id):

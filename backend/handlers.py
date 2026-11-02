@@ -3276,7 +3276,7 @@ class BuildManager:
                     output_images.append(image_name + ':' + tag)
                 proof = validate_release(policy, source_dir=actual_clone_dir, source_mode=source_mode,
                     branch=actual_branch or branch, git_tag=profile_tag_name, commit=commit_hash,
-                    images=output_images) if output_images else None
+                    images=output_images, build_args=build_args, dockerfile_name=dockerfile_name) if output_images else None
                 if proof:
                     remote_head = subprocess.run(['git', '-C', actual_clone_dir, 'ls-remote', 'origin',
                         'refs/heads/' + proof['mainline']], capture_output=True, text=True, timeout=60)
