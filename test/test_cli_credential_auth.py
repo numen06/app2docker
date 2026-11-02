@@ -117,6 +117,24 @@ def test_api_key_and_basic_auth_headers():
     assert basic._auth_headers("GET", "/health")["Authorization"].startswith("Basic ")
 
 
+def test_permission_helpers_reuse_request_identity_but_new_request_cannot_replay(tmp_path, monkeypatch):
+    user_id = _credential_db(tmp_path, monkeypatch)
+    private_path, public_key = _key_pair(tmp_path)
+    credential = credentials.create_credential(user_id, 'pipeline-admin', public_key)
+    client = APIClient({'server':'https://example.com', 'credential_id':credential['credential_id'], 'private_key':str(private_path)})
+    headers = client._auth_headers('PUT', '/api/pipelines/p1', b'{}')
+    def request():
+        return SimpleNamespace(headers=Headers(headers=headers),method='PUT',
+            scope={'raw_path':b'/api/pipelines/p1','query_string':b'',
+                   'app2docker.body_sha256':headers['X-App2Docker-Content-SHA256']},
+            url=SimpleNamespace(path='/api/pipelines/p1'))
+    first=request()
+    assert routes.require_auth(first)=='alice'
+    assert routes.require_auth(first)=='alice'
+    with pytest.raises(HTTPException,match='401'):
+        routes.require_auth(request())
+
+
 def test_server_accepts_api_key_and_basic_identity(monkeypatch):
     monkeypatch.setattr(
         routes,

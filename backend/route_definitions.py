@@ -202,7 +202,15 @@ def require_auth(request: Request) -> str:
             from backend.cli_credential_manager import verify_signed_request
 
             try:
-                return verify_signed_request(request)["username"]
+                # A handler and its permission helper can require authentication
+                # on the same request. Consume the nonce once per ASGI scope;
+                # a new HTTP request still verifies and rejects replay normally.
+                identity = request.scope.get('app2docker.cli_identity')
+                if identity is None:
+                    identity = verify_signed_request(request)
+                    request.scope['app2docker.cli_identity'] = identity
+                CURRENT_CLI_CREDENTIAL_ID.set(identity['credential_id'])
+                return identity["username"]
             except ValueError as exc:
                 raise HTTPException(status_code=401, detail=str(exc)) from exc
 
