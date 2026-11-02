@@ -131,8 +131,9 @@ def test_permission_helpers_reuse_request_identity_but_new_request_cannot_replay
     first=request()
     assert routes.require_auth(first)=='alice'
     assert routes.require_auth(first)=='alice'
-    with pytest.raises(HTTPException,match='401'):
+    with pytest.raises(HTTPException) as error:
         routes.require_auth(request())
+    assert error.value.status_code == 401 and '拒绝重放' in error.value.detail
 
 
 def test_server_accepts_api_key_and_basic_identity(monkeypatch):
